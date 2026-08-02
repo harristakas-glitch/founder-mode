@@ -269,6 +269,12 @@ export default function App() {
             <Stat k="Rev /wk">
               <Ticker value={game.lastRevenue} format={money} />
             </Stat>
+            <Stat k="Burn /wk">
+              <Ticker value={burn} format={money} />
+            </Stat>
+            <Stat k="Net /wk" tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
+              <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
+            </Stat>
             <Stat k="Users">
               <Ticker value={game.users} format={num} />
             </Stat>
