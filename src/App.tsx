@@ -260,7 +260,7 @@ export default function App() {
             <Menu size={20} />
           </button>
           <div className="flex flex-1 items-center gap-4 overflow-x-auto md:gap-6 [&::-webkit-scrollbar]:hidden">
-            <Stat k="Cash" tone={game.cash < burn * 8 ? 'bad' : undefined}>
+            <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
               <Ticker value={game.cash} format={money} />
             </Stat>
             <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
@@ -453,6 +453,11 @@ function GameOver() {
               {game.companyName} ran out of cash in week {go.week}. The servers went dark, the office plants were divided among the
               team, and the domain now redirects to a competitor.
             </p>
+            {go.detail && (
+              <p className="mt-3 rounded-xl border border-line bg-surface2/60 px-4 py-3 text-left text-[13px] leading-relaxed text-mut">
+                <b className="text-ink">Autopsy:</b> {go.detail}
+              </p>
+            )}
           </>
         )}
         {go.type === 'unicorn' && (

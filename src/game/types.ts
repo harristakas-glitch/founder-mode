@@ -129,6 +129,7 @@ export interface GameOver {
   type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo'
   week: number
   payout?: number
+  detail?: string // the autopsy: what actually emptied the account
 }
 
 export interface IpoProcess {

@@ -691,7 +691,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const office = weeklyOffice(s)
   const infra = weeklyInfra(s)
   const expenses = payroll + office + infra + s.marketingSpend
+  const cashAtStart = s.cash
   s.cash += revenue - expenses
+  const cashAfterOperations = s.cash // everything below here (fees, events) is a one-off hit
   s.lastRevenue = revenue
   s.lastExpenses = expenses
 
@@ -842,9 +844,11 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- endings (skip if the IPO already decided this week) ---
   if (s.gameOver) return s
   if (s.cash < 0) {
-    if (!s.bridgeUsed && val > 3_000_000) {
+    // A bridge exists for companies worth saving: real valuation, or fundamentals that basically work.
+    const nearProfitable = revenue >= expenses * 0.85
+    if (!s.bridgeUsed && (val > 3_000_000 || nearProfitable)) {
       s.bridgeUsed = true
-      const bridge = Math.round(weeklyBurn(s) * 10)
+      const bridge = Math.max(Math.round(weeklyBurn(s) * 10), Math.abs(Math.round(s.cash)) + 25_000)
       s.cash += bridge
       s.founderEquity *= 0.85
       s.inbox.unshift({
@@ -853,11 +857,21 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
         kind: 'system',
         title: 'Emergency bridge round',
         body:
-          `The bank account hit zero. An existing investor wired a $${(bridge / 1000).toFixed(0)}k bridge loan to keep the lights on — ` +
+          `The bank account hit zero. ${nearProfitable && val <= 3_000_000 ? 'Your fundamentals are close enough to working that an angel took the call. They' : 'An existing investor'} wired a $${(bridge / 1000).toFixed(0)}k bridge loan to keep the lights on — ` +
           `in exchange for 15% of the company. This will not happen twice. Fix the burn.`,
       })
+      s.flash = `⚠️ The account hit zero — a $${(bridge / 1000).toFixed(0)}k emergency bridge saved you, for 15% of the company. There is no second bridge.`
     } else {
-      s.gameOver = { type: 'bankrupt', week: s.week }
+      const oneOffs = Math.round(cashAfterOperations - s.cash)
+      const fmt = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString()}`
+      s.gameOver = {
+        type: 'bankrupt',
+        week: s.week,
+        detail:
+          `The final week: you went in with ${fmt(cashAtStart)}, earned ${fmt(revenue)} in revenue, paid ${fmt(expenses)} in running costs` +
+          (oneOffs > 0 ? `, and took ${fmt(oneOffs)} in one-off hits (recruiter fees, event costs, severance)` : '') +
+          `. That left the account at −${fmt(s.cash)}${s.bridgeUsed ? ', and the bridge loan was already spent' : ', and no investor would bridge it'}.`,
+      }
     }
   } else if (val >= 1_000_000_000) {
     s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(val * s.founderEquity) }

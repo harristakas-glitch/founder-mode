@@ -71,7 +71,17 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
-        <StatCard label="Cash" numeric={game.cash} format={money} delta={`burn ${money(weeklyBurn(game))}/wk`} tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined} />
+        <StatCard
+          label="Cash"
+          numeric={game.cash}
+          format={money}
+          delta={
+            game.cash < 40_000 && game.week > 6
+              ? 'Buffer is thin — one bad event (cloud bill, recruiter fee) could end you'
+              : `burn ${money(weeklyBurn(game))}/wk`
+          }
+          tone={game.cash < 40_000 && game.week > 6 ? 'down' : game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
+        />
         <StatCard
           label="Runway"
           value={runway === Infinity ? 'Profitable 🎉' : `${Math.max(0, Math.floor(runway))} weeks`}
