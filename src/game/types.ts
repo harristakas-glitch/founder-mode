@@ -138,6 +138,20 @@ export interface IpoProcess {
   demand: number // 0-100 investor appetite, decides pop or flop
 }
 
+// A second (third, fourth…) product line: the escape hatch from a saturated S-curve.
+export interface Venture {
+  id: string
+  sector: SectorId
+  // pre-launch: the discovery loop, all over again
+  features: number
+  pmf: number
+  resonance: number
+  researchSignal: number
+  launched: boolean
+  users: number
+  startedWeek: number
+}
+
 export interface GameState {
   companyName: string
   sector: SectorId
@@ -157,7 +171,7 @@ export interface GameState {
   totalResearch: number // lifetime research across all ideas — improves every future pivot
   pivots: number
   milestones: string[] // achieved milestone ids
-  allocation: { features: number; quality: number; bugs: number; research: number }
+  allocation: { features: number; quality: number; bugs: number; research: number; bet: number }
   marketingSpend: number // $/week
   employees: Employee[]
   candidates: Candidate[]
@@ -179,6 +193,7 @@ export interface GameState {
   challenge: { label: string; cap: number } | null // capped run: daily challenge or multiplayer match
   ipo: IpoProcess | null // S-1 filed, in progress
   ipoCooldown: number // weeks until the street will look at you again after a pulled IPO
+  ventures: Venture[] // additional product lines: one un-launched bet at a time, any number launched
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

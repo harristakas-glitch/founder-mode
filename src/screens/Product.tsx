@@ -1,6 +1,18 @@
 import { useState } from 'react'
 import { Bar, BarRow, Btn, DemandGauge, Panel, StatCard } from '../components'
-import { RESONANCE_RANGE, demandSignal, pivotBonus, pmfLabel, productScore, resonanceEstimate } from '../game/engine'
+import { num } from '../format'
+import { sectorById } from '../game/data'
+import {
+  RESONANCE_RANGE,
+  availableVentureSectors,
+  canStartVenture,
+  demandSignal,
+  pivotBonus,
+  pmfLabel,
+  productScore,
+  resonanceEstimate,
+  ventureSignal,
+} from '../game/engine'
 import { useStore } from '../store'
 
 const SIGNAL_COPY: Record<string, { text: string; cls: string }> = {
@@ -50,13 +62,104 @@ function PivotButton({ onPivot, bonusPct }: { onPivot: () => void; bonusPct: num
   )
 }
 
+const VENTURE_SIGNAL_COPY: Record<string, { text: string; cls: string }> = {
+  unknown: { text: 'Signal unknown — keep the tiger team exploring.', cls: 'text-mut' },
+  weak: { text: 'Demand looks WEAK. Shelve it and try a different market.', cls: 'text-bad' },
+  mixed: { text: 'Demand looks MIXED — it can work, slowly.', cls: 'text-warn' },
+  strong: { text: 'Demand looks STRONG. Feed this bet!', cls: 'text-good' },
+}
+
+function Ventures() {
+  const game = useStore((s) => s.game)!
+  const startBet = useStore((s) => s.startBet)
+  const shelveBet = useStore((s) => s.shelveBet)
+  const gate = canStartVenture(game)
+  const open = availableVentureSectors(game)
+  const active = game.ventures.find((v) => !v.launched)
+  const launched = game.ventures.filter((v) => v.launched)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Product lines — escape the S-curve">
+        {launched.length > 0 && (
+          <div className="mb-3 space-y-1.5">
+            <div className="flex justify-between border-b border-line/40 pb-1.5 text-[13.5px]">
+              <span>
+                <b>Core — {sectorById(game.sector).name}</b>
+              </span>
+              <span className="tnum">{num(game.users)} users</span>
+            </div>
+            {launched.map((v) => (
+              <div key={v.id} className="flex justify-between border-b border-line/40 pb-1.5 text-[13.5px] last:border-b-0">
+                <span>
+                  <b>{sectorById(v.sector).name}</b> <span className="text-mut">· launched wk {v.startedWeek} · PMF {Math.round(v.pmf)}</span>
+                </span>
+                <span className="tnum">{num(v.users)} users</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {active ? (
+          <div className="rounded-xl border border-accent2/40 bg-accent2/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <b>Exploring: {sectorById(active.sector).name}</b>
+              <span className={`text-[13px] font-semibold ${VENTURE_SIGNAL_COPY[ventureSignal(active)].cls}`}>
+                {VENTURE_SIGNAL_COPY[ventureSignal(active)].text}
+              </span>
+            </div>
+            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[11px] text-mut">PMF — launches as a product line at 50</div>
+                <Bar value={(active.pmf / 50) * 100} color="var(--color-accent2)" />
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] text-mut">Demand signal research ({Math.min(100, Math.round((active.researchSignal / 14) * 100))}%)</div>
+                <Bar value={Math.min(100, (active.researchSignal / 14) * 100)} />
+              </div>
+            </div>
+            <div className="mt-2.5 text-xs leading-relaxed text-mut">
+              Progress comes from the <b className="text-accent2">New bet</b> slider below — the share of engineering exploring this
+              market. The demand roll got your +{Math.round(pivotBonus(game) * 100)}% experience bonus.
+            </div>
+            <Btn variant="danger" className="mt-2.5" onClick={() => shelveBet(active.id)}>
+              Shelve this bet
+            </Btn>
+          </div>
+        ) : (
+          <>
+            <div className="text-[13.5px] leading-relaxed text-mut">
+              When your core market saturates, growth dies with it — unless you open a second one. A new bet runs the whole discovery
+              loop again in a fresh sector: new demand roll (boosted by everything you've learned), new TAM, new S-curve. Launched
+              lines add their users and revenue to the company — and to the growth rate your board stares at.
+            </div>
+            {gate.ok ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {open.map((id) => (
+                  <Btn key={id} variant="primary" onClick={() => startBet(id)}>
+                    Explore {sectorById(id).name}
+                  </Btn>
+                ))}
+                {open.length === 0 && <span className="text-mut">Every market is already yours. Impressive.</span>}
+              </div>
+            ) : (
+              <div className="mt-3 text-[13px] text-warn">◻ {gate.reason}</div>
+            )}
+          </>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
 export function Product() {
   const game = useStore((s) => s.game)!
   const setAllocation = useStore((s) => s.setAllocation)
   const doPivot = useStore((s) => s.doPivot)
   const engineers = game.employees.filter((e) => e.role === 'engineer').length
   const a = game.allocation
-  const sum = Math.max(1, a.features + a.quality + a.bugs + a.research)
+  const hasBet = game.ventures.some((v) => !v.launched)
+  const sum = Math.max(1, a.features + a.quality + a.bugs + a.research + (hasBet ? a.bet : 0))
   const signal = demandSignal(game)
   const est = resonanceEstimate(game)
 
@@ -118,13 +221,23 @@ export function Product() {
         </div>
       </div>
 
+      <Ventures />
+
       <div className="mt-3.5">
         <Panel title="Team focus (share of effort)">
-          {(['features', 'quality', 'bugs', 'research'] as const).map((key) => (
+          {(['features', 'quality', 'bugs', 'research', ...(hasBet ? (['bet'] as const) : [])] as const).map((key) => (
             <div className="mb-4 last:mb-0" key={key}>
               <div className="mb-1 flex justify-between text-[13.5px]">
-                <span>
-                  {key === 'features' ? 'New features' : key === 'quality' ? 'Polish & quality' : key === 'bugs' ? 'Bug fixing' : 'User research'}
+                <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>
+                  {key === 'features'
+                    ? 'New features'
+                    : key === 'quality'
+                      ? 'Polish & quality'
+                      : key === 'bugs'
+                        ? 'Bug fixing'
+                        : key === 'research'
+                          ? 'User research'
+                          : 'New bet (tiger team)'}
                 </span>
                 <span className="font-bold tnum">{Math.round((a[key] / sum) * 100)}%</span>
               </div>

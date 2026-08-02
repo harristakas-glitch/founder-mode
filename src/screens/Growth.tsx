@@ -1,7 +1,7 @@
 import { BarRow, LineChart, Panel, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
-import { growthRate, productScore } from '../game/engine'
+import { estimatedCac, growthRate, marketingMax, paidUsersPerWeek, productScore } from '../game/engine'
 import { useStore } from '../store'
 
 export function Growth() {
@@ -33,19 +33,29 @@ export function Growth() {
       </div>
 
       <div className="mt-3.5">
-        <Panel title={`Marketing budget: ${money(game.marketingSpend)}/week`}>
+        <Panel title={`Marketing budget: ${money(game.marketingSpend)}/week (cap ${money(marketingMax(game))} at ${game.stage})`}>
           <input
             type="range"
             min={0}
-            max={30000}
-            step={500}
-            value={game.marketingSpend}
-            style={{ ['--fill' as string]: `${(game.marketingSpend / 30000) * 100}%` }}
+            max={marketingMax(game)}
+            step={marketingMax(game) > 100_000 ? 5000 : 500}
+            value={Math.min(game.marketingSpend, marketingMax(game))}
+            style={{ ['--fill' as string]: `${(game.marketingSpend / marketingMax(game)) * 100}%` }}
             onChange={(e) => setMarketing(Number(e.target.value))}
           />
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+            <span>
+              <span className="text-mut">Est. cost per paid user (CAC):</span> <b className="tnum">{money(estimatedCac(game))}</b>
+            </span>
+            <span>
+              <span className="text-mut">≈ paid users this budget buys:</span>{' '}
+              <b className="tnum">{num(Math.round(paidUsersPerWeek(game, game.marketingSpend)))}/wk</b>
+              <span className="text-mut"> (channels fatigue past ~$150k/wk)</span>
+            </span>
+          </div>
           <div className="mt-3 text-xs leading-relaxed text-mut">
-            Spend builds hype with diminishing returns; marketers multiply its effect. Hype converts to new users — but without
-            product-market fit they will not stick, and paying to acquire users who churn is how startups burn fortunes. Word of mouth
+            Spend does two things: builds hype (diminishing returns, amplified by marketers) and buys users directly at the CAC above —
+            which climbs as the market saturates and falls with PMF. The budget cap grows with your funding stage. Word of mouth
             ({pct(sector.viral, 1)}/wk max for {sector.name}) only kicks in once PMF is real.
           </div>
         </Panel>

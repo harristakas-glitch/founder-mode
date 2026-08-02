@@ -4,11 +4,15 @@ import {
   acceptTermSheet,
   advanceWeek,
   applyEffects,
+  canStartVenture,
   ipoEligible,
+  killVenture,
   newGame,
   pitchInvestors,
   pivot,
   startIPO,
+  startVenture,
+  totalUsers,
   uid,
   valuation,
 } from './game/engine'
@@ -149,7 +153,9 @@ interface Store {
   giveRaise: (employeeId: string) => void
   doPivot: () => void
   fileIPO: () => void
-  setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research', value: number) => void
+  startBet: (sector: SectorId) => void
+  shelveBet: (ventureId: string) => void
+  setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
   pitch: () => void
@@ -164,7 +170,7 @@ export const useStore = create<Store>()(
 
       const myNetSummary = (g: GameState): Partial<NetPlayer> => ({
         week: g.week,
-        users: g.users,
+        users: totalUsers(g),
         val: valuation(g),
         over: !!g.gameOver,
         overType: g.gameOver?.type,
@@ -404,6 +410,23 @@ export const useStore = create<Store>()(
           set({ game })
         },
 
+        startBet: (sector) => {
+          const g = get().game
+          if (!g || !canStartVenture(g).ok) return
+          const game = structuredClone(g)
+          startVenture(game, sector)
+          sfx.milestone()
+          set({ game })
+        },
+
+        shelveBet: (ventureId) => {
+          const g = get().game
+          if (!g) return
+          const game = structuredClone(g)
+          killVenture(game, ventureId)
+          set({ game })
+        },
+
         setAllocation: (key, value) => {
           const g = get().game
           if (!g) return
@@ -469,7 +492,7 @@ export const useStore = create<Store>()(
     },
     {
       name: 'founder-mode-save',
-      version: 7,
+      version: 8,
       // online sessions are live connections — never persist them across reloads
       partialize: (state) => ({ game: state.game, screen: state.screen }),
       migrate: (persisted, version) => {
@@ -490,6 +513,10 @@ export const useStore = create<Store>()(
         if (version < 7 && state.game) {
           state.game.ipo ??= null
           state.game.ipoCooldown ??= 0
+        }
+        if (version < 8 && state.game) {
+          state.game.ventures ??= []
+          state.game.allocation.bet ??= 0
         }
         return state
       },

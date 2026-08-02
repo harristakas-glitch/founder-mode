@@ -87,7 +87,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     totalResearch: 0,
     pivots: 0,
     milestones: [],
-    allocation: { features: 50, quality: 20, bugs: 10, research: 20 },
+    allocation: { features: 50, quality: 20, bugs: 10, research: 20, bet: 0 },
     marketingSpend: 1000,
     employees: [],
     candidates: [],
@@ -109,6 +109,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     challenge: opts.challenge ?? null,
     ipo: null,
     ipoCooldown: 0,
+    ventures: [],
     history: [],
     gameOver: null,
   }
@@ -187,7 +188,8 @@ export function valuation(s: GameState): number {
   const revPart = annualRev * multiple
   // Investors pay up for growth: a fast-growing user base is worth a multiple of a stagnant one.
   const growthMania = 1 + clamp(growth * 12, 0, 4)
-  const userPart = s.users * sector.perUserVal * 0.5 * growthMania
+  const ventureUserVal = s.ventures.reduce((a, v) => (v.launched ? a + v.users * sectorById(v.sector).perUserVal : a), 0)
+  const userPart = (s.users * sector.perUserVal + ventureUserVal) * 0.5 * growthMania
   const vibePart = (s.hype * 12_000 + s.reputation * 10_000 + productScore(s) * 8_000) * (1 + 0.3 * s.climate)
   return Math.max(400_000, Math.round(revPart + userPart + vibePart))
 }
@@ -247,7 +249,36 @@ export function weeklyOffice(s: GameState): number {
 }
 
 export function weeklyInfra(s: GameState): number {
-  return Math.round(s.users * sectorById(s.sector).infraCost)
+  const ventures = s.ventures.reduce((a, v) => a + v.users * sectorById(v.sector).infraCost, 0)
+  return Math.round(s.users * sectorById(s.sector).infraCost + ventures)
+}
+
+// Users across every product line — what the board, the press, and the valuation see.
+export function totalUsers(s: GameState): number {
+  return s.users + s.ventures.reduce((a, v) => a + v.users, 0)
+}
+
+// Marketing budgets grow with the company: a Series C war chest can actually be spent.
+export function marketingMax(s: GameState): number {
+  const byStage: Record<Stage, number> = {
+    'Pre-seed': 30_000,
+    Seed: 50_000,
+    'Series A': 150_000,
+    'Series B': 500_000,
+    'Series C': 1_500_000,
+  }
+  return byStage[s.stage]
+}
+
+// Paid acquisition price per user: rises as the market saturates and falls with PMF.
+export function estimatedCac(s: GameState): number {
+  const sector = sectorById(s.sector)
+  return Math.max(1, (sector.perUserVal / 4) * (1 + 2 * marketSaturation(s)) * (1.7 - s.pmf / 100))
+}
+
+// Channels saturate: every extra dollar past ~$150k/wk buys fewer users than the last.
+export function paidUsersPerWeek(s: GameState, spend: number): number {
+  return spend / (estimatedCac(s) * (1 + spend / 150_000))
 }
 
 export function weeklyBurn(s: GameState): number {
@@ -477,6 +508,67 @@ function checkMilestones(s: GameState) {
   }
 }
 
+// ---------- new ventures: the multi-product company ----------
+
+export function canStartVenture(s: GameState): { ok: boolean; reason?: string } {
+  if (STAGES.indexOf(s.stage) < 2) return { ok: false, reason: 'Reach Series A first — new bets need a real company underneath them' }
+  if (s.pmf < 60) return { ok: false, reason: 'Find product-market fit on your core product first (PMF 60+)' }
+  if (s.ventures.some((v) => !v.launched)) return { ok: false, reason: 'One un-launched bet at a time — focus is a feature' }
+  return { ok: true }
+}
+
+export function availableVentureSectors(s: GameState) {
+  const taken = new Set<string>([s.sector, ...s.ventures.map((v) => v.sector)])
+  return SECTORS_IDS().filter((id) => !taken.has(id))
+}
+
+function SECTORS_IDS(): SectorId[] {
+  return ['saas', 'social', 'fintech', 'devtools', 'ecommerce']
+}
+
+export function startVenture(s: GameState, sector: SectorId) {
+  if (!canStartVenture(s).ok) return
+  if (!availableVentureSectors(s).includes(sector)) return
+  s.ventures.push({
+    id: uid(),
+    sector,
+    features: 5,
+    pmf: 5,
+    // everything the company has learned tilts the new market's demand roll, same as a pivot
+    resonance: clamp(rand(0.5, 1.45) + pivotBonus(s), 0.45, 1.6),
+    researchSignal: 0,
+    launched: false,
+    users: 0,
+    startedWeek: s.week,
+  })
+  if (s.allocation.bet === 0) s.allocation.bet = 25
+  const name = sectorById(sector).name
+  s.flash = `New bet started: ${name}. Point the "New bet" slider at it — the team explores the new market while the core business runs. It launches as a product line when its PMF reaches 50.`
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'system',
+    title: `New vertical: ${s.companyName} explores ${name}`,
+    body: 'A tiger team peels off to chase a second S-curve. New market, new demand roll, new everything — the discovery loop starts again, funded by a business that already works.',
+  })
+}
+
+export function ventureSignal(v: import('./types').Venture): 'unknown' | 'weak' | 'mixed' | 'strong' {
+  if (v.researchSignal < 14) return 'unknown'
+  if (v.resonance < 0.75) return 'weak'
+  if (v.resonance < 1.05) return 'mixed'
+  return 'strong'
+}
+
+export function killVenture(s: GameState, ventureId: string) {
+  const v = s.ventures.find((x) => x.id === ventureId)
+  if (!v || v.launched) return
+  s.ventures = s.ventures.filter((x) => x.id !== ventureId)
+  s.allocation.bet = 0
+  applyEffects(s, { morale: -4 })
+  s.flash = `The ${sectorById(v.sector).name} bet is shelved. The tiger team returns to the mothership with lessons learned.`
+}
+
 // ---------- pivot ----------
 
 // Everything the company has learned — lifetime research and pivot scar tissue —
@@ -647,11 +739,14 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const designPoints = s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0)
   const craftsmen = s.employees.filter((e) => e.trait === 'craftsman').length
   const a = s.allocation
-  const allocSum = Math.max(1, a.features + a.quality + a.bugs + a.research)
+  const hasBet = s.ventures.some((v) => !v.launched)
+  const betAlloc = hasBet ? a.bet : 0
+  const allocSum = Math.max(1, a.features + a.quality + a.bugs + a.research + betAlloc)
   const af = a.features / allocSum
   const aq = a.quality / allocSum
   const ab = a.bugs / allocSum
   const ar = a.research / allocSum
+  const abet = betAlloc / allocSum
 
   const featureGain = engPoints * af * 0.32 * (1 - s.features / 130)
   s.features = clamp(s.features + featureGain, 0, 100)
@@ -668,6 +763,45 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   const pScore = productScore(s)
 
+  // --- the new bet: a second discovery loop, run by the tiger team ---
+  const bet = s.ventures.find((v) => !v.launched)
+  if (bet && abet > 0) {
+    const betPoints = engPoints * abet
+    const betFeatureGain = betPoints * 0.3 * (1 - bet.features / 130)
+    bet.features = clamp(bet.features + betFeatureGain, 0, 100)
+    bet.researchSignal += betPoints
+    s.totalResearch += betPoints * 0.5 // exploring new markets teaches the whole company
+    bet.pmf = clamp(bet.pmf + (0.2 + betPoints * 0.3 + betFeatureGain * 0.2) * bet.resonance * (1 - bet.pmf / 110) - 0.4, 0, 100)
+    if (bet.pmf >= 50) {
+      bet.launched = true
+      bet.users = Math.round(50 + s.hype * 10)
+      s.allocation.bet = 0
+      const name = sectorById(bet.sector).name
+      s.flash = `🚀 ${name} line launched! A second product is live with its own market — a fresh S-curve for the growth chart.`
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `${s.companyName} launches its ${name} product`,
+        body: 'The press calls it "an ambitious expansion". Your early users call it useful. The growth team calls it a brand-new TAM.',
+      })
+      applyEffects(s, { hype: 10, morale: 8, reputation: 5 })
+    }
+  }
+
+  // --- launched product lines grow in their own markets ---
+  for (const v of s.ventures) {
+    if (!v.launched) continue
+    const vs = sectorById(v.sector)
+    const vTam = vs.tam * (1 + (s.week / 52) * 0.25)
+    const vRoom = Math.pow(Math.max(0, 1 - v.users / vTam), 1.2)
+    const vAcq = vs.acqBase * Math.pow(s.hype / 10, 1.25) * 0.5 * (0.35 + (0.65 * v.pmf) / 100) * vRoom * rand(0.8, 1.2)
+    const vWom = v.users * vs.viral * Math.pow(v.pmf / 100, 1.5) * vRoom * rand(0.8, 1.2)
+    const vChurn = v.users * vs.churn * clamp(2.4 - v.pmf / 45 - s.quality / 250 + s.bugs / 200, 0.3, 3)
+    v.users = Math.max(0, Math.round(v.users + vAcq + vWom - vChurn))
+    v.pmf = clamp(v.pmf + 0.2, 0, 100) // the line keeps maturing slowly after launch
+  }
+
   // --- hype & marketing (noisy, saturating) ---
   const marketerPoints =
     s.employees.filter((e) => e.role === 'marketer').reduce((a2, e) => a2 + eff(e), 0) +
@@ -683,7 +817,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const saturation = marketSaturation(s, externalUsers)
   const room = Math.pow(1 - saturation, 1.2)
   const pmfAcq = 0.35 + (0.65 * s.pmf) / 100
-  const acquired = sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2)
+  // paid acquisition: big budgets buy users directly, at a CAC that worsens with saturation and channel fatigue
+  const paid = paidUsersPerWeek(s, s.marketingSpend) * room * rand(0.8, 1.2)
+  const acquired = sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2) + paid
   const wordOfMouth = s.users * sector.viral * Math.pow(s.pmf / 100, 1.5) * (1 + s.hype / 150) * room * rand(0.8, 1.2)
   const churnMult = clamp(2.4 - s.pmf / 45 - s.quality / 250 + s.bugs / 200, 0.3, 3)
   const churned = s.users * sector.churn * churnMult
@@ -695,7 +831,14 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const conversion = 0.25 + (0.75 * s.pmf) / 100
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
   const scaleBoost = s.sector === 'social' ? 1 + Math.log10(Math.max(10, s.users)) / 3 : 1
-  const revenue = Math.round(s.users * sector.arpuWeekly * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150))
+  const coreRevenue = s.users * sector.arpuWeekly * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150)
+  const ventureRevenue = s.ventures.reduce((acc, v) => {
+    if (!v.launched) return acc
+    const vs = sectorById(v.sector)
+    const vScale = v.sector === 'social' ? 1 + Math.log10(Math.max(10, v.users)) / 3 : 1
+    return acc + v.users * vs.arpuWeekly * salesBoost * (0.25 + (0.75 * v.pmf) / 100) * vScale * (0.6 + pScore / 150)
+  }, 0)
+  const revenue = Math.round(coreRevenue + ventureRevenue)
   const payroll = weeklyPayroll(s)
   const office = weeklyOffice(s)
   const infra = weeklyInfra(s)
@@ -832,7 +975,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   s.history.push({
     week: s.week,
     cash: Math.round(s.cash),
-    users: s.users,
+    users: totalUsers(s),
     revenue,
     expenses,
     payroll,
@@ -1007,13 +1150,36 @@ export const BOARD_TARGETS: Record<Stage, number> = {
   'Series C': 0.02,
 }
 
+// What the board actually expects right now: raw stage targets, tempered by market reality.
+export function boardEffectiveTarget(s: GameState): number {
+  if (!s.board) return 0
+  return Math.max(0.008, s.board.targetGrowth * (1 - 0.5 * marketSaturation(s)))
+}
+
+// Trailing weekly revenue growth — the board's alternative yardstick for mature companies.
+export function revenueGrowthRate(s: GameState): number {
+  const h = s.history
+  if (h.length < 5) return 0
+  const now = h[h.length - 1].revenue
+  const then = h[h.length - 5].revenue
+  if (then <= 0) return now > 0 ? 0.2 : 0
+  return clamp((now - then) / then / 4, -0.5, 0.5)
+}
+
 function boardReview(s: GameState) {
   if (!s.board || s.week < s.board.nextReview) return
   const growth = growthRate(s)
-  const target = s.board.targetGrowth
+  const target = boardEffectiveTarget(s)
   s.board.nextReview = s.week + 10
 
-  if (growth >= target) {
+  // Mature companies have two ways to make the board happy: grow users, or grow money.
+  const revGrowth = revenueGrowthRate(s)
+  const netMargin = s.lastExpenses > 0 ? (s.lastRevenue - s.lastExpenses) / Math.max(1, s.lastRevenue) : 0
+  const passedByUsers = growth >= target
+  const passedByRevenue = revGrowth >= target
+  const passedByProfit = netMargin > 0.15 && revGrowth >= target * 0.4
+
+  if (passedByUsers || passedByRevenue || passedByProfit) {
     if (s.board.defied) s.board.defied = false
     s.board.strikes = Math.max(0, s.board.strikes - 1)
     s.reputation = clamp(s.reputation + 2, 0, 100)
@@ -1023,12 +1189,16 @@ function boardReview(s: GameState) {
       week: s.week,
       kind: 'news',
       title: 'Board review: thumbs up',
-      body: `Growth of ${(growth * 100).toFixed(1)}%/wk beats the ${(target * 100).toFixed(1)}% target. The board meeting ends early, which is the highest compliment a board can give.`,
+      body: passedByUsers
+        ? `Growth of ${(growth * 100).toFixed(1)}%/wk beats the ${(target * 100).toFixed(1)}% target. The board meeting ends early, which is the highest compliment a board can give.`
+        : passedByRevenue
+          ? `User growth is slowing, but revenue is compounding at ${(revGrowth * 100).toFixed(1)}%/wk — above target. "Monetization story," someone writes approvingly.`
+          : `Users are mature, but a ${(netMargin * 100).toFixed(0)}% net margin with growing revenue is a business, not a bet. The board approves of money.`,
     })
     return
   }
 
-  if (growth >= target * 0.6) {
+  if (growth >= target * 0.6 || revGrowth >= target * 0.6) {
     s.inbox.unshift({
       id: uid(),
       week: s.week,

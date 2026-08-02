@@ -19,7 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
-import { avgMorale, hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn } from './game/engine'
+import { avgMorale, hasPendingDecision, runwayWeeks, totalUsers, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
 import { myId } from './net/online'
 import { isMuted, setMuted } from './sound'
@@ -276,7 +276,7 @@ export default function App() {
               <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
             </Stat>
             <Stat k="Users">
-              <Ticker value={game.users} format={num} />
+              <Ticker value={totalUsers(game)} format={num} />
             </Stat>
             <Stat k="PMF" tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
               <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />

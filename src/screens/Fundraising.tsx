@@ -1,7 +1,7 @@
 import { Bar, Btn, Panel, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
-import { growthRate, ipoChecklist, ipoEligible, nextStage, valuation } from '../game/engine'
+import { boardEffectiveTarget, growthRate, ipoChecklist, ipoEligible, nextStage, revenueGrowthRate, valuation } from '../game/engine'
 import { useStore } from '../store'
 
 function IpoPanel() {
@@ -101,13 +101,19 @@ export function Fundraising() {
           <Panel title="Your board">
             <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
               <div>
-                <div className="text-[11px] text-mut">Growth target</div>
-                <b className="tnum">{pct(game.board.targetGrowth, 1)}/wk</b>
+                <div className="text-[11px] text-mut">Growth target (saturation-adjusted)</div>
+                <b className="tnum">{pct(boardEffectiveTarget(game), 1)}/wk</b>
               </div>
               <div>
-                <div className="text-[11px] text-mut">Your trailing growth</div>
-                <b className={`tnum ${growthRate(game) >= game.board.targetGrowth ? 'text-good' : 'text-bad'}`}>
+                <div className="text-[11px] text-mut">Your user growth</div>
+                <b className={`tnum ${growthRate(game) >= boardEffectiveTarget(game) ? 'text-good' : 'text-bad'}`}>
                   {pct(growthRate(game), 1)}/wk
+                </b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">Your revenue growth</div>
+                <b className={`tnum ${revenueGrowthRate(game) >= boardEffectiveTarget(game) ? 'text-good' : 'text-bad'}`}>
+                  {pct(revenueGrowthRate(game), 1)}/wk
                 </b>
               </div>
               <div>
@@ -125,8 +131,10 @@ export function Fundraising() {
               {game.board.defied && <b className="text-bad">You defied the board — hit the target by the next review or you are out.</b>}
             </div>
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
-              Investor money comes with investor expectations. Miss the growth target at three reviews and you will face an ultimatum;
-              keep missing it and the board will find a new CEO.
+              Investor money comes with investor expectations — but there are three ways to satisfy them: user growth above target,
+              revenue growth above target, or real profitability (15%+ net margin with revenue still climbing). The target eases as
+              your market saturates. Miss on all three at three reviews and you face an ultimatum; keep missing and the board finds a
+              new CEO.
             </div>
           </Panel>
         </div>

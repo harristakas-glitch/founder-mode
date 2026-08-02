@@ -4,11 +4,13 @@ import { sectorById } from '../game/data'
 import {
   MILESTONES,
   avgMorale,
+  boardEffectiveTarget,
   committedCosts,
   growthRate,
   pmfLabel,
   productScore,
   runwayWeeks,
+  totalUsers,
   valuation,
   weeklyBurn,
 } from '../game/engine'
@@ -18,7 +20,7 @@ function Benchmarks() {
   const game = useStore((s) => s.game)!
   const sector = sectorById(game.sector)
   const growth = growthRate(game)
-  const growthTarget = game.board ? game.board.targetGrowth : 0.04
+  const growthTarget = game.board ? boardEffectiveTarget(game) : 0.04
   const churn = sector.churn * Math.min(3, Math.max(0.3, 2.4 - game.pmf / 45 - game.quality / 250 + game.bugs / 200))
   const churnBench = sector.churn
   const pmfPace = Math.min(85, game.week * 1.6)
@@ -98,7 +100,13 @@ export function Dashboard() {
           tone={runway !== Infinity && runway < 12 ? 'down' : undefined}
           delta={runway !== Infinity && runway < 12 ? 'Danger zone — raise or cut costs' : undefined}
         />
-        <StatCard label="Users" numeric={game.users} format={num} delta={`${growth >= 0 ? '+' : ''}${pct(growth, 1)} /wk avg`} tone={growth >= 0 ? 'up' : 'down'} />
+        <StatCard
+          label={game.ventures.some((v) => v.launched) ? 'Users (all product lines)' : 'Users'}
+          numeric={totalUsers(game)}
+          format={num}
+          delta={`${growth >= 0 ? '+' : ''}${pct(growth, 1)} /wk avg`}
+          tone={growth >= 0 ? 'up' : 'down'}
+        />
         <StatCard label="Valuation" numeric={val} format={money} delta={`Goal: $1B (${pct(val / 1e9, 1)} there)`} />
       </div>
 
