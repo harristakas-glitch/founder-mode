@@ -6,7 +6,7 @@ import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
 import { MATCH_CAP, dailyInfo, readHall, useStore } from '../store'
 
-const ENDING_ICON: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱' }
+const ENDING_ICON: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱', ipo: '🔔' }
 
 function Pick({ selected, onClick, title, blurb, disabled }: { selected: boolean; onClick: () => void; title: string; blurb: string; disabled?: boolean }) {
   return (

@@ -1,8 +1,65 @@
-import { Btn, Panel, StatCard } from '../components'
+import { Bar, Btn, Panel, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
-import { growthRate, nextStage, valuation } from '../game/engine'
+import { growthRate, ipoChecklist, ipoEligible, nextStage, valuation } from '../game/engine'
 import { useStore } from '../store'
+
+function IpoPanel() {
+  const game = useStore((s) => s.game)!
+  const fileIPO = useStore((s) => s.fileIPO)
+
+  if (game.ipo) {
+    const filing = game.ipo.phase === 'filing'
+    return (
+      <div className="mt-3.5">
+        <Panel title={`Going public — ${filing ? 'S-1 under review' : 'roadshow'}`}>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div>
+              <div className="text-[11px] text-mut">Phase</div>
+              <b>{filing ? `Filing · ${game.ipo.weeksLeft} wk of scrutiny left` : `Roadshow · pricing in ${game.ipo.weeksLeft} wk`}</b>
+            </div>
+            <div className="min-w-[180px] flex-1">
+              <div className="mb-1 text-[11px] text-mut">Investor demand</div>
+              <Bar
+                value={game.ipo.demand}
+                color={game.ipo.demand < 45 ? 'var(--color-bad)' : game.ipo.demand < 60 ? 'var(--color-warn)' : 'var(--color-good)'}
+              />
+            </div>
+          </div>
+          <div className="mt-2.5 text-xs leading-relaxed text-mut">
+            {filing
+              ? 'The street reads everything: bugs and a shaky reputation bleed demand, growth builds it. The roadshow starts when the review clears.'
+              : 'Every strong week adds orders to the book. On pricing day, demand meets the funding climate — strong demand pops, weak demand gets the offering pulled at the door.'}
+          </div>
+        </Panel>
+      </div>
+    )
+  }
+
+  const checks = ipoChecklist(game)
+  return (
+    <div className="mt-3.5">
+      <Panel title="The final exit — take the company public">
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {checks.map((c) => (
+            <div key={c.label} className="flex items-center gap-2 text-[13.5px]">
+              <span className={c.met ? 'text-good' : 'text-mut'}>{c.met ? '✓' : '◻'}</span>
+              <span className={c.met ? '' : 'text-mut'}>{c.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-xs leading-relaxed text-mut">
+          Eight weeks from filing to the bell: four of SEC scrutiny, four of roadshow. Fundraising freezes, the process eats ~15% of
+          the team's output, and on pricing day the market decides — a pop crowns the run, a pulled IPO costs $2M, reputation, and ~25
+          weeks before the street will look at you again. Time it to a warm climate and a hot growth curve.
+        </div>
+        <Btn variant="primary" className="mt-3" disabled={!ipoEligible(game)} onClick={fileIPO}>
+          {game.ipoCooldown > 0 ? `The street remembers — ${game.ipoCooldown} wk` : 'File the S-1 ▸'}
+        </Btn>
+      </Panel>
+    </div>
+  )
+}
 
 export function Fundraising() {
   const game = useStore((s) => s.game)!
@@ -74,6 +131,8 @@ export function Fundraising() {
           </Panel>
         </div>
       )}
+
+      {game.stage === 'Series C' && <IpoPanel />}
 
       <div className="mt-3.5">
         <Panel title="Pitch investors">

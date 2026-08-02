@@ -13,6 +13,8 @@ import {
   TrendingUp,
   UserPlus,
   Users,
+  Volume2,
+  VolumeX,
   Wallet,
   X,
 } from 'lucide-react'
@@ -20,6 +22,7 @@ import { useStore, type ScreenId } from './store'
 import { avgMorale, hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
 import { myId } from './net/online'
+import { isMuted, setMuted } from './sound'
 import { NewGame } from './screens/NewGame'
 import { Lobby } from './screens/Lobby'
 import { Dashboard } from './screens/Dashboard'
@@ -46,7 +49,24 @@ const NAV: { id: ScreenId; label: string; icon: typeof Mail }[] = [
 ]
 
 const GAME_URL = 'https://harristakas-glitch.github.io/founder-mode/'
-const ENDING_EMOJI: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱' }
+const ENDING_EMOJI: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱', ipo: '🔔' }
+
+function MuteButton() {
+  const [muted, setM] = useState(isMuted())
+  const Icon = muted ? VolumeX : Volume2
+  return (
+    <button
+      className="rounded-lg p-2 text-mut transition-colors hover:bg-surface2 hover:text-ink"
+      title={muted ? 'Unmute sounds' : 'Mute sounds'}
+      onClick={() => {
+        setMuted(!muted)
+        setM(!muted)
+      }}
+    >
+      <Icon size={17} />
+    </button>
+  )
+}
 
 export default function App() {
   const { game, online, screen, setScreen, advance, abandonGame, resolveChoice } = useStore()
@@ -267,6 +287,7 @@ export default function App() {
               </Stat>
             )}
           </div>
+          <MuteButton />
         </header>
 
         {/* main */}
@@ -463,6 +484,17 @@ function GameOver() {
             </p>
             <div className="my-3 text-4xl font-extrabold tnum">{money(go.payout ?? 0)}</div>
             <p className="text-mut">Somewhere, a founder support group has a chair waiting.</p>
+          </>
+        )}
+        {go.type === 'ipo' && (
+          <>
+            <h2 className="text-3xl font-extrabold">🔔 You rang the bell</h2>
+            <p className="mt-3 leading-relaxed text-mut">
+              Week {go.week}: {game.companyName} is a public company. Confetti falls on the trading floor, your phone melts with
+              messages, and your stake is worth
+            </p>
+            <div className="my-3 text-4xl font-extrabold text-good tnum">{money(go.payout ?? 0)}</div>
+            <p className="text-mut">From $200k and an empty office to a ticker symbol. Founder Mode: completed.</p>
           </>
         )}
         {go.type === 'timeup' && (

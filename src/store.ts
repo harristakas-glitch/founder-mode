@@ -1,6 +1,18 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { acceptTermSheet, advanceWeek, applyEffects, newGame, pitchInvestors, pivot, uid, valuation } from './game/engine'
+import {
+  acceptTermSheet,
+  advanceWeek,
+  applyEffects,
+  ipoEligible,
+  newGame,
+  pitchInvestors,
+  pivot,
+  startIPO,
+  uid,
+  valuation,
+} from './game/engine'
+import { sfx } from './sound'
 import { SECTORS, sectorById } from './game/data'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
@@ -29,7 +41,7 @@ export type ScreenId =
 export interface RunRecord {
   company: string
   sector: string
-  ending: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup'
+  ending: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo'
   weeks: number
   score: number // founder payout in $
 }
@@ -42,6 +54,34 @@ export function readHall(): RunRecord[] {
   } catch {
     return []
   }
+}
+
+// The soundtrack of consequence: play whatever the new week deserves.
+function weekSounds(next: GameState) {
+  if (next.gameOver) {
+    switch (next.gameOver.type) {
+      case 'bankrupt':
+      case 'fired':
+        sfx.thud()
+        return
+      case 'unicorn':
+        sfx.fanfare()
+        return
+      case 'ipo':
+        sfx.bell()
+        return
+      case 'acquired':
+        sfx.cash()
+        return
+      case 'timeup':
+        sfx.bell()
+        return
+    }
+  }
+  if (next.flash?.startsWith('🏁')) sfx.milestone()
+  else if (next.flash?.startsWith('IPO pulled')) sfx.ominous()
+  else if (next.inbox[0]?.title === 'Board ultimatum' && !next.inbox[0].resolved) sfx.ominous()
+  else sfx.week()
 }
 
 function recordRun(g: GameState) {
@@ -108,6 +148,7 @@ interface Store {
   fire: (employeeId: string) => void
   giveRaise: (employeeId: string) => void
   doPivot: () => void
+  fileIPO: () => void
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
@@ -165,6 +206,7 @@ export const useStore = create<Store>()(
         const next = advanceWeek(game, othersUsers(players))
         if (next.gameOver) recordRun(next)
         advancing = false
+        weekSounds(next)
         set({ game: next, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000 } })
         void pushState({ ...myNetSummary(next), ready: false })
       }
@@ -263,11 +305,13 @@ export const useStore = create<Store>()(
             if (game.gameOver) return
             const next = advanceWeek(game)
             if (next.gameOver) recordRun(next)
+            weekSounds(next)
             set({ game: next })
             return
           }
           // online: mark myself ready; the week moves when everyone is
           if (game.gameOver) return
+          sfx.week()
           const players = online.players.map((p) => (p.id === myId() ? { ...p, ready: true } : p))
           set({ online: { ...online, players } })
           void pushState({ ready: true, ...myNetSummary(game) })
@@ -347,6 +391,16 @@ export const useStore = create<Store>()(
           if (!g || g.gameOver) return
           const game = structuredClone(g)
           pivot(game)
+          sfx.pivot()
+          set({ game })
+        },
+
+        fileIPO: () => {
+          const g = get().game
+          if (!g || !ipoEligible(g)) return
+          const game = structuredClone(g)
+          startIPO(game)
+          sfx.ominous()
           set({ game })
         },
 
@@ -379,6 +433,7 @@ export const useStore = create<Store>()(
               payout: Math.round(msg.meta.acquisitionAmount * game.founderEquity),
             }
             recordRun(game)
+            sfx.cash()
             if (get().online) void pushState(myNetSummary(game))
           } else {
             applyEffects(game, choice.effects)
@@ -401,6 +456,7 @@ export const useStore = create<Store>()(
           if (!g) return
           const game = structuredClone(g)
           acceptTermSheet(game, sheetId)
+          sfx.cash()
           set({ game })
         },
 
@@ -413,7 +469,7 @@ export const useStore = create<Store>()(
     },
     {
       name: 'founder-mode-save',
-      version: 6,
+      version: 7,
       // online sessions are live connections — never persist them across reloads
       partialize: (state) => ({ game: state.game, screen: state.screen }),
       migrate: (persisted, version) => {
@@ -430,6 +486,10 @@ export const useStore = create<Store>()(
         }
         if (version < 5 && state.game) {
           state.game.challenge ??= null
+        }
+        if (version < 7 && state.game) {
+          state.game.ipo ??= null
+          state.game.ipoCooldown ??= 0
         }
         return state
       },

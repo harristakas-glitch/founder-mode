@@ -107,6 +107,8 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     lastExpenses: 0,
     flash: null,
     challenge: opts.challenge ?? null,
+    ipo: null,
+    ipoCooldown: 0,
     history: [],
     gameOver: null,
   }
@@ -507,6 +509,17 @@ export function nextStage(s: GameState): Stage | null {
 }
 
 export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Message } {
+  if (s.ipo) {
+    const message: Message = {
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: 'Quiet period',
+      body: 'You are mid-IPO — securities law says no private fundraising until the process ends, one way or the other.',
+    }
+    s.flash = 'Quiet period: no private fundraising while the IPO is in progress.'
+    return { sheets: [], message }
+  }
   const val = valuation(s)
   const target = nextStage(s)
   const threshold = STAGE_THRESHOLDS[s.stage]
@@ -616,9 +629,12 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const moraleFactor = (e: Employee) => 0.55 + (e.morale / 100) * 0.55
   const traitMult = (e: Employee) => (e.trait === 'tenx' ? 1.5 : e.trait === 'mercenary' ? 1.15 : e.trait === 'craftsman' ? 1.1 : 1)
   const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e)
+  // an IPO process eats founder and team attention
+  const ipoDrag = s.ipo ? 0.85 : 1
   const engPoints =
-    s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
-    (s.founderKind === 'technical' ? 5 : 1.5)
+    (s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
+      (s.founderKind === 'technical' ? 5 : 1.5)) *
+    ipoDrag
   const designPoints = s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0)
   const craftsmen = s.employees.filter((e) => e.trait === 'craftsman').length
   const a = s.allocation
@@ -772,6 +788,10 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- term sheets & cooldowns expire ---
   s.termSheets = s.termSheets.filter((t) => (t.weeksLeft -= 1) > 0)
   if (s.raiseCooldown > 0) s.raiseCooldown -= 1
+  if (s.ipoCooldown > 0) s.ipoCooldown -= 1
+
+  // --- IPO process ---
+  tickIPO(s)
 
   // --- random event ---
   maybeFireEvent(s)
@@ -819,7 +839,8 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- milestones ---
   checkMilestones(s)
 
-  // --- endings ---
+  // --- endings (skip if the IPO already decided this week) ---
+  if (s.gameOver) return s
   if (s.cash < 0) {
     if (!s.bridgeUsed && val > 3_000_000) {
       s.bridgeUsed = true
@@ -845,6 +866,112 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   }
 
   return s
+}
+
+// ---------- IPO ----------
+
+export const IPO_COST = 2_000_000
+export const IPO_MIN_VAL = 300_000_000
+export const IPO_MIN_ANNUAL_REV = 10_000_000
+
+export function ipoChecklist(s: GameState): { label: string; met: boolean }[] {
+  return [
+    { label: 'Series C company', met: s.stage === 'Series C' },
+    { label: `Valuation ≥ ${IPO_MIN_VAL / 1e6}M`, met: valuation(s) >= IPO_MIN_VAL },
+    { label: `Revenue ≥ $${IPO_MIN_ANNUAL_REV / 1e6}M/yr`, met: s.lastRevenue * 52 >= IPO_MIN_ANNUAL_REV },
+    { label: 'Bankers will answer your calls', met: s.ipoCooldown === 0 },
+    { label: `$${IPO_COST / 1e6}M for bankers & lawyers`, met: s.cash >= IPO_COST },
+  ]
+}
+
+export function ipoEligible(s: GameState): boolean {
+  return !s.ipo && !s.gameOver && ipoChecklist(s).every((c) => c.met)
+}
+
+export function startIPO(s: GameState) {
+  if (!ipoEligible(s)) return
+  s.cash -= IPO_COST
+  s.ipo = { phase: 'filing', weeksLeft: 4, demand: 50 }
+  s.flash =
+    'The S-1 is filed. Four weeks of regulatory scrutiny, then a four-week roadshow — and then the market decides what you are worth. ' +
+    'Fundraising is frozen during the quiet period, and the process will eat some of your attention.'
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'system',
+    title: `${s.companyName} files to go public`,
+    body:
+      'The confidential S-1 hits the SEC. Analysts start building models, journalists start digging, and every bug report ' +
+      'is suddenly a "material risk factor". Keep the product clean and the growth curve pointing up.',
+  })
+}
+
+function tickIPO(s: GameState) {
+  if (!s.ipo) return
+  const ipo = s.ipo
+  ipo.weeksLeft -= 1
+
+  if (ipo.phase === 'filing') {
+    // scrutiny: the street reads everything
+    let d = 0
+    if (s.bugs > 50) d -= 4
+    if (s.reputation > 60) d += 2
+    if (s.reputation < 35) d -= 3
+    if (growthRate(s) > 0.02) d += 2
+    ipo.demand = clamp(ipo.demand + d + rand(-2, 2), 0, 100)
+    if (ipo.weeksLeft <= 0) {
+      ipo.phase = 'roadshow'
+      ipo.weeksLeft = 4
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'system',
+        title: 'The roadshow begins',
+        body: 'Eight cities, forty meetings, one deck. Fund managers squint at your churn curve and ask about "the path to profitability". Every strong week adds demand for the stock.',
+      })
+    }
+    return
+  }
+
+  // roadshow: demand builds (or leaks) week by week
+  ipo.demand = clamp(ipo.demand + 3 + growthRate(s) * 60 + s.climate * 4 + s.hype / 30 + rand(-3, 3), 0, 100)
+  s.hype = clamp(s.hype + 4, 0, 100)
+  if (ipo.weeksLeft <= 0) priceIPO(s)
+}
+
+function priceIPO(s: GameState) {
+  const val = valuation(s)
+  // pricing day: investor demand meets the market's mood
+  const mult = 0.72 + (s.ipo!.demand / 100) * 0.55 + 0.3 * s.climate + rand(-0.08, 0.12)
+  s.ipo = null
+  if (mult >= 0.95) {
+    const pop = mult >= 1.15
+    const payout = Math.round(val * mult * s.founderEquity)
+    s.gameOver = { type: 'ipo', week: s.week, payout }
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: pop ? `📈 ${s.companyName} pops ${Math.round((mult - 1) * 100)}% on debut` : `${s.companyName} is a public company`,
+      body: pop
+        ? 'The bell rings, the ticker climbs, and CNBC mispronounces your name. A very good day.'
+        : 'A steady, respectable debut. The bankers look relieved, which is their version of joy.',
+    })
+  } else {
+    s.ipoCooldown = 25
+    s.reputation = clamp(s.reputation - 10, 0, 100)
+    applyEffects(s, { morale: -8 })
+    s.flash =
+      `IPO pulled. Demand priced the offering ${Math.round((1 - mult) * 100)}% below your last round and the board refused to go out at that price. ` +
+      'The street will not look at you again for a while — build the numbers, then come back.'
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: `${s.companyName} shelves its IPO`,
+      body: '"Market conditions", says the press release. Everyone knows what that means. The team watched the ticker that never was.',
+    })
+  }
 }
 
 // ---------- the board ----------

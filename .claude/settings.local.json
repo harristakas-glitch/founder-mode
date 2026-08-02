@@ -26,7 +26,9 @@
       "Bash(git push *)",
       "Bash(curl -s -o /dev/null -w \"deploy check: %{http_code}\\\\n\" https://harristakas-glitch.github.io/founder-mode/)",
       "Bash(curl -s https://harristakas-glitch.github.io/founder-mode/)",
-      "Bash(git commit -m 'Online multiplayer: 2-4 players over the internet via Supabase Realtime rooms, plus seeded daily challenge *)"
+      "Bash(git commit -m 'Online multiplayer: 2-4 players over the internet via Supabase Realtime rooms, plus seeded daily challenge *)",
+      "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/ipotest.ts)",
+      "Bash(git commit -m 'Sound \\(WebAudio synth, mute toggle\\) + IPO endgame: S-1 filing, roadshow, pricing day with pop/pull outcomes *)"
     ]
   }
 }

@@ -126,9 +126,15 @@ export interface HistoryPoint {
 }
 
 export interface GameOver {
-  type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup'
+  type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo'
   week: number
   payout?: number
+}
+
+export interface IpoProcess {
+  phase: 'filing' | 'roadshow'
+  weeksLeft: number
+  demand: number // 0-100 investor appetite, decides pop or flop
 }
 
 export interface GameState {
@@ -170,6 +176,8 @@ export interface GameState {
   lastExpenses: number
   flash: string | null // one-shot banner shown after a player action; cleared on advance
   challenge: { label: string; cap: number } | null // capped run: daily challenge or multiplayer match
+  ipo: IpoProcess | null // S-1 filed, in progress
+  ipoCooldown: number // weeks until the street will look at you again after a pulled IPO
   history: HistoryPoint[]
   gameOver: GameOver | null
 }
