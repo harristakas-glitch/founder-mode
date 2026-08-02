@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Check,
   ChevronsRight,
+  Globe,
   HandCoins,
   Hourglass,
   LayoutDashboard,
@@ -17,7 +19,9 @@ import {
 import { useStore, type ScreenId } from './store'
 import { avgMorale, hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
+import { myId } from './net/online'
 import { NewGame } from './screens/NewGame'
+import { Lobby } from './screens/Lobby'
 import { Dashboard } from './screens/Dashboard'
 import { Team } from './screens/Team'
 import { Hiring } from './screens/Hiring'
@@ -41,10 +45,14 @@ const NAV: { id: ScreenId; label: string; icon: typeof Mail }[] = [
   { id: 'fundraising', label: 'Fundraising', icon: HandCoins },
 ]
 
+const GAME_URL = 'https://harristakas-glitch.github.io/founder-mode/'
+const ENDING_EMOJI: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱' }
+
 export default function App() {
-  const { game, screen, setScreen, advance, abandonGame } = useStore()
+  const { game, online, screen, setScreen, advance, abandonGame, resolveChoice } = useStore()
   const [navOpen, setNavOpen] = useState(false)
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
+  const [, setClock] = useState(0) // re-render for the round countdown
   const prevWeek = useRef<number | null>(null)
 
   useEffect(() => {
@@ -55,16 +63,34 @@ export default function App() {
     if (prevWeek.current !== null && game.week > prevWeek.current) {
       setWeekFlash(game.week)
       const t = setTimeout(() => setWeekFlash(null), 950)
+      prevWeek.current = game.week
       return () => clearTimeout(t)
     }
     prevWeek.current = game.week
   }, [game?.week, game])
 
+  // tick once a second while an online round clock is running
   useEffect(() => {
-    if (game) prevWeek.current = game.week
-  }, [game?.week, game])
+    if (!online || online.phase !== 'playing') return
+    const t = setInterval(() => setClock((c) => c + 1), 1000)
+    return () => clearInterval(t)
+  }, [online])
 
-  if (!game) return <NewGame />
+  const me = online?.players.find((p) => p.id === myId())
+  const myReady = !!me?.ready
+  const matchOver = !!online && online.phase === 'playing' && online.players.length > 0 && online.players.every((p) => p.over)
+
+  // when the round clock runs out, decisions resolve conservatively and the week is forced
+  useEffect(() => {
+    if (!game || !online || online.phase !== 'playing' || myReady || game.gameOver || matchOver) return
+    if (online.deadline === null || Date.now() < online.deadline) return
+    for (const m of game.inbox) {
+      if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoice(m.id, m.choices.length - 1)
+    }
+    advance()
+  })
+
+  if (!game) return online?.phase === 'lobby' ? <Lobby /> : <NewGame />
 
   const pending = hasPendingDecision(game)
   const unread = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved).length
@@ -72,6 +98,7 @@ export default function App() {
   const burn = weeklyBurn(game)
   const runway = runwayWeeks(game)
   const morale = avgMorale(game)
+  const secondsLeft = online?.deadline ? Math.max(0, Math.ceil((online.deadline - Date.now()) / 1000)) : null
 
   const nav = (
     <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
@@ -102,13 +129,14 @@ export default function App() {
     </nav>
   )
 
+  const advanceDisabled = online ? pending || myReady || !!game.gameOver || matchOver : pending || !!game.gameOver
   const advanceBtn = (
     <button
-      disabled={pending || !!game.gameOver}
+      disabled={advanceDisabled}
       onClick={advance}
       title={pending ? 'Resolve the decision in your inbox first' : undefined}
       className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-[15px] font-bold transition-all ${
-        pending || game.gameOver
+        advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
           : 'bg-gradient-to-br from-good to-emerald-600 text-white shadow-lg shadow-good/25 hover:brightness-110 active:scale-[0.98]'
       }`}
@@ -117,6 +145,16 @@ export default function App() {
         <>
           <Hourglass size={16} /> Decision required
         </>
+      ) : online ? (
+        myReady ? (
+          <>
+            <Hourglass size={16} /> Waiting for rivals…
+          </>
+        ) : (
+          <>
+            Ready — end my week <ChevronsRight size={18} />
+          </>
+        )
       ) : (
         <>
           Advance Week <ChevronsRight size={18} />
@@ -133,10 +171,40 @@ export default function App() {
           <div className="text-[17px] font-extrabold tracking-tight">{game.companyName}</div>
           <div className="mt-0.5 text-xs text-mut">
             {game.stage} · Week {game.week}
+            {game.challenge && ` · ${game.challenge.label}, ends wk ${game.challenge.cap}`}
           </div>
+          {online && (
+            <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-accent/15 px-2 py-1 text-[11px] font-bold text-accent">
+              <Globe size={11} /> Room {online.code}
+              {secondsLeft !== null && !matchOver && (
+                <span className={`ml-auto tnum ${secondsLeft < 30 ? 'text-bad' : ''}`}>
+                  {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {nav}
         <div className="border-t border-line/60 p-3">
+          {online && (
+            <div className="mb-2 space-y-1">
+              {online.players.map((p) => (
+                <div key={p.id} className="flex items-center justify-between text-[11.5px]">
+                  <span className={`truncate ${p.id === myId() ? 'font-bold' : 'text-mut'}`}>
+                    {p.over ? '☠️ ' : ''}
+                    {p.company}
+                  </span>
+                  {p.over ? (
+                    <span className="text-mut">out</span>
+                  ) : p.ready ? (
+                    <Check size={13} className="text-good" />
+                  ) : (
+                    <span className="text-mut">…</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mb-2 text-center text-[11px] text-mut">{weekDate(game.week)}</div>
           {advanceBtn}
         </div>
@@ -152,6 +220,7 @@ export default function App() {
                 <div className="text-[17px] font-extrabold">{game.companyName}</div>
                 <div className="text-xs text-mut">
                   {game.stage} · Week {game.week}
+                  {online && ` · Room ${online.code}`}
                 </div>
               </div>
               <button onClick={() => setNavOpen(false)} className="rounded-lg p-1.5 text-mut hover:bg-surface2">
@@ -192,11 +261,22 @@ export default function App() {
             <Stat k="Morale" tone={morale < 45 ? 'bad' : undefined}>
               {Math.round(morale)}
             </Stat>
+            {online && secondsLeft !== null && !matchOver && (
+              <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
+                {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
+              </Stat>
+            )}
           </div>
         </header>
 
         {/* main */}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-24 md:px-6 md:pt-5 md:pb-8">
+          {online && game.gameOver && !matchOver && (
+            <div className="mb-4 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
+              <b>{game.companyName} is out of the running</b> ({game.gameOver.type}, week {game.gameOver.week}). Watch the Market screen
+              while your rivals finish the match.
+            </div>
+          )}
           {game.flash && (
             <div
               className={`flash-in mb-4 rounded-xl border px-4 py-3 text-[14px] leading-relaxed ${
@@ -235,15 +315,16 @@ export default function App() {
         </div>
       )}
 
-      {game.gameOver && <GameOver />}
+      {matchOver && <MatchOver />}
+      {!online && game.gameOver && <GameOver />}
 
       <button
         className="fixed right-3 bottom-3 z-20 hidden rounded-lg border border-line/60 px-2.5 py-1 text-[11px] text-mut opacity-40 transition-opacity hover:opacity-100 hover:text-bad md:block"
         onClick={() => {
-          if (confirm('Abandon this company and start over?')) abandonGame()
+          if (confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?')) abandonGame()
         }}
       >
-        New run
+        {online ? 'Leave match' : 'New run'}
       </button>
     </div>
   )
@@ -255,6 +336,74 @@ function Stat({ k, tone, children }: { k: string; tone?: 'good' | 'bad' | 'warn'
     <div className="shrink-0">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-mut">{k}</div>
       <div className={`text-[15px] font-bold tnum ${cls}`}>{children}</div>
+    </div>
+  )
+}
+
+function ShareButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      className="rounded-xl border border-line bg-surface2 px-5 py-3 font-bold transition-all hover:border-accent active:scale-[0.98]"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1800)
+        })
+      }}
+    >
+      {copied ? 'Copied! 📋' : 'Copy share text'}
+    </button>
+  )
+}
+
+function MatchOver() {
+  const { online, abandonGame } = useStore()
+  if (!online) return null
+  const ranked = [...online.players].sort((a, b) => b.payout - a.payout)
+  const shareText =
+    `Founder Mode — online match result:\n` +
+    ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(p.payout)}`).join('\n') +
+    `\nPlay: ${GAME_URL}`
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="rise-in w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+        <h2 className="text-3xl font-extrabold">🏆 Match over</h2>
+        <p className="mt-2 text-mut">
+          <b className="text-ink">{ranked[0]?.company}</b> takes the market. Final founder payouts:
+        </p>
+        <div className="mt-5 space-y-2 text-left">
+          {ranked.map((p, i) => (
+            <div
+              key={p.id}
+              className={`flex items-center justify-between rounded-xl border px-4 py-2.5 ${
+                i === 0 ? 'border-warn/60 bg-warn/10' : 'border-line bg-surface2/50'
+              }`}
+            >
+              <span>
+                <b>
+                  {i === 0 ? '👑 ' : `${i + 1}. `}
+                  {p.company}
+                </b>{' '}
+                <span className="text-mut">
+                  {ENDING_EMOJI[p.overType ?? 'timeup']} {p.overType ?? 'timeup'}
+                  {p.id === myId() && ' · you'}
+                </span>
+              </span>
+              <b className={`tnum ${p.payout > 0 ? 'text-good' : 'text-mut'}`}>{money(p.payout)}</b>
+            </div>
+          ))}
+        </div>
+        <div className="mt-7 flex justify-center gap-3">
+          <ShareButton text={shareText} />
+          <button
+            className="rounded-xl bg-accent px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+            onClick={abandonGame}
+          >
+            New game
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -280,8 +429,8 @@ function GameOver() {
           <>
             <h2 className="text-3xl font-extrabold">💸 Out of money</h2>
             <p className="mt-3 leading-relaxed text-mut">
-              {game.companyName} ran out of cash in week {go.week}. The servers went dark, the office plants were divided
-              among the team, and the domain now redirects to a competitor.
+              {game.companyName} ran out of cash in week {go.week}. The servers went dark, the office plants were divided among the
+              team, and the domain now redirects to a competitor.
             </p>
           </>
         )}
@@ -309,11 +458,22 @@ function GameOver() {
           <>
             <h2 className="text-3xl font-extrabold">🪑 Fired by your own board</h2>
             <p className="mt-3 leading-relaxed text-mut">
-              In week {go.week}, the board of {game.companyName} voted to replace you as CEO. You built it, you raised for
-              it — and the people you raised from showed you the door. Your discounted stake:
+              In week {go.week}, the board of {game.companyName} voted to replace you as CEO. You built it, you raised for it — and the
+              people you raised from showed you the door. Your discounted stake:
             </p>
             <div className="my-3 text-4xl font-extrabold tnum">{money(go.payout ?? 0)}</div>
             <p className="text-mut">Somewhere, a founder support group has a chair waiting.</p>
+          </>
+        )}
+        {go.type === 'timeup' && (
+          <>
+            <h2 className="text-3xl font-extrabold">⏱ Time's up — challenge complete</h2>
+            <p className="mt-3 leading-relaxed text-mut">
+              {game.challenge?.label ?? 'The challenge'} ran its {go.week} weeks. {game.companyName}'s final score — your stake, at the
+              closing bell:
+            </p>
+            <div className="my-3 text-4xl font-extrabold text-good tnum">{money(go.payout ?? 0)}</div>
+            <p className="text-mut">Same world, same starting hand — think a friend can beat that?</p>
           </>
         )}
         <div className="mt-6 grid grid-cols-3 gap-3">
@@ -324,12 +484,19 @@ function GameOver() {
             </div>
           ))}
         </div>
-        <button
-          className="mt-7 rounded-xl bg-accent px-6 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
-          onClick={abandonGame}
-        >
-          Start a new company
-        </button>
+        <div className="mt-7 flex justify-center gap-3">
+          {game.challenge && (
+            <ShareButton
+              text={`Founder Mode ${game.challenge.label}\n${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay the same world: ${GAME_URL}`}
+            />
+          )}
+          <button
+            className="rounded-xl bg-accent px-6 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+            onClick={abandonGame}
+          >
+            Start a new company
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -2,24 +2,46 @@ import { Bar, Panel, StatCard, Td, Th } from '../components'
 import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
 import { effectiveTam, marketSaturation, rivalValuation, valuation } from '../game/engine'
+import { myId } from '../net/online'
 import { useStore } from '../store'
 
 export function Market() {
   const game = useStore((s) => s.game)!
+  const online = useStore((s) => s.online)
   const sector = sectorById(game.sector)
-  const saturation = marketSaturation(game)
+  const netPlayers = online?.players ?? []
+  const otherPlayersUsers = netPlayers.reduce((a, p) => (p.id === myId() || p.over ? a : a + p.users), 0)
+  const saturation = marketSaturation(game, otherPlayersUsers)
+
+  const playerRows = online
+    ? netPlayers.map((p) => {
+        const isMe = p.id === myId()
+        return {
+          id: p.id,
+          name: isMe ? `${p.company} (you)` : p.company,
+          users: isMe ? game.users : p.users,
+          stage: (isMe ? game.stage : `wk ${p.week}`) as string,
+          product: undefined as number | undefined,
+          val: isMe ? valuation(game) : p.over ? p.payout : p.val,
+          alive: isMe ? !game.gameOver : !p.over,
+          you: isMe,
+        }
+      })
+    : [
+        {
+          id: 'you',
+          name: `${game.companyName} (you)`,
+          users: game.users,
+          stage: game.stage as string,
+          product: undefined as number | undefined,
+          val: valuation(game),
+          alive: true,
+          you: true,
+        },
+      ]
 
   const rows = [
-    {
-      id: 'you',
-      name: `${game.companyName} (you)`,
-      users: game.users,
-      stage: game.stage as string,
-      product: undefined as number | undefined,
-      val: valuation(game),
-      alive: true,
-      you: true,
-    },
+    ...playerRows,
     ...game.rivals.map((r) => ({
       id: r.id,
       name: r.name,
@@ -48,8 +70,12 @@ export function Market() {
         />
         <StatCard
           label="Your market share"
-          value={pct(game.users / Math.max(1, game.users + game.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)), 1)}
-          delta="share of captured users, vs living rivals"
+          value={pct(
+            game.users /
+              Math.max(1, game.users + otherPlayersUsers + game.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)),
+            1,
+          )}
+          delta={online ? 'share of captured users, vs the other founders' : 'share of captured users, vs living rivals'}
         />
       </div>
 
@@ -92,8 +118,9 @@ export function Market() {
             </table>
           </div>
           <div className="mt-3 text-xs leading-relaxed text-mut">
-            Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise
-            rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.
+            {online
+              ? 'These are your fellow founders — same market, same starting hand, one pot of users. Fallen players show their final payout.'
+              : 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
           </div>
         </Panel>
       </div>

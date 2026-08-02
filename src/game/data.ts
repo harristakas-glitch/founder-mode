@@ -124,12 +124,16 @@ const LAST = [
   'Fischer', 'Santos', 'Nguyen', 'Petrov', 'Lindqvist', 'Duarte', 'Kaur', 'Yamamoto', 'Berg', 'Osei',
 ]
 
+// Central RNG hook: newGame swaps this for a seeded generator so daily challenges
+// and multiplayer matches deal everyone the identical starting world.
+export const RNG = { next: () => Math.random() }
+
 export function randomName(): string {
   return `${pick(FIRST)} ${pick(LAST)}`
 }
 
 export function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+  return arr[Math.floor(RNG.next() * arr.length)]
 }
 
 export interface EventDef {

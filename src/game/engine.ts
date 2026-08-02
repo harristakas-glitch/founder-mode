@@ -2,6 +2,7 @@ import {
   EVENTS,
   INVESTORS,
   RIVAL_NAMES,
+  RNG,
   STAGES,
   STAGE_THRESHOLDS,
   avgMorale,
@@ -29,11 +30,44 @@ export const uid = () =>
   `${Date.now().toString(36)}-${(idCounter++).toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
-const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo)
+const rand = (lo: number, hi: number) => lo + RNG.next() * (hi - lo)
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Run fn with a seeded RNG, then restore true randomness. Used to deal identical starting worlds.
+export function withSeed<T>(seed: number | undefined, fn: () => T): T {
+  if (seed === undefined) return fn()
+  const prev = RNG.next
+  RNG.next = mulberry32(seed)
+  try {
+    return fn()
+  } finally {
+    RNG.next = prev
+  }
+}
 
 // ---------- new game ----------
 
-export function newGame(companyName: string, sector: SectorId, founderKind: FounderKind): GameState {
+export interface NewGameOpts {
+  seed?: number // deal the same world to everyone with this seed
+  challenge?: { label: string; cap: number } | null // capped run (daily / multiplayer match)
+  aiRivals?: boolean // false in multiplayer — the other players ARE the rivals
+}
+
+export function newGame(companyName: string, sector: SectorId, founderKind: FounderKind, opts: NewGameOpts = {}): GameState {
+  return withSeed(opts.seed, () => buildGame(companyName, sector, founderKind, opts))
+}
+
+function buildGame(companyName: string, sector: SectorId, founderKind: FounderKind, opts: NewGameOpts): GameState {
   const sec = sectorById(sector)
   const state: GameState = {
     companyName,
@@ -59,7 +93,7 @@ export function newGame(companyName: string, sector: SectorId, founderKind: Foun
     candidates: [],
     offersOut: [],
     pendingHires: [],
-    rivals: makeRivals(sec.tam),
+    rivals: opts.aiRivals === false ? [] : makeRivals(sec.tam),
     climate: rand(-0.3, 0.5),
     inbox: [],
     termSheets: [],
@@ -72,6 +106,7 @@ export function newGame(companyName: string, sector: SectorId, founderKind: Foun
     lastRevenue: 0,
     lastExpenses: 0,
     flash: null,
+    challenge: opts.challenge ?? null,
     history: [],
     gameOver: null,
   }
@@ -229,8 +264,8 @@ export function effectiveTam(s: GameState): number {
   return Math.round(sectorById(s.sector).tam * (1 + (s.week / 52) * 0.25))
 }
 
-export function marketSaturation(s: GameState): number {
-  const total = s.users + s.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)
+export function marketSaturation(s: GameState, externalUsers = 0): number {
+  const total = s.users + externalUsers + s.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)
   return clamp(total / effectiveTam(s), 0, 1)
 }
 
@@ -381,7 +416,8 @@ export const MILESTONES: MilestoneDef[] = [
     id: 'market-leader',
     title: 'Market leader',
     goal: 'Have more users than every living rival',
-    cond: (s) => s.users > 100 && s.rivals.filter((r) => r.alive).every((r) => s.users > r.users),
+    cond: (s) =>
+      s.users > 100 && s.rivals.some((r) => r.alive) && s.rivals.filter((r) => r.alive).every((r) => s.users > r.users),
     effects: { hype: 8, reputation: 8, morale: 6 },
   },
   {
@@ -566,7 +602,8 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
 
 // ---------- weekly tick ----------
 
-export function advanceWeek(prev: GameState): GameState {
+// externalUsers: other human players' users in the same market (multiplayer).
+export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const s: GameState = structuredClone(prev)
   const sector = sectorById(s.sector)
   s.week += 1
@@ -618,7 +655,7 @@ export function advanceWeek(prev: GameState): GameState {
   s.hype = clamp(s.hype + hypeGain, 0, 100)
 
   // --- users: acquisition is gated by PMF, and the market is finite ---
-  const saturation = marketSaturation(s)
+  const saturation = marketSaturation(s, externalUsers)
   const room = Math.pow(1 - saturation, 1.2)
   const pmfAcq = 0.35 + (0.65 * s.pmf) / 100
   const acquired = sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2)
@@ -803,6 +840,8 @@ export function advanceWeek(prev: GameState): GameState {
     }
   } else if (val >= 1_000_000_000) {
     s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(val * s.founderEquity) }
+  } else if (s.challenge && s.week >= s.challenge.cap) {
+    s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(val * s.founderEquity) }
   }
 
   return s

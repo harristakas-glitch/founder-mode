@@ -126,7 +126,7 @@ export interface HistoryPoint {
 }
 
 export interface GameOver {
-  type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired'
+  type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup'
   week: number
   payout?: number
 }
@@ -169,6 +169,7 @@ export interface GameState {
   lastRevenue: number
   lastExpenses: number
   flash: string | null // one-shot banner shown after a player action; cleared on advance
+  challenge: { label: string; cap: number } | null // capped run: daily challenge or multiplayer match
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

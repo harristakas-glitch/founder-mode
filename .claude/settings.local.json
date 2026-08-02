@@ -23,7 +23,10 @@
       "Bash(gh api *)",
       "Bash(gh run *)",
       "Bash(git commit -m 'Front-end overhaul: Tailwind v4 + lucide icons, responsive mobile layout, animated tickers, week transitions, interactive charts *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -s -o /dev/null -w \"deploy check: %{http_code}\\\\n\" https://harristakas-glitch.github.io/founder-mode/)",
+      "Bash(curl -s https://harristakas-glitch.github.io/founder-mode/)",
+      "Bash(git commit -m 'Online multiplayer: 2-4 players over the internet via Supabase Realtime rooms, plus seeded daily challenge *)"
     ]
   }
 }
