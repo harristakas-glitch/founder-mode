@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(which node; which brew; ls /opt/homebrew/bin 2>/dev/null | grep -E '^\\(node|npm|bun|deno\\)' ; ls ~/.nvm 2>/dev/null | head -3)",
+      "Bash(brew install *)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/simtest.ts)",
+      "Bash(npm run *)",
+      "Bash(node scripts/singlefile.mjs)",
+      "Bash(open \"/Users/charilaostakas/Claude/game/Founder Mode.html\")",
+      "Bash(chmod +x \"/Users/charilaostakas/Claude/game/Play Founder Mode.command\")",
+      "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/socialtest.ts)",
+      "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/alloctest.ts)",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Founder Mode v0.4 — startup management sim \\(Vite + React + TS + Zustand\\) *)"
+    ]
+  }
+}
