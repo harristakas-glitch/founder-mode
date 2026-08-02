@@ -216,7 +216,7 @@ export const EVENTS: EventDef[] = [
       const best = [...s.employees].sort((a, b) => b.skill - a.skill)[0]
       return [
         {
-          label: `Counter-offer (+25% salary for ${best.name})`,
+          label: `Counter-offer: +25% salary, $${Math.round((best.salary * 0.25) / 4 / 1000)}k signing sweetener for ${best.name}`,
           resultText: `${best.name} stays, feeling valued. Payroll just got heavier.`,
           effects: { morale: 6, cash: -Math.round((best.salary * 0.25) / 4) },
         },
@@ -281,7 +281,7 @@ export const EVENTS: EventDef[] = [
     body: () => 'Late nights are piling up. People are quietly updating their LinkedIn profiles.',
     choices: () => [
       {
-        label: 'Company offsite + a week of no deadlines',
+        label: 'Company offsite + a week of no deadlines ($8,000)',
         resultText: 'Morale rebounds. Not much shipped this week.',
         effects: { cash: -8000, morale: 18, features: -2 },
       },
@@ -323,7 +323,7 @@ export const EVENTS: EventDef[] = [
       'A white-hat researcher reported a serious vulnerability and asked for a bounty. Nothing was leaked — yet.',
     choices: () => [
       {
-        label: 'Pay the bounty, patch immediately',
+        label: 'Pay the bounty ($15,000), patch immediately',
         resultText: 'Patched and disclosed responsibly. The researcher praises you publicly.',
         effects: { cash: -15000, bugs: -5, reputation: 6 },
       },
@@ -344,12 +344,12 @@ export const EVENTS: EventDef[] = [
       'A patent troll claims your product infringes their 2004 patent on "displaying information on a screen".',
     choices: () => [
       {
-        label: 'Settle quietly',
+        label: 'Settle quietly ($25,000)',
         resultText: 'You pay them to go away. It stings.',
         effects: { cash: -25000 },
       },
       {
-        label: 'Lawyer up and fight',
+        label: 'Lawyer up and fight ($12,000)',
         resultText: 'Your lawyer sends a scorcher. The troll retreats, and the story earns you fans.',
         effects: { cash: -12000, reputation: 4, hype: 4 },
       },
@@ -456,10 +456,25 @@ export const EVENTS: EventDef[] = [
     weight: 7,
     minWeek: 10,
     cond: (s) => s.users > 500,
-    title: 'Surprise cloud bill',
+    title: 'Cloud bill spike',
     body: (s) =>
-      `Growth is great — but your infrastructure bill came in at $${Math.round(s.users * 8).toLocaleString()} over budget.`,
-    autoEffects: (s) => ({ cash: -Math.round(s.users * 8) }),
+      `Growth is great — but your infrastructure provider flags a $${Math.round(s.users * 8).toLocaleString()} overage this cycle. Pay it, or pull engineers off the roadmap to optimize it away.`,
+    choices: (s) => {
+      const full = Math.round(s.users * 8)
+      const reduced = Math.round(full / 3)
+      return [
+        {
+          label: `Pay the overage ($${full.toLocaleString()})`,
+          resultText: 'The bill clears. The roadmap does not slip.',
+          effects: { cash: -full },
+        },
+        {
+          label: `Optimization sprint (pay $${reduced.toLocaleString()}, lose a week of product work)`,
+          resultText: 'The team rewrites the hot paths and caches everything. The bill shrinks; the roadmap slips a little.',
+          effects: { cash: -reduced, features: -2 },
+        },
+      ]
+    },
   },
   {
     id: 'fan-mail',

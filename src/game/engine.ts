@@ -168,6 +168,15 @@ export function makeCandidate(s: GameState): Candidate {
 
 export const recruiterFee = (c: Candidate) => Math.round(c.salary * 0.15)
 
+// Every one-off payment the player has already set in motion — no hidden bills.
+export function committedCosts(s: GameState): { due: number; potential: number; recommended: number } {
+  const due = s.pendingHires.reduce((a, p) => a + recruiterFee(p.candidate), 0) // signed, will definitely hit
+  const potential = s.offersOut.reduce((a, c) => a + recruiterFee(c), 0) // hits if the candidate accepts
+  // sensible cash cushion: everything committed + a typical worst-case surprise (infra spikes scale with users)
+  const recommended = due + potential + Math.max(20_000, Math.round(s.users * 8))
+  return { due, potential, recommended }
+}
+
 // ---------- valuation ----------
 
 export function valuation(s: GameState): number {

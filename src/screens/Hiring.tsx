@@ -47,6 +47,7 @@ export function Hiring() {
                   </span>
                   <span className="text-good">
                     starts in {p.weeksUntilStart} wk{p.weeksUntilStart === 1 ? '' : 's'}
+                    <span className="text-mut"> · {money(recruiterFee(p.candidate))} fee due then</span>
                   </span>
                 </div>
               ))}

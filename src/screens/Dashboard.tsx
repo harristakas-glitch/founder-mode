@@ -4,6 +4,7 @@ import { sectorById } from '../game/data'
 import {
   MILESTONES,
   avgMorale,
+  committedCosts,
   growthRate,
   pmfLabel,
   productScore,
@@ -43,6 +44,15 @@ function Benchmarks() {
       <BenchRow metric="Runway" tone={tone(runway === Infinity || runway >= 30, runway >= 15)}>
         <b className="tnum">{runway === Infinity ? 'profitable' : `${Math.floor(runway)} wk`}</b>{' '}
         <span className="text-mut">vs 30+ wk healthy — under 10 and candidates refuse offers</span>
+      </BenchRow>
+      <BenchRow
+        metric="Cash buffer"
+        tone={tone(game.cash >= committedCosts(game).recommended, game.cash >= committedCosts(game).recommended * 0.5)}
+      >
+        <b className="tnum">{money(game.cash)}</b>{' '}
+        <span className="text-mut">
+          vs {money(committedCosts(game).recommended)} recommended — covers committed fees + a worst-case bill (see Finance)
+        </span>
       </BenchRow>
       {bestRival && (
         <BenchRow metric="Product vs rivals" tone={tone(pScore >= bestRival.product, pScore >= bestRival.product - 15)}>

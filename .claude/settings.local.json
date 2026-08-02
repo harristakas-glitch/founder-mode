@@ -30,7 +30,8 @@
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/ipotest.ts)",
       "Bash(git commit -m 'Sound \\(WebAudio synth, mute toggle\\) + IPO endgame: S-1 filing, roadshow, pricing day with pop/pull outcomes *)",
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/bankruptcytest.ts)",
-      "Bash(git commit -m 'Fix surprise bankruptcies: autopsy on death screen, fundamentals-based bridge rescue, thin-cash-buffer warnings *)"
+      "Bash(git commit -m 'Fix surprise bankruptcies: autopsy on death screen, fundamentals-based bridge rescue, thin-cash-buffer warnings *)",
+      "Bash(git commit -m 'No hidden bills: cloud overage becomes a stated-cost choice, dollar amounts on all event options, upcoming-payments panel in Finance, cash-buffer benchmark *)"
     ]
   }
 }
