@@ -1,8 +1,7 @@
-import { Bar, Panel, StatCard } from '../components'
+import { Bar, Panel, StatCard, Td, Th } from '../components'
 import { money, num, pct } from '../format'
-import { sectorById } from '../game/data'
+import { STAGES, sectorById } from '../game/data'
 import { effectiveTam, marketSaturation, rivalValuation, valuation } from '../game/engine'
-import { STAGES } from '../game/data'
 import { useStore } from '../store'
 
 export function Market() {
@@ -35,12 +34,12 @@ export function Market() {
 
   return (
     <div>
-      <div className="screen-title">Market</div>
-      <div className="screen-sub">
+      <div className="text-xl font-extrabold tracking-tight">Market</div>
+      <div className="mb-4 text-[13px] text-mut">
         {sector.name} · addressable market ≈ {num(effectiveTam(game))} users (and growing) · winners take most
       </div>
 
-      <div className="grid cols-2">
+      <div className="grid gap-3.5 md:grid-cols-2">
         <StatCard
           label="Market saturation"
           value={pct(saturation, 1)}
@@ -54,38 +53,47 @@ export function Market() {
         />
       </div>
 
-      <div className="mt">
+      <div className="mt-3.5">
         <Panel title="Leaderboard">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Company</th>
-                <th>Stage</th>
-                <th className="r">Users</th>
-                <th className="r">Est. valuation</th>
-                <th style={{ width: 140 }}>Momentum</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.id} style={r.you ? { background: 'rgba(91,140,255,0.08)' } : !r.alive ? { opacity: 0.4 } : undefined}>
-                  <td>{r.alive ? i + 1 : '—'}</td>
-                  <td>
-                    <b>{r.name}</b>
-                    {!r.alive && <span className="muted"> · shut down</span>}
-                  </td>
-                  <td>{r.alive ? r.stage : '☠️'}</td>
-                  <td className="r">{num(r.users)}</td>
-                  <td className="r">{r.alive ? money(r.val) : '—'}</td>
-                  <td>{r.alive && <Bar value={r.product ?? Math.min(100, 40 + game.pmf / 2)} color={r.you ? 'var(--accent)' : 'var(--muted)'} />}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px]">
+              <thead>
+                <tr>
+                  <Th>#</Th>
+                  <Th>Company</Th>
+                  <Th>Stage</Th>
+                  <Th right>Users</Th>
+                  <Th right>Est. valuation</Th>
+                  <Th>Momentum</Th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="muted mt" style={{ fontSize: '0.8rem' }}>
-            Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell.
-            Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={r.id} className={r.you ? 'bg-accent/10' : !r.alive ? 'opacity-40' : ''}>
+                    <Td>{r.alive ? i + 1 : '—'}</Td>
+                    <Td>
+                      <b>{r.name}</b>
+                      {!r.alive && <span className="text-mut"> · shut down</span>}
+                    </Td>
+                    <Td>{r.alive ? r.stage : '☠️'}</Td>
+                    <Td right>{num(r.users)}</Td>
+                    <Td right>{r.alive ? money(r.val) : '—'}</Td>
+                    <Td className="w-[140px]">
+                      {r.alive && (
+                        <Bar
+                          value={r.product ?? Math.min(100, 40 + game.pmf / 2)}
+                          color={r.you ? 'var(--color-accent)' : 'var(--color-mut)'}
+                        />
+                      )}
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 text-xs leading-relaxed text-mut">
+            Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise
+            rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.
           </div>
         </Panel>
       </div>
