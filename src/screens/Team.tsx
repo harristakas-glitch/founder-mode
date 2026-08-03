@@ -1,6 +1,7 @@
+import { Megaphone } from 'lucide-react'
 import { Bar, Btn, Panel, SkillDots, Td, Th, TraitChip } from '../components'
-import { money } from '../format'
-import { weeklyPayroll } from '../game/engine'
+import { money, pct } from '../format'
+import { pitchOptions, weeklyPayroll } from '../game/engine'
 import { useStore } from '../store'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -8,6 +9,54 @@ const ROLE_LABEL: Record<string, string> = {
   designer: 'Designer',
   marketer: 'Marketer',
   sales: 'Sales',
+}
+
+function PitchPanel() {
+  const game = useStore((s) => s.game)!
+  const rallyTeam = useStore((s) => s.rallyTeam)
+  const onCooldown = game.pitchCooldown > 0
+  const options = pitchOptions(game)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="All-hands — pitch your own team">
+        {game.rally && (
+          <div className="mb-3 rounded-lg border border-good/40 bg-good/10 px-3 py-2 text-[13px] text-good">
+            The team is rallied: output ×{game.rally.mult.toFixed(2)} for {game.rally.weeksLeft} more week
+            {game.rally.weeksLeft === 1 ? '' : 's'}.
+          </div>
+        )}
+        <div className="mb-3 text-xs leading-relaxed text-mut">
+          Investors aren't the only ones you pitch. Gather the company and pick your speech — the odds are computed from what the team
+          can already see (metrics, momentum, their own energy), so a speech the facts don't back is a gamble.
+          {onCooldown && (
+            <b className="text-warn"> They'll sit through the next one in {game.pitchCooldown} wk — even great speeches wear thin.</b>
+          )}
+        </div>
+        <div className="grid gap-2.5 md:grid-cols-3">
+          {options.map((o) => (
+            <div key={o.id} className="flex flex-col rounded-xl border border-line bg-surface2/50 p-3">
+              <div className="flex items-center justify-between">
+                <b className="text-[14px]">{o.name}</b>
+                <span className={`text-[13px] font-bold tnum ${o.p >= 0.6 ? 'text-good' : o.p >= 0.4 ? 'text-warn' : 'text-bad'}`}>
+                  {pct(o.p)} lands
+                </span>
+              </div>
+              <div className="mt-1 flex-1 text-xs leading-relaxed text-mut">{o.blurb}</div>
+              <div className="mt-2 text-[11.5px] leading-relaxed">
+                <div className="text-good">✓ {o.winText}</div>
+                <div className="text-bad">✗ {o.loseText}</div>
+              </div>
+              <Btn variant="primary" className="mt-2.5" disabled={onCooldown} onClick={() => rallyTeam(o.id)}>
+                <Megaphone size={13} className="mr-1 inline" />
+                {onCooldown ? `In ${game.pitchCooldown} wk` : 'Give this speech'}
+              </Btn>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  )
 }
 
 export function Team() {
@@ -32,6 +81,8 @@ export function Team() {
           </span>
         </div>
       </Panel>
+
+      {game.employees.length > 0 && <PitchPanel />}
 
       <div className="mt-3.5">
         <Panel>

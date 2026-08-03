@@ -151,6 +151,8 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     ventures: [],
     maCooldown: 0,
     scenario: null,
+    pitchCooldown: 0,
+    rally: null,
     history: [],
     gameOver: null,
   }
@@ -772,13 +774,15 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const moraleFactor = (e: Employee) => 0.55 + (e.morale / 100) * 0.55
   const traitMult = (e: Employee) => (e.trait === 'tenx' ? 1.5 : e.trait === 'mercenary' ? 1.15 : e.trait === 'craftsman' ? 1.1 : 1)
   const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e)
-  // an IPO process eats founder and team attention
+  // an IPO process eats founder and team attention; a landed pitch lifts everything for a while
   const ipoDrag = s.ipo ? 0.85 : 1
+  const rallyMult = s.rally ? s.rally.mult : 1
   const engPoints =
     (s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
       (s.founderKind === 'technical' ? 5 : 1.5)) *
-    ipoDrag
-  const designPoints = s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0)
+    ipoDrag *
+    rallyMult
+  const designPoints = s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0) * rallyMult
   const craftsmen = s.employees.filter((e) => e.trait === 'craftsman').length
   const a = s.allocation
   const hasBet = s.ventures.some((v) => !v.launched)
@@ -846,8 +850,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   // --- hype & marketing (noisy, saturating) ---
   const marketerPoints =
-    s.employees.filter((e) => e.role === 'marketer').reduce((a2, e) => a2 + eff(e), 0) +
-    (s.founderKind === 'business' ? 4 : 1)
+    (s.employees.filter((e) => e.role === 'marketer').reduce((a2, e) => a2 + eff(e), 0) +
+      (s.founderKind === 'business' ? 4 : 1)) *
+    rallyMult
   s.hype *= 0.92
   const hypeGain =
     (Math.sqrt(s.marketingSpend / 250) * (1 + marketerPoints / 12) + marketerPoints * 0.35) *
@@ -868,7 +873,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   s.users = Math.max(0, Math.round(s.users + acquired + wordOfMouth - churned))
 
   // --- revenue & costs: people only pay for things they need ---
-  const salesPoints = s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0)
+  const salesPoints = s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0) * rallyMult
   const salesBoost = 1 + salesPoints / 40 + (s.founderKind === 'business' ? 0.08 : 0)
   const conversion = 0.25 + (0.75 * s.pmf) / 100
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
@@ -986,6 +991,8 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   if (s.raiseCooldown > 0) s.raiseCooldown -= 1
   if (s.ipoCooldown > 0) s.ipoCooldown -= 1
   if (s.maCooldown > 0) s.maCooldown -= 1
+  if (s.pitchCooldown > 0) s.pitchCooldown -= 1
+  if (s.rally && (s.rally.weeksLeft -= 1) <= 0) s.rally = null
 
   // --- IPO process ---
   tickIPO(s)
@@ -1187,6 +1194,94 @@ function priceIPO(s: GameState) {
       body: '"Market conditions", says the press release. Everyone knows what that means. The team watched the ticker that never was.',
     })
   }
+}
+
+// ---------- the all-hands pitch: founder theater, with odds ----------
+
+export const PITCH_COOLDOWN = 8
+
+export interface PitchOption {
+  id: 'vision' | 'numbers' | 'war'
+  name: string
+  blurb: string
+  p: number // success probability, shown to the player up front
+  winText: string
+  loseText: string
+}
+
+// Odds are computed from the real state of the company — the team can smell whether a speech is earned.
+export function pitchOptions(s: GameState): PitchOption[] {
+  const growth = growthRate(s)
+  const net = s.lastRevenue - s.lastExpenses
+  const runway = runwayWeeks(s)
+  return [
+    {
+      id: 'vision',
+      name: 'The Vision',
+      blurb: 'Unicorns, changing the world, the mission. Lands when the company is visibly winning — rings hollow when it isn\'t.',
+      p: clamp(0.35 + s.pmf / 200 + s.hype / 300 + (growth > 0 ? 0.1 : 0), 0.25, 0.85),
+      winText: 'wins: morale +12 and an inspired team ships 10% more for 4 weeks',
+      loseText: 'flops: eye-rolls in the back row, morale −6',
+    },
+    {
+      id: 'numbers',
+      name: 'The Numbers',
+      blurb: 'Full transparency: metrics on the big screen, questions welcome. Safe when the numbers are good; sobering when they aren\'t.',
+      p: clamp(0.5 + (net >= 0 ? 0.25 : 0) + (growth >= 0.02 ? 0.15 : 0) - (runway !== Infinity && runway < 12 ? 0.2 : 0), 0.15, 0.95),
+      winText: 'wins: morale +6, and honesty compounds (+1 reputation)',
+      loseText: 'flops: the spreadsheet says what it says, morale −4',
+    },
+    {
+      id: 'war',
+      name: 'The War Speech',
+      blurb: 'Rivals at the gates, ship or die, pizza\'s ordered. High-energy teams answer the call — tired ones resent it.',
+      p: clamp(avgMorale(s) / 130, 0.2, 0.75),
+      winText: 'wins: the team crunches happily — output +15% for 4 weeks, morale +4',
+      loseText: 'flops: you asked for more with an empty tank, morale −10',
+    },
+  ]
+}
+
+export function pitchTeam(s: GameState, id: PitchOption['id']): void {
+  if (s.pitchCooldown > 0 || s.employees.length === 0) return
+  const opt = pitchOptions(s).find((o) => o.id === id)!
+  s.pitchCooldown = PITCH_COOLDOWN
+  const won = RNG.next() < opt.p
+
+  if (id === 'vision') {
+    if (won) {
+      applyEffects(s, { morale: 12 })
+      s.rally = { mult: 1.1, weeksLeft: 4 }
+      s.flash = '🎤 The Vision landed. Someone changed their Slack status to the mission statement. Morale +12, output +10% for 4 weeks.'
+    } else {
+      applyEffects(s, { morale: -6 })
+      s.flash = '🎤 The Vision flopped — you could hear the eye-rolls. "Cool, but did sprint planning move?" Morale −6.'
+    }
+  } else if (id === 'numbers') {
+    if (won) {
+      applyEffects(s, { morale: 6, reputation: 1 })
+      s.flash = '🎤 The Numbers landed. Nothing motivates like a graph going up and a founder who shows it either way. Morale +6.'
+    } else {
+      applyEffects(s, { morale: -4 })
+      s.flash = '🎤 The Numbers sobered the room. Transparency has a price when the chart points down. Morale −4.'
+    }
+  } else {
+    if (won) {
+      applyEffects(s, { morale: 4 })
+      s.rally = { mult: 1.15, weeksLeft: 4 }
+      s.flash = '🎤 The War Speech ignited the room — keyboards clattering before you finished. Output +15% for 4 weeks, morale +4.'
+    } else {
+      applyEffects(s, { morale: -10 })
+      s.flash = '🎤 The War Speech backfired. You asked for more from an empty tank; the silence was the answer. Morale −10.'
+    }
+  }
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'system',
+    title: `All-hands: ${opt.name} ${won ? 'landed' : 'flopped'}`,
+    body: won ? opt.winText.replace('wins: ', 'It ') : opt.loseText.replace('flops: ', 'It '),
+  })
 }
 
 // ---------- M&A: buy your rivals ----------

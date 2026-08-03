@@ -198,6 +198,8 @@ export interface GameState {
   ventures: Venture[] // additional product lines: one un-launched bet at a time, any number launched
   maCooldown: number // weeks until the next acquisition attempt (integrations take time)
   scenario: string | null // scenario id this run started with, for flavor & endgame display
+  pitchCooldown: number // weeks until the team will sit through another all-hands pitch
+  rally: { mult: number; weeksLeft: number } | null // temporary productivity buff from a landed pitch
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

@@ -10,6 +10,7 @@ import {
   killVenture,
   newGame,
   pitchInvestors,
+  pitchTeam,
   pivot,
   startIPO,
   startVenture,
@@ -158,6 +159,7 @@ interface Store {
   startBet: (sector: SectorId) => void
   shelveBet: (ventureId: string) => void
   buyRival: (rivalId: string, method: 'cash' | 'stock') => void
+  rallyTeam: (style: 'vision' | 'numbers' | 'war') => void
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
@@ -439,6 +441,16 @@ export const useStore = create<Store>()(
           set({ game })
         },
 
+        rallyTeam: (style) => {
+          const g = get().game
+          if (!g || g.pitchCooldown > 0 || g.employees.length === 0) return
+          const game = structuredClone(g)
+          pitchTeam(game, style)
+          if (game.rally || game.flash?.includes('landed')) sfx.milestone()
+          else sfx.ominous()
+          set({ game })
+        },
+
         setAllocation: (key, value) => {
           const g = get().game
           if (!g) return
@@ -529,6 +541,8 @@ export const useStore = create<Store>()(
           g.allocation.bet ??= 0
           g.maCooldown ??= 0
           g.scenario ??= null
+          g.pitchCooldown ??= 0
+          g.rally ??= null
         }
         return { ...current, ...p }
       },

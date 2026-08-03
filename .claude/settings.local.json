@@ -44,7 +44,9 @@
       "Bash(git checkout *)",
       "Bash(git commit -m 'Keep Lovable project metadata for two-way sync *)",
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/matest.ts)",
-      "Bash(git commit -m 'M&A \\(acquire rivals for cash or stock\\) + scenario starts \\(Funding Winter, Rich Kid, Second-Time Founder, Late Entrant\\) + crash-proof save normalization on every load *)"
+      "Bash(git commit -m 'M&A \\(acquire rivals for cash or stock\\) + scenario starts \\(Funding Winter, Rich Kid, Second-Time Founder, Late Entrant\\) + crash-proof save normalization on every load *)",
+      "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/pitchtest.ts)",
+      "Bash(git commit -m 'All-hands pitch: rally your own team with three speech styles, live success odds from company state, morale/productivity outcomes *)"
     ]
   }
 }
