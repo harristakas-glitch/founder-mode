@@ -60,6 +60,8 @@ export interface Rival {
   product: number // 0-100
   momentum: number // growth personality
   alive: boolean
+  acquired?: boolean // you bought them
+  rebuffedUntil?: number // week until which they won't take your calls after a rejected offer
 }
 
 export interface Effects {
@@ -194,6 +196,8 @@ export interface GameState {
   ipo: IpoProcess | null // S-1 filed, in progress
   ipoCooldown: number // weeks until the street will look at you again after a pulled IPO
   ventures: Venture[] // additional product lines: one un-launched bet at a time, any number launched
+  maCooldown: number // weeks until the next acquisition attempt (integrations take time)
+  scenario: string | null // scenario id this run started with, for flavor & endgame display
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

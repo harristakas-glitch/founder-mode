@@ -61,6 +61,45 @@ export interface NewGameOpts {
   seed?: number // deal the same world to everyone with this seed
   challenge?: { label: string; cap: number } | null // capped run (daily / multiplayer match)
   aiRivals?: boolean // false in multiplayer — the other players ARE the rivals
+  scenario?: string // scenario id from SCENARIOS
+}
+
+// Alternate starting worlds — same rules, different hand.
+export const SCENARIOS: { id: string; name: string; blurb: string }[] = [
+  { id: 'standard', name: 'Standard', blurb: '$200k, a neutral market, three hungry rivals.' },
+  { id: 'winter', name: 'Funding Winter', blurb: 'The market is frozen solid. Investors hibernate — survive on customers, not term sheets.' },
+  { id: 'richkid', name: 'Rich Kid', blurb: 'Start with $1M of family money — they kept 40% of the company. Comfortable, and it costs you.' },
+  { id: 'secondtime', name: 'Second-Time Founder', blurb: 'Less cash ($120k), but a name that opens doors and instincts that tilt every demand roll.' },
+  { id: 'late', name: 'Late Entrant', blurb: 'The market already has funded winners. $350k to catch rivals 10x your size.' },
+]
+
+function applyScenario(s: GameState, id: string) {
+  s.scenario = id
+  switch (id) {
+    case 'winter':
+      s.cash = 180_000
+      s.climate = -0.95
+      break
+    case 'richkid':
+      s.cash = 1_000_000
+      s.founderEquity = 0.6
+      s.reputation = 20
+      break
+    case 'secondtime':
+      s.cash = 120_000
+      s.totalResearch = 220 // pivotBonus starts near its cap — you have taste
+      s.reputation = 30
+      s.hype = 15
+      break
+    case 'late':
+      s.cash = 350_000
+      for (const r of s.rivals) {
+        r.users = Math.round(r.users * rand(8, 14))
+        r.stage = Math.min(4, r.stage + 2)
+        r.product = clamp(r.product + 20, 0, 100)
+      }
+      break
+  }
 }
 
 export function newGame(companyName: string, sector: SectorId, founderKind: FounderKind, opts: NewGameOpts = {}): GameState {
@@ -110,9 +149,12 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     ipo: null,
     ipoCooldown: 0,
     ventures: [],
+    maCooldown: 0,
+    scenario: null,
     history: [],
     gameOver: null,
   }
+  if (opts.scenario && opts.scenario !== 'standard') applyScenario(state, opts.scenario)
   state.candidates = Array.from({ length: 5 }, () => makeCandidate(state))
   state.inbox.push({
     id: uid(),
@@ -943,6 +985,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   s.termSheets = s.termSheets.filter((t) => (t.weeksLeft -= 1) > 0)
   if (s.raiseCooldown > 0) s.raiseCooldown -= 1
   if (s.ipoCooldown > 0) s.ipoCooldown -= 1
+  if (s.maCooldown > 0) s.maCooldown -= 1
 
   // --- IPO process ---
   tickIPO(s)
@@ -1144,6 +1187,69 @@ function priceIPO(s: GameState) {
       body: '"Market conditions", says the press release. Everyone knows what that means. The team watched the ticker that never was.',
     })
   }
+}
+
+// ---------- M&A: buy your rivals ----------
+
+// Exact asking price, visible before you offer — no hidden bills, even in M&A.
+export function acquisitionPrice(s: GameState, r: Rival): number {
+  return Math.round((rivalValuation(r, s) * 1.4) / 100_000) * 100_000
+}
+
+export function canAcquire(s: GameState, r: Rival): { ok: boolean; reason?: string } {
+  if (!r.alive || r.acquired) return { ok: false, reason: 'Not on the market' }
+  if (s.maCooldown > 0) return { ok: false, reason: `Integrating the last deal — ${s.maCooldown} wk` }
+  if ((r.rebuffedUntil ?? 0) > s.week) return { ok: false, reason: `They won't take your calls until week ${r.rebuffedUntil}` }
+  const val = valuation(s)
+  if (val < rivalValuation(r, s) * 1.5) return { ok: false, reason: 'You need to be clearly the bigger company (1.5× their valuation)' }
+  return { ok: true }
+}
+
+export function acquireRival(s: GameState, rivalId: string, method: 'cash' | 'stock'): boolean {
+  const r = s.rivals.find((x) => x.id === rivalId)
+  if (!r || !canAcquire(s, r).ok) return false
+  const price = acquisitionPrice(s, r)
+  if (method === 'cash' && s.cash < price) return false
+
+  // weak companies sell; strong ones believe their own deck
+  const pAccept = clamp(0.55 + (productScore(s) > r.product ? 0.15 : -0.1) + s.reputation / 300 + (r.momentum < 1 ? 0.15 : -0.05), 0.25, 0.9)
+  if (RNG.next() > pAccept) {
+    r.rebuffedUntil = s.week + 20
+    applyEffects(s, { hype: -3 })
+    s.flash = `${r.name} rebuffed your offer — "We're just getting started," their CEO posts, with a screenshot of your term sheet. Awkward. They won't talk again for ~20 weeks.`
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: `${r.name} rejects ${s.companyName}'s acquisition offer`,
+      body: 'The leak makes the rounds. Their team wears it like a badge; your corp-dev slide gets quietly updated.',
+    })
+    return false
+  }
+
+  if (method === 'cash') {
+    s.cash -= price
+  } else {
+    const equitySold = price / (valuation(s) + price)
+    s.founderEquity *= 1 - equitySold
+  }
+  const migrated = Math.round(r.users * 0.7) // some of their users leave during the transition
+  s.users += migrated
+  s.features = clamp(s.features + 4, 0, 100)
+  s.bugs = clamp(s.bugs + 8, 0, 100) // two codebases, one repo: integration pain is real
+  s.maCooldown = 15
+  r.alive = false
+  r.acquired = true
+  applyEffects(s, { hype: 8, reputation: 5, morale: -3 })
+  s.flash = `🤝 Acquired ${r.name} for ${method === 'cash' ? `$${(price / 1e6).toFixed(1)}M cash` : `${((price / (valuation(s) + price)) * 100).toFixed(1)}% of the company in stock`}. ${migrated.toLocaleString()} of their users migrated; their codebase brought features — and bugs.`
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'news',
+    title: `${s.companyName} acquires ${r.name}`,
+    body: `The market consolidates. Their users wake up to a "we're joining forces" email, your engineers wake up to their codebase. Integration is 15 weeks of glue work — worth it for the market share.`,
+  })
+  return true
 }
 
 // ---------- the board ----------

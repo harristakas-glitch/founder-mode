@@ -1,7 +1,7 @@
-import { Bar, Panel, StatCard, Td, Th } from '../components'
+import { Bar, Btn, Panel, StatCard, Td, Th } from '../components'
 import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
-import { effectiveTam, marketSaturation, rivalValuation, valuation } from '../game/engine'
+import { acquisitionPrice, canAcquire, effectiveTam, marketSaturation, rivalValuation, valuation } from '../game/engine'
 import { myId } from '../net/online'
 import { useStore } from '../store'
 
@@ -124,6 +124,53 @@ export function Market() {
           </div>
         </Panel>
       </div>
+
+      {!online && <Acquisitions />}
+    </div>
+  )
+}
+
+function Acquisitions() {
+  const game = useStore((s) => s.game)!
+  const buyRival = useStore((s) => s.buyRival)
+  const targets = game.rivals.filter((r) => r.alive)
+  if (targets.length === 0) return null
+  const val = valuation(game)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Corp dev — buy your rivals">
+        <div className="mb-2 text-xs leading-relaxed text-mut">
+          Consolidate the market: acquire a living rival and ~70% of their users migrate to you, along with their best features — and
+          their bugs. Pay in cash, or in stock (dilution). Weak rivals sell; confident ones leak your offer and gloat. Each deal takes
+          ~15 weeks to integrate before the next.
+        </div>
+        {targets.map((r) => {
+          const gate = canAcquire(game, r)
+          const price = acquisitionPrice(game, r)
+          const stockPct = (price / (val + price)) * 100
+          return (
+            <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
+              <span className="text-[13.5px]">
+                <b>{r.name}</b>{' '}
+                <span className="text-mut">
+                  · {num(r.users)} users · asking <b className="text-ink tnum">{money(price)}</b>
+                </span>
+              </span>
+              {gate.ok ? (
+                <span className="flex gap-2">
+                  <Btn variant="primary" disabled={game.cash < price} onClick={() => buyRival(r.id, 'cash')}>
+                    Cash {game.cash < price ? '(can’t afford)' : ''}
+                  </Btn>
+                  <Btn onClick={() => buyRival(r.id, 'stock')}>Stock ({stockPct.toFixed(1)}% dilution)</Btn>
+                </span>
+              ) : (
+                <span className="text-xs text-mut">{gate.reason}</span>
+              )}
+            </div>
+          )
+        })}
+      </Panel>
     </div>
   )
 }

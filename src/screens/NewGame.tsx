@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CalendarDays, Globe, Rocket } from 'lucide-react'
 import { SECTORS, sectorById } from '../game/data'
+import { SCENARIOS } from '../game/engine'
 import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
@@ -40,6 +41,7 @@ export function NewGame() {
   const [name, setName] = useState('')
   const [founder, setFounder] = useState<FounderKind>('technical')
   const [joinCode, setJoinCode] = useState('')
+  const [scenario, setScenario] = useState('standard')
   const [netError, setNetError] = useState<string | null>(null)
   const hall = readHall()
 
@@ -98,6 +100,17 @@ export function NewGame() {
           </div>
         </div>
 
+        {mode === 'free' && (
+          <>
+            <label className={`${label} mt-6`}>Scenario</label>
+            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+              {SCENARIOS.map((sc) => (
+                <Pick key={sc.id} selected={scenario === sc.id} onClick={() => setScenario(sc.id)} title={sc.name} blurb={sc.blurb} />
+              ))}
+            </div>
+          </>
+        )}
+
         {mode !== 'online' && (
           <>
             <label className={`${label} mt-6`}>
@@ -118,7 +131,7 @@ export function NewGame() {
 
             <button
               className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3.5 text-[16px] font-bold text-white shadow-xl shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.99]"
-              onClick={() => startGame({ mode, sector, name: name.trim(), founder })}
+              onClick={() => startGame({ mode, sector, name: name.trim(), founder, scenario })}
             >
               {mode === 'daily' ? <CalendarDays size={18} /> : <Rocket size={18} />}
               {mode === 'daily' ? `Play Daily #${daily.id}` : 'Found the company'}

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
   acceptTermSheet,
+  acquireRival,
   advanceWeek,
   applyEffects,
   canStartVenture,
@@ -117,6 +118,7 @@ export interface NewGameSetup {
   sector: SectorId
   name: string
   founder: FounderKind
+  scenario?: string
 }
 
 export const MATCH_CAP = 104 // weeks in a capped run (daily & online matches)
@@ -155,6 +157,7 @@ interface Store {
   fileIPO: () => void
   startBet: (sector: SectorId) => void
   shelveBet: (ventureId: string) => void
+  buyRival: (rivalId: string, method: 'cash' | 'stock') => void
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
@@ -293,7 +296,7 @@ export const useStore = create<Store>()(
           const seed = daily ? info.seed : undefined
           const challenge = daily ? { label: `Daily #${info.id}`, cap: MATCH_CAP } : null
           set({
-            game: newGame(setup.name || 'Untitled Inc.', sector, setup.founder, { seed, challenge }),
+            game: newGame(setup.name || 'Untitled Inc.', sector, setup.founder, { seed, challenge, scenario: daily ? undefined : setup.scenario }),
             online: null,
             screen: 'dashboard',
           })
@@ -427,6 +430,15 @@ export const useStore = create<Store>()(
           set({ game })
         },
 
+        buyRival: (rivalId, method) => {
+          const g = get().game
+          if (!g) return
+          const game = structuredClone(g)
+          if (acquireRival(game, rivalId, method)) sfx.cash()
+          else sfx.ominous()
+          set({ game })
+        },
+
         setAllocation: (key, value) => {
           const g = get().game
           if (!g) return
@@ -492,33 +504,33 @@ export const useStore = create<Store>()(
     },
     {
       name: 'founder-mode-save',
-      version: 8,
+      version: 9,
       // online sessions are live connections — never persist them across reloads
       partialize: (state) => ({ game: state.game, screen: state.screen }),
       migrate: (persisted, version) => {
         // v1 saves predate PMF/rivals/climate — start fresh rather than load a broken state.
         if (version < 2) return { game: null, screen: 'dashboard' as ScreenId }
-        const state = persisted as { game: GameState | null; screen: ScreenId }
-        if (version < 3 && state.game) {
-          state.game.milestones ??= []
-          state.game.totalResearch ??= state.game.researchSignal ?? 0
-          state.game.flash ??= null
+        return persisted as { game: GameState | null; screen: ScreenId }
+      },
+      // Shape normalization runs on EVERY load (not just version bumps) so a save can never
+      // crash the app just because it predates a field — belt and suspenders.
+      merge: (persisted, current) => {
+        const p = persisted as { game: GameState | null; screen: ScreenId } | undefined
+        if (p?.game) {
+          const g = p.game
+          g.milestones ??= []
+          g.totalResearch ??= g.researchSignal ?? 0
+          g.flash ??= null
+          g.board ??= null
+          g.challenge ??= null
+          g.ipo ??= null
+          g.ipoCooldown ??= 0
+          g.ventures ??= []
+          g.allocation.bet ??= 0
+          g.maCooldown ??= 0
+          g.scenario ??= null
         }
-        if (version < 4 && state.game) {
-          state.game.board ??= null
-        }
-        if (version < 5 && state.game) {
-          state.game.challenge ??= null
-        }
-        if (version < 7 && state.game) {
-          state.game.ipo ??= null
-          state.game.ipoCooldown ??= 0
-        }
-        if (version < 8 && state.game) {
-          state.game.ventures ??= []
-          state.game.allocation.bet ??= 0
-        }
-        return state
+        return { ...current, ...p }
       },
     },
   ),
