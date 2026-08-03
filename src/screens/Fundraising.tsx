@@ -1,7 +1,16 @@
 import { Bar, Btn, Panel, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
-import { boardEffectiveTarget, growthRate, ipoChecklist, ipoEligible, nextStage, revenueGrowthRate, valuation } from '../game/engine'
+import {
+  boardEffectiveTarget,
+  growthRate,
+  ipoChecklist,
+  ipoEligible,
+  ipoVisible,
+  nextStage,
+  revenueGrowthRate,
+  valuation,
+} from '../game/engine'
 import { useStore } from '../store'
 
 function IpoPanel() {
@@ -49,9 +58,11 @@ function IpoPanel() {
           ))}
         </div>
         <div className="mt-3 text-xs leading-relaxed text-mut">
-          Eight weeks from filing to the bell: four of SEC scrutiny, four of roadshow. Fundraising freezes, the process eats ~15% of
-          the team's output, and on pricing day the market decides — a pop crowns the run, a pulled IPO costs $2M, reputation, and ~25
-          weeks before the street will look at you again. Time it to a warm climate and a hot growth curve.
+          You don't need late-stage rounds to go public — profitable companies walk straight to the exchange. Eight weeks from filing
+          to the bell: four of SEC scrutiny, four of roadshow. Fundraising freezes, the process eats ~15% of the team's output, and on
+          pricing day the market decides — a pop crowns the run, a pulled IPO costs $2M, reputation, and ~25 weeks before the street
+          will look at you again. Time it to a warm climate and a hot growth curve — and note the run no longer auto-ends at $1B while
+          your IPO is in flight, so a monster debut can beat the plain unicorn ending.
         </div>
         <Btn variant="primary" className="mt-3" disabled={!ipoEligible(game)} onClick={fileIPO}>
           {game.ipoCooldown > 0 ? `The street remembers — ${game.ipoCooldown} wk` : 'File the S-1 ▸'}
@@ -140,7 +151,7 @@ export function Fundraising() {
         </div>
       )}
 
-      {game.stage === 'Series C' && <IpoPanel />}
+      {ipoVisible(game) && <IpoPanel />}
 
       <div className="mt-3.5">
         <Panel title="Pitch investors">

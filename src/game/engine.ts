@@ -1025,7 +1025,8 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
           `. That left the account at −${fmt(s.cash)}${s.bridgeUsed ? ', and the bridge loan was already spent' : ', and no investor would bridge it'}.`,
       }
     }
-  } else if (val >= 1_000_000_000) {
+  } else if (val >= 1_000_000_000 && !s.ipo) {
+    // mid-IPO, the run continues — ringing the bell at a $1B+ price beats the plain unicorn ending
     s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(val * s.founderEquity) }
   } else if (s.challenge && s.week >= s.challenge.cap) {
     s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(val * s.founderEquity) }
@@ -1040,14 +1041,19 @@ export const IPO_COST = 2_000_000
 export const IPO_MIN_VAL = 300_000_000
 export const IPO_MIN_ANNUAL_REV = 10_000_000
 
+// The street doesn't care how many rounds you raised — only scale, revenue, and readiness.
 export function ipoChecklist(s: GameState): { label: string; met: boolean }[] {
   return [
-    { label: 'Series C company', met: s.stage === 'Series C' },
-    { label: `Valuation ≥ ${IPO_MIN_VAL / 1e6}M`, met: valuation(s) >= IPO_MIN_VAL },
+    { label: `Valuation ≥ $${IPO_MIN_VAL / 1e6}M`, met: valuation(s) >= IPO_MIN_VAL },
     { label: `Revenue ≥ $${IPO_MIN_ANNUAL_REV / 1e6}M/yr`, met: s.lastRevenue * 52 >= IPO_MIN_ANNUAL_REV },
     { label: 'Bankers will answer your calls', met: s.ipoCooldown === 0 },
     { label: `$${IPO_COST / 1e6}M for bankers & lawyers`, met: s.cash >= IPO_COST },
   ]
+}
+
+// When the IPO path should appear on screen: close enough to start planning for it.
+export function ipoVisible(s: GameState): boolean {
+  return valuation(s) >= IPO_MIN_VAL / 2 || s.stage === 'Series B' || s.stage === 'Series C'
 }
 
 export function ipoEligible(s: GameState): boolean {
