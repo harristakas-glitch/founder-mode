@@ -123,6 +123,8 @@ export interface HistoryPoint {
   marketing: number
   office: number
   infra: number
+  interest?: number
+  macroIndex?: number
   valuation: number
   pmf: number
 }
@@ -200,6 +202,8 @@ export interface GameState {
   scenario: string | null // scenario id this run started with, for flavor & endgame display
   pitchCooldown: number // weeks until the team will sit through another all-hands pitch
   rally: { mult: number; weeksLeft: number } | null // temporary productivity buff from a landed pitch
+  macro: { index: number; rate: number; inflation: number } // the real economy: stock index, central-bank rate %, inflation %
+  debt: { principal: number; apr: number; covenantRevenue: number } | null // bank credit line with a revenue covenant
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

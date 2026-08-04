@@ -1,7 +1,123 @@
-import { LineChart, Panel, StatCard, Td, Th } from '../components'
+import { useState } from 'react'
+import { Btn, LineChart, Panel, StatCard, Td, Th } from '../components'
 import { money } from '../format'
-import { committedCosts, recruiterFee, runwayWeeks, weeklyBurn, weeklyInfra, weeklyOffice, weeklyPayroll } from '../game/engine'
+import {
+  committedCosts,
+  debtApr,
+  debtCapacity,
+  recruiterFee,
+  runwayWeeks,
+  weeklyBurn,
+  weeklyInfra,
+  weeklyInterest,
+  weeklyOffice,
+  weeklyPayroll,
+} from '../game/engine'
 import { useStore } from '../store'
+
+function MacroPanel() {
+  const game = useStore((s) => s.game)!
+  const m = game.macro
+  const idxHistory = game.history.map((h) => h.macroIndex ?? 100)
+  const startIdx = idxHistory[0] ?? 100
+  const trend = m.index >= startIdx ? 'up' : 'down'
+  return (
+    <div className="mt-3.5">
+      <Panel title="The economy — nobody asked your permission">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div>
+            <div className="text-[11px] text-mut">Market index</div>
+            <b className={`tnum ${trend === 'up' ? 'text-good' : 'text-bad'}`}>{m.index.toFixed(0)}</b>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Central-bank rate</div>
+            <b className="tnum">{m.rate.toFixed(1)}%</b>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Inflation</div>
+            <b className={`tnum ${m.inflation > 5 ? 'text-bad' : ''}`}>{m.inflation.toFixed(1)}%</b>
+          </div>
+          <div className="min-w-[160px] flex-1">
+            {idxHistory.length > 1 && <LineChart data={idxHistory} height={54} formatY={(n) => n.toFixed(0)} startWeek={game.history[0]?.week ?? 1} />}
+          </div>
+        </div>
+        <div className="mt-2 text-xs leading-relaxed text-mut">
+          The market's mood drives the funding climate, the bank rate prices your debt, and inflation quietly raises every salary on
+          your payroll each week. Rate cuts and rallies open funding windows; shocks slam them shut.
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+function DebtPanel() {
+  const game = useStore((s) => s.game)!
+  const takeDebt = useStore((s) => s.takeDebt)
+  const payDebt = useStore((s) => s.payDebt)
+  const [amount, setAmount] = useState(100_000)
+  const cap = debtCapacity(game)
+  const available = cap - (game.debt?.principal ?? 0)
+  const apr = debtApr(game)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Bank credit line — leverage with conditions">
+        {game.debt ? (
+          <div className="mb-3 flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl border border-warn/40 bg-warn/5 px-3 py-2.5">
+            <span>
+              <span className="text-[11px] text-mut">Principal</span>
+              <br />
+              <b className="tnum">{money(game.debt.principal)}</b> <span className="text-mut">at {game.debt.apr}%</span>
+            </span>
+            <span>
+              <span className="text-[11px] text-mut">Interest / wk</span>
+              <br />
+              <b className="tnum">{money(weeklyInterest(game))}</b>
+            </span>
+            <span>
+              <span className="text-[11px] text-mut">Covenant: revenue must stay above</span>
+              <br />
+              <b className={`tnum ${game.lastRevenue < game.debt.covenantRevenue * 1.2 ? 'text-bad' : 'text-good'}`}>
+                {money(game.debt.covenantRevenue)}/wk
+              </b>{' '}
+              <span className="text-mut">(now {money(game.lastRevenue)})</span>
+            </span>
+          </div>
+        ) : (
+          <div className="mb-3 text-[13px] text-mut">
+            {cap === 0
+              ? 'Banks lend against revenue — come back with $250k+/yr and they\'ll answer the phone.'
+              : `The bank will lend up to ${money(cap)} (half your annual revenue) at ${apr}% APR — the central-bank rate plus a spread for your risk.`}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="range"
+            min={10_000}
+            max={Math.max(10_000, Math.max(available, game.debt?.principal ?? 0))}
+            step={10_000}
+            value={amount}
+            style={{ ['--fill' as string]: `${(amount / Math.max(10_000, Math.max(available, game.debt?.principal ?? 0))) * 100}%`, maxWidth: 260 }}
+            onChange={(e) => setAmount(Number(e.target.value))}
+          />
+          <b className="w-20 tnum">{money(amount)}</b>
+          <Btn variant="primary" disabled={available <= 0 || amount <= 0} onClick={() => takeDebt(Math.min(amount, available))}>
+            Draw
+          </Btn>
+          <Btn disabled={!game.debt || game.cash <= 0} onClick={() => payDebt(amount)}>
+            Repay
+          </Btn>
+        </div>
+        <div className="mt-2 text-xs leading-relaxed text-mut">
+          Non-dilutive cash: no equity lost, interest hits your weekly burn. The condition, stated up front: the covenant locks at 60%
+          of your revenue when you draw — fall below it and the bank calls the loan, seizing cash first and{' '}
+          <b className="text-ink">15% of the company</b> for anything it can't collect. Debt is rocket fuel for a working machine and
+          poison for a broken one.
+        </div>
+      </Panel>
+    </div>
+  )
+}
 
 function UpcomingPayments() {
   const game = useStore((s) => s.game)!
@@ -73,6 +189,8 @@ export function Finance() {
         />
       </div>
 
+      <DebtPanel />
+      <MacroPanel />
       <UpcomingPayments />
 
       <div className="mt-3.5">

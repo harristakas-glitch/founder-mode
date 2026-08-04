@@ -6,12 +6,14 @@ import {
   advanceWeek,
   applyEffects,
   canStartVenture,
+  drawDebt,
   ipoEligible,
   killVenture,
   newGame,
   pitchInvestors,
   pitchTeam,
   pivot,
+  repayDebt,
   startIPO,
   startVenture,
   totalUsers,
@@ -160,6 +162,8 @@ interface Store {
   shelveBet: (ventureId: string) => void
   buyRival: (rivalId: string, method: 'cash' | 'stock') => void
   rallyTeam: (style: 'vision' | 'numbers' | 'war') => void
+  takeDebt: (amount: number) => void
+  payDebt: (amount: number) => void
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
@@ -441,6 +445,24 @@ export const useStore = create<Store>()(
           set({ game })
         },
 
+        takeDebt: (amount) => {
+          const g = get().game
+          if (!g) return
+          const game = structuredClone(g)
+          drawDebt(game, amount)
+          sfx.cash()
+          set({ game })
+        },
+
+        payDebt: (amount) => {
+          const g = get().game
+          if (!g || !g.debt) return
+          const game = structuredClone(g)
+          repayDebt(game, amount)
+          sfx.week()
+          set({ game })
+        },
+
         rallyTeam: (style) => {
           const g = get().game
           if (!g || g.pitchCooldown > 0 || g.employees.length === 0) return
@@ -543,6 +565,8 @@ export const useStore = create<Store>()(
           g.scenario ??= null
           g.pitchCooldown ??= 0
           g.rally ??= null
+          g.macro ??= { index: 100, rate: 5, inflation: 3 }
+          g.debt ??= null
         }
         return { ...current, ...p }
       },

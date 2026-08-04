@@ -153,6 +153,8 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     scenario: null,
     pitchCooldown: 0,
     rally: null,
+    macro: { index: 100, rate: rand(3, 6), inflation: rand(2, 4) },
+    debt: null,
     history: [],
     gameOver: null,
   }
@@ -326,7 +328,7 @@ export function paidUsersPerWeek(s: GameState, spend: number): number {
 }
 
 export function weeklyBurn(s: GameState): number {
-  return weeklyPayroll(s) + weeklyOffice(s) + weeklyInfra(s) + s.marketingSpend
+  return weeklyPayroll(s) + weeklyOffice(s) + weeklyInfra(s) + s.marketingSpend + weeklyInterest(s)
 }
 
 export function runwayWeeks(s: GameState): number {
@@ -767,8 +769,18 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   s.week += 1
   s.flash = null
 
-  // --- funding climate drifts ---
-  s.climate = clamp(s.climate + rand(-0.12, 0.12), -1, 1)
+  // --- the real economy turns over: rates, inflation, the market — and they drive the funding climate ---
+  const m = s.macro
+  const rateShift = rand(-0.12, 0.12) + (m.inflation > 5 ? 0.06 : m.inflation < 2 ? -0.04 : 0)
+  m.rate = clamp(m.rate + rateShift, 0.5, 12)
+  m.inflation = clamp(m.inflation + rand(-0.15, 0.15) + (m.rate < m.inflation - 2 ? 0.08 : m.rate > m.inflation + 2 ? -0.08 : 0), 0, 12)
+  const marketReturn = rand(-0.025, 0.028) + (5 - m.rate) * 0.0015 - Math.max(0, m.inflation - 4) * 0.001
+  m.index = Math.max(20, m.index * (1 + marketReturn))
+  s.climate = clamp(s.climate + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
+  macroShocks(s)
+
+  // --- inflation quietly eats payroll: salaries drift up with the cost of living ---
+  for (const e of s.employees) e.salary = Math.round(e.salary * (1 + m.inflation / 100 / 52))
 
   // --- engineering & research ---
   const moraleFactor = (e: Employee) => 0.55 + (e.morale / 100) * 0.55
@@ -889,12 +901,14 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const payroll = weeklyPayroll(s)
   const office = weeklyOffice(s)
   const infra = weeklyInfra(s)
-  const expenses = payroll + office + infra + s.marketingSpend
+  const interest = weeklyInterest(s)
+  const expenses = payroll + office + infra + s.marketingSpend + interest
   const cashAtStart = s.cash
   s.cash += revenue - expenses
   const cashAfterOperations = s.cash // everything below here (fees, events) is a one-off hit
   s.lastRevenue = revenue
   s.lastExpenses = expenses
+  covenantCheck(s)
 
   // --- offers out: candidates make up their minds ---
   const offerNews: string[] = []
@@ -1032,6 +1046,8 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
     marketing: s.marketingSpend,
     office,
     infra,
+    interest,
+    macroIndex: Math.round(s.macro.index * 10) / 10,
     valuation: val,
     pmf: Math.round(s.pmf),
   })
@@ -1192,6 +1208,134 @@ function priceIPO(s: GameState) {
       kind: 'news',
       title: `${s.companyName} shelves its IPO`,
       body: '"Market conditions", says the press release. Everyone knows what that means. The team watched the ticker that never was.',
+    })
+  }
+}
+
+// ---------- macro shocks: the world happens to you ----------
+
+function macroShocks(s: GameState) {
+  if (RNG.next() > 0.03) return
+  const m = s.macro
+  const roll = RNG.next()
+  const push = (title: string, body: string) =>
+    s.inbox.unshift({ id: uid(), week: s.week, kind: 'news', title, body })
+  if (roll < 0.25) {
+    m.inflation = clamp(m.inflation + 1.5, 0, 12)
+    m.index *= 0.94
+    s.climate = clamp(s.climate - 0.15, -1, 1)
+    push(
+      '🛢 Oil shock',
+      'Energy prices spike overnight. Inflation jumps, markets wobble, and your cloud provider is already drafting a "pricing update" email. Expect salaries and costs to climb faster for a while.',
+    )
+  } else if (roll < 0.5) {
+    m.rate = clamp(m.rate + 1, 0.5, 12)
+    s.climate = clamp(s.climate - 0.25, -1, 1)
+    push(
+      '🏦 Central bank hikes rates',
+      'Money just got more expensive. Venture funds mark down their models, debt costs more, and every board meeting adds a slide about "efficiency".',
+    )
+  } else if (roll < 0.75) {
+    m.rate = clamp(m.rate - 1.2, 0.5, 12)
+    s.climate = clamp(s.climate + 0.25, -1, 1)
+    push(
+      '🏦 Surprise rate cut',
+      'The central bank blinks. Cheap money returns, valuations inflate, and investors remember your phone number.',
+    )
+  } else if (roll < 0.9) {
+    m.index *= 1.08
+    s.climate = clamp(s.climate + 0.15, -1, 1)
+    push('📈 Markets rally', 'The index rips upward. Risk is back in fashion, and so are term sheets.')
+  } else {
+    m.index *= 0.85
+    s.climate = clamp(s.climate - 0.45, -1, 1)
+    push(
+      '📉 Market crash',
+      'A red day for the ages. Funds freeze new deals, acquirers vanish, and LinkedIn fills with "personal news". Survive this and the survivors inherit the market.',
+    )
+  }
+}
+
+// ---------- bank debt: leverage with conditions ----------
+
+export function debtCapacity(s: GameState): number {
+  const annual = s.lastRevenue * 52
+  if (annual < 250_000) return 0
+  return Math.round(Math.min(annual * 0.5, 10_000_000) / 10_000) * 10_000
+}
+
+export function debtApr(s: GameState): number {
+  return Math.round((s.macro.rate + (s.lastRevenue >= s.lastExpenses ? 3 : 6)) * 10) / 10
+}
+
+export function weeklyInterest(s: GameState): number {
+  return s.debt ? Math.round((s.debt.principal * s.debt.apr) / 100 / 52) : 0
+}
+
+export function drawDebt(s: GameState, amount: number) {
+  const cap = debtCapacity(s) - (s.debt?.principal ?? 0)
+  amount = Math.min(amount, cap)
+  if (amount <= 0) return
+  const apr = debtApr(s)
+  s.cash += amount
+  s.debt = {
+    principal: (s.debt?.principal ?? 0) + amount,
+    apr,
+    covenantRevenue: Math.round(s.lastRevenue * 0.6),
+  }
+  s.flash =
+    `🏦 Drew $${(amount / 1000).toFixed(0)}k of bank debt at ${apr}% APR. No dilution — but read the covenant: if weekly revenue drops below ` +
+    `$${s.debt.covenantRevenue.toLocaleString()}, the bank calls the loan.`
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'system',
+    title: `Credit line drawn: $${(amount / 1000).toFixed(0)}k at ${debtApr(s)}%`,
+    body: 'Non-dilutive money, priced off the central-bank rate. Interest hits the burn every week; the covenant watches your revenue. Banks are lovely right up until they are not.',
+  })
+}
+
+export function repayDebt(s: GameState, amount: number) {
+  if (!s.debt) return
+  amount = Math.min(amount, s.debt.principal, s.cash)
+  if (amount <= 0) return
+  s.cash -= amount
+  s.debt.principal -= amount
+  if (s.debt.principal <= 0) {
+    s.debt = null
+    s.flash = '🏦 Debt fully repaid. The covenant dies with it — your revenue is yours again.'
+  } else {
+    s.flash = `🏦 Repaid $${(amount / 1000).toFixed(0)}k. Remaining principal: $${(s.debt.principal / 1000).toFixed(0)}k.`
+  }
+}
+
+function covenantCheck(s: GameState) {
+  if (!s.debt || s.lastRevenue >= s.debt.covenantRevenue) return
+  const owed = s.debt.principal
+  const paid = Math.min(s.cash, owed)
+  s.cash -= paid
+  const shortfall = owed - paid
+  s.debt = null
+  if (shortfall > 0) {
+    s.founderEquity *= 0.85
+    applyEffects(s, { morale: -8, reputation: -6 })
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: '🏦 Covenant breach — the bank calls the loan',
+      body:
+        `Revenue fell below the covenant. The bank seized $${(paid / 1000).toFixed(0)}k of cash and, for the remaining ` +
+        `$${(shortfall / 1000).toFixed(0)}k, forced an equity conversion — 15% of the company. This is why debt is cheap: it bites.`,
+    })
+  } else {
+    applyEffects(s, { reputation: -3 })
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: '🏦 Covenant breach — loan called and repaid',
+      body: `Revenue fell below the covenant and the bank called the loan. $${(paid / 1000).toFixed(0)}k left the account in one wire. The credit line is gone.`,
     })
   }
 }

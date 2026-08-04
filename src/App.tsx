@@ -387,6 +387,31 @@ function ShareButton({ text }: { text: string }) {
   )
 }
 
+// One-tap posts to the big networks, prefilled with the run's story.
+function SocialShareRow({ text }: { text: string }) {
+  const enc = encodeURIComponent(text)
+  const encUrl = encodeURIComponent(GAME_URL)
+  const targets: { label: string; href: string }[] = [
+    { label: '𝕏', href: `https://twitter.com/intent/tweet?text=${enc}` },
+    { label: 'WhatsApp', href: `https://wa.me/?text=${enc}` },
+    { label: 'Telegram', href: `https://t.me/share/url?url=${encUrl}&text=${enc}` },
+    { label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encUrl}&quote=${enc}` },
+  ]
+  return (
+    <div className="mt-3 flex flex-wrap justify-center gap-2">
+      {targets.map((t) => (
+        <button
+          key={t.label}
+          className="rounded-lg border border-line bg-surface2/70 px-3.5 py-1.5 text-[13px] font-semibold text-mut transition-all hover:border-accent hover:text-ink active:scale-[0.97]"
+          onClick={() => window.open(t.href, '_blank', 'noopener,width=640,height=560')}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof useStore.getState>['game']>; text: string }) {
   const [state, setState] = useState<'idle' | 'shared' | 'downloaded' | 'failed'>('idle')
   return (
@@ -450,6 +475,7 @@ function MatchOver() {
             New game
           </button>
         </div>
+        <SocialShareRow text={shareText} />
       </div>
     </div>
   )
@@ -575,6 +601,9 @@ function GameOver() {
             New company
           </button>
         </div>
+        <SocialShareRow
+          text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} in ${go.week} weeks. Beat that: ${GAME_URL}`}
+        />
       </div>
     </div>
   )
