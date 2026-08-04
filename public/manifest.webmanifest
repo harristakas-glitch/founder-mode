@@ -1,0 +1,16 @@
+{
+  "name": "Founder Mode",
+  "short_name": "Founder Mode",
+  "description": "Run a startup like a football manager: find product-market fit, outgrow your rivals, and build a unicorn — or die trying.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0e18",
+  "theme_color": "#0a0e18",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

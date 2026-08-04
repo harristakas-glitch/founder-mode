@@ -47,7 +47,17 @@
       "Bash(git commit -m 'M&A \\(acquire rivals for cash or stock\\) + scenario starts \\(Funding Winter, Rich Kid, Second-Time Founder, Late Entrant\\) + crash-proof save normalization on every load *)",
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/pitchtest.ts)",
       "Bash(git commit -m 'All-hands pitch: rally your own team with three speech styles, live success odds from company state, morale/productivity outcomes *)",
-      "Bash(git commit -m 'New Game screen: market choice before scenario *)"
+      "Bash(git commit -m 'New Game screen: market choice before scenario *)",
+      "Bash(qlmanage -t -s 512 -o . icon.svg)",
+      "Bash(qlmanage -t -s 1200 -o . og.svg)",
+      "Bash(qlmanage -t -s 192 -o /tmp/fm-192 icon.svg)",
+      "Bash(mkdir -p /tmp/fm-192)",
+      "Bash(qlmanage -t -s 180 -o /tmp/fm-180 icon.svg)",
+      "Bash(mkdir -p /tmp/fm-180)",
+      "Bash(cp /tmp/fm-192/icon.svg.png /Users/charilaostakas/Claude/game/public/icon-192.png)",
+      "Bash(cp /tmp/fm-180/icon.svg.png /Users/charilaostakas/Claude/game/public/apple-touch-icon.png)",
+      "Bash(sips -s format jpeg -s formatOptions 80 og.png --out og.jpg)",
+      "Bash(git commit -m 'Tutorial coach \\(7 auto-advancing lessons\\), run timeline with story markers on the result screen, share-as-image \\(Web Share / download\\), PWA \\(manifest + offline SW + icons\\) and social unfurl card *)"
     ]
   }
 }

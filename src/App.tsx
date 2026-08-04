@@ -34,7 +34,9 @@ import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
 import { Inbox } from './screens/Inbox'
-import { Ticker } from './components'
+import { Ticker, TimelineChart } from './components'
+import { runMarkers, shareResultImage } from './shareImage'
+import { Coach } from './Coach'
 
 const NAV: { id: ScreenId; label: string; icon: typeof Mail }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -298,6 +300,7 @@ export default function App() {
 
         {/* main */}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-24 md:px-6 md:pt-5 md:pb-8">
+          <Coach />
           {online && game.gameOver && !matchOver && (
             <div className="mb-4 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
               <b>{game.companyName} is out of the running</b> ({game.gameOver.type}, week {game.gameOver.week}). Watch the Market screen
@@ -379,13 +382,29 @@ function ShareButton({ text }: { text: string }) {
         })
       }}
     >
-      {copied ? 'Copied! 📋' : 'Copy share text'}
+      {copied ? 'Copied! 📋' : 'Copy text'}
+    </button>
+  )
+}
+
+function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof useStore.getState>['game']>; text: string }) {
+  const [state, setState] = useState<'idle' | 'shared' | 'downloaded' | 'failed'>('idle')
+  return (
+    <button
+      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+      onClick={async () => {
+        const r = await shareResultImage(game, text)
+        setState(r)
+        setTimeout(() => setState('idle'), 2200)
+      }}
+    >
+      {state === 'idle' ? '📸 Share image' : state === 'shared' ? 'Shared!' : state === 'downloaded' ? 'Image saved!' : 'Could not render'}
     </button>
   )
 }
 
 function MatchOver() {
-  const { online, abandonGame } = useStore()
+  const { online, game, abandonGame } = useStore()
   if (!online) return null
   const ranked = [...online.players].sort((a, b) => b.payout - a.payout)
   const shareText =
@@ -421,7 +440,8 @@ function MatchOver() {
             </div>
           ))}
         </div>
-        <div className="mt-7 flex justify-center gap-3">
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          {game && <ShareImageButton game={game} text={shareText} />}
           <ShareButton text={shareText} />
           <button
             className="rounded-xl bg-accent px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
@@ -527,17 +547,32 @@ function GameOver() {
             </div>
           ))}
         </div>
-        <div className="mt-7 flex justify-center gap-3">
-          {game.challenge && (
-            <ShareButton
-              text={`Founder Mode ${game.challenge.label}\n${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay the same world: ${GAME_URL}`}
-            />
-          )}
+
+        <div className="mt-5 rounded-2xl border border-line/60 bg-black/20 p-3 text-left">
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-mut">The story of {game.companyName}</div>
+          <TimelineChart history={game.history} markers={runMarkers(game)} />
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-mut">
+            {runMarkers(game).map((m, i) => (
+              <span key={i}>
+                {m.emoji} wk{m.week} {m.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <ShareImageButton
+            game={game}
+            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]}. Play: ${GAME_URL}`}
+          />
+          <ShareButton
+            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''}\n${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay${game.challenge ? ' the same world' : ''}: ${GAME_URL}`}
+          />
           <button
             className="rounded-xl bg-accent px-6 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
             onClick={abandonGame}
           >
-            Start a new company
+            New company
           </button>
         </div>
       </div>

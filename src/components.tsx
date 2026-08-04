@@ -199,6 +199,40 @@ export function BenchRow({ metric, tone, children }: { metric: string; tone: 'go
 
 // ---------- chart ----------
 
+// The story of a run: valuation curve with emoji markers for its big moments.
+export function TimelineChart({ history, markers }: { history: { week: number; valuation: number }[]; markers: { week: number; emoji: string; label: string }[] }) {
+  if (history.length < 2) return null
+  const vals = history.map((h) => Math.sqrt(Math.max(0, h.valuation)))
+  const vMax = Math.max(...vals) || 1
+  const W = 100
+  const H = 46
+  const x = (i: number) => (i / (vals.length - 1)) * (W - 4) + 2
+  const y = (v: number) => H - 6 - (v / vMax) * (H - 18)
+  const line = vals.map((v, i) => `${x(i)},${y(v)}`).join(' ')
+  const markerPos = markers.map((mk) => {
+    let i = history.findIndex((h) => h.week >= mk.week)
+    if (i < 0) i = history.length - 1
+    return { ...mk, i }
+  })
+  return (
+    <svg className="block w-full" viewBox={`0 0 ${W} ${H}`} style={{ height: 150 }}>
+      <polygon points={`2,${H - 6} ${line} ${W - 2},${H - 6}`} fill="rgba(124,154,255,0.15)" />
+      <polyline points={line} fill="none" stroke="var(--color-accent)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+      {markerPos.map((mk, idx) => (
+        <text key={idx} x={x(mk.i)} y={Math.max(6, y(vals[mk.i]) - 3)} fontSize="5.5" textAnchor="middle">
+          {mk.emoji}
+        </text>
+      ))}
+      <text x="2" y={H - 1} fontSize="3.2" fill="var(--color-mut)">
+        wk {history[0].week}
+      </text>
+      <text x={W - 2} y={H - 1} fontSize="3.2" fill="var(--color-mut)" textAnchor="end">
+        wk {history[history.length - 1].week}
+      </text>
+    </svg>
+  )
+}
+
 export function LineChart({
   data,
   color = 'var(--color-accent)',
