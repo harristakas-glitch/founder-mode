@@ -100,17 +100,6 @@ export function NewGame() {
           </div>
         </div>
 
-        {mode === 'free' && (
-          <>
-            <label className={`${label} mt-6`}>Scenario</label>
-            <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
-              {SCENARIOS.map((sc) => (
-                <Pick key={sc.id} selected={scenario === sc.id} onClick={() => setScenario(sc.id)} title={sc.name} blurb={sc.blurb} />
-              ))}
-            </div>
-          </>
-        )}
-
         {mode !== 'online' && (
           <>
             <label className={`${label} mt-6`}>
@@ -128,6 +117,17 @@ export function NewGame() {
                 />
               ))}
             </div>
+
+            {mode === 'free' && (
+              <>
+                <label className={`${label} mt-6`}>Scenario</label>
+                <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+                  {SCENARIOS.map((sc) => (
+                    <Pick key={sc.id} selected={scenario === sc.id} onClick={() => setScenario(sc.id)} title={sc.name} blurb={sc.blurb} />
+                  ))}
+                </div>
+              </>
+            )}
 
             <button
               className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3.5 text-[16px] font-bold text-white shadow-xl shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.99]"
