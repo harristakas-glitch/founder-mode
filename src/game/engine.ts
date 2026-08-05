@@ -11,6 +11,7 @@ import {
   randomName,
   sectorById,
 } from './data'
+import { ARC_DEFS } from './arcs'
 import type {
   Candidate,
   Effects,
@@ -156,6 +157,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     macro: { index: 100, rate: rand(3, 6), inflation: rand(2, 4) },
     debt: null,
     flags: {},
+    arcs: [],
     history: [],
     gameOver: null,
   }
@@ -403,6 +405,7 @@ export function applyEffects(s: GameState, fx: Effects) {
     if (star) star.morale = clamp(star.morale - 20, 0, 100)
   }
   if (fx.special === 'acquihire') {
+    s.flags.acquihired = 1
     for (let i = 0; i < 2; i++) {
       const role: Role = i === 0 ? 'engineer' : pick<Role>(['engineer', 'designer', 'marketer'])
       const skill = clamp(Math.round(rand(5, 8)), 1, 10)
@@ -1044,6 +1047,10 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   // --- random event ---
   maybeFireEvent(s)
+
+  // --- story arcs: chapters open, chapters resolve ---
+  maybeStartArc(s)
+  tickArcs(s)
 
   // --- acquisition offers: only credible companies get bought ---
   const val = valuation(s)
@@ -1713,6 +1720,81 @@ function maybeFireEvent(s: GameState) {
   }
   s.inbox.unshift(msg)
   if (def.autoEffects) applyEffects(s, def.autoEffects(s))
+}
+
+// ---------- story arcs ----------
+
+function maybeStartArc(s: GameState) {
+  if (s.arcs.filter((a) => !a.done).length >= 2) return // at most two open storylines
+  if (RNG.next() > 0.08) return
+  const eligible = ARC_DEFS.filter((d) => d.cond(s) && !s.arcs.some((a) => a.id === d.id))
+  if (eligible.length === 0) return
+  const total = eligible.reduce((acc, d) => acc + d.weight, 0)
+  let roll = RNG.next() * total
+  const def = eligible.find((d) => (roll -= d.weight) <= 0) ?? eligible[0]
+  s.arcs.push({ instanceId: uid(), id: def.id, stage: def.start, week: s.week, data: {} })
+}
+
+function tickArcs(s: GameState) {
+  for (const arc of s.arcs) {
+    if (arc.done || arc.waiting) continue
+    const def = ARC_DEFS.find((d) => d.id === arc.id)
+    const stage = def?.stages[arc.stage]
+    if (!def || !stage) {
+      arc.done = true
+      continue
+    }
+    if (s.week - arc.week < stage.after) continue
+    const built = stage.build(s, arc)
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: built.choices ? 'choice' : 'news',
+      title: built.title,
+      body: built.body,
+      choices: built.choices,
+      meta: { arcInstance: arc.instanceId },
+    })
+    if (built.autoEffects) applyEffects(s, built.autoEffects)
+    if (built.choices) {
+      arc.waiting = true
+    } else if (built.goto) {
+      arc.stage = built.goto
+      arc.week = s.week
+    } else {
+      arc.done = true
+    }
+  }
+}
+
+// The single source of truth for answering an inbox decision — used by the UI store and by tests.
+export function resolveChoiceOnState(s: GameState, messageId: string, choiceIndex: number): void {
+  const msg = s.inbox.find((x) => x.id === messageId)
+  if (!msg || msg.resolved || !msg.choices) return
+  const choice = msg.choices[choiceIndex]
+  if (!choice) return
+  msg.resolved = true
+  msg.resultText = choice.resultText
+  if (choice.effects.special === 'acquired' && msg.meta?.acquisitionAmount) {
+    s.gameOver = { type: 'acquired', week: s.week, payout: Math.round(msg.meta.acquisitionAmount * s.founderEquity) }
+  } else {
+    applyEffects(s, choice.effects)
+  }
+  // arc bookkeeping: the story remembers
+  if (msg.meta?.arcInstance) {
+    const arc = s.arcs.find((a) => a.instanceId === msg.meta!.arcInstance)
+    if (arc) {
+      arc.waiting = false
+      if (choice.arcSet) Object.assign(arc.data, choice.arcSet)
+      if (choice.arcEnd) arc.done = true
+      else if (choice.arcGoto) {
+        arc.stage = choice.arcGoto
+        arc.week = s.week
+      } else {
+        arc.done = true
+      }
+    }
+  }
 }
 
 export function hasPendingDecision(s: GameState): boolean {

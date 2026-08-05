@@ -14,6 +14,7 @@ import {
   pitchTeam,
   pivot,
   repayDebt,
+  resolveChoiceOnState,
   startIPO,
   startVenture,
   totalUsers,
@@ -503,24 +504,13 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           const game = structuredClone(g)
-          const msg = game.inbox.find((m) => m.id === messageId)
-          if (!msg || msg.resolved || !msg.choices) return
-          const choice = msg.choices[choiceIndex]
-          if (!choice) return
-          msg.resolved = true
-          msg.resultText = choice.resultText
-          if (choice.effects.special === 'acquired' && msg.meta?.acquisitionAmount) {
-            game.gameOver = {
-              type: 'acquired',
-              week: game.week,
-              payout: Math.round(msg.meta.acquisitionAmount * game.founderEquity),
-            }
+          const wasOver = !!game.gameOver
+          resolveChoiceOnState(game, messageId, choiceIndex)
+          if (!wasOver && game.gameOver) {
             recordRun(game)
             sfx.cash()
             awardAchievements(game)
             if (get().online) void pushState(myNetSummary(game))
-          } else {
-            applyEffects(game, choice.effects)
           }
           set({ game })
         },
@@ -583,6 +573,7 @@ export const useStore = create<Store>()(
           g.macro ??= { index: 100, rate: 5, inflation: 3 }
           g.debt ??= null
           g.flags ??= {}
+          g.arcs ??= []
         }
         return { ...current, ...p }
       },

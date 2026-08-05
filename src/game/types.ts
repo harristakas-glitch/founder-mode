@@ -98,6 +98,10 @@ export interface Choice {
   label: string
   resultText: string
   effects: Effects
+  // story-arc bookkeeping: what this choice does to the arc that asked the question
+  arcGoto?: string // advance the arc to this stage
+  arcSet?: Record<string, number> // remember facts inside the arc
+  arcEnd?: boolean // the arc concludes here
 }
 
 export interface Message {
@@ -109,7 +113,18 @@ export interface Message {
   choices?: Choice[]
   resolved?: boolean
   resultText?: string
-  meta?: { acquisitionAmount?: number }
+  meta?: { acquisitionAmount?: number; arcInstance?: string }
+}
+
+// A running story arc: a chain of events across weeks that remembers your choices.
+export interface ActiveArc {
+  instanceId: string
+  id: string // ArcDef id
+  stage: string
+  week: number // week the current stage was entered
+  waiting?: boolean // a choice message is out, the arc pauses until it's answered
+  done?: boolean
+  data: Record<string, number>
 }
 
 export interface TermSheet {
@@ -212,6 +227,7 @@ export interface GameState {
   macro: { index: number; rate: number; inflation: number } // the real economy: stock index, central-bank rate %, inflation %
   debt: { principal: number; apr: number; covenantRevenue: number } | null // bank credit line with a revenue covenant
   flags: Record<string, number> // run-lifetime counters for achievements (tookDebt, pitchesLanded, …)
+  arcs: ActiveArc[] // story arcs, active and concluded
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

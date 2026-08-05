@@ -61,7 +61,12 @@
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/macrotest.ts)",
       "Bash(git commit -m 'Macro economy \\(market index, central-bank rate, inflation, shocks driving the funding climate + payroll\\) + bank credit line with revenue covenant + social share buttons on result screens *)",
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/decktest.ts)",
-      "Bash(git commit -m 'Content expansion: 44 new events \\(macro-reactive, debt/banking, ventures, trait-driven, product, drama\\) + 26 achievements with persistent cross-run badges and start-screen gallery *)"
+      "Bash(git commit -m 'Content expansion: 44 new events \\(macro-reactive, debt/banking, ventures, trait-driven, product, drama\\) + 26 achievements with persistent cross-run badges and start-screen gallery *)",
+      "Bash(git commit -m 'Career screen: cross-run stats, endings breakdown, per-sector table *)",
+      "Bash(git config *)",
+      "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/arctest.ts)",
+      "Bash(git commit -m 'Story arcs: multi-week narrative chains with memory \\(6 arcs: MegaCorp pilot, regulator inquiry, influencer, acqui-hire integration, whale customer in a downturn, open-source clone\\) *)",
+      "Bash(git merge *)"
     ]
   }
 }
