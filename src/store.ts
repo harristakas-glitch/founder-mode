@@ -21,6 +21,18 @@ import {
   valuation,
 } from './game/engine'
 import { sfx } from './sound'
+import { checkAchievements } from './game/achievements'
+
+// Evaluate achievement unlocks against a freshly-computed state and surface them in the flash banner.
+function awardAchievements(g: GameState) {
+  const fresh = checkAchievements(g)
+  if (fresh.length > 0) {
+    g.flash =
+      (g.flash ? g.flash + ' · ' : '') +
+      `🏆 Unlocked: ${fresh.map((a) => `${a.emoji} ${a.name}`).join(' · ')}`
+    sfx.milestone()
+  }
+}
 import { SECTORS, sectorById } from './game/data'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
@@ -222,6 +234,7 @@ export const useStore = create<Store>()(
         if (next.gameOver) recordRun(next)
         advancing = false
         weekSounds(next)
+        awardAchievements(next)
         set({ game: next, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000 } })
         void pushState({ ...myNetSummary(next), ready: false })
       }
@@ -321,6 +334,7 @@ export const useStore = create<Store>()(
             const next = advanceWeek(game)
             if (next.gameOver) recordRun(next)
             weekSounds(next)
+            awardAchievements(next)
             set({ game: next })
             return
           }
@@ -503,6 +517,7 @@ export const useStore = create<Store>()(
             }
             recordRun(game)
             sfx.cash()
+            awardAchievements(game)
             if (get().online) void pushState(myNetSummary(game))
           } else {
             applyEffects(game, choice.effects)
@@ -567,6 +582,7 @@ export const useStore = create<Store>()(
           g.rally ??= null
           g.macro ??= { index: 100, rate: 5, inflation: 3 }
           g.debt ??= null
+          g.flags ??= {}
         }
         return { ...current, ...p }
       },

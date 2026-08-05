@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CalendarDays, Globe, Rocket } from 'lucide-react'
 import { SECTORS, sectorById } from '../game/data'
+import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
 import { SCENARIOS } from '../game/engine'
 import { money } from '../format'
 import { onlineConfigured } from '../net/config'
@@ -29,6 +30,34 @@ const inputCls =
   'w-full rounded-xl border border-line bg-surface px-4 py-3 text-[15px] outline-none transition-colors placeholder:text-mut/50 focus:border-accent'
 
 type Mode = 'free' | 'daily' | 'online'
+
+function AchievementGallery() {
+  const earned = earnedAchievements()
+  if (earned.size === 0) return null // nothing to brag about yet — keep the first screen clean
+  return (
+    <div className="mt-8">
+      <label className={label}>
+        Achievements — {earned.size}/{ACHIEVEMENTS.length}
+      </label>
+      <div className="flex flex-wrap gap-1.5">
+        {ACHIEVEMENTS.map((a) => {
+          const has = earned.has(a.id)
+          return (
+            <span
+              key={a.id}
+              title={`${a.name} — ${has ? a.desc : '???'}`}
+              className={`cursor-help rounded-lg border px-2 py-1 text-[12px] font-semibold ${
+                has ? 'border-accent2/50 bg-accent2/10 text-ink' : 'border-line bg-surface opacity-35 grayscale'
+              }`}
+            >
+              {a.emoji} {has ? a.name : '·····'}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export function NewGame() {
   const startGame = useStore((s) => s.startGame)
@@ -185,6 +214,8 @@ export function NewGame() {
             {netError && <div className="mt-3 rounded-lg border border-bad/50 bg-bad/10 px-3 py-2 text-[13px] text-bad">{netError}</div>}
           </div>
         )}
+
+        <AchievementGallery />
 
         {hall.length > 0 && (
           <div className="mt-8">

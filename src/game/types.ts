@@ -85,6 +85,13 @@ export interface Effects {
     | 'poach-rival'
     | 'board-layoffs'
     | 'board-defy'
+    | 'refinance' // reprice existing debt at today's rates
+    | 'rate-hike-debt' // bank passes a hike through to your APR
+    | 'cola-raise' // cost-of-living adjustment: all salaries +5%
+    | 'talent-influx' // two strong candidates join the pool
+    | 'bet-insight' // the active new bet gains PMF and signal
+    | 'line-surge' // every launched product line gains users
+    | 'lose-mercenary' // a mercenary walks
 }
 
 export interface Choice {
@@ -204,6 +211,7 @@ export interface GameState {
   rally: { mult: number; weeksLeft: number } | null // temporary productivity buff from a landed pitch
   macro: { index: number; rate: number; inflation: number } // the real economy: stock index, central-bank rate %, inflation %
   debt: { principal: number; apr: number; covenantRevenue: number } | null // bank credit line with a revenue covenant
+  flags: Record<string, number> // run-lifetime counters for achievements (tookDebt, pitchesLanded, …)
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

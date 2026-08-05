@@ -534,6 +534,587 @@ export const EVENTS: EventDef[] = [
       },
     ],
   },
+
+  // ---------- macro-reactive ----------
+  {
+    id: 'layoffs-wave',
+    weight: 7,
+    minWeek: 8,
+    cond: (s) => s.climate < -0.4,
+    title: 'Industry layoffs wave',
+    body: () =>
+      'Three big names cut 20% in the same week. The talent market floods with excellent people — and your team quietly checks the runway math.',
+    autoEffects: () => ({ morale: -2, special: 'talent-influx' }),
+  },
+  {
+    id: 'crash-fire-sale',
+    weight: 6,
+    minWeek: 20,
+    cond: (s) => s.climate < -0.5 && s.cash > 500_000,
+    title: 'Distressed startup fire sale',
+    body: () =>
+      'A dying competitor-adjacent startup is auctioning its codebase and patents for a fraction of what they raised. Their loss, potentially your gain.',
+    choices: () => [
+      {
+        label: 'Buy the assets ($150,000)',
+        resultText: 'Two repos, one patent family, and a very sad README. Your product grows overnight — so does your bug tracker.',
+        effects: { cash: -150_000, features: 8, bugs: 5 },
+      },
+      { label: 'Let it pass', resultText: 'Someone else buys the scraps.', effects: {} },
+    ],
+  },
+  {
+    id: 'crypto-mania',
+    weight: 5,
+    minWeek: 10,
+    cond: (s) => s.climate > 0.5,
+    title: 'Speculative mania sucks the air out',
+    body: () =>
+      'The hot money found a new toy this month, and it is not your category. Attention drifts; your launch tweet lands in an empty room.',
+    autoEffects: () => ({ hype: -4 }),
+  },
+  {
+    id: 'index-ath',
+    weight: 6,
+    minWeek: 6,
+    cond: (s) => s.macro.index > 125,
+    title: 'Markets hit all-time highs',
+    body: () => 'Everyone feels rich, budgets loosen, and B2B buyers say yes faster. Enjoy it while it lasts — it never lasts.',
+    autoEffects: () => ({ hype: 5, morale: 3 }),
+  },
+  {
+    id: 'cola-demand',
+    weight: 8,
+    minWeek: 12,
+    cond: (s) => s.macro.inflation > 6 && s.employees.length >= 3,
+    title: 'Cost-of-living revolt',
+    body: (s) =>
+      `Inflation is running at ${s.macro.inflation.toFixed(1)}% and the team did the math on their groceries. A delegation asks for a company-wide cost-of-living adjustment.`,
+    choices: () => [
+      {
+        label: 'Grant a 5% company-wide adjustment',
+        resultText: 'Payroll rises; so does loyalty. "They actually did it," someone writes in the group chat.',
+        effects: { morale: 10, special: 'cola-raise' },
+      },
+      {
+        label: 'Hold the line on salaries',
+        resultText: 'The delegation files out silently. Grocery math continues.',
+        effects: { morale: -9 },
+      },
+    ],
+  },
+  {
+    id: 'vc-tourist',
+    weight: 5,
+    minWeek: 10,
+    cond: (s) => s.climate > 0.55 && s.pmf > 40,
+    title: 'A fund you never called is calling',
+    body: () =>
+      'A partner from a mega-fund "would love to get to know the story — no agenda". In a frothy market, capital chases anything that moves.',
+    autoEffects: () => ({ hype: 4, reputation: 2 }),
+  },
+  // ---------- debt & banking ----------
+  {
+    id: 'refi-offer',
+    weight: 9,
+    minWeek: 10,
+    cond: (s) => !!s.debt && s.macro.rate + 2 < s.debt.apr - 1,
+    title: 'Refinancing window',
+    body: (s) =>
+      `Rates have fallen since you drew your loan at ${s.debt!.apr}%. Your banker — suddenly friendly — offers to reprice the line at ${(s.macro.rate + 2).toFixed(1)}%.`,
+    choices: () => [
+      { label: 'Refinance at the new rate', resultText: 'Papers signed. Same debt, smaller bite.', effects: { special: 'refinance' } },
+      { label: 'Ignore the banker', resultText: 'The old rate stands. The banker stops sending holiday cards.', effects: {} },
+    ],
+  },
+  {
+    id: 'credit-tightening',
+    weight: 6,
+    minWeek: 10,
+    cond: (s) => !!s.debt && s.macro.rate > 8,
+    title: 'Credit tightens',
+    body: () =>
+      'With rates this high, your bank reprices risk across its whole book. A letter informs you of a 1-point increase on your line, citing clause 14(b), which you definitely read.',
+    autoEffects: () => ({ special: 'rate-hike-debt' }),
+  },
+  {
+    id: 'banker-dinner',
+    weight: 4,
+    minWeek: 15,
+    cond: (s) => !!s.debt && s.lastRevenue > s.debt.covenantRevenue * 1.5,
+    title: 'Dinner with the bank',
+    body: () =>
+      'Your revenue is comfortably above covenant, and suddenly it is steak dinners and "what else can we do for you". Banks love you exactly when you don\'t need them.',
+    autoEffects: () => ({ reputation: 2 }),
+  },
+  // ---------- ventures & product lines ----------
+  {
+    id: 'bet-breakthrough',
+    weight: 8,
+    minWeek: 10,
+    cond: (s) => s.ventures.some((v) => !v.launched),
+    title: 'The tiger team finds a thread',
+    body: () =>
+      'The new-bet team ran twelve customer interviews in four days and came back vibrating. Something in the new market is pulling.',
+    autoEffects: () => ({ special: 'bet-insight', morale: 3 }),
+  },
+  {
+    id: 'venture-press',
+    weight: 6,
+    minWeek: 20,
+    cond: (s) => s.ventures.some((v) => v.launched),
+    title: '"The everything company?"',
+    body: () =>
+      'A columnist writes about your expansion strategy with grudging admiration and one mean paragraph. Net effect: people now know you do more than one thing.',
+    autoEffects: () => ({ hype: 6 }),
+  },
+  {
+    id: 'cross-sell',
+    weight: 6,
+    minWeek: 25,
+    cond: (s) => s.ventures.filter((v) => v.launched).length >= 2,
+    title: 'Cross-sell machine kicks in',
+    body: () =>
+      'Sales discovers that customers of one product line convert beautifully into the others. The bundle deck writes itself.',
+    autoEffects: () => ({ special: 'line-surge', reputation: 2 }),
+  },
+  {
+    id: 'roadmap-war',
+    weight: 6,
+    minWeek: 20,
+    cond: (s) => s.ventures.some((v) => v.launched) && s.employees.length >= 6,
+    title: 'Roadmap turf war',
+    body: () =>
+      'The core team and the new-line team both claim the same two engineers for next quarter. The meeting has an agenda, a counter-agenda, and snacks nobody touches.',
+    choices: () => [
+      {
+        label: 'Offsite to settle priorities ($15,000)',
+        resultText: 'Two days, one whiteboard, a truce. Everyone knows what winning means now.',
+        effects: { cash: -15_000, morale: 6 },
+      },
+      {
+        label: 'Let them fight it out',
+        resultText: 'The loudest roadmap wins. The quietest engineers update their priors about how decisions happen here.',
+        effects: { morale: -5 },
+      },
+    ],
+  },
+  {
+    id: 'conglomerate-award',
+    weight: 4,
+    minWeek: 40,
+    cond: (s) => s.ventures.filter((v) => v.launched).length >= 3,
+    title: 'Cover story: the mini-conglomerate',
+    body: () =>
+      'A business magazine puts your multi-product empire on the cover with the headline "The Compounder". Your parents finally understand what you do. Sort of.',
+    autoEffects: () => ({ reputation: 8, hype: 6, morale: 4 }),
+  },
+  // ---------- board & investors ----------
+  {
+    id: 'board-tweet',
+    weight: 6,
+    minWeek: 12,
+    cond: (s) => !!s.board,
+    title: 'A board member is posting again',
+    body: () =>
+      'Your most online investor posted a spicy take that is being screenshotted widely — with your company named in their bio.',
+    choices: () => [
+      {
+        label: 'Ask them to delete it',
+        resultText: 'They delete it and respect you slightly more, which they express by interrupting you slightly less.',
+        effects: { reputation: 2 },
+      },
+      {
+        label: 'Quote-post with a meme',
+        resultText: 'The exchange goes viral. Brand: chaotic. Reach: enormous.',
+        effects: { hype: 7, reputation: -3 },
+      },
+    ],
+  },
+  {
+    id: 'investor-intro',
+    weight: 6,
+    minWeek: 15,
+    cond: (s) => !!s.board && (s.sector === 'saas' || s.sector === 'fintech' || s.sector === 'devtools'),
+    title: 'A warm intro from the board',
+    body: () =>
+      'One of your investors walks you into their old employer — a logo big enough to anchor your next sales deck.',
+    autoEffects: (s) => ({ cash: Math.round(20_000 + s.lastRevenue * 0.5), reputation: 3 }),
+  },
+  {
+    id: 'founder-award',
+    weight: 4,
+    minWeek: 30,
+    cond: (s) => s.reputation > 55,
+    title: 'You made a list',
+    body: () =>
+      '"Founders to Watch." Your photo is fine. Your quote got trimmed weirdly. Your mother bought nine copies.',
+    autoEffects: () => ({ reputation: 5, hype: 5, morale: 2 }),
+  },
+  {
+    id: 'analyst-coverage',
+    weight: 5,
+    minWeek: 40,
+    cond: (s) => s.lastRevenue * 52 > 5_000_000,
+    title: 'An analyst starts covering your category',
+    body: () =>
+      'A research firm publishes a market map with your logo in the "leaders" quadrant-ish area. Procurement departments suddenly return calls.',
+    autoEffects: () => ({ hype: 5, reputation: 4 }),
+  },
+  {
+    id: 'unicorn-watch',
+    weight: 4,
+    minWeek: 50,
+    cond: (s) => (s.history[s.history.length - 1]?.valuation ?? 0) > 650_000_000,
+    title: 'The unicorn watchlist',
+    body: () =>
+      'A tracker site lists you under "approaching $1B". Recruiters, bankers, and long-lost acquaintances all notice simultaneously.',
+    autoEffects: () => ({ hype: 8 }),
+  },
+
+  // ---------- trait-driven team moments ----------
+  {
+    id: 'tenx-keynote',
+    weight: 6,
+    minWeek: 12,
+    cond: (s) => s.employees.some((e) => e.trait === 'tenx'),
+    title: 'Your 10x wants the spotlight',
+    body: (s) => {
+      const star = s.employees.find((e) => e.trait === 'tenx')!
+      return `${star.name} got invited to keynote a conference about "how we ship so fast". The talk would be great marketing — and insufferable to sit through for the rest of the team.`
+    },
+    choices: () => [
+      {
+        label: 'Send them — with a slide about the team',
+        resultText: 'The talk kills. The team slide gets exactly four seconds of screen time.',
+        effects: { hype: 8, morale: -2 },
+      },
+      { label: 'Keep them heads-down', resultText: 'They sulk in four programming languages.', effects: { morale: -2 } },
+    ],
+  },
+  {
+    id: 'drama-blowup',
+    weight: 7,
+    minWeek: 10,
+    cond: (s) => s.employees.some((e) => e.trait === 'drama') && s.employees.length >= 3,
+    title: 'The group chat is on fire',
+    body: (s) => {
+      const magnet = s.employees.find((e) => e.trait === 'drama')!
+      return `${magnet.name} had Opinions about a code review, in public, at length. Two channels have gone quiet in the bad way.`
+    },
+    choices: () => [
+      {
+        label: 'Mediate over lunch ($500 of sushi)',
+        resultText: 'Grievances aired, boundaries drawn, spicy tuna consumed. Peace, for now.',
+        effects: { cash: -500, morale: 6 },
+      },
+      { label: 'Let adults be adults', resultText: 'They are not, currently, being adults.', effects: { morale: -6 } },
+    ],
+  },
+  {
+    id: 'culture-carrier-moment',
+    weight: 5,
+    minWeek: 8,
+    cond: (s) => s.employees.some((e) => e.trait === 'culture'),
+    title: 'A small kindness scales',
+    body: (s) => {
+      const carrier = s.employees.find((e) => e.trait === 'culture')!
+      return `${carrier.name} quietly started a Friday demo-and-doughnuts ritual. Attendance is now 100% and nobody mandated anything.`
+    },
+    autoEffects: () => ({ morale: 5 }),
+  },
+  {
+    id: 'mercenary-sidegig',
+    weight: 6,
+    minWeek: 14,
+    cond: (s) => s.employees.some((e) => e.trait === 'mercenary'),
+    title: 'Moonlighting suspicions',
+    body: (s) => {
+      const merc = s.employees.find((e) => e.trait === 'mercenary')!
+      return `${merc.name}'s GitHub is suspiciously active on someone else's product at 2am. Their output here hasn't dropped — yet.`
+    },
+    choices: () => [
+      {
+        label: 'Confront them directly',
+        resultText: 'They shrug, quote their contract, and resign by lunch. Mercenaries gonna mercenary.',
+        effects: { special: 'lose-mercenary', morale: 2 },
+      },
+      {
+        label: 'Look away while the work is good',
+        resultText: 'You now co-own their attention with a mystery startup.',
+        effects: { features: -2 },
+      },
+    ],
+  },
+  {
+    id: 'craftsman-refactor',
+    weight: 6,
+    minWeek: 12,
+    cond: (s) => s.employees.some((e) => e.trait === 'craftsman') && s.bugs > 25,
+    title: 'The craftsman proposes a cleanup week',
+    body: (s) => {
+      const c = s.employees.find((e) => e.trait === 'craftsman')!
+      return `${c.name} presents a one-pager titled "The Refactor We Deserve". It promises to halve the bug pile at the cost of a week of features.`
+    },
+    choices: () => [
+      {
+        label: 'Grant the cleanup week',
+        resultText: 'A week of deletion, renaming, and quiet joy. The codebase breathes again.',
+        effects: { features: -2, bugs: -12, morale: 3 },
+      },
+      { label: 'Roadmap first', resultText: 'The one-pager joins its ancestors in the icebox.', effects: { morale: -2 } },
+    ],
+  },
+  // ---------- people & office ----------
+  {
+    id: 'referral-network',
+    weight: 6,
+    minWeek: 10,
+    cond: (s) => s.employees.length >= 3,
+    title: 'Referral bonus program?',
+    body: () => 'The team knows great people. Great people know the team. A referral bonus might shake a few loose.',
+    choices: () => [
+      {
+        label: 'Offer $15k in referral bonuses',
+        resultText: 'Two impressive CVs land within days — pre-vouched, pre-vetted.',
+        effects: { cash: -15_000, special: 'talent-influx' },
+      },
+      { label: 'Keep hiring the hard way', resultText: 'The pipeline stays artisanal.', effects: {} },
+    ],
+  },
+  {
+    id: 'salary-leak',
+    weight: 6,
+    minWeek: 16,
+    cond: (s) => s.employees.length >= 6,
+    title: 'The salary spreadsheet leaked',
+    body: () => 'Someone left the comp sheet open on the office TV for eleven minutes. Everyone saw everything. Slack is very quiet.',
+    choices: () => [
+      {
+        label: 'Go transparent: publish salary bands',
+        resultText: 'Radical honesty, retroactively adopted. After the initial shock, it reads as courage.',
+        effects: { morale: 6, reputation: 3 },
+      },
+      {
+        label: 'Pretend it never happened',
+        resultText: 'Everyone pretends too. Badly.',
+        effects: { morale: -8 },
+      },
+    ],
+  },
+  {
+    id: 'office-dog',
+    weight: 5,
+    minWeek: 6,
+    cond: (s) => s.employees.length >= 2,
+    title: 'A dog has adopted the office',
+    body: () =>
+      'A golden retriever belonging to the café downstairs has decided your standup is her standup. Productivity dips for exactly one day, then soars.',
+    autoEffects: () => ({ morale: 5 }),
+  },
+  {
+    id: 'alumni-founder',
+    weight: 4,
+    minWeek: 40,
+    cond: (s) => s.employees.some((e) => e.weeks > 30),
+    title: 'An early employee starts their own thing',
+    body: () =>
+      'One of your veterans gives notice — to found their own company, "inspired by what we built here". Bittersweet, in the way of good schools.',
+    autoEffects: () => ({ morale: -2, reputation: 3 }),
+  },
+  {
+    id: 'intern-cohort',
+    weight: 5,
+    minWeek: 20,
+    cond: (s) => s.employees.length >= 5,
+    title: 'Summer intern cohort?',
+    body: () => 'Three universities ask if you take interns. Chaos, energy, and at least one future star — for the price of some mentoring bandwidth.',
+    choices: () => [
+      {
+        label: 'Run the internship ($12,000)',
+        resultText: 'The interns ship a tool the whole team now depends on, and leave behind an inexplicable amount of soda.',
+        effects: { cash: -12_000, morale: 5, features: 3 },
+      },
+      { label: 'Not this year', resultText: 'The universities move down their list.', effects: {} },
+    ],
+  },
+  // ---------- product & users ----------
+  {
+    id: 'power-user-council',
+    weight: 6,
+    minWeek: 10,
+    cond: (s) => s.users > 150 && s.pmf < 75,
+    title: 'Assemble a power-user council?',
+    body: () => 'Your ten most obsessive users would happily meet monthly and tell you exactly what to build, in exchange for stickers and early access.',
+    choices: () => [
+      {
+        label: 'Convene the council ($5,000)',
+        resultText: 'Ninety minutes of brutal, loving feedback. Your roadmap is now sharper than your pitch deck.',
+        effects: { cash: -5_000, pmf: 4 },
+      },
+      { label: 'Trust the analytics', resultText: 'The dashboards say things. Different things.', effects: {} },
+    ],
+  },
+  {
+    id: 'feature-storm',
+    weight: 6,
+    minWeek: 14,
+    cond: (s) => s.users > 800,
+    title: 'The feature-request storm',
+    body: () => 'One request has 400 upvotes, a hashtag, and fan art. It is not on your roadmap.',
+    choices: () => [
+      {
+        label: 'Build the people\'s feature',
+        resultText: 'Shipped in two weeks. The hashtag turns celebratory; the codebase turns slightly wilder.',
+        effects: { features: 5, bugs: 4, hype: 5 },
+      },
+      { label: 'Hold the roadmap line', resultText: 'The hashtag turns sarcastic.', effects: { reputation: -3 } },
+    ],
+  },
+  {
+    id: 'localization',
+    weight: 5,
+    minWeek: 25,
+    cond: (s) => s.users > 4_000,
+    title: 'The world wants in',
+    body: () => 'A third of your signups now come from countries you have never marketed to, using the product through browser translation. Imagine if it spoke their language.',
+    choices: () => [
+      {
+        label: 'Localize into 5 languages ($25,000)',
+        resultText: 'Conversion in the new markets doubles overnight. Turns out people like being spoken to.',
+        effects: { cash: -25_000, users: 0.06, reputation: 2 },
+      },
+      { label: 'English is the language of software', resultText: 'The browser translations soldier on heroically.', effects: {} },
+    ],
+  },
+  {
+    id: 'app-store-feature',
+    weight: 5,
+    minWeek: 15,
+    cond: (s) => (s.sector === 'social' || s.sector === 'ecommerce') && s.users > 2_000,
+    title: 'Featured on the app store',
+    body: () => 'An editor at the platform picked you for the front page. For seventy-two glorious hours, the install graph goes vertical.',
+    autoEffects: (s) => ({ users: Math.round(s.users * 0.12), hype: 8, bugs: 3 }),
+  },
+  {
+    id: 'accessibility-audit',
+    weight: 4,
+    minWeek: 18,
+    cond: (s) => s.users > 500,
+    title: 'Accessibility audit request',
+    body: () => 'A user who relies on a screen reader sends a detailed, generous, damning report about everything your product gets wrong.',
+    choices: () => [
+      {
+        label: 'Fix it properly ($8,000)',
+        resultText: 'The fixes ship. The user posts a thank-you thread that outperforms your last three launches.',
+        effects: { cash: -8_000, reputation: 5, quality: 4 },
+      },
+      { label: 'Backlog it', resultText: 'The report joins the backlog, where reports go to think about what they\'ve done.', effects: { reputation: -3 } },
+    ],
+  },
+  {
+    id: 'dark-mode',
+    weight: 4,
+    minWeek: 8,
+    cond: (s) => s.users > 100,
+    title: 'The dark mode ultimatum',
+    body: () => 'The most-upvoted request of all time is, of course, dark mode. An engineer builds it in a weekend "for fun". Ship it?',
+    autoEffects: () => ({ features: 2, morale: 3, hype: 2 }),
+  },
+  // ---------- drama & misc ----------
+  {
+    id: 'domain-squatter',
+    weight: 5,
+    minWeek: 10,
+    cond: (s) => s.hype > 25,
+    title: 'Domain squatter',
+    body: (s) => `Someone bought every misspelling of ${s.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com and wants $8,000 for the bundle.`,
+    choices: () => [
+      { label: 'Pay the troll ($8,000)', resultText: 'The typos are yours. It feels bad and correct.', effects: { cash: -8_000 } },
+      { label: 'Refuse on principle', resultText: 'A typo\'d clone site appears within the month, harvesting confused visitors.', effects: { reputation: -3 } },
+    ],
+  },
+  {
+    id: 'documentary-crew',
+    weight: 4,
+    minWeek: 25,
+    cond: (s) => s.reputation > 40,
+    title: 'A documentary crew wants access',
+    body: () => 'A streaming platform is making a series about startups. They want three weeks of fly-on-the-wall access. Cameras change rooms.',
+    choices: () => [
+      {
+        label: 'Let them in',
+        resultText: 'The team performs "casual" for three weeks. The episode, airing later, is unreasonably flattering.',
+        effects: { hype: 10, morale: -3, features: -1 },
+      },
+      { label: 'Closed set', resultText: 'They film your competitor instead. You watch the episode twice.', effects: {} },
+    ],
+  },
+  {
+    id: 'meme-moment',
+    weight: 5,
+    minWeek: 8,
+    cond: (s) => s.users > 300,
+    title: 'You are a meme now',
+    body: () => 'A screenshot of your error message — accidentally poetic — is everywhere. "This is so us," say thousands of strangers.',
+    autoEffects: () => ({ hype: 7 }),
+  },
+  {
+    id: 'founder-podcast',
+    weight: 5,
+    minWeek: 12,
+    cond: (s) => s.reputation > 25,
+    title: 'Podcast invitation',
+    body: () => 'A mid-sized podcast wants two hours of your origin story. Founders before you have converted rambling into recruiting gold.',
+    choices: () => [
+      {
+        label: 'Record the episode',
+        resultText: 'You tell the pivot story well. Three great candidates mention the episode in cover letters.',
+        effects: { hype: 6, features: -1, special: 'talent-influx' },
+      },
+      { label: 'Politely decline', resultText: 'The host books a thought leader instead.', effects: {} },
+    ],
+  },
+  {
+    id: 'gdpr-request',
+    weight: 4,
+    minWeek: 20,
+    cond: (s) => s.users > 1_000,
+    title: 'Regulatory data request',
+    body: () => 'A privacy regulator sends a questionnaire with 44 questions and a deadline. Question 12 has sub-parts.',
+    choices: () => [
+      { label: 'Lawyer + engineer sprint ($10,000)', resultText: 'Compliant, documented, filed. Boring in the best way.', effects: { cash: -10_000, reputation: 2 } },
+      { label: 'Answer it yourself over a weekend', resultText: 'Probably fine. Probably.', effects: { morale: -2, reputation: -2 } },
+    ],
+  },
+  {
+    id: 'rival-alumni-ship',
+    weight: 4,
+    minWeek: 20,
+    cond: (s) => s.rivals.some((r) => !r.alive),
+    title: 'Refugees from a dead rival',
+    body: (s) => {
+      const dead = s.rivals.find((r) => !r.alive)!
+      return `Two ex-${dead.name} engineers, now freelancing, offer you the integration playbook they wish their old company had used. Cheap, and it slots right in.`
+    },
+    autoEffects: () => ({ features: 4, bugs: -2 }),
+  },
+  {
+    id: 'award-gala',
+    weight: 4,
+    minWeek: 30,
+    cond: (s) => s.reputation > 45,
+    title: 'Industry awards night',
+    body: () => 'You are nominated for "Breakout Company". Attendance means a table, a tux, and small talk with rivals.',
+    choices: () => [
+      {
+        label: 'Buy the table ($3,000)',
+        resultText: 'You lose to a juice company, but the networking pays for the tux tenfold.',
+        effects: { cash: -3_000, reputation: 4, hype: 3 },
+      },
+      { label: 'Skip it', resultText: 'The juice company wins in your absence too.', effects: {} },
+    ],
+  },
 ]
 
 export function raiseDemandTarget(s: GameState) {

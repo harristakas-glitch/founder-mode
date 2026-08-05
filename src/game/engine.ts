@@ -155,6 +155,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     rally: null,
     macro: { index: 100, rate: rand(3, 6), inflation: rand(2, 4) },
     debt: null,
+    flags: {},
     history: [],
     gameOver: null,
   }
@@ -425,6 +426,36 @@ export function applyEffects(s: GameState, fx: Effects) {
   }
   if (fx.special === 'board-defy' && s.board) {
     s.board.defied = true
+  }
+  if (fx.special === 'refinance' && s.debt) {
+    s.debt.apr = Math.round((s.macro.rate + 2) * 10) / 10
+  }
+  if (fx.special === 'rate-hike-debt' && s.debt) {
+    s.debt.apr = Math.round((s.debt.apr + 1) * 10) / 10
+  }
+  if (fx.special === 'cola-raise') {
+    for (const e of s.employees) e.salary = Math.round((e.salary * 1.05) / 1000) * 1000
+  }
+  if (fx.special === 'talent-influx') {
+    for (let i = 0; i < 2; i++) {
+      const c = makeCandidate(s)
+      c.skill = clamp(c.skill + 2, 1, 10)
+      s.candidates.unshift(c)
+    }
+  }
+  if (fx.special === 'bet-insight') {
+    const bet = s.ventures.find((v) => !v.launched)
+    if (bet) {
+      bet.pmf = clamp(bet.pmf + 5, 0, 100)
+      bet.researchSignal += 5
+    }
+  }
+  if (fx.special === 'line-surge') {
+    for (const v of s.ventures) if (v.launched) v.users = Math.round(v.users * 1.08)
+  }
+  if (fx.special === 'lose-mercenary') {
+    const merc = s.employees.find((e) => e.trait === 'mercenary')
+    if (merc) s.employees = s.employees.filter((e) => e.id !== merc.id)
   }
   if (fx.special === 'poach-rival') {
     const skill = clamp(Math.round(rand(8, 9.4)), 1, 10)
@@ -1278,6 +1309,7 @@ export function drawDebt(s: GameState, amount: number) {
   if (amount <= 0) return
   const apr = debtApr(s)
   s.cash += amount
+  s.flags.tookDebt = 1
   s.debt = {
     principal: (s.debt?.principal ?? 0) + amount,
     apr,
@@ -1391,6 +1423,7 @@ export function pitchTeam(s: GameState, id: PitchOption['id']): void {
   const opt = pitchOptions(s).find((o) => o.id === id)!
   s.pitchCooldown = PITCH_COOLDOWN
   const won = RNG.next() < opt.p
+  if (won) s.flags.pitchesLanded = (s.flags.pitchesLanded ?? 0) + 1
 
   if (id === 'vision') {
     if (won) {
