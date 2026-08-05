@@ -57,6 +57,7 @@ export type ScreenId =
   | 'finance'
   | 'fundraising'
   | 'inbox'
+  | 'career'
 
 export interface RunRecord {
   company: string
