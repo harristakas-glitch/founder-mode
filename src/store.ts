@@ -23,6 +23,7 @@ import {
 } from './game/engine'
 import { sfx } from './sound'
 import { checkAchievements } from './game/achievements'
+import { submitDailyScore } from './net/leaderboard'
 
 // Evaluate achievement unlocks against a freshly-computed state and surface them in the flash banner.
 function awardAchievements(g: GameState) {
@@ -119,6 +120,9 @@ function recordRun(g: GameState) {
   })
   runs.sort((a, b) => b.score - a.score)
   localStorage.setItem(HALL_KEY, JSON.stringify(runs.slice(0, 10)))
+  // daily challenge scores also go to the global leaderboard (no-op until Supabase is configured)
+  const daily = g.challenge?.label.match(/^Daily #(\d+)/)
+  if (daily) void submitDailyScore(Number(daily[1]), { company: g.companyName, score, weeks: g.gameOver.week, ending: g.gameOver.type })
 }
 
 // ---------- daily challenge ----------

@@ -7,6 +7,7 @@ import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
 import { MATCH_CAP, dailyInfo, readHall, useStore } from '../store'
+import { DailyLeaderboard } from './DailyLeaderboard'
 
 const ENDING_ICON: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱', ipo: '🔔' }
 
@@ -128,6 +129,12 @@ export function NewGame() {
             ))}
           </div>
         </div>
+
+        {mode === 'daily' && (
+          <div className="mt-4">
+            <DailyLeaderboard day={daily.id} />
+          </div>
+        )}
 
         {mode !== 'online' && (
           <>

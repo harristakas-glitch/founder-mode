@@ -39,6 +39,7 @@ import { Career } from './screens/Career'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
+import { DailyLeaderboard } from './screens/DailyLeaderboard'
 
 // Each market gets its own accent identity — the whole UI subtly rethemes per run.
 const SECTOR_ACCENTS: Record<string, [string, string]> = {
@@ -607,6 +608,12 @@ function GameOver() {
             </div>
           ))}
         </div>
+
+        {game.challenge?.label.startsWith('Daily') && (
+          <div className="mt-5 text-left">
+            <DailyLeaderboard day={Number(game.challenge.label.match(/#(\d+)/)?.[1] ?? 0)} highlightPlayerId={myId()} />
+          </div>
+        )}
 
         <div className="mt-5 rounded-2xl border border-line/60 bg-black/20 p-3 text-left">
           <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-mut">The story of {game.companyName}</div>
