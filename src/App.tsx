@@ -11,6 +11,7 @@ import {
   Package,
   Swords,
   TrendingUp,
+  Trophy,
   UserPlus,
   Users,
   Volume2,
@@ -34,6 +35,7 @@ import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
 import { Inbox } from './screens/Inbox'
+import { Career } from './screens/Career'
 import { Ticker, TimelineChart } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
@@ -48,6 +50,7 @@ const NAV: { id: ScreenId; label: string; icon: typeof Mail }[] = [
   { id: 'market', label: 'Market', icon: Swords },
   { id: 'finance', label: 'Finance', icon: Wallet },
   { id: 'fundraising', label: 'Fundraising', icon: HandCoins },
+  { id: 'career', label: 'Career', icon: Trophy },
 ]
 
 const GAME_URL = 'https://harristakas-glitch.github.io/founder-mode/'
@@ -328,6 +331,7 @@ export default function App() {
             {screen === 'market' && <Market />}
             {screen === 'finance' && <Finance />}
             {screen === 'fundraising' && <Fundraising />}
+            {screen === 'career' && <Career />}
           </div>
         </main>
 
