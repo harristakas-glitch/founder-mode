@@ -76,7 +76,8 @@
       "Bash(git commit -m 'Daily leaderboard module: Supabase table SQL, client, and screen component *)",
       "Bash(git commit -m 'Wire daily leaderboard into start/result screens; SW production-only \\(dev cache fix\\) *)",
       "Bash(git commit -m 'Add vite/client types for import.meta.env *)",
-      "Bash(git commit -m 'Room chat: floating widget with unread badge, session-only messages over the realtime channel, available in lobby and mid-match *)"
+      "Bash(git commit -m 'Room chat: floating widget with unread badge, session-only messages over the realtime channel, available in lobby and mid-match *)",
+      "Bash(git commit -m 'Optional social login \\(Google / X\\) via Supabase Auth: profile chip on start screen, leaderboard rows carry the player'\\\\''s handle; auth-upgrade.sql adds display_name *)"
     ]
   }
 }

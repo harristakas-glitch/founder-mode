@@ -56,7 +56,10 @@ export function DailyLeaderboard({ day, highlightPlayerId }: { day: number; high
               return (
                 <tr key={r.player_id} className={mine ? 'bg-accent/10' : ''}>
                   <Td className="w-8 text-mut tnum">{i + 1}</Td>
-                  <Td className={mine ? 'font-bold' : ''}>{r.company}</Td>
+                  <Td className={mine ? 'font-bold' : ''}>
+                    {r.company}
+                    {r.display_name && <span className="ml-1.5 text-[11px] text-mut">by {r.display_name}</span>}
+                  </Td>
                   <Td right>{money(r.score)}</Td>
                   <Td right>{r.weeks}</Td>
                   <Td right>{ENDING_EMOJI[r.ending] ?? '🏁'}</Td>

@@ -24,6 +24,7 @@ import {
 import { sfx } from './sound'
 import { checkAchievements } from './game/achievements'
 import { submitDailyScore } from './net/leaderboard'
+import { currentProfile, onAuthChange, signInWith, signOut, type AuthProfile, type AuthProvider } from './net/auth'
 
 // Evaluate achievement unlocks against a freshly-computed state and surface them in the flash banner.
 function awardAchievements(g: GameState) {
@@ -126,7 +127,14 @@ function recordRun(g: GameState) {
   localStorage.setItem(HALL_KEY, JSON.stringify(runs.slice(0, 10)))
   // daily challenge scores also go to the global leaderboard (no-op until Supabase is configured)
   const daily = g.challenge?.label.match(/^Daily #(\d+)/)
-  if (daily) void submitDailyScore(Number(daily[1]), { company: g.companyName, score, weeks: g.gameOver.week, ending: g.gameOver.type })
+  if (daily)
+    void submitDailyScore(Number(daily[1]), {
+      company: g.companyName,
+      score,
+      weeks: g.gameOver.week,
+      ending: g.gameOver.type,
+      display_name: useStore.getState().authUser?.name ?? null,
+    })
 }
 
 // ---------- daily challenge ----------
@@ -190,6 +198,7 @@ interface Store {
   reconnecting: boolean
   emotes: EmoteToast[]
   chat: ChatMessage[]
+  authUser: AuthProfile | null
   connecting: boolean
   screen: ScreenId
   setScreen: (s: ScreenId) => void
@@ -205,6 +214,9 @@ interface Store {
   cancelReady: () => void
   sendEmote: (emoji: string) => void
   sendChat: (text: string) => void
+  initAuth: () => Promise<void>
+  signIn: (provider: AuthProvider) => Promise<string | null>
+  signOutUser: () => Promise<void>
   // --- in-game actions ---
   sendOffer: (candidateId: string) => void
   fire: (employeeId: string) => void
@@ -375,6 +387,7 @@ export const useStore = create<Store>()(
         reconnecting: false,
         emotes: [],
         chat: [],
+        authUser: null,
         connecting: false,
         screen: 'dashboard',
         setScreen: (screen) => set({ screen }),
@@ -492,6 +505,18 @@ export const useStore = create<Store>()(
           const payload = { from: online.myCompany, emoji }
           void broadcastEmote(payload)
           showEmote(payload) // broadcast doesn't echo to self
+        },
+
+        initAuth: async () => {
+          set({ authUser: await currentProfile() })
+          onAuthChange((p) => set({ authUser: p }))
+        },
+
+        signIn: async (provider) => signInWith(provider),
+
+        signOutUser: async () => {
+          await signOut()
+          set({ authUser: null })
         },
 
         sendChat: (text) => {

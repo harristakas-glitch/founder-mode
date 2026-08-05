@@ -64,7 +64,7 @@ export function makeRoomCode(): string {
   return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
 }
 
-function getClient(): SupabaseClient {
+export function getClient(): SupabaseClient {
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       realtime: { params: { eventsPerSecond: 5 } },

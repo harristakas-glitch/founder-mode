@@ -13,6 +13,7 @@ export interface DailyScore {
   score: number
   weeks: number
   ending: string
+  display_name?: string | null
 }
 
 const TABLE = 'daily_scores'
@@ -34,7 +35,7 @@ function getClient(): SupabaseClient {
  */
 export async function submitDailyScore(
   day: number,
-  entry: { company: string; score: number; weeks: number; ending: string },
+  entry: { company: string; score: number; weeks: number; ending: string; display_name?: string | null },
 ): Promise<void> {
   if (!onlineConfigured) return
   try {
@@ -47,6 +48,7 @@ export async function submitDailyScore(
       score: Math.max(0, Math.round(entry.score)),
       weeks: entry.weeks,
       ending: entry.ending,
+      display_name: entry.display_name ? entry.display_name.slice(0, 24) : null,
     }
 
     // Fetch-compare: only overwrite an existing row with an equal-or-better score.
@@ -70,7 +72,7 @@ export async function fetchDailyTop(day: number, limit = 10): Promise<DailyScore
   try {
     const { data, error } = await getClient()
       .from(TABLE)
-      .select('player_id, company, score, weeks, ending')
+      .select('player_id, company, score, weeks, ending, display_name')
       .eq('day', day)
       .order('score', { ascending: false })
       .limit(limit)

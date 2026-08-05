@@ -92,9 +92,10 @@ export default function App() {
   const emotes = useStore((s) => s.emotes)
   const [navOpen, setNavOpen] = useState(false)
 
-  // rejoin the online room this device was in before a refresh
+  // rejoin the online room this device was in before a refresh; pick up any signed-in session
   useEffect(() => {
     void useStore.getState().resumeOnline()
+    void useStore.getState().initAuth()
   }, [])
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
   const [, setClock] = useState(0) // re-render for the round countdown

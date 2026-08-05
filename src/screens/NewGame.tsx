@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays, Globe, Rocket } from 'lucide-react'
+import { CalendarDays, Globe, LogIn, LogOut, Rocket } from 'lucide-react'
 import { SECTORS, sectorById } from '../game/data'
 import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
 import { SCENARIOS } from '../game/engine'
@@ -60,6 +60,48 @@ function AchievementGallery() {
   )
 }
 
+function AuthCorner() {
+  const authUser = useStore((s) => s.authUser)
+  const signIn = useStore((s) => s.signIn)
+  const signOutUser = useStore((s) => s.signOutUser)
+  const [err, setErr] = useState<string | null>(null)
+  if (!onlineConfigured || location.protocol === 'file:') return null
+
+  if (authUser) {
+    return (
+      <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-1.5 py-1">
+        {authUser.avatar ? (
+          <img src={authUser.avatar} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
+        ) : (
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-white">
+            {authUser.name[0]?.toUpperCase()}
+          </span>
+        )}
+        <span className="text-[12.5px] font-semibold">{authUser.name}</span>
+        <button className="rounded-full p-1 text-mut hover:text-bad" title="Sign out" onClick={() => void signOutUser()}>
+          <LogOut size={13} />
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex gap-1.5">
+        {(['google', 'twitter'] as const).map((p) => (
+          <button
+            key={p}
+            className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-semibold text-mut transition-colors hover:border-accent hover:text-ink"
+            onClick={async () => setErr(await signIn(p))}
+          >
+            <LogIn size={12} /> {p === 'google' ? 'Google' : '𝕏'}
+          </button>
+        ))}
+      </div>
+      {err && <span className="max-w-[260px] text-right text-[10.5px] text-bad">{err}</span>}
+    </div>
+  )
+}
+
 export function NewGame() {
   const startGame = useStore((s) => s.startGame)
   const hostRoom = useStore((s) => s.hostRoom)
@@ -87,9 +129,12 @@ export function NewGame() {
   return (
     <div className="flex min-h-screen items-center justify-center p-6 md:p-8">
       <div className="rise-in w-[780px] max-w-full">
-        <h1 className="bg-gradient-to-r from-ink to-accent bg-clip-text text-4xl font-extrabold tracking-tight text-transparent md:text-5xl">
-          Founder Mode
-        </h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="bg-gradient-to-r from-ink to-accent bg-clip-text text-4xl font-extrabold tracking-tight text-transparent md:text-5xl">
+            Founder Mode
+          </h1>
+          <AuthCorner />
+        </div>
         <p className="mt-1.5 mb-7 text-mut">You have $200,000, an empty office, and a dream. Build a unicorn — or die trying.</p>
 
         <label className={label}>Game mode</label>
