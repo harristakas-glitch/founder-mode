@@ -66,7 +66,10 @@
       "Bash(git config *)",
       "Bash(npx -y tsx /private/tmp/claude-502/-Users-charilaostakas-Claude-game/729dd487-bf6a-4d5e-81ed-e5c15d3e6609/scratchpad/arctest.ts)",
       "Bash(git commit -m 'Story arcs: multi-week narrative chains with memory \\(6 arcs: MegaCorp pilot, regulator inquiry, influencer, acqui-hire integration, whale customer in a downturn, open-source clone\\) *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m 'Ignore agent worktrees *)",
+      "Bash(git commit -m 'Merge Career screen; ignore agent worktrees *)"
     ]
   }
 }
