@@ -1,5 +1,5 @@
 import { Megaphone } from 'lucide-react'
-import { Bar, Btn, Panel, SkillDots, Td, Th, TraitChip } from '../components'
+import { Bar, Btn, Panel, RoleAvatar, SkillRing, TraitChip } from '../components'
 import { money, pct } from '../format'
 import { pitchOptions, weeklyPayroll } from '../game/engine'
 import { useStore } from '../store'
@@ -73,8 +73,11 @@ export function Team() {
 
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <b>You</b> <span className="text-mut">· Founder & CEO ({game.founderKind})</span>
+          <div className="flex items-center gap-2.5">
+            <RoleAvatar name="You" role={game.founderKind === 'technical' ? 'engineer' : 'sales'} />
+            <div>
+              <b>You</b> <span className="text-mut">· Founder & CEO ({game.founderKind})</span>
+            </div>
           </div>
           <span className="text-[13px] text-mut">
             {game.founderKind === 'technical' ? 'Contributes engineering output every week' : 'Generates hype and boosts revenue'}
@@ -85,61 +88,54 @@ export function Team() {
       {game.employees.length > 0 && <PitchPanel />}
 
       <div className="mt-3.5">
-        <Panel>
-          {game.employees.length === 0 ? (
+        {game.employees.length === 0 ? (
+          <Panel>
             <div className="text-mut">
               No employees yet. Head to <b>Hiring</b> — you cannot build a unicorn alone.
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px]">
-                <thead>
-                  <tr>
-                    <Th>Name</Th>
-                    <Th>Role</Th>
-                    <Th>Skill</Th>
-                    <Th>Morale</Th>
-                    <Th right>Salary</Th>
-                    <Th right>Tenure</Th>
-                    <Th right>Actions</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {game.employees.map((e) => (
-                    <tr key={e.id}>
-                      <Td>
-                        <b>{e.name}</b>
-                        <TraitChip trait={e.trait} />
-                      </Td>
-                      <Td>{ROLE_LABEL[e.role]}</Td>
-                      <Td>
-                        <SkillDots skill={e.skill} />
-                      </Td>
-                      <Td className="min-w-[110px]">
-                        <Bar value={e.morale} color={e.morale < 40 ? 'var(--color-bad)' : e.morale < 60 ? 'var(--color-warn)' : 'var(--color-good)'} />
-                      </Td>
-                      <Td right>{money(e.salary)}/yr</Td>
-                      <Td right>{e.weeks} wk</Td>
-                      <Td right>
-                        <div className="flex justify-end gap-1.5">
-                          <Btn onClick={() => giveRaise(e.id)}>Raise</Btn>
-                          <Btn
-                            variant="danger"
-                            onClick={() => {
-                              if (confirm(`Let ${e.name} go? One month severance, team morale takes a hit.`)) fire(e.id)
-                            }}
-                          >
-                            Fire
-                          </Btn>
-                        </div>
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+          </Panel>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {game.employees.map((e) => (
+              <div
+                key={e.id}
+                className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-3.5 shadow-lg shadow-black/25 transition-colors hover:border-line"
+              >
+                <div className="flex items-center gap-3">
+                  <RoleAvatar name={e.name} role={e.role} size={42} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-bold">
+                      {e.name}
+                      <TraitChip trait={e.trait} />
+                    </div>
+                    <div className="text-xs text-mut">
+                      {ROLE_LABEL[e.role]} · {e.weeks} wk · {money(e.salary)}/yr
+                    </div>
+                  </div>
+                  <SkillRing skill={e.skill} />
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="w-12 text-[11px] text-mut">morale</span>
+                  <div className="flex-1">
+                    <Bar value={e.morale} color={e.morale < 40 ? 'var(--color-bad)' : e.morale < 60 ? 'var(--color-warn)' : 'var(--color-good)'} />
+                  </div>
+                  <span className="w-7 text-right text-[11.5px] font-semibold tnum">{Math.round(e.morale)}</span>
+                </div>
+                <div className="mt-3 flex justify-end gap-1.5">
+                  <Btn onClick={() => giveRaise(e.id)}>Raise</Btn>
+                  <Btn
+                    variant="danger"
+                    onClick={() => {
+                      if (confirm(`Let ${e.name} go? One month severance, team morale takes a hit.`)) fire(e.id)
+                    }}
+                  >
+                    Fire
+                  </Btn>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

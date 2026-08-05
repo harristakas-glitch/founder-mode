@@ -10,6 +10,7 @@
   --color-mut: #8593ab;
   --color-accent: #7c9aff;
   --color-accent2: #a78bfa;
+  --color-chart: #6172f3; /* deep series color — validated for the dark chart surface */
   --color-good: #34d399;
   --color-bad: #f87171;
   --color-warn: #fbbf24;
@@ -156,4 +157,26 @@ input[type='range']::-moz-range-thumb {
   to {
     background-position: -200% 0;
   }
+}
+
+/* ---------- confetti ---------- */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+.confetti-piece {
+  position: fixed;
+  top: 0;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti-fall linear both;
+  pointer-events: none;
+  z-index: 80;
 }

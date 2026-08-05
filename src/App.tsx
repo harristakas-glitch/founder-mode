@@ -36,9 +36,18 @@ import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
 import { Inbox } from './screens/Inbox'
 import { Career } from './screens/Career'
-import { Ticker, TimelineChart } from './components'
+import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
+
+// Each market gets its own accent identity — the whole UI subtly rethemes per run.
+const SECTOR_ACCENTS: Record<string, [string, string]> = {
+  saas: ['#7c9aff', '#a78bfa'],
+  social: ['#f472b6', '#fb7185'],
+  fintech: ['#34d399', '#2dd4bf'],
+  devtools: ['#a78bfa', '#818cf8'],
+  ecommerce: ['#fbbf24', '#fb923c'],
+}
 
 const NAV: { id: ScreenId; label: string; icon: typeof Mail }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -101,6 +110,13 @@ export default function App() {
     return () => clearInterval(t)
   }, [online])
 
+  // retheme accents by sector
+  useEffect(() => {
+    const [a, a2] = SECTOR_ACCENTS[game?.sector ?? 'saas'] ?? SECTOR_ACCENTS.saas
+    document.documentElement.style.setProperty('--color-accent', a)
+    document.documentElement.style.setProperty('--color-accent2', a2)
+  }, [game?.sector])
+
   const me = online?.players.find((p) => p.id === myId())
   const myReady = !!me?.ready
   const matchOver = !!online && online.phase === 'playing' && online.players.length > 0 && online.players.every((p) => p.over)
@@ -124,6 +140,12 @@ export default function App() {
   const runway = runwayWeeks(game)
   const morale = avgMorale(game)
   const secondsLeft = online?.deadline ? Math.max(0, Math.ceil((online.deadline - Date.now()) / 1000)) : null
+  const h = game.history
+  const usersTrend = h.length >= 5 && h[h.length - 5].users > 0 ? (h[h.length - 1].users - h[h.length - 5].users) / h[h.length - 5].users / 4 : 0
+  const cashDelta = h.length >= 2 ? h[h.length - 1].cash - h[h.length - 2].cash : 0
+  const celebrate =
+    (game.flash?.includes('🏆') || game.flash?.startsWith('🏁') || game.flash?.startsWith('🚀') || false) ||
+    (!!game.gameOver && ['unicorn', 'ipo', 'acquired'].includes(game.gameOver.type))
 
   const nav = (
     <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
@@ -193,11 +215,16 @@ export default function App() {
       {/* sidebar — desktop */}
       <aside className="hidden w-[230px] shrink-0 flex-col border-r border-line/60 bg-gradient-to-b from-bg2 to-bg md:flex">
         <div className="border-b border-line/60 px-4 py-4">
-          <div className="text-[17px] font-extrabold tracking-tight">{game.companyName}</div>
-          <div className="mt-0.5 text-xs text-mut">
-            {game.stage} · Week {game.week}
-            {game.challenge && ` · ${game.challenge.label}, ends wk ${game.challenge.cap}`}
+          <div className="flex items-center gap-2.5">
+            <Monogram name={game.companyName} />
+            <div className="min-w-0">
+              <div className="truncate text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
+              <div className="text-xs text-mut">
+                {game.stage} · Week {game.week}
+              </div>
+            </div>
           </div>
+          {game.challenge && <div className="mt-1 text-[11px] text-mut">{game.challenge.label} · ends wk {game.challenge.cap}</div>}
           {online && (
             <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-accent/15 px-2 py-1 text-[11px] font-bold text-accent">
               <Globe size={11} /> Room {online.code}
@@ -267,6 +294,7 @@ export default function App() {
           <div className="flex flex-1 items-center gap-4 overflow-x-auto md:gap-6 [&::-webkit-scrollbar]:hidden">
             <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
               <Ticker value={game.cash} format={money} />
+              <TrendBadge value={cashDelta} format={money} />
             </Stat>
             <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
               {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
@@ -282,6 +310,7 @@ export default function App() {
             </Stat>
             <Stat k="Users">
               <Ticker value={totalUsers(game)} format={num} />
+              <TrendBadge value={usersTrend} />
             </Stat>
             <Stat k="PMF" tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
               <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
@@ -349,6 +378,7 @@ export default function App() {
         </div>
       )}
 
+      {celebrate && <Confetti key={`${game.week}-${game.gameOver?.type ?? 'w'}`} />}
       {matchOver && <MatchOver />}
       {!online && game.gameOver && <GameOver />}
 

@@ -78,6 +78,18 @@ export function Panel({ title, children, className = '' }: { title?: string; chi
   )
 }
 
+// Signed weekly change with a glyph — the glyph is the secondary encoding, never color alone.
+export function TrendBadge({ value, format, invert }: { value: number; format?: (n: number) => string; invert?: boolean }) {
+  if (!isFinite(value) || value === 0) return null
+  const up = value > 0
+  const goodDir = invert ? !up : up
+  return (
+    <span className={`ml-1.5 text-[11px] font-bold tnum ${goodDir ? 'text-good' : 'text-bad'}`}>
+      {up ? '▲' : '▼'} {format ? format(Math.abs(value)) : `${(Math.abs(value) * 100).toFixed(1)}%`}
+    </span>
+  )
+}
+
 export function StatCard({
   label,
   value,
@@ -85,6 +97,8 @@ export function StatCard({
   format,
   delta,
   tone,
+  trend,
+  trendFormat,
 }: {
   label: string
   value?: string
@@ -92,17 +106,120 @@ export function StatCard({
   format?: (n: number) => string
   delta?: string
   tone?: 'up' | 'down'
+  trend?: number
+  trendFormat?: (n: number) => string
 }) {
   return (
-    <div className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-4 shadow-lg shadow-black/25">
+    <div className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-4 shadow-lg shadow-black/25 transition-colors hover:border-line">
       <div className="text-2xl font-extrabold tracking-tight">
         {numeric !== undefined && format ? <Ticker value={numeric} format={format} /> : value}
+        {trend !== undefined && <TrendBadge value={trend} format={trendFormat} />}
       </div>
       <div className="mt-0.5 text-xs text-mut">{label}</div>
       {delta && (
         <div className={`mt-1.5 text-xs ${tone === 'up' ? 'text-good' : tone === 'down' ? 'text-bad' : 'text-mut'}`}>{delta}</div>
       )}
     </div>
+  )
+}
+
+// Deterministic company monogram: two initials on a gradient seeded by the name.
+export function Monogram({ name, size = 38 }: { name: string; size?: number }) {
+  let hash = 0
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  const hue = hash % 360
+  const initials = name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-xl font-extrabold text-white shadow-lg"
+      style={{
+        width: size,
+        height: size,
+        fontSize: size * 0.42,
+        background: `linear-gradient(135deg, hsl(${hue} 65% 52%), hsl(${(hue + 50) % 360} 70% 42%))`,
+      }}
+    >
+      {initials || '?'}
+    </div>
+  )
+}
+
+const ROLE_COLORS: Record<string, string> = {
+  engineer: 'hsl(230 70% 60%)',
+  designer: 'hsl(270 65% 62%)',
+  marketer: 'hsl(38 80% 52%)',
+  sales: 'hsl(155 55% 45%)',
+}
+
+export function RoleAvatar({ name, role, size = 36 }: { name: string; role: string; size?: number }) {
+  const initials = name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      title={role}
+      style={{ width: size, height: size, fontSize: size * 0.38, background: ROLE_COLORS[role] ?? 'var(--color-accent)' }}
+    >
+      {initials}
+    </div>
+  )
+}
+
+// Radial skill indicator: ring fill + the number, so the value is never color-alone.
+export function SkillRing({ skill, size = 40 }: { skill: number; size?: number }) {
+  const r = (size - 6) / 2
+  const c = 2 * Math.PI * r
+  const frac = Math.min(1, skill / 10)
+  return (
+    <svg width={size} height={size} className="shrink-0" aria-label={`skill ${skill}/10`}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-line)" strokeWidth="4" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={skill >= 9 ? 'var(--color-accent2)' : 'var(--color-accent)'}
+        strokeWidth="4"
+        strokeDasharray={`${c * frac} ${c}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="54%" dominantBaseline="middle" textAnchor="middle" fontSize={size * 0.34} fontWeight="800" fill="var(--color-ink)">
+        {skill}
+      </text>
+    </svg>
+  )
+}
+
+// A one-shot celebration: 26 pieces, pure CSS animation, self-cleaning.
+export function Confetti() {
+  const pieces = Array.from({ length: 26 }, (_, i) => ({
+    left: `${(i * 137.5) % 100}%`,
+    delay: `${(i % 9) * 0.12}s`,
+    duration: `${2 + (i % 5) * 0.35}s`,
+    color: ['#7c9aff', '#a78bfa', '#34d399', '#fbbf24', '#f472b6'][i % 5],
+  }))
+  return (
+    <>
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          className="confetti-piece"
+          style={{ left: p.left, background: p.color, animationDelay: p.delay, animationDuration: p.duration }}
+        />
+      ))}
+    </>
   )
 }
 
@@ -235,7 +352,7 @@ export function TimelineChart({ history, markers }: { history: { week: number; v
 
 export function LineChart({
   data,
-  color = 'var(--color-accent)',
+  color = 'var(--color-chart)',
   height = 120,
   formatY = (n: number) => `${Math.round(n)}`,
   startWeek = 1,
@@ -283,6 +400,10 @@ export function LineChart({
             <stop offset="100%" stopColor={color} stopOpacity="0.02" />
           </linearGradient>
         </defs>
+        {/* recessive gridlines at max / mid / min */}
+        {[y(max), y((max + min) / 2), y(min)].map((gy, i) => (
+          <line key={i} x1="0" y1={gy} x2={W} y2={gy} stroke="rgba(220,229,245,0.07)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        ))}
         <polygon points={area} fill={`url(#g-${color.replace(/[^a-z0-9]/gi, '')})`} />
         <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
         {hi !== null && (
@@ -298,6 +419,7 @@ export function LineChart({
         </div>
       )}
       <span className="absolute top-0 left-1 text-[10px] text-mut tnum">{formatY(max)}</span>
+      <span className="absolute top-1/2 left-1 -translate-y-1/2 text-[10px] text-mut/70 tnum">{formatY((max + min) / 2)}</span>
       <span className="absolute bottom-0 left-1 text-[10px] text-mut tnum">{formatY(min)}</span>
       <span className="absolute right-1 bottom-0 text-[10px] text-mut">wk {startWeek + data.length - 1}</span>
     </div>

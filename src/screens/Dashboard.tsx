@@ -1,4 +1,4 @@
-import { BenchRow, LineChart, Panel, StatCard } from '../components'
+import { BenchRow, LineChart, Panel, StatCard, TrendBadge } from '../components'
 import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
 import {
@@ -15,6 +15,34 @@ import {
   weeklyBurn,
 } from '../game/engine'
 import { useStore } from '../store'
+
+// This week vs last: the one-glance digest of what just happened.
+function WeekDigest() {
+  const game = useStore((s) => s.game)!
+  const h = game.history
+  if (h.length < 2) return null
+  const now = h[h.length - 1]
+  const prev = h[h.length - 2]
+  const items: { label: string; delta: number; format?: (n: number) => string; invert?: boolean }[] = [
+    { label: 'Users', delta: now.users - prev.users, format: num },
+    { label: 'Cash', delta: now.cash - prev.cash, format: money },
+    { label: 'Revenue', delta: now.revenue - prev.revenue, format: money },
+    { label: 'PMF', delta: now.pmf - prev.pmf, format: (n: number) => n.toFixed(1) },
+    { label: 'Valuation', delta: now.valuation - prev.valuation, format: money },
+  ].filter((i) => i.delta !== 0)
+  if (items.length === 0) return null
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-line/60 bg-surface/60 px-4 py-2.5">
+      <span className="text-[10.5px] font-bold uppercase tracking-wider text-mut">This week</span>
+      {items.map((i) => (
+        <span key={i.label} className="text-[13px]">
+          <span className="text-mut">{i.label}</span>
+          <TrendBadge value={i.delta} format={i.format} invert={i.invert} />
+        </span>
+      ))}
+    </div>
+  )
+}
 
 function Benchmarks() {
   const game = useStore((s) => s.game)!
@@ -81,6 +109,9 @@ export function Dashboard() {
       <div className="mb-4 text-[13px] text-mut">
         Week {game.week} · {game.stage} · You own {pct(game.founderEquity, 1)} of the company
       </div>
+
+      <WeekDigest />
+
 
       <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
         <StatCard
