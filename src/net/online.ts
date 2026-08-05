@@ -32,10 +32,16 @@ export interface EmotePayload {
   emoji: string
 }
 
+export interface ChatPayload {
+  from: string
+  text: string
+}
+
 export interface Handlers {
   onPlayers: (players: NetPlayer[]) => void
   onStart: (p: StartPayload) => void
   onEmote?: (p: EmotePayload) => void
+  onChat?: (p: ChatPayload) => void
 }
 
 let client: SupabaseClient | null = null
@@ -86,6 +92,7 @@ export async function connectRoom(code: string, me: NetPlayer, handlers: Handler
   ch.on('presence', { event: 'sync' }, () => handlers.onPlayers(readPlayers()))
   ch.on('broadcast', { event: 'start' }, ({ payload }) => handlers.onStart(payload as StartPayload))
   ch.on('broadcast', { event: 'emote' }, ({ payload }) => handlers.onEmote?.(payload as EmotePayload))
+  ch.on('broadcast', { event: 'chat' }, ({ payload }) => handlers.onChat?.(payload as ChatPayload))
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Connection timed out — check your internet and the Supabase config.')), 12_000)
     ch.subscribe(async (status) => {
@@ -113,6 +120,10 @@ export async function broadcastStart(payload: StartPayload): Promise<void> {
 
 export async function broadcastEmote(payload: EmotePayload): Promise<void> {
   await channel?.send({ type: 'broadcast', event: 'emote', payload })
+}
+
+export async function broadcastChat(payload: ChatPayload): Promise<void> {
+  await channel?.send({ type: 'broadcast', event: 'chat', payload })
 }
 
 export async function leaveRoom(): Promise<void> {

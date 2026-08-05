@@ -4,6 +4,7 @@ import { SECTORS } from '../game/data'
 import type { SectorId } from '../game/types'
 import { myId } from '../net/online'
 import { useStore } from '../store'
+import { ChatWidget } from '../ChatWidget'
 
 export function Lobby() {
   const online = useStore((s) => s.online)!
@@ -88,6 +89,7 @@ export function Lobby() {
           <DoorOpen size={14} /> Leave room
         </button>
       </div>
+      <ChatWidget />
     </div>
   )
 }

@@ -39,6 +39,7 @@ import { SECTORS, sectorById } from './game/data'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
+  broadcastChat,
   broadcastEmote,
   broadcastStart,
   connectRoom,
@@ -46,6 +47,7 @@ import {
   makeRoomCode,
   myId,
   pushState,
+  type ChatPayload,
   type EmotePayload,
   type NetPlayer,
   type StartPayload,
@@ -174,12 +176,20 @@ export interface EmoteToast {
   emoji: string
 }
 
+export interface ChatMessage {
+  id: string
+  from: string
+  text: string
+  self: boolean
+}
+
 interface Store {
   game: GameState | null
   online: OnlineSession | null
   onlineResume: OnlineResume | null
   reconnecting: boolean
   emotes: EmoteToast[]
+  chat: ChatMessage[]
   connecting: boolean
   screen: ScreenId
   setScreen: (s: ScreenId) => void
@@ -194,6 +204,7 @@ interface Store {
   resumeOnline: () => Promise<void>
   cancelReady: () => void
   sendEmote: (emoji: string) => void
+  sendChat: (text: string) => void
   // --- in-game actions ---
   sendOffer: (candidateId: string) => void
   fire: (employeeId: string) => void
@@ -276,6 +287,11 @@ export const useStore = create<Store>()(
         setTimeout(() => set({ emotes: get().emotes.filter((e) => e.id !== toast.id) }), 4000)
       }
 
+      const appendChat = (p: ChatPayload, self: boolean) => {
+        const msg: ChatMessage = { id: uid(), from: p.from, text: p.text.slice(0, 200), self }
+        set({ chat: [...get().chat, msg].slice(-100) })
+      }
+
       const handlers = {
         onPlayers: (players: NetPlayer[]) => {
           const online = get().online
@@ -294,6 +310,7 @@ export const useStore = create<Store>()(
           maybeNetAdvance()
         },
         onEmote: showEmote,
+        onChat: (p: ChatPayload) => appendChat(p, false),
         onStart: (p: StartPayload) => {
           const online = get().online
           if (!online || online.phase === 'playing') return
@@ -357,6 +374,7 @@ export const useStore = create<Store>()(
         onlineResume: null,
         reconnecting: false,
         emotes: [],
+        chat: [],
         connecting: false,
         screen: 'dashboard',
         setScreen: (screen) => set({ screen }),
@@ -376,7 +394,7 @@ export const useStore = create<Store>()(
 
         abandonGame: () => {
           void leaveRoom()
-          set({ game: null, online: null, onlineResume: null, screen: 'dashboard' })
+          set({ game: null, online: null, onlineResume: null, chat: [], screen: 'dashboard' })
         },
 
         advance: () => {
@@ -410,7 +428,7 @@ export const useStore = create<Store>()(
 
         leaveOnline: () => {
           void leaveRoom()
-          set({ online: null, game: null, onlineResume: null, screen: 'dashboard' })
+          set({ online: null, game: null, onlineResume: null, chat: [], screen: 'dashboard' })
         },
 
         // After a refresh or crash: rejoin the room this device was in. The catch-up logic
@@ -474,6 +492,15 @@ export const useStore = create<Store>()(
           const payload = { from: online.myCompany, emoji }
           void broadcastEmote(payload)
           showEmote(payload) // broadcast doesn't echo to self
+        },
+
+        sendChat: (text) => {
+          const online = get().online
+          const clean = text.trim().slice(0, 200)
+          if (!online || !clean) return
+          const payload = { from: online.myCompany, text: clean }
+          void broadcastChat(payload)
+          appendChat(payload, true) // broadcast doesn't echo to self
         },
 
         beginMatch: (sector) => {

@@ -39,6 +39,7 @@ import { Career } from './screens/Career'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
+import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
 
 // Each market gets its own accent identity — the whole UI subtly rethemes per run.
@@ -419,6 +420,7 @@ export default function App() {
         </div>
       )}
 
+      <ChatWidget />
       {celebrate && <Confetti key={`${game.week}-${game.gameOver?.type ?? 'w'}`} />}
       {matchOver && <MatchOver />}
       {!online && game.gameOver && <GameOver />}
