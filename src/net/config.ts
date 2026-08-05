@@ -7,8 +7,8 @@
 //      uses Realtime channels (broadcast + presence), which work out of the box.
 // The anon key is designed to be public — shipping it in the client is normal.
 
-export const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co'
-export const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY'
+export const SUPABASE_URL = 'https://rgxwsffpfsvcpqgvogkl.supabase.co'
+export const SUPABASE_ANON_KEY = 'sb_publishable_Z7TmXookH7bLzesT4ohNLA_6DWmmU_r'
 
 export const ROUND_SECONDS = 150 // each round: everyone plays their week, 2.5 min max
 
