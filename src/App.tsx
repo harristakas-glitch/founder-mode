@@ -83,9 +83,18 @@ function MuteButton() {
   )
 }
 
+const EMOTES = ['👍', '😂', '😱', '🔥', '🐌', '🦄']
+
 export default function App() {
-  const { game, online, screen, setScreen, advance, abandonGame, resolveChoice } = useStore()
+  const { game, online, screen, setScreen, advance, abandonGame, resolveChoice, cancelReady, sendEmote } = useStore()
+  const reconnecting = useStore((s) => s.reconnecting)
+  const emotes = useStore((s) => s.emotes)
   const [navOpen, setNavOpen] = useState(false)
+
+  // rejoin the online room this device was in before a refresh
+  useEffect(() => {
+    void useStore.getState().resumeOnline()
+  }, [])
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
   const [, setClock] = useState(0) // re-render for the round countdown
   const prevWeek = useRef<number | null>(null)
@@ -132,6 +141,14 @@ export default function App() {
     advance()
   })
 
+  if (reconnecting)
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse rounded-2xl border border-line bg-surface px-8 py-5 text-[15px] font-semibold">
+          Reconnecting to your room…
+        </div>
+      </div>
+    )
   if (!game) return online?.phase === 'lobby' ? <Lobby /> : <NewGame />
 
   const pending = hasPendingDecision(game)
@@ -256,10 +273,22 @@ export default function App() {
                   )}
                 </div>
               ))}
+              <div className="flex justify-between pt-1">
+                {EMOTES.map((e) => (
+                  <button key={e} className="rounded p-0.5 text-[15px] transition-transform hover:scale-125" onClick={() => sendEmote(e)}>
+                    {e}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <div className="mb-2 text-center text-[11px] text-mut">{weekDate(game.week)}</div>
           {advanceBtn}
+          {online && myReady && !matchOver && !game.gameOver && (
+            <button className="mt-1.5 w-full text-center text-[11.5px] text-mut hover:text-ink" onClick={cancelReady}>
+              Cancel ready
+            </button>
+          )}
         </div>
       </aside>
 
@@ -376,6 +405,17 @@ export default function App() {
             <div className="text-3xl font-extrabold tracking-tight">Week {weekFlash}</div>
             <div className="mt-1 text-sm text-mut">{weekDate(weekFlash)}</div>
           </div>
+        </div>
+      )}
+
+      {/* emote toasts */}
+      {emotes.length > 0 && (
+        <div className="pointer-events-none fixed top-16 left-1/2 z-[75] flex -translate-x-1/2 flex-col items-center gap-1.5">
+          {emotes.map((e) => (
+            <div key={e.id} className="flash-in rounded-full border border-line bg-bg2/95 px-4 py-1.5 text-[14px] shadow-xl">
+              <b>{e.from}</b> <span className="text-[18px]">{e.emoji}</span>
+            </div>
+          ))}
         </div>
       )}
 

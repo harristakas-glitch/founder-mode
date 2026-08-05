@@ -39,12 +39,14 @@ import { SECTORS, sectorById } from './game/data'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
+  broadcastEmote,
   broadcastStart,
   connectRoom,
   leaveRoom,
   makeRoomCode,
   myId,
   pushState,
+  type EmotePayload,
   type NetPlayer,
   type StartPayload,
 } from './net/online'
@@ -156,9 +158,28 @@ export interface OnlineSession {
   error: string | null
 }
 
+// The minimal breadcrumb persisted across reloads so a refresh doesn't eject you from the match.
+export interface OnlineResume {
+  code: string
+  host: boolean
+  phase: 'lobby' | 'playing'
+  sector: SectorId
+  myCompany: string
+  myFounder: FounderKind
+}
+
+export interface EmoteToast {
+  id: string
+  from: string
+  emoji: string
+}
+
 interface Store {
   game: GameState | null
   online: OnlineSession | null
+  onlineResume: OnlineResume | null
+  reconnecting: boolean
+  emotes: EmoteToast[]
   connecting: boolean
   screen: ScreenId
   setScreen: (s: ScreenId) => void
@@ -170,6 +191,9 @@ interface Store {
   joinRoom: (code: string, company: string, founder: FounderKind) => Promise<void>
   leaveOnline: () => void
   beginMatch: (sector: SectorId) => void
+  resumeOnline: () => Promise<void>
+  cancelReady: () => void
+  sendEmote: (emoji: string) => void
   // --- in-game actions ---
   sendOffer: (candidateId: string) => void
   fire: (employeeId: string) => void
@@ -245,13 +269,31 @@ export const useStore = create<Store>()(
         void pushState({ ...myNetSummary(next), ready: false })
       }
 
+      // toast an emote for ~4 seconds
+      const showEmote = (p: EmotePayload) => {
+        const toast: EmoteToast = { id: uid(), from: p.from, emoji: p.emoji }
+        set({ emotes: [...get().emotes, toast].slice(-5) })
+        setTimeout(() => set({ emotes: get().emotes.filter((e) => e.id !== toast.id) }), 4000)
+      }
+
       const handlers = {
         onPlayers: (players: NetPlayer[]) => {
           const online = get().online
           if (!online) return
+          // host migration: if the host vanished from a lobby, the lowest player id takes the chair
+          if (online.phase === 'lobby' && players.length > 0 && !players.some((p) => p.host)) {
+            const minId = [...players].sort((a, b) => a.id.localeCompare(b.id))[0].id
+            if (minId === myId()) {
+              void pushState({ host: true })
+              set({ online: { ...online, host: true, players } })
+              maybeNetAdvance()
+              return
+            }
+          }
           set({ online: { ...online, players } })
           maybeNetAdvance()
         },
+        onEmote: showEmote,
         onStart: (p: StartPayload) => {
           const online = get().online
           if (!online || online.phase === 'playing') return
@@ -263,6 +305,7 @@ export const useStore = create<Store>()(
           set({
             game: g,
             online: { ...online, phase: 'playing', sector: p.sector, deadline: p.deadline },
+            onlineResume: get().onlineResume ? { ...get().onlineResume!, phase: 'playing', sector: p.sector } : null,
             screen: 'dashboard',
           })
           void pushState({ ...myNetSummary(g), ready: false })
@@ -300,9 +343,10 @@ export const useStore = create<Store>()(
               deadline: null,
               error: null,
             },
+            onlineResume: { code, host, phase: 'lobby', sector: 'saas', myCompany: me.company, myFounder: founder },
           })
         } catch (e) {
-          set({ connecting: false, online: null })
+          set({ connecting: false, online: null, onlineResume: null })
           throw e
         }
       }
@@ -310,6 +354,9 @@ export const useStore = create<Store>()(
       return {
         game: null,
         online: null,
+        onlineResume: null,
+        reconnecting: false,
+        emotes: [],
         connecting: false,
         screen: 'dashboard',
         setScreen: (screen) => set({ screen }),
@@ -329,7 +376,7 @@ export const useStore = create<Store>()(
 
         abandonGame: () => {
           void leaveRoom()
-          set({ game: null, online: null, screen: 'dashboard' })
+          set({ game: null, online: null, onlineResume: null, screen: 'dashboard' })
         },
 
         advance: () => {
@@ -363,7 +410,70 @@ export const useStore = create<Store>()(
 
         leaveOnline: () => {
           void leaveRoom()
-          set({ online: null, game: null, screen: 'dashboard' })
+          set({ online: null, game: null, onlineResume: null, screen: 'dashboard' })
+        },
+
+        // After a refresh or crash: rejoin the room this device was in. The catch-up logic
+        // in maybeNetAdvance replays any weeks the table played without us.
+        resumeOnline: async () => {
+          const r = get().onlineResume
+          if (!r || get().online || !onlineConfigured) return
+          const g = get().game
+          // a lobby session with no game just rejoins the lobby; a match session needs its game back
+          if (r.phase === 'playing' && (!g || g.challenge?.label !== 'Online match')) {
+            set({ onlineResume: null })
+            return
+          }
+          set({ reconnecting: true })
+          const me: NetPlayer = {
+            id: myId(),
+            company: r.myCompany,
+            founder: r.myFounder,
+            host: r.host,
+            week: g?.week ?? 0,
+            ready: false,
+            users: g ? totalUsers(g) : 0,
+            val: g ? valuation(g) : 0,
+            payout: g?.gameOver?.payout ?? 0,
+            over: !!g?.gameOver,
+            overType: g?.gameOver?.type,
+          }
+          try {
+            await connectRoom(r.code, me, handlers)
+            set({
+              reconnecting: false,
+              online: {
+                code: r.code,
+                host: r.host,
+                phase: r.phase,
+                sector: r.sector,
+                myCompany: r.myCompany,
+                myFounder: r.myFounder,
+                players: [me],
+                deadline: r.phase === 'playing' ? Date.now() + ROUND_SECONDS * 1000 : null,
+                error: null,
+              },
+            })
+          } catch {
+            // room is gone (everyone left) — keep the local game, drop the session
+            set({ reconnecting: false, online: null, onlineResume: null })
+          }
+        },
+
+        cancelReady: () => {
+          const { game, online } = get()
+          if (!game || !online || online.phase !== 'playing' || game.gameOver) return
+          const players = online.players.map((p) => (p.id === myId() ? { ...p, ready: false } : p))
+          set({ online: { ...online, players } })
+          void pushState({ ready: false })
+        },
+
+        sendEmote: (emoji) => {
+          const online = get().online
+          if (!online) return
+          const payload = { from: online.myCompany, emoji }
+          void broadcastEmote(payload)
+          showEmote(payload) // broadcast doesn't echo to self
         },
 
         beginMatch: (sector) => {
@@ -549,8 +659,8 @@ export const useStore = create<Store>()(
     {
       name: 'founder-mode-save',
       version: 9,
-      // online sessions are live connections — never persist them across reloads
-      partialize: (state) => ({ game: state.game, screen: state.screen }),
+      // live connections are never persisted, but the resume breadcrumb is — a refresh rejoins the room
+      partialize: (state) => ({ game: state.game, screen: state.screen, onlineResume: state.onlineResume }),
       migrate: (persisted, version) => {
         // v1 saves predate PMF/rivals/climate — start fresh rather than load a broken state.
         if (version < 2) return { game: null, screen: 'dashboard' as ScreenId }
