@@ -5,3 +5,6 @@ dist/
 
 # local build artifacts (regenerate with: npm run build && node scripts/singlefile.mjs)
 Founder Mode.html
+
+# agent worktrees
+.claude/worktrees/
