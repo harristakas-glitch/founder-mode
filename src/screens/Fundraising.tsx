@@ -3,15 +3,50 @@ import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
 import {
   boardEffectiveTarget,
+  canSellSecondary,
   growthRate,
   ipoChecklist,
   ipoEligible,
   ipoVisible,
   nextStage,
   revenueGrowthRate,
+  secondaryProceeds,
   valuation,
 } from '../game/engine'
 import { useStore } from '../store'
+
+function SecondaryPanel() {
+  const game = useStore((s) => s.game)!
+  const doSecondary = useStore((s) => s.doSecondary)
+  const gate = canSellSecondary(game)
+  // don't clutter the early game — the option surfaces once it's within reach
+  if (!gate.ok && !gate.reason?.startsWith('Already')) {
+    if (game.stage === 'Pre-seed' || game.stage === 'Seed') return null
+  }
+  return (
+    <div className="mt-3.5">
+      <Panel title="Secondary sale — take money off the table">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-[13px] leading-relaxed text-mut">
+            Sell <b className="text-ink">2% of your personal stake</b> at a 30% discount —{' '}
+            <b className="text-ink tnum">{money(secondaryProceeds(game))}</b> banked for you, no matter how the company ends. Costs a
+            little reputation and team goodwill; buys a founder who sleeps. Once per funding stage, from Series B.
+            {game.bankedPayout > 0 && (
+              <span className="text-good"> Banked so far: {money(game.bankedPayout)}.</span>
+            )}
+          </div>
+          {gate.ok ? (
+            <Btn variant="primary" onClick={doSecondary}>
+              Sell 2% for {money(secondaryProceeds(game))}
+            </Btn>
+          ) : (
+            <span className="text-xs text-mut">{gate.reason}</span>
+          )}
+        </div>
+      </Panel>
+    </div>
+  )
+}
 
 function IpoPanel() {
   const game = useStore((s) => s.game)!
@@ -150,6 +185,8 @@ export function Fundraising() {
           </Panel>
         </div>
       )}
+
+      <SecondaryPanel />
 
       {ipoVisible(game) && <IpoPanel />}
 

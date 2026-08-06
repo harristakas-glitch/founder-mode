@@ -1099,6 +1099,110 @@ export const EVENTS: EventDef[] = [
     },
     autoEffects: () => ({ features: 4, bugs: -2 }),
   },
+  // ---------- sector catastrophes: each market's signature nightmare ----------
+  {
+    id: 'cat-breach',
+    weight: 5,
+    minWeek: 30,
+    cond: (s) => s.sector === 'fintech' && s.users > 2_000,
+    title: '🚨 Data breach',
+    body: (s) =>
+      s.bugs > 30
+        ? 'Attackers found a hole your bug backlog knew about. Customer financial data is out. This is the fintech nightmare, and it is happening to you.'
+        : 'A sophisticated attack got partial access before your (solid) defenses cut it off. Bad — but your clean engineering just saved the company.',
+    choices: (s) => {
+      const bad = s.bugs > 30
+      return [
+        {
+          label: 'Full disclosure, credit monitoring for all ($120,000)',
+          resultText: bad
+            ? 'Brutal week, honest handling. The coverage is harsh but notes you "responded like adults".'
+            : 'Transparent handling of a contained incident. Security researchers publicly praise the response.',
+          effects: bad
+            ? { cash: -120_000, users: -0.12, reputation: -12, morale: -6 }
+            : { cash: -120_000, users: -0.03, reputation: 4 },
+        },
+        {
+          label: 'Minimal statement, lawyer-approved',
+          resultText: 'The statement satisfies regulators and no one else. The story drips out for weeks.',
+          effects: bad ? { users: -0.18, reputation: -20, hype: -10, morale: -8 } : { users: -0.06, reputation: -8 },
+        },
+      ]
+    },
+  },
+  {
+    id: 'cat-algorithm',
+    weight: 5,
+    minWeek: 30,
+    cond: (s) => s.sector === 'social' && s.users > 20_000,
+    title: '🚨 The algorithm turns',
+    body: () =>
+      'The platform your growth rides on changed its ranking overnight. Your content — everyone\'s content — is buried. Distribution you didn\'t own was never yours.',
+    autoEffects: (s) => ({ users: -Math.round(s.users * 0.15), hype: -12 }),
+  },
+  {
+    id: 'cat-dependency',
+    weight: 5,
+    minWeek: 30,
+    cond: (s) => s.sector === 'saas' && s.users > 3_000,
+    title: '🚨 Your platform dependency breaks',
+    body: () =>
+      'The cloud service half your product sits on had a catastrophic multi-day outage. Your customers don\'t care whose fault it is — their tools were down.',
+    choices: () => [
+      {
+        label: 'Issue service credits to every customer',
+        resultText: 'Expensive, classy, remembered. Churn stays low; the invoice stings.',
+        effects: { cash: -60_000, reputation: 4, users: -0.02 },
+      },
+      {
+        label: 'Point at the provider\'s status page',
+        resultText: 'Technically correct. Contractually fine. Emotionally, your customers wanted to hear something else.',
+        effects: { users: -0.08, reputation: -6 },
+      },
+    ],
+  },
+  {
+    id: 'cat-cve',
+    weight: 5,
+    minWeek: 30,
+    cond: (s) => s.sector === 'devtools' && s.users > 3_000,
+    title: '🚨 Critical CVE in your tool',
+    body: () =>
+      'A researcher dropped a critical vulnerability in your most-used component — with a proof of concept. Every security team using you is paging someone right now.',
+    choices: () => [
+      {
+        label: 'All-hands patch sprint + public post-mortem',
+        resultText: 'Patched in 48 hours with a post-mortem the industry links to as "how to do it right".',
+        effects: { features: -3, morale: -5, bugs: -6, reputation: 6 },
+      },
+      {
+        label: 'Quiet patch, no fuss',
+        resultText: 'The patch ships; the silence gets noticed. Security Twitter does your comms for you, unkindly.',
+        effects: { features: -2, reputation: -8, users: -0.04 },
+      },
+    ],
+  },
+  {
+    id: 'cat-logistics',
+    weight: 5,
+    minWeek: 30,
+    cond: (s) => s.sector === 'ecommerce' && s.users > 10_000,
+    title: '🚨 Logistics meltdown',
+    body: () =>
+      'Your fulfillment partner collapsed mid-season. Thousands of orders are sitting in a warehouse that has stopped answering the phone.',
+    choices: () => [
+      {
+        label: 'Emergency re-route via premium carriers ($90,000)',
+        resultText: 'Orders arrive late but they arrive, each with an apology credit. You keep most of the customers and none of the margin.',
+        effects: { cash: -90_000, reputation: 2, morale: -3 },
+      },
+      {
+        label: 'Refund the stuck orders and move on',
+        resultText: 'Cheaper this quarter. The one-star reviews mention "never again" with remarkable consistency.',
+        effects: { cash: -40_000, users: -0.1, reputation: -8 },
+      },
+    ],
+  },
   {
     id: 'award-gala',
     weight: 4,

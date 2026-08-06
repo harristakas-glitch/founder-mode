@@ -63,6 +63,7 @@ export function Team() {
   const game = useStore((s) => s.game)!
   const fire = useStore((s) => s.fire)
   const giveRaise = useStore((s) => s.giveRaise)
+  const recharge = useStore((s) => s.recharge)
 
   return (
     <div>
@@ -72,17 +73,34 @@ export function Team() {
       </div>
 
       <Panel>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <RoleAvatar name="You" role={game.founderKind === 'technical' ? 'engineer' : 'sales'} />
             <div>
               <b>You</b> <span className="text-mut">· Founder & CEO ({game.founderKind})</span>
+              <div className="text-xs text-mut">
+                {game.founderKind === 'technical' ? 'Contributes engineering output every week' : 'Generates hype and boosts revenue'} — scaled
+                by your energy ({Math.round(game.energy)}/100)
+              </div>
             </div>
           </div>
-          <span className="text-[13px] text-mut">
-            {game.founderKind === 'technical' ? 'Contributes engineering output every week' : 'Generates hype and boosts revenue'}
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="w-28">
+              <Bar
+                value={game.energy}
+                color={game.energy < 25 ? 'var(--color-bad)' : game.energy < 50 ? 'var(--color-warn)' : 'var(--color-good)'}
+              />
+            </div>
+            <Btn disabled={game.vacationCooldown > 0} onClick={recharge} title="A real week off: +30 energy, the roadmap slips slightly">
+              🏝 {game.vacationCooldown > 0 ? `Recharge in ${game.vacationCooldown} wk` : 'Recharge week'}
+            </Btn>
+          </div>
         </div>
+        {game.energy < 30 && (
+          <div className="mt-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-1.5 text-[12.5px] text-bad">
+            You're running on fumes — your weekly contribution is badly weakened, and hitting empty forces a burnout. Take the week.
+          </div>
+        )}
       </Panel>
 
       {game.employees.length > 0 && <PitchPanel />}

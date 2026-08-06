@@ -15,7 +15,9 @@ import {
   pivot,
   repayDebt,
   resolveChoiceOnState,
+  sellSecondary,
   startIPO,
+  takeVacation,
   startVenture,
   totalUsers,
   uid,
@@ -229,6 +231,8 @@ interface Store {
   rallyTeam: (style: 'vision' | 'numbers' | 'war') => void
   takeDebt: (amount: number) => void
   payDebt: (amount: number) => void
+  recharge: () => void
+  doSecondary: () => void
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
@@ -645,6 +649,24 @@ export const useStore = create<Store>()(
           set({ game })
         },
 
+        recharge: () => {
+          const g = get().game
+          if (!g || g.vacationCooldown > 0) return
+          const game = structuredClone(g)
+          takeVacation(game)
+          sfx.milestone()
+          set({ game })
+        },
+
+        doSecondary: () => {
+          const g = get().game
+          if (!g) return
+          const game = structuredClone(g)
+          sellSecondary(game)
+          sfx.cash()
+          set({ game })
+        },
+
         rallyTeam: (style) => {
           const g = get().game
           if (!g || g.pitchCooldown > 0 || g.employees.length === 0) return
@@ -741,6 +763,9 @@ export const useStore = create<Store>()(
           g.debt ??= null
           g.flags ??= {}
           g.arcs ??= []
+          g.energy ??= 80
+          g.vacationCooldown ??= 0
+          g.bankedPayout ??= 0
         }
         return { ...current, ...p }
       },

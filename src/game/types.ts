@@ -98,6 +98,8 @@ export interface Choice {
   label: string
   resultText: string
   effects: Effects
+  // targeted consequences for the employee this message is about (meta.employeeId)
+  target?: { morale?: number; salaryMult?: number }
   // story-arc bookkeeping: what this choice does to the arc that asked the question
   arcGoto?: string // advance the arc to this stage
   arcSet?: Record<string, number> // remember facts inside the arc
@@ -113,7 +115,7 @@ export interface Message {
   choices?: Choice[]
   resolved?: boolean
   resultText?: string
-  meta?: { acquisitionAmount?: number; arcInstance?: string }
+  meta?: { acquisitionAmount?: number; arcInstance?: string; employeeId?: string }
 }
 
 // A running story arc: a chain of events across weeks that remembers your choices.
@@ -228,6 +230,9 @@ export interface GameState {
   debt: { principal: number; apr: number; covenantRevenue: number } | null // bank credit line with a revenue covenant
   flags: Record<string, number> // run-lifetime counters for achievements (tookDebt, pitchesLanded, …)
   arcs: ActiveArc[] // story arcs, active and concluded
+  energy: number // 0-100: the founder's own tank — big moves drain it, low energy weakens everything you touch
+  vacationCooldown: number // weeks until the next recharge week
+  bankedPayout: number // personal money already taken off the table via secondary sales
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

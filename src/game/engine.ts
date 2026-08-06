@@ -14,6 +14,7 @@ import {
 import { ARC_DEFS } from './arcs'
 import type {
   Candidate,
+  Choice,
   Effects,
   Employee,
   FounderKind,
@@ -158,6 +159,9 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     debt: null,
     flags: {},
     arcs: [],
+    energy: 80,
+    vacationCooldown: 0,
+    bankedPayout: 0,
     history: [],
     gameOver: null,
   }
@@ -660,6 +664,7 @@ export function pivotBonus(s: GameState): number {
 export function pivot(s: GameState) {
   const bonus = pivotBonus(s)
   s.pivots += 1
+  s.energy = clamp(s.energy - 12, 0, 100) // rewriting your own conviction is exhausting
   s.features = Math.round(s.features * 0.5)
   s.quality = Math.round(s.quality * 0.7)
   s.hype = Math.round(s.hype * 0.6)
@@ -705,6 +710,7 @@ export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Me
   const target = nextStage(s)
   const threshold = STAGE_THRESHOLDS[s.stage]
   s.raiseCooldown = 10
+  s.energy = clamp(s.energy - 10, 0, 100) // the roadshow grind is real
 
   const frozenOut = s.climate < -0.5 && Math.random() < 0.7
   if (!target || val < threshold || frozenOut) {
@@ -820,12 +826,14 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const moraleFactor = (e: Employee) => 0.55 + (e.morale / 100) * 0.55
   const traitMult = (e: Employee) => (e.trait === 'tenx' ? 1.5 : e.trait === 'mercenary' ? 1.15 : e.trait === 'craftsman' ? 1.1 : 1)
   const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e)
-  // an IPO process eats founder and team attention; a landed pitch lifts everything for a while
+  // an IPO process eats founder and team attention; a landed pitch lifts everything for a while.
+  // The founder's own contribution runs on their energy tank — an exhausted founder is half a founder.
   const ipoDrag = s.ipo ? 0.85 : 1
   const rallyMult = s.rally ? s.rally.mult : 1
+  const energyMult = 0.4 + 0.6 * (s.energy / 100)
   const engPoints =
     (s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
-      (s.founderKind === 'technical' ? 5 : 1.5)) *
+      (s.founderKind === 'technical' ? 5 : 1.5) * energyMult) *
     ipoDrag *
     rallyMult
   const designPoints = s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0) * rallyMult
@@ -897,7 +905,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- hype & marketing (noisy, saturating) ---
   const marketerPoints =
     (s.employees.filter((e) => e.role === 'marketer').reduce((a2, e) => a2 + eff(e), 0) +
-      (s.founderKind === 'business' ? 4 : 1)) *
+      (s.founderKind === 'business' ? 4 : 1) * energyMult) *
     rallyMult
   s.hype *= 0.92
   const hypeGain =
@@ -1040,7 +1048,28 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   if (s.ipoCooldown > 0) s.ipoCooldown -= 1
   if (s.maCooldown > 0) s.maCooldown -= 1
   if (s.pitchCooldown > 0) s.pitchCooldown -= 1
+  if (s.vacationCooldown > 0) s.vacationCooldown -= 1
   if (s.rally && (s.rally.weeksLeft -= 1) <= 0) s.rally = null
+
+  // --- founder energy: slow recovery, faster erosion under stress ---
+  const stressed = expenses > revenue && runway < 8
+  s.energy = clamp(s.energy + 3 - (s.ipo ? 4 : 0) - (stressed ? 3 : 0), 0, 100)
+  if (s.energy <= 5) {
+    // the body files its own board ultimatum
+    s.energy = 35
+    applyEffects(s, { morale: -3, features: -1 })
+    s.flash = '🛌 You hit the wall. Two days in bed, phone off — the doctor used the word "mandatory". You\'re back on your feet, but the warning was clear: manage your energy like you manage your runway.'
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: 'Founder burnout',
+      body: 'Everyone saw it coming except you. The team covered, badly. Take recharge weeks before the tank hits empty — an exhausted founder is half a founder.',
+    })
+  }
+
+  // --- one-on-ones: your people have asks of their own ---
+  maybeOneOnOne(s)
 
   // --- IPO process ---
   tickIPO(s)
@@ -1123,6 +1152,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
       s.gameOver = {
         type: 'bankrupt',
         week: s.week,
+        payout: s.bankedPayout > 0 ? s.bankedPayout : undefined, // secondaries survive the wreck
         detail:
           `The final week: you went in with ${fmt(cashAtStart)}, earned ${fmt(revenue)} in revenue, paid ${fmt(expenses)} in running costs` +
           (oneOffs > 0 ? `, and took ${fmt(oneOffs)} in one-off hits (recruiter fees, event costs, severance)` : '') +
@@ -1131,9 +1161,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
     }
   } else if (val >= 1_000_000_000 && !s.ipo) {
     // mid-IPO, the run continues — ringing the bell at a $1B+ price beats the plain unicorn ending
-    s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(val * s.founderEquity) }
+    s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(val * s.founderEquity + s.bankedPayout) }
   } else if (s.challenge && s.week >= s.challenge.cap) {
-    s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(val * s.founderEquity) }
+    s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(val * s.founderEquity + s.bankedPayout) }
   }
 
   return s
@@ -1167,6 +1197,7 @@ export function ipoEligible(s: GameState): boolean {
 export function startIPO(s: GameState) {
   if (!ipoEligible(s)) return
   s.cash -= IPO_COST
+  s.energy = clamp(s.energy - 10, 0, 100)
   s.ipo = { phase: 'filing', weeksLeft: 4, demand: 50 }
   s.flash =
     'The S-1 is filed. Four weeks of regulatory scrutiny, then a four-week roadshow — and then the market decides what you are worth. ' +
@@ -1222,7 +1253,7 @@ function priceIPO(s: GameState) {
   s.ipo = null
   if (mult >= 0.95) {
     const pop = mult >= 1.15
-    const payout = Math.round(val * mult * s.founderEquity)
+    const payout = Math.round(val * mult * s.founderEquity + s.bankedPayout)
     s.gameOver = { type: 'ipo', week: s.week, payout }
     s.inbox.unshift({
       id: uid(),
@@ -1379,6 +1410,167 @@ function covenantCheck(s: GameState) {
   }
 }
 
+// ---------- one-on-ones: targeted asks from named people ----------
+
+interface OneOnOne {
+  id: string
+  cond: (e: Employee, s: GameState) => boolean
+  body: (e: Employee) => string
+  accept: Choice
+  refuse: Choice
+}
+
+const ONE_ON_ONES: OneOnOne[] = [
+  {
+    id: 'promotion',
+    cond: (e) => e.weeks >= 16 && e.skill >= 6,
+    body: (e) => `${e.name} books a 1:1 and comes prepared: a doc titled "My Next Chapter". They want a lead title and the salary to match. They've earned a hearing — and the rest of the team will hear the outcome either way.`,
+    accept: {
+      label: 'Promote them (+15% salary)',
+      resultText: 'A new lead is born. Two teammates quietly wonder why it wasn\'t them.',
+      effects: { morale: -2 },
+      target: { morale: 15, salaryMult: 1.15 },
+    },
+    refuse: {
+      label: 'Not yet — revisit next quarter',
+      resultText: 'They close the doc slowly. "Next quarter," they repeat, in a tone you\'ll remember.',
+      effects: {},
+      target: { morale: -12 },
+    },
+  },
+  {
+    id: 'remote',
+    cond: (e) => e.weeks >= 6,
+    body: (e) => `${e.name} asks to go fully remote — moving closer to family. The work will travel; the whiteboard sessions won't.`,
+    accept: {
+      label: 'Bless the move',
+      resultText: 'They pack the desk plant. Their first remote week ships more than their last office month.',
+      effects: { features: -1 },
+      target: { morale: 12 },
+    },
+    refuse: {
+      label: 'The team needs you here',
+      resultText: 'They nod and stay. Something in their calendar starts filling with blocks marked "private".',
+      effects: {},
+      target: { morale: -8 },
+    },
+  },
+  {
+    id: 'sideproject',
+    cond: (e) => (e.role === 'engineer' || e.role === 'designer') && e.skill >= 5,
+    body: (e) => `${e.name} wants your blessing for a weekend side project — an open-source tool adjacent to your product. "It'll make me sharper," they argue. It might also make them a founder.`,
+    accept: {
+      label: 'Bless it — sharp people need outlets',
+      resultText: 'The side project earns stars, and the lessons flow back into your codebase.',
+      effects: { pmf: 1, features: -1 },
+      target: { morale: 10 },
+    },
+    refuse: {
+      label: 'All focus here, please',
+      resultText: 'They nod. The side project continues in a private repo, which everyone silently understands.',
+      effects: {},
+      target: { morale: -6 },
+    },
+  },
+  {
+    id: 'conference',
+    cond: (e) => e.skill >= 5,
+    body: (e) => `${e.name} got accepted to speak at a conference — about work they did here. Travel and a ticket come to $3,000, plus a week of lighter output.`,
+    accept: {
+      label: 'Send them ($3,000)',
+      resultText: 'The talk lands. Their slides carry your logo, and two attendees ask if you\'re hiring.',
+      effects: { cash: -3000, hype: 3 },
+      target: { morale: 8 },
+    },
+    refuse: {
+      label: 'Not in this budget',
+      resultText: 'They present the same talk at a meetup for free, to eleven people and one dog.',
+      effects: {},
+      target: { morale: -4 },
+    },
+  },
+  {
+    id: 'sabbatical',
+    cond: (e) => e.weeks >= 40,
+    body: (e) => `${e.name} — here since week ${52 - (52 - e.weeks)}, ${e.weeks} weeks of grind — asks for a four-week unpaid sabbatical. "I'll come back better. Or I'll come back gone, eventually, if I don't go now."`,
+    accept: {
+      label: 'Grant the sabbatical',
+      resultText: 'Four weeks later they return with a tan, a sketchbook of product ideas, and frightening energy.',
+      effects: { features: -3 },
+      target: { morale: 20 },
+    },
+    refuse: {
+      label: 'We can\'t spare you',
+      resultText: '"Understood." The word does a lot of work in that sentence.',
+      effects: {},
+      target: { morale: -15 },
+    },
+  },
+]
+
+function maybeOneOnOne(s: GameState) {
+  if (s.employees.length < 2 || RNG.next() > 0.1) return
+  if (s.inbox.some((m) => m.kind === 'choice' && !m.resolved)) return
+  const candidates = s.employees.filter((e) => !s.inbox.slice(0, 12).some((m) => m.meta?.employeeId === e.id))
+  if (candidates.length === 0) return
+  const e = candidates[Math.floor(RNG.next() * candidates.length)]
+  const eligible = ONE_ON_ONES.filter((o) => o.cond(e, s))
+  if (eligible.length === 0) return
+  const o = eligible[Math.floor(RNG.next() * eligible.length)]
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'choice',
+    title: `1:1 — ${e.name} has an ask`,
+    body: o.body(e),
+    choices: [o.accept, o.refuse],
+    meta: { employeeId: e.id },
+  })
+}
+
+// ---------- founder self-care & personal finance ----------
+
+export function takeVacation(s: GameState) {
+  if (s.vacationCooldown > 0 || s.gameOver) return
+  s.energy = clamp(s.energy + 30, 0, 100)
+  s.features = clamp(s.features - 1.5, 0, 100)
+  s.vacationCooldown = 10
+  applyEffects(s, { morale: 2 })
+  s.flash = '🏝 A real week off — phone in a drawer, laptop at home. You come back with a full tank and one big idea scribbled on a napkin. The team, trusted alone, did fine.'
+}
+
+export function canSellSecondary(s: GameState): { ok: boolean; reason?: string } {
+  if (STAGES.indexOf(s.stage) < 3) return { ok: false, reason: 'Available from Series B — early secondaries scare investors' }
+  if (s.flags[`secondary-${s.stage}`]) return { ok: false, reason: `Already sold once this stage — again would read as fleeing` }
+  if (s.founderEquity <= 0.1) return { ok: false, reason: 'Your remaining stake is too thin to sell down further' }
+  return { ok: true }
+}
+
+export function secondaryProceeds(s: GameState): number {
+  return Math.round(valuation(s) * 0.02 * 0.7) // 2% of the company, at a 30% secondary discount
+}
+
+export function sellSecondary(s: GameState) {
+  if (!canSellSecondary(s).ok) return
+  const proceeds = secondaryProceeds(s)
+  s.founderEquity = Math.max(0, s.founderEquity - 0.02)
+  s.bankedPayout += proceeds
+  s.flags[`secondary-${s.stage}`] = 1
+  s.reputation = clamp(s.reputation - 3, 0, 100)
+  applyEffects(s, { morale: -2 })
+  s.energy = clamp(s.energy + 8, 0, 100) // sleeping better is worth something
+  s.flash =
+    `💼 Secondary sale: 2% of your stake for $${(proceeds / 1e6).toFixed(1)}M in personal cash — banked no matter how this ends. ` +
+    'The board notes it "without judgment", which is how boards judge.'
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'system',
+    title: 'Founder takes money off the table',
+    body: 'A fund bought a sliver of your personal stake at a discount. De-risked founders make braver decisions — or complacent ones. The team watches which you become.',
+  })
+}
+
 // ---------- the all-hands pitch: founder theater, with odds ----------
 
 export const PITCH_COOLDOWN = 8
@@ -1429,6 +1621,7 @@ export function pitchTeam(s: GameState, id: PitchOption['id']): void {
   if (s.pitchCooldown > 0 || s.employees.length === 0) return
   const opt = pitchOptions(s).find((o) => o.id === id)!
   s.pitchCooldown = PITCH_COOLDOWN
+  s.energy = clamp(s.energy - 8, 0, 100) // speeches cost something to give
   const won = RNG.next() < opt.p
   if (won) s.flags.pitchesLanded = (s.flags.pitchesLanded ?? 0) + 1
 
@@ -1489,6 +1682,7 @@ export function acquireRival(s: GameState, rivalId: string, method: 'cash' | 'st
   if (!r || !canAcquire(s, r).ok) return false
   const price = acquisitionPrice(s, r)
   if (method === 'cash' && s.cash < price) return false
+  s.energy = clamp(s.energy - 8, 0, 100) // deal-making eats weekends
 
   // weak companies sell; strong ones believe their own deck
   const pAccept = clamp(0.55 + (productScore(s) > r.product ? 0.15 : -0.1) + s.reputation / 300 + (r.momentum < 1 ? 0.15 : -0.05), 0.25, 0.9)
@@ -1602,11 +1796,12 @@ function boardReview(s: GameState) {
 
   // A real miss.
   if (s.board.defied) {
-    s.gameOver = { type: 'fired', week: s.week, payout: Math.round(valuation(s) * s.founderEquity * 0.5) }
+    s.gameOver = { type: 'fired', week: s.week, payout: Math.round(valuation(s) * s.founderEquity * 0.5 + s.bankedPayout) }
     return
   }
   s.board.strikes += 1
   if (s.board.strikes >= 3) {
+    s.energy = clamp(s.energy - 5, 0, 100)
     s.inbox.unshift({
       id: uid(),
       week: s.week,
@@ -1776,9 +1971,17 @@ export function resolveChoiceOnState(s: GameState, messageId: string, choiceInde
   msg.resolved = true
   msg.resultText = choice.resultText
   if (choice.effects.special === 'acquired' && msg.meta?.acquisitionAmount) {
-    s.gameOver = { type: 'acquired', week: s.week, payout: Math.round(msg.meta.acquisitionAmount * s.founderEquity) }
+    s.gameOver = { type: 'acquired', week: s.week, payout: Math.round(msg.meta.acquisitionAmount * s.founderEquity + s.bankedPayout) }
   } else {
     applyEffects(s, choice.effects)
+  }
+  // targeted consequences for the person this 1:1 was about
+  if (choice.target && msg.meta?.employeeId) {
+    const emp = s.employees.find((e) => e.id === msg.meta!.employeeId)
+    if (emp) {
+      if (choice.target.morale) emp.morale = clamp(emp.morale + choice.target.morale, 0, 100)
+      if (choice.target.salaryMult) emp.salary = Math.round((emp.salary * choice.target.salaryMult) / 1000) * 1000
+    }
   }
   // arc bookkeeping: the story remembers
   if (msg.meta?.arcInstance) {
