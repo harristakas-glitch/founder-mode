@@ -1,12 +1,14 @@
 import { BenchRow, EmptyState, LineChart, Panel, StatCard, TrendBadge } from '../components'
 import { money, num, pct } from '../format'
-import { sectorById } from '../game/data'
+import { STAGE_THRESHOLDS, sectorById } from '../game/data'
 import {
   MILESTONES,
   avgMorale,
   boardEffectiveTarget,
   committedCosts,
   growthRate,
+  hasPendingDecision,
+  nextStage,
   pmfLabel,
   productScore,
   runwayWeeks,
@@ -94,6 +96,91 @@ function Benchmarks() {
   )
 }
 
+// The briefing: the benchmarks panel already knows what is wrong, but it sits at the bottom
+// in muted grey. This lifts the single most urgent thing to the top, with the button that
+// acts on it — so the Dashboard answers "what should I do this week?", not just "what am I?".
+interface Attention {
+  tone: 'bad' | 'warn' | 'good'
+  text: string
+  action?: { label: string; screen: Parameters<ReturnType<typeof useStore.getState>['setScreen']>[0] }
+}
+
+function attentionItems(game: ReturnType<typeof useStore.getState>['game']): Attention[] {
+  if (!game) return []
+  const out: Attention[] = []
+  const runway = runwayWeeks(game)
+  const pmfPace = Math.min(85, game.week * 1.6)
+
+  if (hasPendingDecision(game))
+    out.push({ tone: 'bad', text: 'A decision is blocking the week.', action: { label: 'Open Inbox', screen: 'inbox' } })
+  if (runway !== Infinity && runway < 12)
+    out.push({
+      tone: 'bad',
+      text: `Only ${Math.max(0, Math.floor(runway))} weeks of runway left — raise, or cut burn now.`,
+      action: { label: 'Fundraising', screen: 'fundraising' },
+    })
+  if (game.termSheets.length > 0)
+    out.push({
+      tone: 'good',
+      text: `${game.termSheets.length} term sheet${game.termSheets.length === 1 ? '' : 's'} on the table — they expire.`,
+      action: { label: 'Review', screen: 'fundraising' },
+    })
+  if (game.week > 6 && game.pmf < pmfPace * 0.6)
+    out.push({
+      tone: 'warn',
+      text: `PMF ${Math.round(game.pmf)} against ~${Math.round(pmfPace)} expected by week ${game.week}. The market isn't biting — research harder, or pivot.`,
+      action: { label: 'Product', screen: 'product' },
+    })
+  if (game.bugs > 55)
+    out.push({
+      tone: 'warn',
+      text: `Bugs at ${Math.round(game.bugs)} are driving churn and scaring off the press.`,
+      action: { label: 'Shift focus', screen: 'product' },
+    })
+  if (avgMorale(game) < 45 && game.employees.length > 0)
+    out.push({ tone: 'warn', text: 'Team morale is low — output suffers and people start leaving.', action: { label: 'Team', screen: 'team' } })
+  if (game.board && game.board.strikes > 0)
+    out.push({
+      tone: 'bad',
+      text: `The board has issued ${game.board.strikes} strike${game.board.strikes === 1 ? '' : 's'}. Miss the next review and you can be replaced.`,
+      action: { label: 'Fundraising', screen: 'fundraising' },
+    })
+  return out.slice(0, 3)
+}
+
+function AttentionStrip() {
+  const game = useStore((s) => s.game)!
+  const setScreen = useStore((s) => s.setScreen)
+  const items = attentionItems(game)
+  if (items.length === 0) {
+    return (
+      <div className="mb-3.5 rounded-2xl border border-good/30 bg-good/5 px-4 py-2.5 text-[13px] text-mut">
+        ✓ Nothing on fire. Good week to make a bet.
+      </div>
+    )
+  }
+  const ring = { bad: 'border-bad/40 bg-bad/8', warn: 'border-warn/40 bg-warn/8', good: 'border-good/40 bg-good/8' }
+  const dot = { bad: 'bg-bad', warn: 'bg-warn', good: 'bg-good' }
+  return (
+    <div className="mb-3.5 space-y-1.5">
+      {items.map((it, i) => (
+        <div key={i} className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border px-4 py-2.5 ${ring[it.tone]}`}>
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot[it.tone]}`} />
+          <span className="flex-1 text-[13.5px] leading-snug">{it.text}</span>
+          {it.action && (
+            <button
+              className="shrink-0 rounded-lg border border-line2 px-2.5 py-1 text-[12px] font-semibold transition-colors hover:border-accent hover:text-ink"
+              onClick={() => setScreen(it.action!.screen)}
+            >
+              {it.action.label} →
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Dashboard() {
   const game = useStore((s) => s.game)!
   const setScreen = useStore((s) => s.setScreen)
@@ -110,6 +197,7 @@ export function Dashboard() {
         Week {game.week} · {game.stage} · You own {pct(game.founderEquity, 1)} of the company
       </div>
 
+      <AttentionStrip />
       <WeekDigest />
 
 
@@ -138,7 +226,19 @@ export function Dashboard() {
           delta={`${growth >= 0 ? '+' : ''}${pct(growth, 1)} /wk avg`}
           tone={growth >= 0 ? 'up' : 'down'}
         />
-        <StatCard label="Valuation" numeric={val} format={money} delta={`Goal: $1B (${pct(val / 1e9, 1)} there)`} />
+        {/* The next rung, not the summit: "0.1% of $1B" at week 13 tells a founder nothing
+            they can act on, while "62% of the way to a Seed" is this month's actual job. */}
+        <StatCard
+          label="Valuation"
+          numeric={val}
+          format={money}
+          delta={
+            nextStage(game)
+              ? `${pct(Math.min(1, val / STAGE_THRESHOLDS[game.stage]), 0)} of the way to ${nextStage(game)} (${money(STAGE_THRESHOLDS[game.stage])})`
+              : `Goal: $1B — ${pct(val / 1e9, 1)} there`
+          }
+          tone={nextStage(game) && val >= STAGE_THRESHOLDS[game.stage] ? 'up' : undefined}
+        />
       </div>
 
       <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">

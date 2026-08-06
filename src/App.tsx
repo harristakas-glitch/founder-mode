@@ -234,8 +234,26 @@ export default function App() {
             {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" />}
             <Icon size={16} strokeWidth={2.2} className={active ? 'text-accent' : ''} />
             {n.label}
+            {/* Anything waiting on the player is visible without opening the screen:
+                blocking decisions shout, opportunities murmur. */}
             {n.id === 'inbox' && unread > 0 && (
               <span className="ml-auto rounded-full bg-bad px-1.5 py-px text-[10px] font-bold text-bg tnum">{unread}</span>
+            )}
+            {n.id === 'fundraising' && game.termSheets.length > 0 && (
+              <span
+                className="ml-auto rounded-full bg-warn px-1.5 py-px text-[10px] font-bold text-bg tnum"
+                title={`${game.termSheets.length} term sheet${game.termSheets.length === 1 ? '' : 's'} on the table`}
+              >
+                {game.termSheets.length}
+              </span>
+            )}
+            {n.id === 'hiring' && game.candidates.length > 0 && (
+              <span
+                className="ml-auto rounded-full border border-line2 px-1.5 py-px text-[10px] font-semibold text-mut tnum"
+                title={`${game.candidates.length} candidate${game.candidates.length === 1 ? '' : 's'} in the pool`}
+              >
+                {game.candidates.length}
+              </span>
             )}
           </button>
         )
@@ -253,22 +271,29 @@ export default function App() {
     >
       <DoorOpen size={16} /> {online ? 'Leave match' : 'New company'}
     </button>
+  ) : pending ? (
+    // The week is blocked by a decision — so the button takes you to it. Greying out the
+    // most prominent control at the exact moment the player is stuck is a dead end.
+    <button
+      onClick={() => {
+        setScreen('inbox')
+        setNavOpen(false)
+      }}
+      className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl bg-warn px-4 text-[15px] font-bold text-bg shadow-[var(--elev-2)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+    >
+      <Hourglass size={16} /> Decide {unread > 1 ? `${unread} items` : 'to continue'} <ChevronsRight size={18} />
+    </button>
   ) : (
     <button
       disabled={advanceDisabled}
       onClick={advance}
-      title={pending ? 'Resolve the decision in your inbox first' : undefined}
       className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl px-4 text-[15px] font-bold transition-[filter,transform,background-color] duration-[120ms] ${
         advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
           : 'bg-good text-bg shadow-[var(--elev-2)] hover:brightness-110 active:scale-[0.98]'
       }`}
     >
-      {pending ? (
-        <>
-          <Hourglass size={16} /> Decision required
-        </>
-      ) : online ? (
+      {online ? (
         myReady ? (
           <>
             <Hourglass size={16} /> Waiting for rivals…
