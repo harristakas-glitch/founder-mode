@@ -345,14 +345,16 @@ export const EVENTS: EventDef[] = [
       'A patent troll claims your product infringes their 2004 patent on "displaying information on a screen".',
     choices: () => [
       {
-        label: 'Settle quietly ($25,000)',
-        resultText: 'You pay them to go away. It stings.',
-        effects: { cash: -25000 },
+        label: 'Settle quietly ($18,000)',
+        resultText: 'You pay them to go away. It stings, it is over, and nobody hears about it.',
+        effects: { cash: -18_000 },
       },
       {
-        label: 'Lawyer up and fight ($12,000)',
-        resultText: 'Your lawyer sends a scorcher. The troll retreats, and the story earns you fans.',
-        effects: { cash: -12000, reputation: 4, hype: 4 },
+        label: 'Lawyer up and fight ($45,000)',
+        resultText:
+          'Months of discovery, a five-figure legal bill, and a founder who reads patent law at 2am. ' +
+          'The troll eventually retreats — and the story earns you fans who like a company that fights.',
+        effects: { cash: -45_000, reputation: 6, hype: 6, morale: -4 },
       },
     ],
   },
@@ -787,8 +789,10 @@ export const EVENTS: EventDef[] = [
     choices: () => [
       {
         label: 'Send them — with a slide about the team',
-        resultText: 'The talk kills. The team slide gets exactly four seconds of screen time.',
-        effects: { hype: 8, morale: -2 },
+        resultText:
+          'The talk kills. The team slide gets four seconds of screen time, and three recruiters get ' +
+          'their phone number before they are off the stage.',
+        effects: { hype: 10, morale: -6, special: 'lose-best' },
       },
       { label: 'Keep them heads-down', resultText: 'They sulk in four programming languages.', effects: { morale: -2 } },
     ],
@@ -893,8 +897,10 @@ export const EVENTS: EventDef[] = [
     choices: () => [
       {
         label: 'Go transparent: publish salary bands',
-        resultText: 'Radical honesty, retroactively adopted. After the initial shock, it reads as courage.',
-        effects: { morale: 6, reputation: 3 },
+        resultText:
+          'Radical honesty, retroactively adopted. It reads as courage — and the people below their band ' +
+          'now have a number to point at. Payroll rises to meet it.',
+        effects: { morale: 6, reputation: 3, special: 'cola-raise' },
       },
       {
         label: 'Pretend it never happened',
@@ -966,8 +972,10 @@ export const EVENTS: EventDef[] = [
     choices: () => [
       {
         label: 'Build the people\'s feature',
-        resultText: 'Shipped in two weeks. The hashtag turns celebratory; the codebase turns slightly wilder.',
-        effects: { features: 5, bugs: 4, hype: 5 },
+        resultText:
+          'Shipped in two weeks — two weeks that belonged to the roadmap. The hashtag turns celebratory; ' +
+          'the codebase turns wilder; the quarter turns sideways.',
+        effects: { features: 5, bugs: 9, hype: 6, quality: -5 },
       },
       { label: 'Hold the roadmap line', resultText: 'The hashtag turns sarcastic.', effects: { reputation: -3 } },
     ],
@@ -1006,9 +1014,11 @@ export const EVENTS: EventDef[] = [
     body: () => 'A user who relies on a screen reader sends a detailed, generous, damning report about everything your product gets wrong.',
     choices: () => [
       {
-        label: 'Fix it properly ($8,000)',
-        resultText: 'The fixes ship. The user posts a thank-you thread that outperforms your last three launches.',
-        effects: { cash: -8_000, reputation: 5, quality: 4 },
+        label: 'Fix it properly (two sprints)',
+        resultText:
+          'Two sprints of unglamorous work nobody demoed. The fixes ship, and the user posts a thank-you ' +
+          'thread that outperforms your last three launches.',
+        effects: { cash: -8_000, features: -4, reputation: 7, quality: 6 },
       },
       { label: 'Backlog it', resultText: 'The report joins the backlog, where reports go to think about what they\'ve done.', effects: { reputation: -3 } },
     ],

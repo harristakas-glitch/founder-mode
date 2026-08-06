@@ -274,8 +274,10 @@ export const useStore = create<Store>()(
         pmf: Math.round(g.pmf),
       })
 
+      // Peer-reported and therefore untrusted: normalizePlayer bounds each value, and the
+      // sum is capped again so no combination of peers can crush everyone's growth headroom.
       const othersUsers = (players: NetPlayer[]): number =>
-        players.reduce((a, p) => (p.id === myId() || p.over ? a : a + p.users), 0)
+        Math.min(1e10, players.reduce((a, p) => (p.id === myId() || p.over ? a : a + (Number.isFinite(p.users) ? Math.max(0, p.users) : 0)), 0))
 
       let advancing = false
       const attacksTakenThisWeek = new Set<string>()

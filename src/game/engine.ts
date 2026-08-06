@@ -1113,7 +1113,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   }
   // Quits — mercenaries jump ship well before anyone else
   const quitters = s.employees.filter(
-    (e) => e.morale < (e.trait === 'mercenary' ? 42 : 32) && RNG.next() < 0.22,
+    (e) => e.morale < (e.trait === 'mercenary' ? 55 : 32) && RNG.next() < 0.22, // mercenaries walk early — that IS the trade for their output
   )
   for (const q of quitters) {
     s.employees = s.employees.filter((e) => e.id !== q.id)
@@ -1183,7 +1183,10 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- acquisition offers: only credible companies get bought ---
   const val = valuation(s)
   if (val > 8_000_000 && s.pmf > 50 && RNG.next() < 0.03 && !s.inbox.some((m) => !m.resolved && m.kind === 'choice')) {
-    const amount = Math.round((val * rand(0.85, 1.5)) / 1e6) * 1e6
+    // Premium tracks momentum: a hot company gets bid up ~2x, a stalling one gets a lowball.
+    // Flat noise made every offer strictly worse than holding, so the button was pure bait.
+    const premium = 1.1 + 0.9 * clamp(growthRate(s) * 20, 0, 1)
+    const amount = Math.round((val * premium * rand(0.92, 1.12)) / 1e6) * 1e6
     s.inbox.unshift({
       id: uid(),
       week: s.week,
@@ -1271,7 +1274,10 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 // ---------- IPO ----------
 
 export const IPO_COST = 2_000_000
-export const IPO_MIN_VAL = 300_000_000
+// Raised from $300M: filing the moment you were eligible HALVED the median payout
+// ($166M vs $313M for riding to the unicorn). The checklist told you that you could,
+// never that you shouldn't.
+export const IPO_MIN_VAL = 500_000_000
 export const IPO_MIN_ANNUAL_REV = 10_000_000
 
 // The street doesn't care how many rounds you raised — only scale, revenue, and readiness.
@@ -1350,7 +1356,8 @@ function tickIPO(s: GameState) {
 function priceIPO(s: GameState) {
   const val = valuation(s)
   // pricing day: investor demand meets the market's mood
-  const mult = 0.72 + (s.ipo!.demand / 100) * 0.55 + 0.3 * s.climate + rand(-0.08, 0.12)
+  // Wider spread: a well-prepared book should clearly beat grinding to $1B, a sloppy one should sting.
+  const mult = 0.65 + (s.ipo!.demand / 100) * 0.85 + 0.3 * s.climate + rand(-0.08, 0.12)
   s.ipo = null
   if (mult >= 0.95) {
     const pop = mult >= 1.15
@@ -1697,9 +1704,9 @@ export interface AttackDef {
 }
 
 export const ATTACKS: AttackDef[] = [
-  { id: 'poach', name: 'Poach talent', emoji: '🎣', cost: 60_000, blurb: 'Recruiters target their team. Their morale dips; two strong candidates appear in your pool.' },
+  { id: 'poach', name: 'Poach talent', emoji: '🎣', cost: 50_000, blurb: 'Recruiters target their team. Their best engineer walks — and lands in your hiring pool.' },
   { id: 'smear', name: 'Smear campaign', emoji: '🗞', cost: 40_000, blurb: 'Anonymous briefings to journalists. Their hype and reputation take a hit; a little mud sticks to you too.' },
-  { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 80_000, blurb: 'A targeted campaign at their customer base. You take ~4% of their users.' },
+  { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 80_000, blurb: 'A targeted campaign at their customer base. Punching UP at a bigger rival pays far more than punching down.' },
 ]
 
 // Costs scale with your stage: $40k is a real decision at pre-seed and noise at
@@ -1707,7 +1714,8 @@ export const ATTACKS: AttackDef[] = [
 export function attackCost(s: GameState, kind: AttackDef['id']): number {
   const def = ATTACKS.find((a) => a.id === kind)
   if (!def) return Infinity
-  return def.cost * (STAGES.indexOf(s.stage) + 1)
+  // Softer than linear: full stage scaling made attacks unaffordable exactly when they mattered.
+  return Math.round(def.cost * (1 + STAGES.indexOf(s.stage) * 0.5))
 }
 
 export function canAttack(s: GameState): { ok: boolean; reason?: string } {
@@ -1729,7 +1737,12 @@ export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetC
   drainEnergy(s, 4)
   if (kind === 'poach') applyEffects(s, { special: 'talent-influx' })
   if (kind === 'smear') s.reputation = clamp(s.reputation - 2, 0, 100)
-  if (kind === 'raid') s.users += Math.round(targetUsers * 0.04 * 0.8) // some raided users bounce
+  if (kind === 'raid') {
+    // Relative, not absolute: raiding the leader pays up to 3x, kicking a straggler pays half.
+    // Absolute spoils meant raids only paid at a scale a 52-week match never reaches.
+    const leverage = clamp(targetUsers / Math.max(1, s.users), 0.5, 3)
+    s.users += Math.round(targetUsers * 0.04 * 0.8 * leverage)
+  }
   s.flash = `${def.emoji} ${def.name} launched against ${targetCompany}. ${kind === 'raid' ? 'Their users are getting your ads today.' : kind === 'poach' ? 'Your recruiters are working their team.' : 'The stories run tomorrow.'}`
   return true
 }
@@ -1777,7 +1790,7 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
     s.flash = `🛡 Your crisis team deflected ${fromCompany}'s ${def.name.toLowerCase()}!`
     return
   }
-  if (kind === 'poach') applyEffects(s, { morale: -6 })
+  if (kind === 'poach') applyEffects(s, { morale: -6, special: 'lose-best' }) // they take a person, not just a mood
   if (kind === 'smear') applyEffects(s, { hype: -10, reputation: -3 })
   if (kind === 'raid') applyEffects(s, { users: -0.04 })
   s.inbox.unshift({
@@ -1988,7 +2001,8 @@ function boardReview(s: GameState) {
   const netMargin = s.lastExpenses > 0 ? (s.lastRevenue - s.lastExpenses) / Math.max(1, s.lastRevenue) : 0
   const passedByUsers = growth >= target
   const passedByRevenue = revGrowth >= target
-  const passedByProfit = netMargin > 0.15 && revGrowth >= target * 0.4
+  // Profitability only satisfies the board once you're big enough for it to be the point.
+  const passedByProfit = netMargin > 0.15 && revGrowth >= target * 0.4 && STAGES.indexOf(s.stage) >= 3
 
   if (passedByUsers || passedByRevenue || passedByProfit) {
     if (s.board.defied) s.board.defied = false
@@ -2009,7 +2023,7 @@ function boardReview(s: GameState) {
     return
   }
 
-  if (growth >= target * 0.6 || revGrowth >= target * 0.6) {
+  if (growth >= target * 0.8 || revGrowth >= target * 0.8) {
     s.inbox.unshift({
       id: uid(),
       week: s.week,
@@ -2026,7 +2040,7 @@ function boardReview(s: GameState) {
     return
   }
   s.board.strikes += 1
-  if (s.board.strikes >= 3) {
+  if (s.board.strikes >= 2) {
     drainEnergy(s, 5)
     s.inbox.unshift({
       id: uid(),
