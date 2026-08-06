@@ -93,7 +93,8 @@ export function drawResultCard(g: GameState): HTMLCanvasElement {
     ctx.font = font(30)
     ctx.textAlign = 'center'
     for (const mk of runMarkers(g)) {
-      const i = Math.min(vals.length - 1, Math.max(0, hist.findIndex((h) => h.week >= mk.week)))
+      const found = hist.findIndex((h) => h.week >= mk.week)
+      const i = found < 0 ? vals.length - 1 : Math.min(vals.length - 1, found) // past the last point → plot at the end
       if (i < 0) continue
       ctx.fillText(mk.emoji, x(i), y(vals[i]) - 14)
     }

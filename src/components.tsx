@@ -15,7 +15,11 @@ export function useTicker(value: number, ms = 500): number {
     const tick = (t: number) => {
       const p = Math.min(1, (t - start) / ms)
       const eased = 1 - Math.pow(1 - p, 3)
-      setShown(from + (value - from) * eased)
+      const now = from + (value - from) * eased
+      setShown(now)
+      // track where we actually are, so an interrupted animation resumes from here
+      // instead of snapping back to the previous animation's origin
+      fromRef.current = now
       if (p < 1) rafRef.current = requestAnimationFrame(tick)
       else fromRef.current = value
     }

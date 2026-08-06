@@ -13,6 +13,7 @@ import {
   canStartVenture,
   drawDebt,
   ipoEligible,
+  marketingMax,
   killVenture,
   newGame,
   pitchInvestors,
@@ -88,7 +89,8 @@ const HALL_KEY = 'founder-mode-hall'
 
 export function readHall(): RunRecord[] {
   try {
-    return JSON.parse(localStorage.getItem(HALL_KEY) ?? '[]')
+    const v = JSON.parse(localStorage.getItem(HALL_KEY) ?? '[]')
+    return Array.isArray(v) ? v : [] // a corrupt value must not break .push() later
   } catch {
     return []
   }
@@ -164,7 +166,10 @@ export interface NewGameSetup {
   scenario?: string
 }
 
+const clampSpend = (v: number, max: number) => Math.min(max, Math.max(0, Math.round(v)))
+
 export const MATCH_CAP = 104 // weeks in a capped run (daily & online matches)
+const CATCH_UP_LIMIT = 120 // most weeks we'll ever replay in one go to rejoin a room
 
 export interface OnlineSession {
   code: string
@@ -257,6 +262,7 @@ export const useStore = create<Store>()(
       // ---- online protocol helpers ----
 
       const myNetSummary = (g: GameState): Partial<NetPlayer> => ({
+        playing: true,
         week: g.week,
         users: totalUsers(g),
         val: valuation(g),
@@ -272,6 +278,28 @@ export const useStore = create<Store>()(
         players.reduce((a, p) => (p.id === myId() || p.over ? a : a + p.users), 0)
 
       let advancing = false
+      const attacksTakenThisWeek = new Set<string>()
+
+      // The 'start' broadcast is unauthenticated: only the presence-declared host may open a match,
+      // and every field has to be sane before it becomes a GameState (a bad sector white-screens
+      // the app, a bad cap can hang it, a stale deadline forfeits everyone's first turn).
+      const validStart = (
+        p: StartPayload,
+        players: NetPlayer[],
+      ): { seed: number; sector: SectorId; cap: number; rules: Ruleset } | null => {
+        const host = players.find((x) => x.host)
+        if (host && p.hostId && p.hostId !== host.id) return null
+        if (!SECTORS.some((s) => s.id === p.sector)) return null
+        if (!Number.isFinite(p.seed)) return null
+        if (!Number.isInteger(p.cap) || p.cap < 1 || p.cap > 520) return null
+        const rules = { ...PVP_RULES }
+        if (p.rules && typeof p.rules === 'object') {
+          for (const k of Object.keys(rules) as (keyof Ruleset)[]) {
+            if (typeof p.rules[k] === 'boolean') rules[k] = p.rules[k]
+          }
+        }
+        return { seed: p.seed, sector: p.sector, cap: p.cap, rules }
+      }
 
       // Called on every presence sync: catch up if behind, advance if everyone is ready.
       const maybeNetAdvance = () => {
@@ -280,21 +308,27 @@ export const useStore = create<Store>()(
         const players = online.players
         if (players.length === 0) return
 
-        // catch up if the room has moved past us (e.g. we reconnected)
-        const maxWeek = Math.max(...players.map((p) => p.week))
+        // catch up if the room has moved past us (e.g. we reconnected). A peer can advertise any
+        // week it likes, so never simulate past the match cap or for more than a sane number of turns.
+        const cap = game.challenge?.cap ?? MATCH_CAP
+        const maxWeek = Math.min(cap, Math.max(...players.map((p) => p.week)))
         if (!game.gameOver && maxWeek > game.week) {
           advancing = true
           let g = game
-          while (g.week < maxWeek && !g.gameOver) g = advanceWeek(g, othersUsers(players))
+          for (let i = 0; i < CATCH_UP_LIMIT && g.week < maxWeek && !g.gameOver; i++) g = advanceWeek(g, othersUsers(players))
           if (g.gameOver) recordRun(g)
           advancing = false
-          set({ game: g })
+          weekSounds(g)
+          awardAchievements(g)
+          // we arrive mid-round: give ourselves the rest of this round, not an expired clock
+          set({ game: g, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000 } })
           void pushState({ ...myNetSummary(g), ready: false })
           return
         }
 
-        // advance when every living, present player is ready for this week
-        const living = players.filter((p) => !p.over)
+        // advance when every living player who is actually in the match is ready for this week.
+        // Someone still sitting in the lobby (joined late, or mid-reconnect) must not deadlock the room.
+        const living = players.filter((p) => !p.over && p.playing !== false)
         if (living.length === 0) return
         const allReady = living.every((p) => p.ready && p.week >= game.week)
         if (!allReady) return
@@ -344,6 +378,11 @@ export const useStore = create<Store>()(
           if (p.targetId !== myId()) return
           const g = get().game
           if (!g || g.gameOver) return
+          if (!(g.rules?.pvp ?? false)) return // attacks don't exist in a match where PvP is off
+          // one hit per attacker per week, however many packets they send
+          const key = `${p.fromId ?? p.fromCompany}@${g.week}`
+          if (attacksTakenThisWeek.has(key)) return
+          attacksTakenThisWeek.add(key)
           const game = structuredClone(g)
           applyAttackIncoming(game, p.kind, p.fromCompany)
           sfx.ominous()
@@ -353,16 +392,18 @@ export const useStore = create<Store>()(
         onStart: (p: StartPayload) => {
           const online = get().online
           if (!online || online.phase === 'playing') return
-          const g = newGame(online.myCompany, p.sector, online.myFounder, {
-            seed: p.seed,
-            challenge: { label: 'Online match', cap: p.cap },
+          const start = validStart(p, online.players)
+          if (!start) return // malformed, or not from the host
+          const g = newGame(online.myCompany, start.sector, online.myFounder, {
+            seed: start.seed,
+            challenge: { label: 'Online match', cap: start.cap },
             aiRivals: false, // the other players are the rivals
-            rules: p.rules ?? { ...PVP_RULES },
+            rules: start.rules,
           })
           set({
             game: g,
-            online: { ...online, phase: 'playing', sector: p.sector, deadline: p.deadline },
-            onlineResume: get().onlineResume ? { ...get().onlineResume!, phase: 'playing', sector: p.sector } : null,
+            online: { ...online, phase: 'playing', sector: start.sector, deadline: Date.now() + ROUND_SECONDS * 1000 },
+            onlineResume: get().onlineResume ? { ...get().onlineResume!, phase: 'playing', sector: start.sector } : null,
             screen: 'dashboard',
           })
           void pushState({ ...myNetSummary(g), ready: false })
@@ -565,6 +606,7 @@ export const useStore = create<Store>()(
             cap: cap ?? MATCH_CAP,
             deadline: Date.now() + ROUND_SECONDS * 1000,
             rules: rules ?? { ...PVP_RULES },
+            hostId: myId(),
           }
           void broadcastStart(payload)
           handlers.onStart(payload) // broadcast doesn't echo to self
@@ -579,7 +621,7 @@ export const useStore = create<Store>()(
           if (!applyAttackOutgoing(g, kind, target.company, target.users)) return
           sfx.ominous()
           set({ game: g })
-          void broadcastAttack({ fromCompany: online.myCompany, targetId, kind })
+          void broadcastAttack({ fromCompany: online.myCompany, targetId, kind, fromId: myId() })
           void pushState(myNetSummary(g))
         },
 
@@ -734,7 +776,8 @@ export const useStore = create<Store>()(
         setMarketing: (value) => {
           const g = get().game
           if (!g) return
-          set({ game: { ...g, marketingSpend: value } })
+          const spend = Number.isFinite(value) ? clampSpend(value, marketingMax(g)) : 0
+          set({ game: { ...g, marketingSpend: spend } })
         },
 
         resolveChoice: (messageId, choiceIndex) => {

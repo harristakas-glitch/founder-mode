@@ -131,7 +131,7 @@ export function Career() {
                     <Td>{r.company}</Td>
                     <Td>{r.sector}</Td>
                     <Td>
-                      {ENDING_META[r.ending].emoji} {ENDING_META[r.ending].name}
+                      {(ENDING_META[r.ending]?.emoji ?? '🏁') + ' ' + (ENDING_META[r.ending]?.name ?? r.ending)}
                     </Td>
                     <Td right>{r.weeks}</Td>
                     <Td right>{money(r.score)}</Td>

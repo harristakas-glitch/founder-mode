@@ -65,7 +65,10 @@ export function Coach() {
   const screen = useStore((s) => s.screen)
   const setScreen = useStore((s) => s.setScreen)
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DONE_KEY) === '1')
-  const [step, setStep] = useState(() => Number(localStorage.getItem(STEP_KEY) ?? 0))
+  const [step, setStep] = useState(() => {
+    const n = Number(localStorage.getItem(STEP_KEY) ?? 0)
+    return Number.isInteger(n) && n >= 0 ? n : 0 // a corrupt key must not NaN-index the lesson list
+  })
 
   // auto-advance when the current lesson's goal is met
   useEffect(() => {

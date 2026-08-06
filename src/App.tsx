@@ -115,7 +115,9 @@ export default function App() {
       return () => clearTimeout(t)
     }
     prevWeek.current = game.week
-  }, [game?.week, game])
+    // week only — depending on the whole game object would let any action during the
+    // 950ms window cancel the timer and strand the overlay on screen
+  }, [game?.week])
 
   // tick once a second while an online round clock is running
   useEffect(() => {
@@ -138,7 +140,8 @@ export default function App() {
 
   const me = online?.players.find((p) => p.id === myId())
   const myReady = !!me?.ready
-  const matchOver = !!online && online.phase === 'playing' && online.players.length > 0 && online.players.every((p) => p.over)
+  // a lone entry is usually just a pre-sync view of ourselves after a reconnect — not a finished match
+  const matchOver = !!online && online.phase === 'playing' && online.players.length > 1 && online.players.every((p) => p.over)
 
   // when the round clock runs out, decisions resolve conservatively and the week is forced
   useEffect(() => {
@@ -553,13 +556,21 @@ function SocialShareRow({ text }: { text: string }) {
 
 function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof useStore.getState>['game']>; text: string }) {
   const [state, setState] = useState<'idle' | 'shared' | 'downloaded' | 'failed'>('idle')
+  const [busy, setBusy] = useState(false)
   return (
     <button
-      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+      disabled={busy}
+      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
       onClick={async () => {
-        const r = await shareResultImage(game, text)
-        setState(r)
-        setTimeout(() => setState('idle'), 2200)
+        if (busy) return // a second tap mid-share sheet would fire a stray download
+        setBusy(true)
+        try {
+          const r = await shareResultImage(game, text)
+          setState(r)
+          setTimeout(() => setState('idle'), 2200)
+        } finally {
+          setBusy(false)
+        }
       }}
     >
       {state === 'idle' ? '📸 Share image' : state === 'shared' ? 'Shared!' : state === 'downloaded' ? 'Image saved!' : 'Could not render'}

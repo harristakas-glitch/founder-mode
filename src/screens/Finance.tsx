@@ -58,6 +58,9 @@ function DebtPanel() {
   const cap = debtCapacity(game)
   const available = cap - (game.debt?.principal ?? 0)
   const apr = debtApr(game)
+  // the slider's ceiling moves with revenue and debt — keep the label honest about what the buttons will do
+  const sliderMax = Math.max(10_000, Math.max(available, game.debt?.principal ?? 0))
+  const shownAmount = Math.min(amount, sliderMax)
 
   return (
     <div className="mt-3.5">
@@ -94,17 +97,17 @@ function DebtPanel() {
           <input
             type="range"
             min={10_000}
-            max={Math.max(10_000, Math.max(available, game.debt?.principal ?? 0))}
+            max={sliderMax}
             step={10_000}
-            value={amount}
-            style={{ ['--fill' as string]: `${(amount / Math.max(10_000, Math.max(available, game.debt?.principal ?? 0))) * 100}%`, maxWidth: 260 }}
+            value={shownAmount}
+            style={{ ['--fill' as string]: `${(shownAmount / sliderMax) * 100}%`, maxWidth: 260 }}
             onChange={(e) => setAmount(Number(e.target.value))}
           />
-          <b className="w-20 tnum">{money(amount)}</b>
-          <Btn variant="primary" disabled={available <= 0 || amount <= 0} onClick={() => takeDebt(Math.min(amount, available))}>
+          <b className="w-20 tnum">{money(shownAmount)}</b>
+          <Btn variant="primary" disabled={available <= 0 || shownAmount <= 0} onClick={() => takeDebt(Math.min(shownAmount, available))}>
             Draw
           </Btn>
-          <Btn disabled={!game.debt || game.cash <= 0} onClick={() => payDebt(amount)}>
+          <Btn disabled={!game.debt || game.cash <= 0} onClick={() => payDebt(shownAmount)}>
             Repay
           </Btn>
         </div>

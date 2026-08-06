@@ -217,13 +217,40 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
   return state
 }
 
+// Last line of defence against NaN/Infinity: once one enters the state it propagates through
+// every formula, and `cash < 0` stops being true so the run can never even end. Anything
+// non-finite is snapped back to a sane value rather than silently poisoning the save.
+const finite = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback)
+
+function sanitize(s: GameState) {
+  s.cash = finite(s.cash, 0)
+  s.users = Math.max(0, finite(s.users, 0))
+  s.marketingSpend = Math.max(0, finite(s.marketingSpend, 0))
+  s.hype = clamp(finite(s.hype, 0), 0, 100)
+  s.pmf = clamp(finite(s.pmf, 0), 0, 100)
+  s.features = clamp(finite(s.features, 0), 0, 100)
+  s.quality = clamp(finite(s.quality, 50), 0, 100)
+  s.bugs = clamp(finite(s.bugs, 0), 0, 100)
+  s.reputation = clamp(finite(s.reputation, 50), 0, 100)
+  s.energy = clamp(finite(s.energy, 80), 0, 100)
+  s.resonance = clamp(finite(s.resonance, 1), 0.1, 2)
+  s.founderEquity = clamp(finite(s.founderEquity, 1), 0, 1)
+  s.lastRevenue = Math.max(0, finite(s.lastRevenue, 0))
+  s.lastExpenses = Math.max(0, finite(s.lastExpenses, 0))
+  for (const e of s.employees) e.morale = clamp(finite(e.morale, 60), 0, 100)
+  for (const v of s.ventures) v.users = Math.max(0, finite(v.users, 0))
+}
+
 function makeRivals(tam: number): Rival[] {
-  const names = [...RIVAL_NAMES].sort(() => Math.random() - 0.5).slice(0, 3)
+  // seeded shuffle — daily challenges and online matches must build identical worlds
+  const pool = [...RIVAL_NAMES]
+  const names: string[] = []
+  for (let i = 0; i < 3; i++) names.push(pool.splice(Math.floor(RNG.next() * pool.length), 1)[0])
   return names.map((name) => ({
     id: uid(),
     name,
     users: Math.round(tam * rand(0.0008, 0.006)),
-    stage: Math.random() < 0.5 ? 0 : 1,
+    stage: RNG.next() < 0.5 ? 0 : 1,
     product: rand(20, 45),
     momentum: rand(0.5, 1.5),
     alive: true,
@@ -235,8 +262,8 @@ function makeRivals(tam: number): Rival[] {
 const ROLE_BASE: Record<Role, number> = { engineer: 62_000, designer: 55_000, marketer: 50_000, sales: 52_000 }
 
 function rollTrait(skill: number): import('./types').TraitId | null {
-  if (skill >= 8 && Math.random() < 0.2) return 'tenx'
-  if (Math.random() < 0.4) return pick<import('./types').TraitId>(['craftsman', 'mercenary', 'culture', 'drama'])
+  if (skill >= 8 && RNG.next() < 0.2) return 'tenx'
+  if (RNG.next() < 0.4) return pick<import('./types').TraitId>(['craftsman', 'mercenary', 'culture', 'drama'])
   return null
 }
 
@@ -702,7 +729,7 @@ export function pivotBonus(s: GameState): number {
 export function pivot(s: GameState) {
   const bonus = pivotBonus(s)
   s.pivots += 1
-  s.energy = clamp(s.energy - 12, 0, 100) // rewriting your own conviction is exhausting
+  drainEnergy(s, 12) // rewriting your own conviction is exhausting
   s.features = Math.round(s.features * 0.5)
   s.quality = Math.round(s.quality * 0.7)
   s.hype = Math.round(s.hype * 0.6)
@@ -748,9 +775,9 @@ export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Me
   const target = nextStage(s)
   const threshold = STAGE_THRESHOLDS[s.stage]
   s.raiseCooldown = 10
-  s.energy = clamp(s.energy - 10, 0, 100) // the roadshow grind is real
+  drainEnergy(s, 10) // the roadshow grind is real
 
-  const frozenOut = s.climate < -0.5 && Math.random() < 0.7
+  const frozenOut = s.climate < -0.5 && RNG.next() < 0.7
   if (!target || val < threshold || frozenOut) {
     s.raiseCooldown = 4 // a failed roadshow stings, but you can get back out there fast
     const message: Message = {
@@ -779,7 +806,7 @@ export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Me
     'Series B': 15_000_000,
     'Series C': 40_000_000,
   }
-  const investors = [...INVESTORS].sort(() => Math.random() - 0.5).slice(0, n)
+  const investors = [...INVESTORS].sort(() => RNG.next() - 0.5).slice(0, n)
   const growth = growthRate(s)
   const sheets: TermSheet[] = investors.map((investor) => {
     // Each fund prices you differently around your "fair" valuation; a cold market prices everyone down.
@@ -803,6 +830,7 @@ export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Me
 }
 
 export function acceptTermSheet(s: GameState, sheetId: string) {
+  if (s.ipo) return // quiet period: the S-1 is out, private rounds are off the table
   const sheet = s.termSheets.find((t) => t.id === sheetId)
   if (!sheet) return
   const target = nextStage(s)
@@ -846,6 +874,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const sector = sectorById(s.sector)
   s.week += 1
   s.flash = null
+  sanitize(s) // a non-finite number anywhere would spread through every formula below and brick the save
 
   // --- the real economy turns over: rates, inflation, the market — and they drive the funding climate ---
   const m = s.macro
@@ -946,8 +975,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
       (s.founderKind === 'business' ? 4 : 1) * energyMult) *
     rallyMult
   s.hype *= 0.92
+  const adSpend = Math.max(0, s.marketingSpend) // sqrt of a negative budget would NaN the whole run
   const hypeGain =
-    (Math.sqrt(s.marketingSpend / 250) * (1 + marketerPoints / 12) + marketerPoints * 0.35) *
+    (Math.sqrt(adSpend / 250) * (1 + marketerPoints / 12) + marketerPoints * 0.35) *
     (1 - s.hype / 115) *
     rand(0.7, 1.3)
   s.hype = clamp(s.hype + hypeGain, 0, 100)
@@ -957,7 +987,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const room = Math.pow(1 - saturation, 1.2)
   const pmfAcq = 0.35 + (0.65 * s.pmf) / 100
   // paid acquisition: big budgets buy users directly, at a CAC that worsens with saturation and channel fatigue
-  const paid = paidUsersPerWeek(s, s.marketingSpend) * room * rand(0.8, 1.2)
+  const paid = paidUsersPerWeek(s, adSpend) * room * rand(0.8, 1.2)
   const acquired = sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2) + paid
   const wordOfMouth = s.users * sector.viral * Math.pow(s.pmf / 100, 1.5) * (1 + s.hype / 150) * room * rand(0.8, 1.2)
   const churnMult = clamp(2.4 - s.pmf / 45 - s.quality / 250 + s.bugs / 200, 0.3, 3)
@@ -995,7 +1025,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   for (const c of [...s.offersOut]) {
     const runwayNow = s.cash / Math.max(1, expenses - revenue)
     const acceptChance = 0.72 + s.reputation / 400 - (runwayNow > 0 && runwayNow < 10 ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0)
-    if (Math.random() < acceptChance) {
+    if (RNG.next() < acceptChance) {
       s.pendingHires.push({ candidate: c, weeksUntilStart: c.notice })
       offerNews.push(`${c.name} accepted (starts in ${c.notice} wk)`)
       s.inbox.unshift({
@@ -1027,7 +1057,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
     p.weeksUntilStart -= 1
     if (p.weeksUntilStart <= 0) {
       const c = p.candidate
-      s.employees.push({ id: c.id, name: c.name, role: c.role, skill: c.skill, salary: c.salary, morale: 75, weeks: 0 })
+      s.employees.push({ id: c.id, name: c.name, role: c.role, skill: c.skill, salary: c.salary, morale: 75, weeks: 0, trait: c.trait ?? null })
       s.cash -= recruiterFee(c)
       s.inbox.unshift({
         id: uid(),
@@ -1059,7 +1089,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   }
   // Quits — mercenaries jump ship well before anyone else
   const quitters = s.employees.filter(
-    (e) => e.morale < (e.trait === 'mercenary' ? 42 : 32) && Math.random() < 0.22,
+    (e) => e.morale < (e.trait === 'mercenary' ? 42 : 32) && RNG.next() < 0.22,
   )
   for (const q of quitters) {
     s.employees = s.employees.filter((e) => e.id !== q.id)
@@ -1127,7 +1157,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   // --- acquisition offers: only credible companies get bought ---
   const val = valuation(s)
-  if (val > 8_000_000 && s.pmf > 50 && Math.random() < 0.03 && !s.inbox.some((m) => !m.resolved && m.kind === 'choice')) {
+  if (val > 8_000_000 && s.pmf > 50 && RNG.next() < 0.03 && !s.inbox.some((m) => !m.resolved && m.kind === 'choice')) {
     const amount = Math.round((val * rand(0.85, 1.5)) / 1e6) * 1e6
     s.inbox.unshift({
       id: uid(),
@@ -1243,7 +1273,7 @@ export function ipoEligible(s: GameState): boolean {
 export function startIPO(s: GameState) {
   if (!ipoEligible(s)) return
   s.cash -= IPO_COST
-  s.energy = clamp(s.energy - 10, 0, 100)
+  drainEnergy(s, 10)
   s.ipo = { phase: 'filing', weeksLeft: 4, demand: 50 }
   s.flash =
     'The S-1 is filed. Four weeks of regulatory scrutiny, then a four-week roadshow — and then the market decides what you are worth. ' +
@@ -1429,7 +1459,8 @@ export function repayDebt(s: GameState, amount: number) {
 function covenantCheck(s: GameState) {
   if (!s.debt || s.lastRevenue >= s.debt.covenantRevenue) return
   const owed = s.debt.principal
-  const paid = Math.min(s.cash, owed)
+  // cash can already be negative this week — the bank can only seize what exists
+  const paid = Math.max(0, Math.min(s.cash, owed))
   s.cash -= paid
   const shortfall = owed - paid
   s.debt = null
@@ -1539,7 +1570,7 @@ const ONE_ON_ONES: OneOnOne[] = [
   {
     id: 'sabbatical',
     cond: (e) => e.weeks >= 40,
-    body: (e) => `${e.name} — here since week ${52 - (52 - e.weeks)}, ${e.weeks} weeks of grind — asks for a four-week unpaid sabbatical. "I'll come back better. Or I'll come back gone, eventually, if I don't go now."`,
+    body: (e) => `${e.name} — ${e.weeks} weeks on the grind, longer than most marriages survive at this pace — asks for a four-week unpaid sabbatical. "I'll come back better. Or I'll come back gone, eventually, if I don't go now."`,
     accept: {
       label: 'Grant the sabbatical',
       resultText: 'Four weeks later they return with a tan, a sketchbook of product ideas, and frightening energy.',
@@ -1640,7 +1671,8 @@ export const ATTACKS: AttackDef[] = [
 // Costs scale with your stage: $40k is a real decision at pre-seed and noise at
 // Series C, so the multiplier keeps dirty tricks a real decision all game long.
 export function attackCost(s: GameState, kind: AttackDef['id']): number {
-  const def = ATTACKS.find((a) => a.id === kind)!
+  const def = ATTACKS.find((a) => a.id === kind)
+  if (!def) return Infinity
   return def.cost * (STAGES.indexOf(s.stage) + 1)
 }
 
@@ -1652,8 +1684,10 @@ export function canAttack(s: GameState): { ok: boolean; reason?: string } {
 
 // The attacker's side: pay the cost, collect the spoils. targetUsers is the victim's
 // last-known user count (from presence) — spoils are computed from it.
-export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetCompany: string, targetUsers: number): boolean {
-  const def = ATTACKS.find((a) => a.id === kind)!
+export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetCompany: string, rawTargetUsers: number): boolean {
+  const def = ATTACKS.find((a) => a.id === kind)
+  if (!def) return false
+  const targetUsers = Number.isFinite(rawTargetUsers) && rawTargetUsers > 0 ? Math.min(rawTargetUsers, 1e10) : 0
   const cost = attackCost(s, kind)
   if (!canAttack(s).ok || s.cash < cost) return false
   s.cash -= cost
@@ -1691,8 +1725,10 @@ export function buyShield(s: GameState): boolean {
 }
 
 // The victim's side, applied when the attack broadcast arrives.
-export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], fromCompany: string) {
-  const def = ATTACKS.find((a) => a.id === kind)!
+export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom: string) {
+  const def = ATTACKS.find((a) => a.id === kind)
+  if (!def) return // unknown attack kind off the wire
+  const fromCompany = String(rawFrom ?? 'A rival').slice(0, 30)
   if ((s.flags.shield ?? 0) > 0) {
     s.flags.shield = 0
     s.inbox.unshift({
@@ -1773,7 +1809,7 @@ export function pitchTeam(s: GameState, id: PitchOption['id']): void {
   if (s.pitchCooldown > 0 || s.employees.length === 0) return
   const opt = pitchOptions(s).find((o) => o.id === id)!
   s.pitchCooldown = PITCH_COOLDOWN
-  s.energy = clamp(s.energy - 8, 0, 100) // speeches cost something to give
+  drainEnergy(s, 8) // speeches cost something to give
   const won = RNG.next() < opt.p
   if (won) s.flags.pitchesLanded = (s.flags.pitchesLanded ?? 0) + 1
 
@@ -1834,7 +1870,7 @@ export function acquireRival(s: GameState, rivalId: string, method: 'cash' | 'st
   if (!r || !canAcquire(s, r).ok) return false
   const price = acquisitionPrice(s, r)
   if (method === 'cash' && s.cash < price) return false
-  s.energy = clamp(s.energy - 8, 0, 100) // deal-making eats weekends
+  drainEnergy(s, 8) // deal-making eats weekends
 
   // weak companies sell; strong ones believe their own deck
   const pAccept = clamp(0.55 + (productScore(s) > r.product ? 0.15 : -0.1) + s.reputation / 300 + (r.momentum < 1 ? 0.15 : -0.05), 0.25, 0.9)
@@ -1904,6 +1940,7 @@ export function revenueGrowthRate(s: GameState): number {
 }
 
 function boardReview(s: GameState) {
+  if (s.gameOver) return // an ending this week (IPO pricing, acquisition) stands
   if (!ruleOn(s, 'board')) return
   if (!s.board || s.week < s.board.nextReview) return
   const growth = growthRate(s)
@@ -1954,7 +1991,7 @@ function boardReview(s: GameState) {
   }
   s.board.strikes += 1
   if (s.board.strikes >= 3) {
-    s.energy = clamp(s.energy - 5, 0, 100)
+    drainEnergy(s, 5)
     s.inbox.unshift({
       id: uid(),
       week: s.week,
@@ -2001,13 +2038,13 @@ function tickRivals(s: GameState, room: number) {
     r.users = Math.max(0, Math.round(r.users * (1 + growth) + sector.acqBase * rand(0.5, 2) * (0.5 + r.product / 100)))
 
     // A rival with a better product siphons some of your least-happy users.
-    if (r.product > productScore(s) + 15 && s.users > 50 && Math.random() < 0.25) {
+    if (r.product > productScore(s) + 15 && s.users > 50 && RNG.next() < 0.25) {
       const stolen = Math.round(s.users * rand(0.005, 0.02))
       s.users -= stolen
       r.users += stolen
     }
 
-    const roll = Math.random()
+    const roll = RNG.next()
     if (roll < 0.03 && r.stage < 4 && r.users > sector.tam * 0.002 * (r.stage + 1)) {
       r.stage += 1
       r.momentum *= 1.15
@@ -2046,7 +2083,7 @@ function tickRivals(s: GameState, room: number) {
 }
 
 function maybeFireEvent(s: GameState) {
-  if (Math.random() > 0.45) return
+  if (RNG.next() > 0.45) return
   if (s.inbox.some((m) => m.kind === 'choice' && !m.resolved)) return
   const eligible = EVENTS.filter(
     (e) =>
@@ -2057,7 +2094,7 @@ function maybeFireEvent(s: GameState) {
   )
   if (eligible.length === 0) return
   const total = eligible.reduce((acc, e) => acc + e.weight, 0)
-  let roll = Math.random() * total
+  let roll = RNG.next() * total
   const def = eligible.find((e) => (roll -= e.weight) <= 0) ?? eligible[0]
   const msg: Message = {
     id: uid(),

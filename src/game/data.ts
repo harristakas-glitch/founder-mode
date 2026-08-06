@@ -63,7 +63,8 @@ export const SECTORS: Sector[] = [
   },
 ]
 
-export const sectorById = (id: string): Sector => SECTORS.find((s) => s.id === id)!
+// Never throw on an unknown id: sector ids also arrive from the network and from old saves.
+export const sectorById = (id: string): Sector => SECTORS.find((s) => s.id === id) ?? SECTORS[0]
 
 export const STAGES: Stage[] = ['Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C']
 

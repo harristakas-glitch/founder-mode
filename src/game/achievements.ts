@@ -72,6 +72,12 @@ export function checkAchievements(g: GameState): AchievementDef[] {
       // a single broken check must never take down the game loop
     }
   }
-  if (fresh.length > 0) localStorage.setItem(KEY, JSON.stringify([...earned]))
+  if (fresh.length > 0) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify([...earned]))
+    } catch {
+      // private mode / quota: badges just don't persist — never break the turn
+    }
+  }
   return fresh
 }
