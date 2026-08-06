@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays, Globe, LogIn, LogOut, Rocket } from 'lucide-react'
+import { CalendarDays, Check, Globe, LogIn, LogOut, Rocket } from 'lucide-react'
 import { SECTORS, sectorById } from '../game/data'
 import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
 import { SCENARIOS } from '../game/engine'
@@ -16,10 +16,19 @@ function Pick({ selected, onClick, title, blurb, disabled }: { selected: boolean
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl border p-3 text-left transition-all disabled:opacity-40 ${
-        selected ? 'border-accent bg-accent/15 shadow-lg shadow-accent/10' : 'border-line bg-surface hover:border-accent/60'
+      aria-pressed={selected}
+      className={`relative rounded-xl border p-3 pr-8 text-left transition-[background-color,border-color,transform] duration-[120ms] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40 ${
+        selected ? 'border-accent bg-accent/12' : 'border-line bg-surface/70 hover:border-line2 hover:bg-surface2/60'
       }`}
     >
+      {/* a tick, not just a tint — the chosen option is unmistakable at a glance */}
+      <span
+        className={`absolute top-3 right-3 flex h-4 w-4 items-center justify-center rounded-full transition-opacity duration-[120ms] ${
+          selected ? 'bg-accent opacity-100' : 'opacity-0'
+        }`}
+      >
+        <Check size={11} strokeWidth={3.5} className="text-bg" />
+      </span>
       <div className="text-[14px] font-bold">{title}</div>
       <div className="mt-0.5 text-xs leading-relaxed text-mut">{blurb}</div>
     </button>
@@ -28,7 +37,7 @@ function Pick({ selected, onClick, title, blurb, disabled }: { selected: boolean
 
 const label = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-mut'
 const inputCls =
-  'w-full rounded-xl border border-line bg-surface px-4 py-3 text-[15px] outline-none transition-colors placeholder:text-mut/50 focus:border-accent'
+  'w-full rounded-xl border border-line bg-surface px-4 py-3 text-[15px] transition-colors placeholder:text-mut/50 focus:border-accent'
 
 type Mode = 'free' | 'daily' | 'online'
 
@@ -73,7 +82,7 @@ function AuthCorner() {
         {authUser.avatar ? (
           <img src={authUser.avatar} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
         ) : (
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-white">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-bg">
             {authUser.name[0]?.toUpperCase()}
           </span>
         )}
@@ -160,14 +169,26 @@ export function NewGame() {
         </div>
 
         <label className={`${label} mt-6`}>Your company</label>
-        <div className="flex flex-wrap items-center gap-2">
-          <input type="text" placeholder="e.g. Hyperloop for Cats, Inc." value={name} maxLength={24} onChange={(e) => setName(e.target.value)} className={`${inputCls} min-w-0 flex-1`} />
-          <div className="flex overflow-hidden rounded-lg border border-line text-[12px] font-semibold">
+        {/* stacks on phones — a 12-character-wide name field is not a name field */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            type="text"
+            placeholder="e.g. Hyperloop for Cats, Inc."
+            value={name}
+            maxLength={24}
+            aria-label="Company name"
+            onChange={(e) => setName(e.target.value)}
+            className={`${inputCls} min-w-0 sm:flex-1`}
+          />
+          <div className="flex shrink-0 overflow-hidden rounded-xl border border-line text-[12px] font-semibold">
             {(['technical', 'business'] as FounderKind[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFounder(f)}
-                className={`px-3 py-2.5 transition-colors ${founder === f ? 'bg-accent text-white' : 'bg-surface text-mut hover:text-ink'}`}
+                aria-pressed={founder === f}
+                className={`min-h-[44px] flex-1 px-3 whitespace-nowrap transition-colors duration-[120ms] sm:min-h-[42px] ${
+                  founder === f ? 'bg-accent text-bg' : 'bg-surface text-mut hover:bg-surface2 hover:text-ink'
+                }`}
               >
                 {f === 'technical' ? 'Technical founder' : 'Business founder'}
               </button>
@@ -210,8 +231,10 @@ export function NewGame() {
               </>
             )}
 
+            {/* sticky, so the way into the game stays on screen however far down
+                the option list the player has scrolled */}
             <button
-              className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3.5 text-[16px] font-bold text-white shadow-xl shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.99]"
+              className="sticky bottom-4 z-10 mt-7 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-accent text-[16px] font-bold text-bg shadow-[var(--elev-3)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.99]"
               onClick={() => startGame({ mode, sector, name: name.trim(), founder, scenario })}
             >
               {mode === 'daily' ? <CalendarDays size={18} /> : <Rocket size={18} />}
@@ -233,7 +256,7 @@ export function NewGame() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     disabled={connecting}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-accent py-3.5 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-accent py-3.5 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
                     onClick={() => netAction(() => hostRoom(name.trim(), founder))}
                   >
                     <Globe size={17} /> {connecting ? 'Connecting…' : 'Create a room'}

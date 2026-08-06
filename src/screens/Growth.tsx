@@ -15,7 +15,7 @@ export function Growth() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Growth</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Growth</h1>
       <div className="mb-4 text-[13px] text-mut">
         {sector.name} · {marketers} marketer{marketers === 1 ? '' : 's'}
         {game.founderKind === 'business' ? ' + you' : ''} on the megaphone

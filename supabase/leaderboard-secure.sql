@@ -33,17 +33,13 @@ delete from public.daily_scores
 alter table public.daily_scores add column if not exists display_name text;
 alter table public.daily_scores add column if not exists secret text;
 
--- Belt and braces: also try to keep the hash out of SELECT. This is NOT what makes v4 safe —
--- the hashing is — so it does not matter if a hosted setup re-grants these.
-do $$
-begin
-  revoke select on public.daily_scores from anon, authenticated;
-  grant select (id, day, player_id, company, score, weeks, ending, created_at, display_name)
-    on public.daily_scores to anon, authenticated;
-  grant insert, update on public.daily_scores to anon, authenticated;
-exception when others then
-  raise notice 'column-level grants not applied (%) — v4 does not depend on them', sqlerrm;
-end $$;
+-- Table-level grants, deliberately. An earlier version revoked table SELECT and re-granted it
+-- column by column to hide the secret — that BROKE THE GAME: PostgreSQL requires table-level
+-- SELECT for `INSERT ... ON CONFLICT DO UPDATE`, which is exactly what the client's upsert does,
+-- so every score submission failed with "permission denied for table daily_scores".
+-- Hiding the column was never what made this safe: the column holds a bcrypt hash, so reading
+-- it is worthless to an attacker. Keep the grants simple and let the hash do the work.
+grant select, insert, update on public.daily_scores to anon, authenticated;
 
 -- --- 2. value bounds ---------------------------------------------------------------------------
 -- score 0..1e12 (a real unicorn payout is ~1e9), weeks 0..520, day 10000..40000 (~1997..2079),

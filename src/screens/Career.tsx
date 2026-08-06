@@ -23,7 +23,7 @@ export function Career() {
   if (runs.length === 0) {
     return (
       <div>
-        <div className="text-xl font-extrabold tracking-tight">Career</div>
+        <h1 className="text-[20px] font-extrabold tracking-tight">Career</h1>
         <div className="mb-4 text-[13px] text-mut">Your record across every company you've run.</div>
         <Panel title="No history yet">
           <div className="py-4 text-center text-[13px] text-mut">
@@ -55,7 +55,7 @@ export function Career() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Career</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Career</h1>
       <div className="mb-4 text-[13px] text-mut">Your record across every company you've run.</div>
 
       <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">

@@ -31,7 +31,7 @@ export function Lobby() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
-      <div className="rise-in w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 shadow-2xl">
+      <div className="rise-in w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 shadow-[var(--elev-3)]">
         <div className="text-center">
           <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-mut">Room code — share with your rivals</div>
           <button
@@ -125,7 +125,7 @@ export function Lobby() {
             </div>
             <button
               disabled={online.players.length < 2}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-good py-3.5 font-bold text-white shadow-xl shadow-good/25 transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-good py-3.5 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
               onClick={() => beginMatch(sector, rules, cap)}
             >
               <Play size={17} />

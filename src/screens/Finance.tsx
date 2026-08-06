@@ -173,7 +173,7 @@ export function Finance() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Finance</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Finance</h1>
       <div className="mb-4 text-[13px] text-mut">Cash is oxygen. Everything else is commentary.</div>
 
       <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">

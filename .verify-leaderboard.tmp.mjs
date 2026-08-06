@@ -72,6 +72,30 @@ check('insert without a secret rejected', !!noSecret.error, noSecret.error?.mess
 const big = await owner.from('daily_scores').insert({ day: DAY, player_id: 'X'.repeat(5000), company: 'Big', score: 10, weeks: 5, ending: 'timeup', secret: MY_SECRET })
 check('oversized player_id rejected', !!big.error, big.error?.message?.slice(0, 50) ?? 'ACCEPTED')
 
+
+// ---- production path: exactly what src/net/leaderboard.ts submitDailyScore does ----
+console.log('\n  — production path (fetch-compare + upsert) —')
+const PDAY = 30888, PME = 'upsert-' + Date.now().toString(36)
+const PSECRET = 'p'.repeat(8) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+const pdb = createClient(URL, KEY, { global: { headers: { 'x-player-secret': PSECRET } } })
+async function submit(score, company) {
+  const row = { day: PDAY, player_id: PME, company, score, weeks: 52, ending: 'unicorn', display_name: null, secret: PSECRET }
+  const { data: ex } = await pdb.from('daily_scores').select('score').eq('day', PDAY).eq('player_id', PME).maybeSingle()
+  if (ex && ex.score > row.score) return { skipped: true }
+  const { error } = await pdb.from('daily_scores').upsert(row, { onConflict: 'day,player_id' })
+  return { error }
+}
+const f1 = await submit(100000, 'FirstRun')
+check('first submission (insert path)', !f1.error, f1.error?.message ?? '')
+const f2 = await submit(250000, 'BetterRun')
+const pAfter = await pdb.from('daily_scores').select('score').eq('day', PDAY).eq('player_id', PME).maybeSingle()
+check('improving a score (upsert-update path)', !f2.error && pAfter.data?.score === 250000, pAfter.data ? 'score=' + pAfter.data.score : f2.error?.message ?? '')
+const f3 = await submit(50000, 'WorseRun')
+const pAfter2 = await pdb.from('daily_scores').select('score').eq('day', PDAY).eq('player_id', PME).maybeSingle()
+check('a worse run does not overwrite your best', pAfter2.data?.score === 250000, 'score=' + pAfter2.data?.score + (f3.skipped ? ' (client skipped, as designed)' : ''))
+const { data: top, error: topErr } = await pdb.from('daily_scores').select('player_id, company, score, weeks, ending, display_name').eq('day', PDAY).order('score', { ascending: false }).limit(10)
+check('leaderboard fetch works', !topErr && (top?.length ?? 0) > 0, topErr?.message ?? (top?.length + ' row(s)'))
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n  test rows left on day ${DAY} — clean up with:`)
 console.log(`  delete from public.daily_scores where day >= 30000;`)

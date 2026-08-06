@@ -17,7 +17,7 @@ export function Hiring() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Hiring</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Hiring</h1>
       <div className="mb-4 text-[13px] leading-relaxed text-mut">
         Burn {money(weeklyBurn(game))}/wk · revenue {money(game.lastRevenue)}/wk · runway{' '}
         {runway === Infinity ? '∞' : `${Math.floor(runway)} wk`}. The <b className="text-ink">runway after</b> column shows what hiring

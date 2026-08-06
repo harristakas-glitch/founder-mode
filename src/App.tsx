@@ -88,6 +88,17 @@ function MuteButton() {
 
 const EMOTES = ['👍', '😂', '😱', '🔥', '🐌', '🦄']
 
+// Escape closes any overlay — the standard exit every player already knows.
+function useEscape(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+}
+
 export default function App() {
   const { game, online, screen, setScreen, advance, abandonGame, resolveChoice, cancelReady, sendEmote } = useStore()
   const reconnecting = useStore((s) => s.reconnecting)
@@ -200,7 +211,7 @@ export default function App() {
             <Icon size={16} strokeWidth={2.2} className={active ? 'text-accent' : ''} />
             {n.label}
             {n.id === 'inbox' && unread > 0 && (
-              <span className="ml-auto rounded-full bg-bad px-1.5 py-px text-[10px] font-bold text-white tnum">{unread}</span>
+              <span className="ml-auto rounded-full bg-bad px-1.5 py-px text-[10px] font-bold text-bg tnum">{unread}</span>
             )}
           </button>
         )
@@ -214,7 +225,7 @@ export default function App() {
   const advanceBtn = runDone ? (
     <button
       onClick={abandonGame}
-      className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-[15px] font-bold text-white shadow-[var(--elev-2)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+      className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-[15px] font-bold text-bg shadow-[var(--elev-2)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
     >
       <DoorOpen size={16} /> {online ? 'Leave match' : 'New company'}
     </button>
@@ -226,7 +237,7 @@ export default function App() {
       className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl px-4 text-[15px] font-bold transition-[filter,transform,background-color] duration-[120ms] ${
         advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
-          : 'bg-good text-white shadow-[var(--elev-2)] hover:brightness-110 active:scale-[0.98]'
+          : 'bg-good text-bg shadow-[var(--elev-2)] hover:brightness-110 active:scale-[0.98]'
       }`}
     >
       {pending ? (
@@ -429,7 +440,7 @@ export default function App() {
                 screen while your rivals finish the match — or head out now.
               </span>
               <button
-                className="shrink-0 rounded-lg border border-bad/50 px-3 py-1.5 text-[13px] font-bold text-bad transition-all hover:bg-bad hover:text-white"
+                className="shrink-0 rounded-lg border border-bad/50 px-3 py-1.5 text-[13px] font-bold text-bad transition-all hover:bg-bad hover:text-bg"
                 onClick={abandonGame}
               >
                 Leave match
@@ -449,7 +460,7 @@ export default function App() {
                   View results
                 </button>
                 <button
-                  className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-bold text-white transition-all hover:brightness-110"
+                  className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-bold text-bg transition-all hover:brightness-110"
                   onClick={abandonGame}
                 >
                   {online ? 'Leave match' : 'New company'}
@@ -459,10 +470,11 @@ export default function App() {
           )}
           {game.flash && (
             <div
+              role="status"
               className={`flash-in mb-4 rounded-xl border px-4 py-3 text-[14px] leading-relaxed ${
                 game.flash.startsWith('🏁')
-                  ? 'celebrate border-good/50 bg-gradient-to-r from-good/20 to-good/5 text-good'
-                  : 'border-accent/50 bg-gradient-to-r from-accent/15 to-accent/5'
+                  ? 'celebrate border-good/45 bg-good/10 text-good'
+                  : 'border-accent/40 bg-accent/[0.08]'
               }`}
             >
               {game.flash}
@@ -491,7 +503,7 @@ export default function App() {
       {/* week transition */}
       {weekFlash && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-          <div className="week-sweep rounded-2xl border border-line/60 bg-bg2/90 px-10 py-6 text-center shadow-2xl backdrop-blur">
+          <div className="week-sweep rounded-2xl border border-line/60 bg-bg2/90 px-10 py-6 text-center shadow-[var(--elev-3)] backdrop-blur">
             <div className="text-3xl font-extrabold tracking-tight">Week {weekFlash}</div>
             <div className="mt-1 text-sm text-mut">{weekDate(weekFlash)}</div>
           </div>
@@ -502,7 +514,7 @@ export default function App() {
       {emotes.length > 0 && (
         <div className="pointer-events-none fixed top-16 left-1/2 z-[75] flex -translate-x-1/2 flex-col items-center gap-1.5">
           {emotes.map((e) => (
-            <div key={e.id} className="flash-in rounded-full border border-line bg-bg2/95 px-4 py-1.5 text-[14px] shadow-xl">
+            <div key={e.id} className="flash-in rounded-full border border-line bg-bg2/95 px-4 py-1.5 text-[14px] shadow-[var(--elev-3)]">
               <b>{e.from}</b> <span className="text-[18px]">{e.emoji}</span>
             </div>
           ))}
@@ -575,7 +587,7 @@ function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof 
   return (
     <button
       disabled={busy}
-      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
       onClick={async () => {
         if (busy) return // a second tap mid-share sheet would fire a stray download
         setBusy(true)
@@ -595,6 +607,7 @@ function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof 
 
 function MatchOver({ onClose }: { onClose: () => void }) {
   const { online, game, abandonGame } = useStore()
+  useEscape(onClose)
   if (!online) return null
   const ranked = [...online.players].sort((a, b) => b.payout - a.payout)
   const shareText =
@@ -602,8 +615,8 @@ function MatchOver({ onClose }: { onClose: () => void }) {
     ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(p.payout)}`).join('\n') +
     `\nPlay: ${GAME_URL}`
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="rise-in relative w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-label="Match over" className="fixed inset-0 z-[60] flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
+      <div className="rise-in relative w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-[var(--elev-3)]">
         <button className="absolute top-3 right-3 rounded-lg p-1.5 text-mut transition-colors hover:bg-surface2 hover:text-ink" title="Close and look around" onClick={onClose}>
           <X size={18} />
         </button>
@@ -637,7 +650,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
           {game && <ShareImageButton game={game} text={shareText} />}
           <ShareButton text={shareText} />
           <button
-            className="rounded-xl bg-accent px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+            className="rounded-xl bg-accent px-5 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98]"
             onClick={abandonGame}
           >
             <DoorOpen size={16} className="mr-1.5 inline" />
@@ -652,6 +665,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
 
 function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame } = useStore()
+  useEscape(onClose)
   if (!game?.gameOver) return null
   const go = game.gameOver
   const peakUsers = Math.max(...game.history.map((h) => h.users), game.users)
@@ -665,8 +679,8 @@ function GameOver({ onClose }: { onClose: () => void }) {
     ['Final stake', `${(game.founderEquity * 100).toFixed(1)}%`],
   ]
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
-      <div className="rise-in relative my-auto w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-label="Run results" className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
+      <div className="rise-in relative my-auto w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-[var(--elev-3)]">
         <button className="absolute top-3 right-3 rounded-lg p-1.5 text-mut transition-colors hover:bg-surface2 hover:text-ink" title="Close and look around" onClick={onClose}>
           <X size={18} />
         </button>
@@ -773,7 +787,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
             text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''}\n${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay${game.challenge ? ' the same world' : ''}: ${GAME_URL}`}
           />
           <button
-            className="rounded-xl bg-accent px-6 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+            className="rounded-xl bg-accent px-6 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98]"
             onClick={abandonGame}
           >
             New company

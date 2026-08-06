@@ -87,11 +87,11 @@ export function Coach() {
   const s = STEPS[step]
 
   return (
-    <div className="mb-4 rounded-xl border border-accent2/50 bg-gradient-to-r from-accent2/15 to-accent2/5 px-4 py-3">
+    <div className="mb-4 rounded-xl border border-accent2/35 bg-accent2/[0.07] px-4 py-3">
       <div className="flex items-start gap-2.5">
         <GraduationCap size={17} className="mt-0.5 shrink-0 text-accent2" />
         <div className="flex-1 text-[13px] leading-relaxed">
-          <span className="mr-1.5 rounded bg-accent2/20 px-1.5 py-px text-[10px] font-bold text-accent2">
+          <span className="mr-1.5 rounded bg-accent2/20 px-1.5 py-px text-[10px] font-bold whitespace-nowrap text-accent2 tnum">
             COACH {step + 1}/{STEPS.length}
           </span>
           {s.text}
@@ -102,7 +102,8 @@ export function Coach() {
           )}
         </div>
         <button
-          className="shrink-0 rounded-lg p-1 text-mut hover:bg-surface2 hover:text-ink"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-mut transition-colors hover:bg-surface2 hover:text-ink"
+          aria-label="Skip the tutorial"
           title="Skip the tutorial"
           onClick={() => {
             localStorage.setItem(DONE_KEY, '1')

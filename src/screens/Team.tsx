@@ -67,7 +67,7 @@ export function Team() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Team</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Team</h1>
       <div className="mb-4 text-[13px] text-mut">
         {game.employees.length} employees · payroll {money(weeklyPayroll(game))}/wk · a raise is +10% salary, +12 morale
       </div>
@@ -119,7 +119,7 @@ export function Team() {
             {game.employees.map((e) => (
               <div
                 key={e.id}
-                className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-3.5 shadow-lg shadow-black/25 transition-colors hover:border-line"
+                className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-3.5 shadow-[var(--elev-2)] shadow-black/25 transition-colors hover:border-line"
               >
                 <div className="flex items-center gap-3">
                   <RoleAvatar name={e.name} role={e.role} size={42} />

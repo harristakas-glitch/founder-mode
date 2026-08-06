@@ -120,7 +120,7 @@ export function Fundraising() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Fundraising</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Fundraising</h1>
       <div className="mb-4 text-[13px] text-mut">
         {game.stage} · you own {pct(game.founderEquity, 1)} · dilution is forever, choose wisely
       </div>

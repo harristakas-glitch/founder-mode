@@ -105,7 +105,7 @@ export function Dashboard() {
 
   return (
     <div>
-      <div className="text-xl font-extrabold tracking-tight">Dashboard</div>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Dashboard</h1>
       <div className="mb-4 text-[13px] text-mut">
         Week {game.week} · {game.stage} · You own {pct(game.founderEquity, 1)} of the company
       </div>

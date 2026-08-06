@@ -46,8 +46,8 @@ export function Ticker({ value, format }: { value: number; format: (n: number) =
 
 const BTN_VARIANTS = {
   default: 'border border-line bg-surface2 text-ink hover:border-line2 hover:bg-surface2/70',
-  primary: 'bg-accent text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.5)] hover:brightness-110',
-  good: 'bg-good text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.5)] hover:brightness-110',
+  primary: 'bg-accent text-bg shadow-[var(--elev-2)] hover:brightness-110',
+  good: 'bg-good text-bg shadow-[var(--elev-2)] hover:brightness-110',
   danger: 'border border-line bg-surface2 text-ink hover:border-bad/70 hover:text-bad',
   ghost: 'text-mut hover:bg-surface2 hover:text-ink',
 } as const
@@ -181,12 +181,13 @@ export function Monogram({ name, size = 38 }: { name: string; size?: number }) {
     .toUpperCase()
   return (
     <div
-      className="flex shrink-0 items-center justify-center rounded-xl font-extrabold text-white shadow-lg"
+      className="flex shrink-0 items-center justify-center rounded-xl font-extrabold text-bg shadow-[var(--elev-2)]"
       style={{
         width: size,
         height: size,
         fontSize: size * 0.42,
-        background: `linear-gradient(135deg, hsl(${hue} 65% 52%), hsl(${(hue + 50) % 360} 70% 42%))`,
+        // bright chip, dark initials — the one pairing that clears AA at every hue
+        background: `linear-gradient(135deg, hsl(${hue} 68% 68%), hsl(${(hue + 50) % 360} 70% 58%))`,
       }}
     >
       {initials || '?'}
@@ -195,10 +196,10 @@ export function Monogram({ name, size = 38 }: { name: string; size?: number }) {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  engineer: 'hsl(230 70% 60%)',
-  designer: 'hsl(270 65% 62%)',
-  marketer: 'hsl(38 80% 52%)',
-  sales: 'hsl(155 55% 45%)',
+  engineer: 'hsl(230 75% 72%)',
+  designer: 'hsl(270 70% 74%)',
+  marketer: 'hsl(38 85% 62%)',
+  sales: 'hsl(155 55% 62%)',
 }
 
 export function RoleAvatar({ name, role, size = 36 }: { name: string; role: string; size?: number }) {
@@ -211,7 +212,7 @@ export function RoleAvatar({ name, role, size = 36 }: { name: string; role: stri
     .toUpperCase()
   return (
     <div
-      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      className="flex shrink-0 items-center justify-center rounded-full font-bold text-bg"
       title={role}
       style={{ width: size, height: size, fontSize: size * 0.38, background: ROLE_COLORS[role] ?? 'var(--color-accent)' }}
     >
@@ -334,7 +335,7 @@ export function DemandGauge({ lo, hi, min, max, weakBelow, strongAbove }: { lo: 
         <div className="h-full bg-warn/25" style={{ width: `${(((strongAbove - weakBelow) / span) * 100).toFixed(1)}%` }} />
         <div className="h-full flex-1 bg-good/25" />
         <div
-          className="absolute top-[3px] bottom-[3px] min-w-[6px] rounded-md bg-ink/90 shadow-[0_0_10px_rgba(220,229,245,0.5)] transition-all duration-700"
+          className="absolute top-[3px] bottom-[3px] min-w-[6px] rounded-md bg-ink/90 shadow-[0_0_10px_rgba(220,229,245,0.45)] transition-[left,width] duration-[400ms] ease-out"
           style={{ left: pct(lo), width: `${Math.max(2, ((hi - lo) / span) * 100).toFixed(1)}%` }}
         />
       </div>

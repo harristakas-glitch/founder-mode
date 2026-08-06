@@ -27,13 +27,13 @@ export function ChatWidget() {
   if (!open) {
     return (
       <button
-        className="fixed right-4 bottom-20 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-line bg-surface2 shadow-xl transition-all hover:border-accent active:scale-95 md:bottom-4"
+        className="fixed right-4 bottom-20 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-line bg-surface2 shadow-[var(--elev-3)] transition-all hover:border-accent active:scale-95 md:bottom-4"
         onClick={() => setOpen(true)}
         title="Room chat"
       >
         <MessageCircle size={20} />
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-bad px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-bad px-1 text-[10px] font-bold text-bg">
             {unread}
           </span>
         )}
@@ -42,7 +42,7 @@ export function ChatWidget() {
   }
 
   return (
-    <div className="fixed right-4 bottom-20 z-40 flex h-[380px] w-[300px] flex-col overflow-hidden rounded-2xl border border-line bg-bg2/98 shadow-2xl backdrop-blur md:bottom-4">
+    <div className="fixed right-4 bottom-20 z-40 flex h-[380px] w-[300px] flex-col overflow-hidden rounded-2xl border border-line bg-bg2/98 shadow-[var(--elev-3)] backdrop-blur md:bottom-4">
       <div className="flex items-center justify-between border-b border-line/60 px-3 py-2">
         <b className="text-[13px]">Room {online.code} — chat</b>
         <button className="rounded p-1 text-mut hover:text-ink" onClick={() => setOpen(false)}>
@@ -56,7 +56,7 @@ export function ChatWidget() {
             {!m.self && <div className="text-[10px] font-bold text-accent">{m.from}</div>}
             <div
               className={`inline-block rounded-xl px-2.5 py-1.5 text-[13px] leading-snug break-words ${
-                m.self ? 'bg-accent text-white' : 'bg-surface2'
+                m.self ? 'bg-accent text-bg' : 'bg-surface2'
               }`}
             >
               {m.text}
@@ -77,9 +77,14 @@ export function ChatWidget() {
           maxLength={200}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Message the room…"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-accent"
+          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-2 text-[13px] transition-colors focus:border-accent"
         />
-        <button type="submit" className="rounded-lg bg-accent px-2.5 text-white disabled:opacity-40" disabled={!draft.trim()}>
+        <button
+          type="submit"
+          aria-label="Send message"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-bg transition-[filter,opacity] duration-[120ms] hover:brightness-110 disabled:opacity-40"
+          disabled={!draft.trim()}
+        >
           <Send size={15} />
         </button>
       </form>
