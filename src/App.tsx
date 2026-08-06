@@ -88,15 +88,39 @@ function MuteButton() {
 
 const EMOTES = ['👍', '😂', '😱', '🔥', '🐌', '🦄']
 
-// Escape closes any overlay — the standard exit every player already knows.
-function useEscape(onClose: () => void) {
+// Escape closes any overlay, and Tab stays inside it — without the trap, keyboard focus
+// wanders into the dead game behind the dialog and the player cannot find their way back.
+function useDialog(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const focusable = () =>
+      Array.from(
+        ref.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? [],
+      ).filter((el) => el.offsetParent !== null)
+    focusable()[0]?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') return onClose()
+      if (e.key !== 'Tab') return
+      const items = focusable()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      previouslyFocused?.focus?.() // hand focus back where the player left it
+    }
   }, [onClose])
+  return ref
 }
 
 export default function App() {
@@ -607,7 +631,7 @@ function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof 
 
 function MatchOver({ onClose }: { onClose: () => void }) {
   const { online, game, abandonGame } = useStore()
-  useEscape(onClose)
+  const dialogRef = useDialog(onClose)
   if (!online) return null
   const ranked = [...online.players].sort((a, b) => b.payout - a.payout)
   const shareText =
@@ -615,7 +639,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
     ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(p.payout)}`).join('\n') +
     `\nPlay: ${GAME_URL}`
   return (
-    <div role="dialog" aria-modal="true" aria-label="Match over" className="fixed inset-0 z-[60] flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Match over" className="fixed inset-0 z-[60] flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
       <div className="rise-in relative w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-[var(--elev-3)]">
         <button className="absolute top-3 right-3 rounded-lg p-1.5 text-mut transition-colors hover:bg-surface2 hover:text-ink" title="Close and look around" onClick={onClose}>
           <X size={18} />
@@ -665,7 +689,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
 
 function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame } = useStore()
-  useEscape(onClose)
+  const dialogRef = useDialog(onClose)
   if (!game?.gameOver) return null
   const go = game.gameOver
   const peakUsers = Math.max(...game.history.map((h) => h.users), game.users)
@@ -679,7 +703,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
     ['Final stake', `${(game.founderEquity * 100).toFixed(1)}%`],
   ]
   return (
-    <div role="dialog" aria-modal="true" aria-label="Run results" className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Run results" className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
       <div className="rise-in relative my-auto w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-[var(--elev-3)]">
         <button className="absolute top-3 right-3 rounded-lg p-1.5 text-mut transition-colors hover:bg-surface2 hover:text-ink" title="Close and look around" onClick={onClose}>
           <X size={18} />

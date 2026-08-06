@@ -56,7 +56,50 @@ export function Hiring() {
         </div>
       )}
 
-      <Panel>
+      {/* Phones get cards: in a horizontally scrolling table the "Send offer" button sits
+          off-screen, so the primary action of the screen is unreachable without noticing
+          you can swipe sideways. */}
+      <div className="space-y-2.5 md:hidden">
+        {game.candidates.map((c) => {
+          const after = runwayAfterHire(game, c)
+          const afterLabel = after === Infinity ? '∞' : `${Math.max(0, Math.floor(after))} wk`
+          const cls = after === Infinity ? 'text-good' : after < 12 ? 'text-bad font-bold' : after < 20 ? 'text-warn' : 'text-good'
+          return (
+            <Panel key={c.id}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-bold">
+                    {c.name}
+                    <TraitChip trait={c.trait} />
+                  </div>
+                  <div className="text-[12px] text-mut">
+                    {c.role} · {ROLE_HELP[c.role]}
+                  </div>
+                </div>
+                <SkillDots skill={c.skill} />
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
+                <span className="text-mut">Salary</span>
+                <span className="text-right tnum">{money(c.salary)}/yr</span>
+                <span className="text-mut">Recruiter fee</span>
+                <span className="text-right tnum">{money(recruiterFee(c))}</span>
+                <span className="text-mut">Runway after</span>
+                <span className={`text-right tnum ${cls}`}>
+                  {afterLabel}
+                  {after !== Infinity && after < 12 && ' · overhiring!'}
+                </span>
+                <span className="text-mut">Leaves the pool in</span>
+                <span className="text-right tnum">{c.weeksLeft} wk</span>
+              </div>
+              <Btn variant="primary" className="mt-3 w-full" onClick={() => sendOffer(c.id)}>
+                Send offer
+              </Btn>
+            </Panel>
+          )
+        })}
+      </div>
+
+      <Panel className="hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px]">
             <thead>
