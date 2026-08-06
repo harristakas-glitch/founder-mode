@@ -767,7 +767,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="mt-5 rounded-2xl border border-line/60 bg-black/20 p-3 text-left">
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-mut">The story of {game.companyName}</div>
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">The story of {game.companyName}</div>
           <TimelineChart history={game.history} markers={runMarkers(game)} />
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-mut">
             {runMarkers(game).map((m, i) => (

@@ -60,7 +60,7 @@ export function Btn({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BTN_VARIANTS }) {
   return (
     <button
-      className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold transition-[background-color,border-color,color,transform,opacity] duration-[120ms] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 md:min-h-[34px] ${BTN_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform,opacity] duration-[120ms] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 md:min-h-[34px] ${BTN_VARIANTS[variant]} ${className}`}
       {...props}
     />
   )
@@ -70,7 +70,8 @@ export function Btn({
 
 export function Th({ children, right }: { children?: ReactNode; right?: boolean }) {
   return (
-    <th className={`border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut ${right ? 'text-right' : 'text-left'}`}>
+    // pr-2 mirrors Td, so adjacent column headers can't run into each other
+    <th className={`border-b border-line pr-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut ${right ? 'text-right' : 'text-left'}`}>
       {children}
     </th>
   )

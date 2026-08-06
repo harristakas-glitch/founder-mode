@@ -33,7 +33,7 @@ export function Lobby() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="rise-in w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 shadow-[var(--elev-3)]">
         <div className="text-center">
-          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-mut">Room code — share with your rivals</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-mut">Room code — share with your rivals</div>
           <button
             className="mt-2 inline-flex items-center gap-3 rounded-2xl border border-accent/50 bg-accent/10 px-6 py-3 font-mono text-4xl font-extrabold tracking-[0.35em] transition-all hover:bg-accent/20"
             onClick={() => {
@@ -51,7 +51,7 @@ export function Lobby() {
         </div>
 
         <div className="mt-6">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">
             <Users size={12} /> Founders in the room ({online.players.length}/4)
           </div>
           <div className="space-y-1.5">
@@ -72,7 +72,7 @@ export function Lobby() {
 
         {online.host ? (
           <>
-            <div className="mt-6 mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">Market — same for everyone</div>
+            <div className="mt-6 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">Market — same for everyone</div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {SECTORS.map((s) => (
                 <button
@@ -86,7 +86,7 @@ export function Lobby() {
                 </button>
               ))}
             </div>
-            <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">Match length</div>
+            <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">Match length</div>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { weeks: 52, name: '⚡ Sprint — 52 weeks', blurb: 'Fast and vicious. Highest payout wins.' },
@@ -104,7 +104,7 @@ export function Lobby() {
                 </button>
               ))}
             </div>
-            <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+            <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">
               Match rules — lean &amp; mean by default
             </div>
             <div className="flex flex-wrap gap-1.5">

@@ -175,7 +175,7 @@ export function Product() {
         <Panel title={`Product-market fit — ${pmfLabel(game.pmf)}`}>
           <Bar value={game.pmf} color={game.pmf < 40 ? 'var(--color-warn)' : 'var(--color-good)'} />
 
-          <div className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-mut">
+          <div className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">
             Idea quality — your team's estimate of true market demand
           </div>
           {!est ? (

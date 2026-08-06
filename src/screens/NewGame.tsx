@@ -35,7 +35,7 @@ function Pick({ selected, onClick, title, blurb, disabled }: { selected: boolean
   )
 }
 
-const label = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-mut'
+const label = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] text-mut'
 const inputCls =
   'w-full rounded-xl border border-line bg-surface px-4 py-3 text-[15px] transition-colors placeholder:text-mut/50 focus:border-accent'
 
