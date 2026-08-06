@@ -1937,11 +1937,12 @@ export function acquireRival(s: GameState, rivalId: string, method: 'cash' | 'st
     return false
   }
 
+  let soldEquity = 0
   if (method === 'cash') {
     s.cash -= price
   } else {
-    const equitySold = price / (valuation(s) + price)
-    s.founderEquity *= 1 - equitySold
+    soldEquity = price / (valuation(s) + price)
+    s.founderEquity *= 1 - soldEquity
   }
   const migrated = Math.round(r.users * 0.7) // some of their users leave during the transition
   s.users += migrated
@@ -1951,7 +1952,9 @@ export function acquireRival(s: GameState, rivalId: string, method: 'cash' | 'st
   r.alive = false
   r.acquired = true
   applyEffects(s, { hype: 8, reputation: 5, morale: -3 })
-  s.flash = `🤝 Acquired ${r.name} for ${method === 'cash' ? `$${(price / 1e6).toFixed(1)}M cash` : `${((price / (valuation(s) + price)) * 100).toFixed(1)}% of the company in stock`}. ${migrated.toLocaleString()} of their users migrated; their codebase brought features — and bugs.`
+  // reuse the equity actually deducted above — recomputing here used the POST-deal valuation
+  // and quoted the player a percentage that differed from what they really paid
+  s.flash = `🤝 Acquired ${r.name} for ${method === 'cash' ? `$${(price / 1e6).toFixed(1)}M cash` : `${(soldEquity * 100).toFixed(1)}% of the company in stock`}. ${migrated.toLocaleString()} of their users migrated; their codebase brought features — and bugs.`
   s.inbox.unshift({
     id: uid(),
     week: s.week,

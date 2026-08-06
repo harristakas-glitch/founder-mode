@@ -84,13 +84,16 @@ node scripts/singlefile.mjs   # optional: self-contained "Founder Mode.html"
 
 Deploys automatically to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`).
 
+Known-but-unfixed work lives in [BACKLOG.md](BACKLOG.md).
+
 ### Online features setup
 
 The game runs fully offline/anonymous without any of this. To enable online play on a fork:
 
 1. Create a free [Supabase](https://supabase.com) project; paste its URL and publishable key into `src/net/config.ts`. Multiplayer works immediately (realtime channels need no schema).
-2. Run `supabase/leaderboard.sql` in the SQL Editor → global daily leaderboard.
-3. Optional social login: run `supabase/auth-upgrade.sql`, set the Site URL / redirect allowlist under Authentication → URL Configuration, and enable the Google (and/or X) provider with OAuth credentials from their consoles.
+2. Run `supabase/leaderboard-secure.sql` in the SQL Editor → global daily leaderboard, with row ownership proved by a hashed per-device secret. It supersedes `leaderboard.sql` and `leaderboard-hardening.sql` and is safe to re-run.
+3. Optional social login: set the Site URL / redirect allowlist under Authentication → URL Configuration, and enable the Google (and/or X) provider with OAuth credentials from their consoles.
+4. Set a spending cap and usage alerts in the Supabase dashboard — the publishable key is public, and nothing else rate-limits it.
 
 ## Balance philosophy
 
