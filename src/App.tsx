@@ -5,6 +5,7 @@ import {
   Globe,
   HandCoins,
   Hourglass,
+  DoorOpen,
   LayoutDashboard,
   Mail,
   Menu,
@@ -98,6 +99,7 @@ export default function App() {
     void useStore.getState().initAuth()
   }, [])
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
+  const [resultsClosed, setResultsClosed] = useState(false) // results overlay dismissed for a last look around
   const [, setClock] = useState(0) // re-render for the round countdown
   const prevWeek = useRef<number | null>(null)
 
@@ -128,6 +130,11 @@ export default function App() {
     document.documentElement.style.setProperty('--color-accent', a)
     document.documentElement.style.setProperty('--color-accent2', a2)
   }, [game?.sector])
+
+  // a fresh run gets a fresh results overlay
+  useEffect(() => {
+    if (!game?.gameOver) setResultsClosed(false)
+  }, [game?.gameOver])
 
   const me = online?.players.find((p) => p.id === myId())
   const myReady = !!me?.ready
@@ -197,7 +204,16 @@ export default function App() {
   )
 
   const advanceDisabled = online ? pending || myReady || !!game.gameOver || matchOver : pending || !!game.gameOver
-  const advanceBtn = (
+  // once the run is over, the big button IS the exit — no hunting for a way out
+  const runDone = !!game.gameOver && (!online || matchOver)
+  const advanceBtn = runDone ? (
+    <button
+      onClick={abandonGame}
+      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-3 text-[15px] font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+    >
+      <DoorOpen size={16} /> {online ? 'Leave match' : 'New company'}
+    </button>
+  ) : (
     <button
       disabled={advanceDisabled}
       onClick={advance}
@@ -375,15 +391,54 @@ export default function App() {
             )}
           </div>
           <MuteButton />
+          <button
+            className="rounded-lg p-2 text-mut transition-colors hover:bg-surface2 hover:text-bad"
+            title={online ? 'Leave match' : 'Abandon run & start over'}
+            onClick={() => {
+              if (game.gameOver || confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?'))
+                abandonGame()
+            }}
+          >
+            <DoorOpen size={18} />
+          </button>
         </header>
 
         {/* main */}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-24 md:px-6 md:pt-5 md:pb-8">
           <Coach />
           {online && game.gameOver && !matchOver && (
-            <div className="mb-4 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
-              <b>{game.companyName} is out of the running</b> ({game.gameOver.type}, week {game.gameOver.week}). Watch the Market screen
-              while your rivals finish the match.
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
+              <span>
+                <b>{game.companyName} is out of the running</b> ({game.gameOver.type}, week {game.gameOver.week}). Watch the Market
+                screen while your rivals finish the match — or head out now.
+              </span>
+              <button
+                className="shrink-0 rounded-lg border border-bad/50 px-3 py-1.5 text-[13px] font-bold text-bad transition-all hover:bg-bad hover:text-white"
+                onClick={abandonGame}
+              >
+                Leave match
+              </button>
+            </div>
+          )}
+          {game.gameOver && (!online || matchOver) && resultsClosed && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/50 bg-accent/10 px-4 py-3 text-[14px]">
+              <span>
+                <b>This run is finished</b> — you&apos;re free to look around one last time.
+              </span>
+              <span className="flex shrink-0 gap-2">
+                <button
+                  className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-bold transition-all hover:border-accent"
+                  onClick={() => setResultsClosed(false)}
+                >
+                  View results
+                </button>
+                <button
+                  className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-bold text-white transition-all hover:brightness-110"
+                  onClick={abandonGame}
+                >
+                  {online ? 'Leave match' : 'New company'}
+                </button>
+              </span>
             </div>
           )}
           {game.flash && (
@@ -438,17 +493,8 @@ export default function App() {
 
       <ChatWidget />
       {celebrate && <Confetti key={`${game.week}-${game.gameOver?.type ?? 'w'}`} />}
-      {matchOver && <MatchOver />}
-      {!online && game.gameOver && <GameOver />}
-
-      <button
-        className="fixed right-3 bottom-3 z-20 hidden rounded-lg border border-line/60 px-2.5 py-1 text-[11px] text-mut opacity-40 transition-opacity hover:opacity-100 hover:text-bad md:block"
-        onClick={() => {
-          if (confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?')) abandonGame()
-        }}
-      >
-        {online ? 'Leave match' : 'New run'}
-      </button>
+      {matchOver && !resultsClosed && <MatchOver onClose={() => setResultsClosed(true)} />}
+      {!online && game.gameOver && !resultsClosed && <GameOver onClose={() => setResultsClosed(true)} />}
     </div>
   )
 }
@@ -521,7 +567,7 @@ function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof 
   )
 }
 
-function MatchOver() {
+function MatchOver({ onClose }: { onClose: () => void }) {
   const { online, game, abandonGame } = useStore()
   if (!online) return null
   const ranked = [...online.players].sort((a, b) => b.payout - a.payout)
@@ -531,7 +577,10 @@ function MatchOver() {
     `\nPlay: ${GAME_URL}`
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="rise-in w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+      <div className="rise-in relative w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+        <button className="absolute top-3 right-3 rounded-lg p-1.5 text-mut transition-colors hover:bg-surface2 hover:text-ink" title="Close and look around" onClick={onClose}>
+          <X size={18} />
+        </button>
         <h2 className="text-3xl font-extrabold">🏆 Match over</h2>
         <p className="mt-2 text-mut">
           <b className="text-ink">{ranked[0]?.company}</b> takes the market. Final founder payouts:
@@ -565,7 +614,8 @@ function MatchOver() {
             className="rounded-xl bg-accent px-5 py-3 font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
             onClick={abandonGame}
           >
-            New game
+            <DoorOpen size={16} className="mr-1.5 inline" />
+            Leave — new game
           </button>
         </div>
         <SocialShareRow text={shareText} />
@@ -574,7 +624,7 @@ function MatchOver() {
   )
 }
 
-function GameOver() {
+function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame } = useStore()
   if (!game?.gameOver) return null
   const go = game.gameOver
@@ -589,8 +639,11 @@ function GameOver() {
     ['Final stake', `${(game.founderEquity * 100).toFixed(1)}%`],
   ]
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="rise-in w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
+      <div className="rise-in relative my-auto w-[560px] max-w-full rounded-3xl border border-line bg-gradient-to-b from-surface to-bg2 p-8 text-center shadow-2xl">
+        <button className="absolute top-3 right-3 rounded-lg p-1.5 text-mut transition-colors hover:bg-surface2 hover:text-ink" title="Close and look around" onClick={onClose}>
+          <X size={18} />
+        </button>
         {go.type === 'bankrupt' && (
           <>
             <h2 className="text-3xl font-extrabold">💸 Out of money</h2>
