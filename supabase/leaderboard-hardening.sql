@@ -18,6 +18,12 @@
 -- the leaderboard ever matters competitively. This change removes the "wipe everything
 -- with one request" class of abuse, which is the part that actually hurts.
 
+-- --- prerequisite: the display_name column ------------------------------------
+-- The game client always sends display_name (null when not signed in), so this column
+-- must exist or EVERY score submission fails. This is the same statement as
+-- auth-upgrade.sql; repeated here so this file works standalone. Safe to re-run.
+alter table public.daily_scores add column if not exists display_name text;
+
 -- --- bounds shared by insert and update ---------------------------------------
 -- score:   0 .. 1e15   (a $1B unicorn payout is ~1e9; 1e15 leaves absurd headroom)
 -- weeks:   0 .. 520    (the longest possible run is 104 weeks; 520 = 10 years of slack)
@@ -38,9 +44,15 @@ alter table public.daily_scores
   ) not valid;
 
 -- `not valid` skips checking rows that already exist (they were written under the old,
--- looser policy). Validate separately so a single bad legacy row can't block the migration:
--- if this errors, delete the offending rows and re-run it.
-alter table public.daily_scores validate constraint daily_scores_sane;
+-- looser policy), so new and updated rows are protected either way. Try to validate the
+-- existing rows too, but never let one bad legacy row abort this whole script.
+do $$
+begin
+  alter table public.daily_scores validate constraint daily_scores_sane;
+  raise notice 'existing rows validated';
+exception when others then
+  raise notice 'existing rows left unvalidated (%). New and updated rows are still checked.', sqlerrm;
+end $$;
 
 -- --- INSERT: anyone may post a score, within the bounds above ------------------
 drop policy if exists "anon can submit daily scores" on public.daily_scores;
