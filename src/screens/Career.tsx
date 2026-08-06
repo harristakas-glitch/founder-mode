@@ -26,7 +26,7 @@ export function Career() {
         <div className="text-xl font-extrabold tracking-tight">Career</div>
         <div className="mb-4 text-[13px] text-mut">Your record across every company you've run.</div>
         <Panel title="No history yet">
-          <div className="py-4 text-center text-[13.5px] text-mut">
+          <div className="py-4 text-center text-[13px] text-mut">
             No finished runs yet — your legend starts with your first bankruptcy.
           </div>
         </Panel>

@@ -73,7 +73,8 @@ function MuteButton() {
   const Icon = muted ? VolumeX : Volume2
   return (
     <button
-      className="rounded-lg p-2 text-mut transition-colors hover:bg-surface2 hover:text-ink"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:h-9 md:w-9"
+      aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
       title={muted ? 'Unmute sounds' : 'Mute sounds'}
       onClick={() => {
         setMuted(!muted)
@@ -189,16 +190,17 @@ export default function App() {
               setScreen(n.id)
               setNavOpen(false)
             }}
-            className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[14px] transition-colors ${
-              active ? 'bg-accent font-semibold text-white shadow-lg shadow-accent/25' : 'text-mut hover:bg-surface2 hover:text-ink'
+            aria-current={active ? 'page' : undefined}
+            className={`relative flex min-h-[44px] w-full items-center gap-2.5 rounded-xl py-2 pr-3 pl-4 text-left text-[14px] transition-colors duration-[120ms] md:min-h-[36px] ${
+              active ? 'bg-accent/12 font-semibold text-ink' : 'text-mut hover:bg-surface2/70 hover:text-ink'
             }`}
           >
-            <Icon size={16} strokeWidth={2.2} />
+            {/* a quiet accent rail marks the place; the accent itself stays reserved for actions */}
+            {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" />}
+            <Icon size={16} strokeWidth={2.2} className={active ? 'text-accent' : ''} />
             {n.label}
             {n.id === 'inbox' && unread > 0 && (
-              <span className={`ml-auto rounded-full px-1.5 py-px text-[10px] font-bold ${active ? 'bg-white/25 text-white' : 'bg-bad text-white'}`}>
-                {unread}
-              </span>
+              <span className="ml-auto rounded-full bg-bad px-1.5 py-px text-[10px] font-bold text-white tnum">{unread}</span>
             )}
           </button>
         )
@@ -212,7 +214,7 @@ export default function App() {
   const advanceBtn = runDone ? (
     <button
       onClick={abandonGame}
-      className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-3 text-[15px] font-bold text-white shadow-lg shadow-accent/25 transition-all hover:brightness-110 active:scale-[0.98]"
+      className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-[15px] font-bold text-white shadow-[var(--elev-2)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
     >
       <DoorOpen size={16} /> {online ? 'Leave match' : 'New company'}
     </button>
@@ -221,10 +223,10 @@ export default function App() {
       disabled={advanceDisabled}
       onClick={advance}
       title={pending ? 'Resolve the decision in your inbox first' : undefined}
-      className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-[15px] font-bold transition-all ${
+      className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl px-4 text-[15px] font-bold transition-[filter,transform,background-color] duration-[120ms] ${
         advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
-          : 'bg-gradient-to-br from-good to-emerald-600 text-white shadow-lg shadow-good/25 hover:brightness-110 active:scale-[0.98]'
+          : 'bg-good text-white shadow-[var(--elev-2)] hover:brightness-110 active:scale-[0.98]'
       }`}
     >
       {pending ? (
@@ -266,7 +268,7 @@ export default function App() {
           {game.challenge && <div className="mt-1 text-[11px] text-mut">{game.challenge.label} · ends wk {game.challenge.cap}</div>}
           {game.rules?.energy !== false && (
           <div className="mt-2 flex items-center gap-1.5" title="Founder energy — big moves drain it, low energy weakens your weekly contribution. Recharge on the Team screen.">
-            <span className="text-[9.5px] font-bold uppercase tracking-wider text-mut">Energy</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-mut">Energy</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/40">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -295,7 +297,7 @@ export default function App() {
           {online && (
             <div className="mb-2 space-y-1">
               {online.players.map((p) => (
-                <div key={p.id} className="flex items-center justify-between text-[11.5px]">
+                <div key={p.id} className="flex items-center justify-between text-[12px]">
                   <span className={`truncate ${p.id === myId() ? 'font-bold' : 'text-mut'}`}>
                     {p.over ? '☠️ ' : ''}
                     {p.company}
@@ -321,7 +323,7 @@ export default function App() {
           <div className="mb-2 text-center text-[11px] text-mut">{weekDate(game.week)}</div>
           {advanceBtn}
           {online && myReady && !matchOver && !game.gameOver && (
-            <button className="mt-1.5 w-full text-center text-[11.5px] text-mut hover:text-ink" onClick={cancelReady}>
+            <button className="mt-1.5 w-full text-center text-[12px] text-mut hover:text-ink" onClick={cancelReady}>
               Cancel ready
             </button>
           )}
@@ -332,16 +334,20 @@ export default function App() {
       {navOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setNavOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-[260px] flex-col border-r border-line bg-bg2 shadow-2xl rise-in">
+          <aside className="absolute inset-y-0 left-0 flex w-[260px] flex-col border-r border-line bg-bg2 shadow-[var(--elev-3)] rise-in">
             <div className="flex items-center justify-between border-b border-line/60 px-4 py-4">
               <div>
-                <div className="text-[17px] font-extrabold">{game.companyName}</div>
+                <div className="text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
                 <div className="text-xs text-mut">
                   {game.stage} · Week {game.week}
                   {online && ` · Room ${online.code}`}
                 </div>
               </div>
-              <button onClick={() => setNavOpen(false)} className="rounded-lg p-1.5 text-mut hover:bg-surface2">
+              <button
+                onClick={() => setNavOpen(false)}
+                aria-label="Close menu"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -353,11 +359,17 @@ export default function App() {
       {/* right side */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* topbar */}
-        <header className="flex h-[60px] shrink-0 items-center gap-3 border-b border-line/60 bg-surface/60 px-3 backdrop-blur md:gap-6 md:px-5">
-          <button className="rounded-lg p-2 text-mut hover:bg-surface2 md:hidden" onClick={() => setNavOpen(true)}>
+        <header className="flex h-[60px] shrink-0 items-center gap-2 border-b border-line/60 bg-bg2/70 px-2 backdrop-blur-md md:gap-4 md:px-5">
+          <button
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:hidden"
+            aria-label="Open menu"
+            onClick={() => setNavOpen(true)}
+          >
             <Menu size={20} />
           </button>
-          <div className="flex flex-1 items-center gap-4 overflow-x-auto md:gap-6 [&::-webkit-scrollbar]:hidden">
+          {/* the metric rail scrolls on narrow screens; the soft right edge is the
+              affordance, so a value is never chopped off mid-word */}
+          <div className="fade-r flex flex-1 items-center gap-4 overflow-x-auto pr-6 md:gap-6 [&::-webkit-scrollbar]:hidden">
             <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
               <Ticker value={game.cash} format={money} />
               <TrendBadge value={cashDelta} format={money} />
@@ -395,7 +407,8 @@ export default function App() {
           </div>
           <MuteButton />
           <button
-            className="rounded-lg p-2 text-mut transition-colors hover:bg-surface2 hover:text-bad"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-bad md:h-9 md:w-9"
+            aria-label={online ? 'Leave match' : 'Abandon run & start over'}
             title={online ? 'Leave match' : 'Abandon run & start over'}
             onClick={() => {
               if (game.gameOver || confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?'))
@@ -470,7 +483,9 @@ export default function App() {
         </main>
 
         {/* mobile advance */}
-        <div className="fixed inset-x-4 bottom-4 z-30 md:hidden">{advanceBtn}</div>
+        <div className="fixed inset-x-4 bottom-4 z-30 md:hidden" style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
+          {advanceBtn}
+        </div>
       </div>
 
       {/* week transition */}
@@ -505,9 +520,9 @@ export default function App() {
 function Stat({ k, tone, children }: { k: string; tone?: 'good' | 'bad' | 'warn'; children: React.ReactNode }) {
   const cls = tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : tone === 'warn' ? 'text-warn' : ''
   return (
-    <div className="shrink-0">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-mut">{k}</div>
-      <div className={`text-[15px] font-bold tnum ${cls}`}>{children}</div>
+    <div className="shrink-0 leading-tight">
+      <div className="text-[10px] font-semibold whitespace-nowrap uppercase tracking-[0.08em] text-mut">{k}</div>
+      <div className={`mt-0.5 flex items-baseline whitespace-nowrap text-[15px] font-bold tnum ${cls}`}>{children}</div>
     </div>
   )
 }

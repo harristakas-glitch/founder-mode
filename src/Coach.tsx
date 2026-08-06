@@ -90,7 +90,7 @@ export function Coach() {
     <div className="mb-4 rounded-xl border border-accent2/50 bg-gradient-to-r from-accent2/15 to-accent2/5 px-4 py-3">
       <div className="flex items-start gap-2.5">
         <GraduationCap size={17} className="mt-0.5 shrink-0 text-accent2" />
-        <div className="flex-1 text-[13.5px] leading-relaxed">
+        <div className="flex-1 text-[13px] leading-relaxed">
           <span className="mr-1.5 rounded bg-accent2/20 px-1.5 py-px text-[10px] font-bold text-accent2">
             COACH {step + 1}/{STEPS.length}
           </span>

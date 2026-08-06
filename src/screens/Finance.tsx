@@ -130,7 +130,7 @@ function UpcomingPayments() {
     <div className="mt-3.5">
       <Panel title="Upcoming one-off payments — no hidden bills">
         {game.pendingHires.map((p) => (
-          <div key={p.candidate.id} className="flex justify-between border-b border-line/40 py-1.5 text-[13.5px] last:border-b-0">
+          <div key={p.candidate.id} className="flex justify-between border-b border-line/40 py-1.5 text-[13px] last:border-b-0">
             <span>
               Recruiter fee — <b>{p.candidate.name}</b>{' '}
               <span className="text-mut">
@@ -141,15 +141,15 @@ function UpcomingPayments() {
           </div>
         ))}
         {game.offersOut.map((c) => (
-          <div key={c.id} className="flex justify-between border-b border-line/40 py-1.5 text-[13.5px] last:border-b-0">
+          <div key={c.id} className="flex justify-between border-b border-line/40 py-1.5 text-[13px] last:border-b-0">
             <span>
               Recruiter fee — <b>{c.name}</b> <span className="text-mut">only if they accept your offer</span>
             </span>
             <b className="tnum text-mut">{money(recruiterFee(c))}</b>
           </div>
         ))}
-        {due === 0 && potential === 0 && <div className="py-1 text-[13.5px] text-mut">Nothing committed right now.</div>}
-        <div className="mt-2.5 flex justify-between rounded-lg bg-surface2/60 px-3 py-2 text-[13.5px]">
+        {due === 0 && potential === 0 && <div className="py-1 text-[13px] text-mut">Nothing committed right now.</div>}
+        <div className="mt-2.5 flex justify-between rounded-lg bg-surface2/60 px-3 py-2 text-[13px]">
           <span>
             Recommended cash buffer <span className="text-mut">— committed fees + a worst-case event (grows with your user count)</span>
           </span>

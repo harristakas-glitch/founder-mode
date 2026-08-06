@@ -86,7 +86,7 @@ function IpoPanel() {
       <Panel title="The final exit — take the company public">
         <div className="grid gap-1.5 sm:grid-cols-2">
           {checks.map((c) => (
-            <div key={c.label} className="flex items-center gap-2 text-[13.5px]">
+            <div key={c.label} className="flex items-center gap-2 text-[13px]">
               <span className={c.met ? 'text-good' : 'text-mut'}>{c.met ? '✓' : '◻'}</span>
               <span className={c.met ? '' : 'text-mut'}>{c.label}</span>
             </div>
@@ -212,7 +212,7 @@ export function Fundraising() {
                 return (
                   <div key={t.id} className="rise-in rounded-xl border border-line bg-surface2 p-4">
                     <div className="font-bold">{t.investor}</div>
-                    <div className="my-2.5 text-[13.5px] leading-relaxed text-mut">
+                    <div className="my-2.5 text-[13px] leading-relaxed text-mut">
                       Investing <b className="text-ink tnum">{money(t.amount)}</b>
                       <br />
                       for <b className="text-ink tnum">{pct(t.equity, 1)}</b> of the company

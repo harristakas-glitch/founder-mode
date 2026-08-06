@@ -77,7 +77,7 @@ function AuthCorner() {
             {authUser.name[0]?.toUpperCase()}
           </span>
         )}
-        <span className="text-[12.5px] font-semibold">{authUser.name}</span>
+        <span className="text-[13px] font-semibold">{authUser.name}</span>
         <button className="rounded-full p-1 text-mut hover:text-bad" title="Sign out" onClick={() => void signOutUser()}>
           <LogOut size={13} />
         </button>
@@ -97,7 +97,7 @@ function AuthCorner() {
           </button>
         ))}
       </div>
-      {err && <span className="max-w-[260px] text-right text-[10.5px] text-bad">{err}</span>}
+      {err && <span className="max-w-[260px] text-right text-[11px] text-bad">{err}</span>}
     </div>
   )
 }
@@ -223,7 +223,7 @@ export function NewGame() {
         {mode === 'online' && (
           <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
             {!onlineConfigured ? (
-              <div className="text-[13.5px] leading-relaxed text-mut">
+              <div className="text-[13px] leading-relaxed text-mut">
                 <b className="text-warn">Online play isn't configured yet.</b> It needs a free Supabase project: create one at
                 supabase.com, then paste its URL and anon key into <code className="text-ink">src/net/config.ts</code> and redeploy.
                 No database or SQL required — the game only uses realtime channels.
@@ -274,7 +274,7 @@ export function NewGame() {
             <label className={label}>Hall of fame — your past runs</label>
             <div className="rounded-xl border border-line bg-surface px-4 py-2">
               {hall.slice(0, 5).map((r, i) => (
-                <div key={i} className="flex items-center justify-between border-b border-line/40 py-2 text-[13.5px] last:border-b-0">
+                <div key={i} className="flex items-center justify-between border-b border-line/40 py-2 text-[13px] last:border-b-0">
                   <span>
                     {ENDING_ICON[r.ending] ?? ''} <b>{r.company}</b>{' '}
                     <span className="text-mut">

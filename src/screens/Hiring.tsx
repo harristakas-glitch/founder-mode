@@ -29,7 +29,7 @@ export function Hiring() {
           {game.offersOut.length > 0 && (
             <Panel title="Offers out — they answer next week">
               {game.offersOut.map((c) => (
-                <div key={c.id} className="flex justify-between py-1.5 text-[13.5px]">
+                <div key={c.id} className="flex justify-between py-1.5 text-[13px]">
                   <span>
                     <b>{c.name}</b> <span className="text-mut">· {c.role}</span>
                   </span>
@@ -41,7 +41,7 @@ export function Hiring() {
           {game.pendingHires.length > 0 && (
             <Panel title="Signed — serving notice">
               {game.pendingHires.map((p) => (
-                <div key={p.candidate.id} className="flex justify-between py-1.5 text-[13.5px]">
+                <div key={p.candidate.id} className="flex justify-between py-1.5 text-[13px]">
                   <span>
                     <b>{p.candidate.name}</b> <span className="text-mut">· {p.candidate.role}</span>
                   </span>

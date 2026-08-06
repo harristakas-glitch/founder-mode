@@ -4,6 +4,8 @@ import type { TraitId } from './game/types'
 
 // ---------- animated number ----------
 
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
 export function useTicker(value: number, ms = 500): number {
   const [shown, setShown] = useState(value)
   const fromRef = useRef(value)
@@ -11,6 +13,12 @@ export function useTicker(value: number, ms = 500): number {
   useEffect(() => {
     const from = fromRef.current
     if (from === value) return
+    // a player who asked for less motion gets the number, not the count-up
+    if (reducedMotion()) {
+      fromRef.current = value
+      setShown(value)
+      return
+    }
     const start = performance.now()
     const tick = (t: number) => {
       const p = Math.min(1, (t - start) / ms)
@@ -37,13 +45,14 @@ export function Ticker({ value, format }: { value: number; format: (n: number) =
 // ---------- buttons ----------
 
 const BTN_VARIANTS = {
-  default: 'border border-line bg-surface2 text-ink hover:border-accent hover:text-white',
-  primary: 'bg-accent text-white shadow-md shadow-accent/25 hover:brightness-110',
-  good: 'bg-good text-white shadow-md shadow-good/25 hover:brightness-110',
-  danger: 'border border-line bg-surface2 text-ink hover:border-bad hover:text-bad',
+  default: 'border border-line bg-surface2 text-ink hover:border-line2 hover:bg-surface2/70',
+  primary: 'bg-accent text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.5)] hover:brightness-110',
+  good: 'bg-good text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.5)] hover:brightness-110',
+  danger: 'border border-line bg-surface2 text-ink hover:border-bad/70 hover:text-bad',
   ghost: 'text-mut hover:bg-surface2 hover:text-ink',
 } as const
 
+// 44px minimum on touch widths (WCAG target size), tighter on the desktop dashboards.
 export function Btn({
   variant = 'default',
   className = '',
@@ -51,7 +60,7 @@ export function Btn({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BTN_VARIANTS }) {
   return (
     <button
-      className={`rounded-lg px-3.5 py-1.5 text-[13px] font-semibold transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${BTN_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold transition-[background-color,border-color,color,transform,opacity] duration-[120ms] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 md:min-h-[34px] ${BTN_VARIANTS[variant]} ${className}`}
       {...props}
     />
   )
@@ -61,23 +70,48 @@ export function Btn({
 
 export function Th({ children, right }: { children?: ReactNode; right?: boolean }) {
   return (
-    <th className={`border-b border-line pb-2 text-[10.5px] font-semibold uppercase tracking-wider text-mut ${right ? 'text-right' : 'text-left'}`}>
+    <th className={`border-b border-line pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut ${right ? 'text-right' : 'text-left'}`}>
       {children}
     </th>
   )
 }
 
 export function Td({ children, right, className = '' }: { children?: ReactNode; right?: boolean; className?: string }) {
-  return <td className={`border-b border-line/40 py-2.5 pr-2 text-[13.5px] ${right ? 'text-right tnum' : ''} ${className}`}>{children}</td>
+  return (
+    <td className={`border-b border-line/40 py-2.5 pr-2 text-[13px] leading-[1.45] ${right ? 'text-right tnum' : ''} ${className}`}>
+      {children}
+    </td>
+  )
 }
 
 // ---------- surfaces ----------
 
-export function Panel({ title, children, className = '' }: { title?: string; children: ReactNode; className?: string }) {
+// One card recipe for the whole game: a lifted surface, a hairline, an ambient
+// shadow, and a 1px inner highlight along the top edge. No glass, no gradients —
+// depth comes from the elevation ramp so dense numbers stay on a flat backdrop.
+export const CARD = 'rounded-2xl border border-line/70 bg-surface/80 shadow-[var(--elev-2)] ring-1 ring-inset ring-white/[0.03]'
+
+export function Panel({ title, action, children, className = '' }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-4 shadow-lg shadow-black/25 ${className}`}>
-      {title && <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-mut">{title}</h3>}
+    <div className={`${CARD} p-4 ${className}`}>
+      {title && (
+        <div className="mb-3 flex min-h-[16px] items-center justify-between gap-3">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-mut">{title}</h3>
+          {action}
+        </div>
+      )}
       {children}
+    </div>
+  )
+}
+
+// A calm, consistent way to say "there is nothing here yet".
+export function EmptyState({ icon, title, hint }: { icon?: ReactNode; title: string; hint?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-line/70 px-4 py-8 text-center">
+      {icon && <span className="text-mut/60">{icon}</span>}
+      <div className="text-[13px] font-semibold text-mut">{title}</div>
+      {hint && <div className="max-w-[38ch] text-[12px] leading-relaxed text-mut/70">{hint}</div>}
     </div>
   )
 }
@@ -88,7 +122,7 @@ export function TrendBadge({ value, format, invert }: { value: number; format?: 
   const up = value > 0
   const goodDir = invert ? !up : up
   return (
-    <span className={`ml-1.5 text-[11px] font-bold tnum ${goodDir ? 'text-good' : 'text-bad'}`}>
+    <span className={`ml-1.5 whitespace-nowrap text-[11px] font-bold tnum ${goodDir ? 'text-good' : 'text-bad'}`}>
       {up ? '▲' : '▼'} {format ? format(Math.abs(value)) : `${(Math.abs(value) * 100).toFixed(1)}%`}
     </span>
   )
@@ -113,15 +147,21 @@ export function StatCard({
   trend?: number
   trendFormat?: (n: number) => string
 }) {
+  // Label first, value second — same reading order as the topbar rail, so the eye
+  // finds the metric by its name and only then parses the digits.
   return (
-    <div className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-4 shadow-lg shadow-black/25 transition-colors hover:border-line">
-      <div className="text-2xl font-extrabold tracking-tight">
+    <div className={`${CARD} p-3.5 transition-colors duration-[120ms] hover:border-line2`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">{label}</div>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-1 text-[26px] leading-[1.15] font-extrabold tracking-tight tnum">
         {numeric !== undefined && format ? <Ticker value={numeric} format={format} /> : value}
         {trend !== undefined && <TrendBadge value={trend} format={trendFormat} />}
       </div>
-      <div className="mt-0.5 text-xs text-mut">{label}</div>
       {delta && (
-        <div className={`mt-1.5 text-xs ${tone === 'up' ? 'text-good' : tone === 'down' ? 'text-bad' : 'text-mut'}`}>{delta}</div>
+        <div className={`mt-1.5 text-[12px] leading-snug ${tone === 'up' ? 'text-good' : tone === 'down' ? 'text-bad' : 'text-mut'}`}>
+          {/* status colour never travels alone */}
+          {tone === 'up' ? '▲ ' : tone === 'down' ? '▼ ' : ''}
+          {delta}
+        </div>
       )}
     </div>
   )
@@ -231,9 +271,9 @@ export function Confetti() {
 
 export function Bar({ value, color }: { value: number; color?: string }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-black/40">
+    <div className="h-2 overflow-hidden rounded-full bg-black/40 ring-1 ring-inset ring-white/[0.04]">
       <div
-        className="h-full rounded-full transition-all duration-500"
+        className="h-full rounded-full transition-[width,background-color] duration-[400ms] ease-out"
         style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: color ?? 'var(--color-accent)' }}
       />
     </div>
@@ -258,7 +298,7 @@ export function SkillDots({ skill }: { skill: number }) {
       {Array.from({ length: 10 }, (_, i) => (
         <i
           key={i}
-          className={`h-[7px] w-[7px] rounded-full ${i < skill ? (skill >= 9 ? 'bg-accent2 shadow-[0_0_6px_rgba(167,139,250,0.6)]' : 'bg-accent') : 'bg-line'}`}
+          className={`h-[7px] w-[7px] rounded-full ${i < skill ? (skill >= 9 ? 'bg-accent2' : 'bg-accent') : 'bg-line'}`}
         />
       ))}
     </span>
@@ -371,8 +411,12 @@ export function LineChart({
   const boxRef = useRef<HTMLDivElement>(null)
   if (data.length < 2)
     return (
-      <div className="flex items-center justify-center text-xs text-mut" style={{ height }}>
-        Not enough data yet — advance a few weeks.
+      <div
+        className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line/60 text-center"
+        style={{ height }}
+      >
+        <span className="text-[13px] font-semibold text-mut">No trend yet</span>
+        <span className="text-[12px] text-mut/70">Advance a few weeks and the line appears here.</span>
       </div>
     )
   const min = Math.min(...data)
@@ -386,46 +430,76 @@ export function LineChart({
   const area = `0,${H} ${line} ${W},${H}`
   const hi = hover !== null ? Math.min(data.length - 1, Math.max(0, hover)) : null
 
+  const gid = `g-${color.replace(/[^a-z0-9]/gi, '')}`
+  const AXIS = 16 // px reserved under the plot for the week axis
+  // fraction along the plot; doubles as the tooltip's own transform origin so it
+  // never hangs off either end of the card
+  const p = hi === null ? 0 : hi / (data.length - 1)
+
   return (
-    <div
-      ref={boxRef}
-      className="relative select-none"
-      style={{ height }}
-      onMouseMove={(e) => {
-        const rect = boxRef.current!.getBoundingClientRect()
-        setHover(Math.round(((e.clientX - rect.left) / rect.width) * (data.length - 1)))
-      }}
-      onMouseLeave={() => setHover(null)}
-    >
-      <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id={`g-${color.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        {/* recessive gridlines at max / mid / min */}
-        {[y(max), y((max + min) / 2), y(min)].map((gy, i) => (
-          <line key={i} x1="0" y1={gy} x2={W} y2={gy} stroke="rgba(220,229,245,0.07)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        ))}
-        <polygon points={area} fill={`url(#g-${color.replace(/[^a-z0-9]/gi, '')})`} />
-        <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
-        {hi !== null && (
-          <line x1={x(hi)} y1="0" x2={x(hi)} y2={H} stroke="rgba(220,229,245,0.35)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        )}
-      </svg>
-      {hi !== null && (
-        <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-line bg-bg2/95 px-2 py-1 text-[11px] shadow-lg tnum"
-          style={{ left: `${(hi / (data.length - 1)) * 100}%`, top: 0 }}
-        >
-          <span className="text-mut">wk {startWeek + hi}:</span> <b>{formatY(data[hi])}</b>
+    <div className="select-none" style={{ height }}>
+      <div className="flex" style={{ height: height - AXIS }}>
+        {/* value gutter — labels live beside the plot, never on top of the line */}
+        <div className="relative w-12 shrink-0 text-[10px] text-mut tnum">
+          <span className="absolute top-0 right-2">{formatY(max)}</span>
+          <span className="absolute top-1/2 right-2 -translate-y-1/2 text-mut/70">{formatY((max + min) / 2)}</span>
+          <span className="absolute right-2 bottom-0">{formatY(min)}</span>
         </div>
-      )}
-      <span className="absolute top-0 left-1 text-[10px] text-mut tnum">{formatY(max)}</span>
-      <span className="absolute top-1/2 left-1 -translate-y-1/2 text-[10px] text-mut/70 tnum">{formatY((max + min) / 2)}</span>
-      <span className="absolute bottom-0 left-1 text-[10px] text-mut tnum">{formatY(min)}</span>
-      <span className="absolute right-1 bottom-0 text-[10px] text-mut">wk {startWeek + data.length - 1}</span>
+        <div
+          ref={boxRef}
+          className="relative min-w-0 flex-1"
+          onMouseMove={(e) => {
+            const rect = boxRef.current!.getBoundingClientRect()
+            setHover(Math.round(((e.clientX - rect.left) / rect.width) * (data.length - 1)))
+          }}
+          onMouseLeave={() => setHover(null)}
+        >
+          <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+            <defs>
+              <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+                <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {/* recessive gridlines at max / mid / min */}
+            {[y(max), y((max + min) / 2), y(min)].map((gy, i) => (
+              <line key={i} x1="0" y1={gy} x2={W} y2={gy} stroke="rgba(220,229,245,0.07)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            ))}
+            <polygon points={area} fill={`url(#${gid})`} />
+            <polyline
+              points={line}
+              fill="none"
+              stroke={color}
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            {hi !== null && (
+              <line x1={x(hi)} y1="0" x2={x(hi)} y2={H} stroke="rgba(220,229,245,0.3)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            )}
+          </svg>
+          {/* the read-out dot is HTML, so the stretched viewBox can't turn it into an ellipse */}
+          {hi !== null && (
+            <span
+              className="pointer-events-none absolute z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-bg2"
+              style={{ left: `${p * 100}%`, top: `${y(data[hi])}%`, background: color }}
+            />
+          )}
+          {hi !== null && (
+            <div
+              className="pointer-events-none absolute top-0 z-10 rounded-lg border border-line bg-bg2/95 px-2 py-1 text-[11px] shadow-[var(--elev-3)] tnum"
+              style={{ left: `${p * 100}%`, transform: `translateX(${-p * 100}%)` }}
+            >
+              <span className="text-mut">wk {startWeek + hi}</span> <b>{formatY(data[hi])}</b>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex justify-between pl-12 text-[10px] text-mut tnum" style={{ height: AXIS }}>
+        <span>wk {startWeek}</span>
+        <span>wk {startWeek + data.length - 1}</span>
+      </div>
     </div>
   )
 }

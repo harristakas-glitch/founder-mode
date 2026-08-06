@@ -1,50 +1,53 @@
--- Founder Mode — leaderboard security, v3. RUN THIS; it supersedes leaderboard-hardening.sql.
--- Paste into the Supabase SQL editor (SQL → New query → Run). Safe to re-run.
+-- Founder Mode — leaderboard security, v4. RUN THIS. It supersedes every earlier SQL file
+-- (leaderboard.sql, leaderboard-hardening.sql). Paste into the Supabase SQL editor. Idempotent.
 --
--- WHY v2 FAILED: it authenticated updates with an "x-player-id" header, but player_id is
--- returned by the public SELECT policy. An attacker just reads a victim's id off the
--- leaderboard and echoes it back — verified live: a row was blanked and then moved to a
--- different day (an effective delete). Naming yourself is not proof of identity.
+-- THE STORY SO FAR:
+--   v2 authenticated updates with an "x-player-id" header — but player_id is returned by the
+--      public SELECT, so an attacker read a victim's id and echoed it back. Verified broken.
+--   v3 added a per-device secret and tried to hide it with a column-level REVOKE. On this
+--      project the column stayed readable, so the secret could be harvested. Also broken.
+--   v4 stops relying on hiding anything: the column stores a BCRYPT HASH of the secret. Reading
+--      it gains you nothing, because you cannot derive the secret from the hash. The check is
+--      a hash comparison, so it works even if every column is world-readable.
 --
--- HOW v3 WORKS: each device generates a random secret, keeps it in localStorage, and sends
--- it in a header. The secret lives in a column that anon is NOT allowed to read, so it can
--- be checked but never harvested. A trigger additionally makes identity immutable and scores
--- monotonic, so even a leaked secret can only ever raise that one row's score — it can never
--- blank a row, steal it, or move it off the board.
+-- Defence in depth, in order:
+--   1. Ownership is proved by a secret that only the player's browser holds; the DB stores a hash.
+--   2. A trigger makes player_id / day / secret immutable and scores monotonic — so even a
+--      compromised secret can only ever RAISE that one row's score. It can never blank a row,
+--      steal it, or move it off the leaderboard.
+--   3. Value bounds on every column, so no row can be inflated or made unbeatable.
 
--- --- 0. clear out test/junk rows so the stricter checks below can be validated -----------
+create extension if not exists pgcrypto;
+
+-- --- 0. clear out test/junk rows so the stricter checks below can validate ------------------
 delete from public.daily_scores
  where day >= 30000
     or day <= 0
     or player_id like 'SECTEST-%'
     or player_id like 'victim-%'
+    or player_id like 'v3-%'
     or player_id like 'verify-bot-%'
     or player_id = 'claude-test';
 
--- --- 1. columns ---------------------------------------------------------------------------
+-- --- 1. columns ------------------------------------------------------------------------------
 alter table public.daily_scores add column if not exists display_name text;
 alter table public.daily_scores add column if not exists secret text;
 
--- The secret must be writable by the client but never readable by anyone using the anon key.
--- Column-level privileges are what make the check unforgeable.
---
--- IMPORTANT POSTGRES DETAIL: `revoke select (secret)` alone does NOTHING while a table-wide
--- SELECT grant exists — the table grant already covers every column, and column-level revokes
--- cannot punch a hole in it. The table grant must be dropped first, then SELECT re-granted
--- column by column. (Getting this wrong is silent: the column stays readable.)
-revoke select on public.daily_scores from anon, authenticated;
-grant select (id, day, player_id, company, score, weeks, ending, created_at, display_name)
-  on public.daily_scores to anon, authenticated;
-grant insert, update on public.daily_scores to anon;
--- NOTE: because anon has no SELECT on `secret`, `select *` now fails for anon BY DESIGN.
--- The game always selects explicit columns, so this is fine — keep it that way.
+-- Belt and braces: also try to keep the hash out of SELECT. This is NOT what makes v4 safe —
+-- the hashing is — so it does not matter if a hosted setup re-grants these.
+do $$
+begin
+  revoke select on public.daily_scores from anon, authenticated;
+  grant select (id, day, player_id, company, score, weeks, ending, created_at, display_name)
+    on public.daily_scores to anon, authenticated;
+  grant insert, update on public.daily_scores to anon, authenticated;
+exception when others then
+  raise notice 'column-level grants not applied (%) — v4 does not depend on them', sqlerrm;
+end $$;
 
--- --- 2. value bounds -----------------------------------------------------------------------
--- score:  0 .. 1e12   (a real unicorn payout is ~1e9; 1e12 is generous and blocks "unbeatable" rows)
--- weeks:  0 .. 520
--- ending: one of the six real endings
--- day:    10000..40000 (day-number epoch used by dailyInfo(); ~1997..2079)
--- player_id / secret / company / display_name: length-capped so rows cannot be inflated
+-- --- 2. value bounds ---------------------------------------------------------------------------
+-- score 0..1e12 (a real unicorn payout is ~1e9), weeks 0..520, day 10000..40000 (~1997..2079),
+-- and every text column length-capped so rows cannot be inflated.
 alter table public.daily_scores drop constraint if exists daily_scores_sane;
 alter table public.daily_scores
   add constraint daily_scores_sane check (
@@ -66,17 +69,32 @@ exception when others then
   raise notice 'existing rows left unvalidated (%); new and updated rows are still checked', sqlerrm;
 end $$;
 
--- --- 3. identity is immutable, scores only go up -------------------------------------------
--- RLS `with check` cannot see the OLD row, so this invariant needs a trigger. This is the
--- backstop that keeps a stolen/leaked secret from being useful for anything destructive.
+-- --- 3. hash the secret on the way in ----------------------------------------------------------
+-- The client posts a random 48-char secret; we never store it in the clear.
+create or replace function public.daily_scores_hash_secret()
+returns trigger language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if new.secret is null or char_length(new.secret) < 16 then
+    raise exception 'daily_scores: a secret of at least 16 characters is required';
+  end if;
+  new.secret := crypt(new.secret, gen_salt('bf', 8));
+  return new;
+end $$;
+
+drop trigger if exists daily_scores_hash_trg on public.daily_scores;
+create trigger daily_scores_hash_trg
+  before insert on public.daily_scores
+  for each row execute function public.daily_scores_hash_secret();
+
+-- --- 4. identity immutable, scores monotonic ---------------------------------------------------
+-- RLS `with check` cannot see the OLD row, so these invariants need a trigger. This is what
+-- keeps a leaked secret from being useful for anything destructive.
 create or replace function public.daily_scores_guard()
 returns trigger language plpgsql as $$
 begin
-  if new.player_id is distinct from old.player_id
-     or new.day is distinct from old.day
-     or new.secret is distinct from old.secret then
-    raise exception 'daily_scores: player_id, day and secret are immutable';
-  end if;
+  new.secret := old.secret;      -- clients resend their secret on upsert; never re-hash or change it
+  new.player_id := old.player_id;
+  new.day := old.day;
   if new.score < old.score then
     raise exception 'daily_scores: score may only increase';
   end if;
@@ -88,35 +106,47 @@ create trigger daily_scores_guard_trg
   before update on public.daily_scores
   for each row execute function public.daily_scores_guard();
 
--- --- 4. policies ---------------------------------------------------------------------------
--- READ: open. The leaderboard is public; the secret column is unreadable via the grant above.
+-- --- 5. ownership check ------------------------------------------------------------------------
+-- SECURITY DEFINER with a pinned search_path so pgcrypto resolves no matter where it lives,
+-- and so the policy body stays readable.
+create or replace function public.owns_score_row(stored text)
+returns boolean language sql stable security definer set search_path = public, extensions as $$
+  select stored is not null
+     and stored = crypt(
+           coalesce(nullif(current_setting('request.headers', true)::json ->> 'x-player-secret', ''), '~no~'),
+           stored)
+$$;
+
+grant execute on function public.owns_score_row(text) to anon, authenticated;
+
+-- --- 6. policies -------------------------------------------------------------------------------
+alter table public.daily_scores enable row level security;
+
+-- READ: open. The leaderboard is public, and the only sensitive column is a bcrypt hash.
 drop policy if exists "anon can read daily scores" on public.daily_scores;
 create policy "anon can read daily scores"
   on public.daily_scores for select to anon using (true);
 
--- INSERT: anyone may post a score, within bounds, and must set a secret of real length.
+-- INSERT: anyone may post a score, within bounds, and must supply a secret (hashed by the trigger).
 drop policy if exists "anon can submit daily scores" on public.daily_scores;
 create policy "anon can submit daily scores"
   on public.daily_scores for insert to anon
   with check (
     char_length(company) <= 30
     and char_length(player_id) <= 64
-    and secret is not null and char_length(secret) between 16 and 128
+    and secret is not null and char_length(secret) >= 16
     and score >= 0 and score <= 1000000000000
     and weeks >= 0 and weeks <= 520
     and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo')
     and day >= 10000 and day <= 40000
   );
 
--- UPDATE: only the device that created the row (proved by the unreadable secret), and the
--- trigger above still forbids lowering the score or changing identity.
+-- UPDATE: only the device holding the secret behind the stored hash; the trigger above still
+-- forbids lowering a score or changing identity.
 drop policy if exists "anon can improve own daily score" on public.daily_scores;
 create policy "anon can improve own daily score"
   on public.daily_scores for update to anon
-  using (
-    secret is not null
-    and secret = nullif(current_setting('request.headers', true)::json ->> 'x-player-secret', '')
-  )
+  using (public.owns_score_row(secret))
   with check (
     char_length(company) <= 30
     and score >= 0 and score <= 1000000000000
@@ -126,10 +156,10 @@ create policy "anon can improve own daily score"
 
 -- No DELETE policy for anon: rows cannot be removed from the client.
 
--- --- 5. what this does NOT fix (accepted, or needs mandatory login) -------------------------
--- * A player can still submit an honest-looking but cheated score for THEMSELVES (no server
---   simulates the game). Closing that needs an authoritative server, not RLS.
--- * display_name is still self-asserted for anonymous players, so a signed-out player can
---   type someone else's handle on their OWN row. Requiring login to post would close it.
--- * Insert flooding is still possible with the anon key (no rate limiting exists). Set a
---   spending cap and usage alerts in the Supabase dashboard; consider Realtime rate limits.
+-- --- 7. what this does NOT fix (accepted, or needs mandatory login) -----------------------------
+-- * Nothing simulates the game server-side, so a player can still submit a plausible but
+--   cheated score for THEMSELVES. Closing that needs an authoritative server, not RLS.
+-- * display_name is self-asserted for anonymous players, so a signed-out player can type
+--   someone else's handle on their OWN row. Requiring login to post would close it.
+-- * Insert flooding is still possible with a public key — there is no rate limiting. Set a
+--   spending cap and usage alerts in the Supabase dashboard.

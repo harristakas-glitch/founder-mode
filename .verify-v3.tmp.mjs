@@ -17,11 +17,22 @@ const anon = createClient(URL, KEY)
 const ins = await owner.from('daily_scores').insert({ day: DAY, player_id: ME, company: 'HonestCo', score: 500, weeks: 52, ending: 'unicorn', display_name: 'honest', secret: MY_SECRET })
 check('owner can submit a score', !ins.error, ins.error?.message ?? '')
 
-// the secret must be unreadable — directly, and via select *
+// The stored secret must be useless to anyone who reads it: either hidden, or a bcrypt hash.
 const leak = await anon.from('daily_scores').select('player_id, secret').eq('day', DAY)
-check('secret column is NOT readable', !!leak.error || !leak.data?.[0]?.secret, leak.error ? 'blocked: ' + leak.error.message.slice(0, 50) : 'LEAKED: ' + JSON.stringify(leak.data?.[0]))
-const star = await anon.from('daily_scores').select('*').eq('day', DAY)
-check('select * does not leak the secret', !!star.error || !star.data?.[0]?.secret, star.error ? 'blocked: ' + star.error.message.slice(0, 50) : 'LEAKED via *: ' + JSON.stringify(Object.keys(star.data?.[0] ?? {})))
+const stored = leak.data?.[0]?.secret
+const hidden = !!leak.error || !stored
+const hashed = typeof stored === 'string' && /^\$2[aby]?\$/.test(stored) && stored !== MY_SECRET
+check('stored secret is not a usable credential', hidden || hashed, hidden ? 'column hidden' : hashed ? 'bcrypt hash, not the secret' : 'PLAINTEXT LEAK: ' + stored)
+
+// The decisive test: take whatever the DB exposes and try to USE it as the credential.
+if (stored) {
+  const harvester = createClient(URL, KEY, { global: { headers: { 'x-player-secret': stored } } })
+  await harvester.from('daily_scores').update({ company: 'HARVESTED' }).eq('day', DAY).eq('player_id', ME)
+  const h = await anon.from('daily_scores').select('company').eq('day', DAY).eq('player_id', ME).maybeSingle()
+  check('a harvested secret value grants NO access', h.data?.company === 'HonestCo', `company=${h.data?.company}`)
+} else {
+  check('a harvested secret value grants NO access', true, 'nothing to harvest')
+}
 // and the columns the game actually needs must still be readable
 const needed = await anon.from('daily_scores').select('player_id, company, score, weeks, ending, display_name').eq('day', DAY)
 check('game can still read the leaderboard columns', !needed.error && (needed.data?.length ?? 0) > 0, needed.error?.message?.slice(0, 60) ?? `${needed.data?.length} row(s)`)

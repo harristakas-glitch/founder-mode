@@ -83,14 +83,14 @@ function Ventures() {
       <Panel title="Product lines — escape the S-curve">
         {launched.length > 0 && (
           <div className="mb-3 space-y-1.5">
-            <div className="flex justify-between border-b border-line/40 pb-1.5 text-[13.5px]">
+            <div className="flex justify-between border-b border-line/40 pb-1.5 text-[13px]">
               <span>
                 <b>Core — {sectorById(game.sector).name}</b>
               </span>
               <span className="tnum">{num(game.users)} users</span>
             </div>
             {launched.map((v) => (
-              <div key={v.id} className="flex justify-between border-b border-line/40 pb-1.5 text-[13.5px] last:border-b-0">
+              <div key={v.id} className="flex justify-between border-b border-line/40 pb-1.5 text-[13px] last:border-b-0">
                 <span>
                   <b>{sectorById(v.sector).name}</b> <span className="text-mut">· launched wk {v.startedWeek} · PMF {Math.round(v.pmf)}</span>
                 </span>
@@ -128,7 +128,7 @@ function Ventures() {
           </div>
         ) : (
           <>
-            <div className="text-[13.5px] leading-relaxed text-mut">
+            <div className="text-[13px] leading-relaxed text-mut">
               When your core market saturates, growth dies with it — unless you open a second one. A new bet runs the whole discovery
               loop again in a fresh sector: new demand roll (boosted by everything you've learned), new TAM, new S-curve. Launched
               lines add their users and revenue to the company — and to the growth rate your board stares at.
@@ -189,7 +189,7 @@ export function Product() {
           ) : (
             <DemandGauge lo={est.lo} hi={est.hi} {...RESONANCE_RANGE} />
           )}
-          <div className={`mt-3 text-[13.5px] font-semibold ${SIGNAL_COPY[signal].cls}`}>{SIGNAL_COPY[signal].text}</div>
+          <div className={`mt-3 text-[13px] font-semibold ${SIGNAL_COPY[signal].cls}`}>{SIGNAL_COPY[signal].text}</div>
           <div className="mt-2 text-xs leading-relaxed text-mut">
             The white band is where your idea's true demand sits, as far as research can tell — more research narrows it. PMF gates
             everything: retention, word of mouth, and how many users actually pay.
@@ -227,7 +227,7 @@ export function Product() {
         <Panel title="Team focus (share of effort)">
           {(['features', 'quality', 'bugs', 'research', ...(hasBet ? (['bet'] as const) : [])] as const).map((key) => (
             <div className="mb-4 last:mb-0" key={key}>
-              <div className="mb-1 flex justify-between text-[13.5px]">
+              <div className="mb-1 flex justify-between text-[13px]">
                 <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>
                   {key === 'features'
                     ? 'New features'

@@ -33,7 +33,7 @@ function WeekDigest() {
   if (items.length === 0) return null
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-line/60 bg-surface/60 px-4 py-2.5">
-      <span className="text-[10.5px] font-bold uppercase tracking-wider text-mut">This week</span>
+      <span className="text-[11px] font-bold uppercase tracking-wider text-mut">This week</span>
       {items.map((i) => (
         <span key={i.label} className="text-[13px]">
           <span className="text-mut">{i.label}</span>
@@ -165,7 +165,7 @@ export function Dashboard() {
           {MILESTONES.filter((m) => !game.milestones.includes(m.id))
             .slice(0, 4)
             .map((m) => (
-              <div key={m.id} className="flex gap-2 py-1 text-[13.5px]">
+              <div key={m.id} className="flex gap-2 py-1 text-[13px]">
                 <span className="text-mut">◻</span>
                 <span>
                   <b>{m.title}</b> <span className="text-mut">— {m.goal}</span>
@@ -187,8 +187,8 @@ export function Dashboard() {
               className="block w-full border-b border-line/40 py-2 text-left last:border-b-0 hover:bg-surface2/50"
               onClick={() => setScreen('inbox')}
             >
-              <div className="text-[10.5px] text-mut">Week {m.week}</div>
-              <div className="text-[13.5px] font-semibold">{m.title}</div>
+              <div className="text-[11px] text-mut">Week {m.week}</div>
+              <div className="text-[13px] font-semibold">{m.title}</div>
             </button>
           ))}
         </Panel>

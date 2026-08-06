@@ -78,7 +78,7 @@ export function Lobby() {
                 <button
                   key={s.id}
                   onClick={() => setSector(s.id)}
-                  className={`rounded-lg border px-2 py-2 text-[12.5px] font-semibold transition-all ${
+                  className={`rounded-lg border px-2 py-2 text-[13px] font-semibold transition-all ${
                     sector === s.id ? 'border-accent bg-accent/15' : 'border-line bg-surface hover:border-accent/60'
                   }`}
                 >
@@ -99,7 +99,7 @@ export function Lobby() {
                     cap === o.weeks ? 'border-accent bg-accent/15' : 'border-line bg-surface hover:border-accent/60'
                   }`}
                 >
-                  <div className="text-[12.5px] font-semibold">{o.name}</div>
+                  <div className="text-[13px] font-semibold">{o.name}</div>
                   <div className="text-[11px] text-mut">{o.blurb}</div>
                 </button>
               ))}

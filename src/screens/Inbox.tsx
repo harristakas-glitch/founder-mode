@@ -24,9 +24,9 @@ export function Inbox() {
                   : 'border-l-line'
           return (
             <div key={m.id} className={`rounded-r-xl border border-l-[3px] border-line/60 bg-surface p-3.5 ${accent}`}>
-              <div className="text-[10.5px] text-mut">Week {m.week}</div>
+              <div className="text-[11px] text-mut">Week {m.week}</div>
               <div className="mt-0.5 font-bold">{m.title}</div>
-              <div className="mt-1 text-[13.5px] leading-relaxed text-mut">{m.body}</div>
+              <div className="mt-1 text-[13px] leading-relaxed text-mut">{m.body}</div>
               {m.kind === 'choice' && !m.resolved && m.choices && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {m.choices.map((c, i) => (

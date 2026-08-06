@@ -190,7 +190,7 @@ function PvpOps() {
           pricier bat.
         </div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2/50 px-3 py-2.5">
-          <span className="text-[13.5px]">
+          <span className="text-[13px]">
             🛡 <b>Crisis retainer</b>{' '}
             <span className="text-mut">
               — silently deflects the next attack on you. Lasts {SHIELD_WEEKS} weeks; your rivals can&apos;t see it.
@@ -209,7 +209,7 @@ function PvpOps() {
         {!gate.ok && <div className="mb-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{gate.reason}</div>}
         {targets.map((p) => (
           <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
-            <span className="text-[13.5px]">
+            <span className="text-[13px]">
               <b>{p.company}</b> <span className="text-mut">· {num(p.users)} users · wk {p.week}</span>
             </span>
             <span className="flex flex-wrap gap-2">
@@ -255,7 +255,7 @@ function Acquisitions() {
           const stockPct = (price / (val + price)) * 100
           return (
             <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
-              <span className="text-[13.5px]">
+              <span className="text-[13px]">
                 <b>{r.name}</b>{' '}
                 <span className="text-mut">
                   · {num(r.users)} users · asking <b className="text-ink tnum">{money(price)}</b>

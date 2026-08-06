@@ -43,7 +43,7 @@ function PitchPanel() {
                 </span>
               </div>
               <div className="mt-1 flex-1 text-xs leading-relaxed text-mut">{o.blurb}</div>
-              <div className="mt-2 text-[11.5px] leading-relaxed">
+              <div className="mt-2 text-[12px] leading-relaxed">
                 <div className="text-good">✓ {o.winText}</div>
                 <div className="text-bad">✗ {o.loseText}</div>
               </div>
@@ -99,7 +99,7 @@ export function Team() {
           )}
         </div>
         {game.rules?.energy !== false && game.energy < 30 && (
-          <div className="mt-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-1.5 text-[12.5px] text-bad">
+          <div className="mt-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-1.5 text-[13px] text-bad">
             You're running on fumes — your weekly contribution is badly weakened, and hitting empty forces a burnout. Take the week.
           </div>
         )}
@@ -139,7 +139,7 @@ export function Team() {
                   <div className="flex-1">
                     <Bar value={e.morale} color={e.morale < 40 ? 'var(--color-bad)' : e.morale < 60 ? 'var(--color-warn)' : 'var(--color-good)'} />
                   </div>
-                  <span className="w-7 text-right text-[11.5px] font-semibold tnum">{Math.round(e.morale)}</span>
+                  <span className="w-7 text-right text-[12px] font-semibold tnum">{Math.round(e.morale)}</span>
                 </div>
                 <div className="mt-3 flex justify-end gap-1.5">
                   <Btn onClick={() => giveRaise(e.id)}>Raise</Btn>

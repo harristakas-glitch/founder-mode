@@ -1,11 +1,13 @@
 @import 'tailwindcss';
 
 @theme {
+  /* ---------- surfaces: a 5-step dark elevation ramp, no pure black ---------- */
   --color-bg: #0a0e18;
   --color-bg2: #0d1322;
   --color-surface: #121a2c;
   --color-surface2: #1a2338;
   --color-line: #24304a;
+  --color-line2: #33405e; /* hover / emphasis hairline — 3:1 against surface */
   --color-ink: #dce5f5;
   --color-mut: #8593ab;
   --color-accent: #7c9aff;
@@ -15,6 +17,28 @@
   --color-bad: #f87171;
   --color-warn: #fbbf24;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  /* ---------- motion: one vocabulary, all of it fast and interruptible ----------
+     1 = pointer feedback, 2 = state change, 3 = element entering. Nothing over 260ms. */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+:root {
+  --dur-1: 120ms; /* hover, press */
+  --dur-2: 180ms; /* selected / tone changes */
+  --dur-3: 240ms; /* enter, screen change */
+  --e-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  /* elevation: dark UI reads depth from a lifted surface + a soft ambient shadow,
+     not from heavy drop shadows or blur */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+  --elev-3: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
 }
 
 html,
@@ -25,14 +49,74 @@ body,
 
 body {
   background: radial-gradient(1400px 700px at 70% -20%, #16203b 0%, var(--color-bg) 55%);
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* prose reads better without orphans; headings wrap evenly (Baseline 2026) */
+p,
+li {
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 40%, transparent);
+  color: #fff;
 }
 
 /* numbers line up in tables and tickers */
 .tnum {
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ---------- focus: one visible ring everywhere (WCAG 2.4.11) ----------
+   2px accent stroke + a 2px offset gap, so the indicator has a light AND a dark
+   edge and survives whatever surface it lands on. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---------- scroll ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line2);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+/* the horizontal metric rail: a soft right edge is the "there is more" affordance,
+   instead of a value getting guillotined mid-word */
+.fade-r {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent 100%);
 }
 
 /* ---------- range inputs ---------- */
@@ -41,9 +125,8 @@ input[type='range'] {
   appearance: none;
   width: 100%;
   height: 6px;
-  border-radius: 3px;
+  border-radius: 999px;
   background: linear-gradient(to right, var(--color-accent) var(--fill, 50%), #1c2740 var(--fill, 50%));
-  outline: none;
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -53,12 +136,15 @@ input[type='range']::-webkit-slider-thumb {
   border-radius: 50%;
   background: #fff;
   border: 3px solid var(--color-accent);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--elev-2);
   cursor: pointer;
-  transition: transform 0.12s;
+  transition: transform var(--dur-1) var(--e-out);
 }
 input[type='range']::-webkit-slider-thumb:hover {
   transform: scale(1.15);
+}
+input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(1.05);
 }
 input[type='range']::-moz-range-thumb {
   width: 18px;
@@ -69,24 +155,11 @@ input[type='range']::-moz-range-thumb {
   cursor: pointer;
 }
 
-/* ---------- scrollbars ---------- */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: #24304a;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 /* ---------- animations ---------- */
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -94,16 +167,13 @@ input[type='range']::-moz-range-thumb {
   }
 }
 .rise-in {
-  animation: rise-in 0.28s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: rise-in var(--dur-3) var(--e-out) both;
 }
 
 @keyframes flash-in {
   0% {
     opacity: 0;
-    transform: translateY(-10px) scale(0.98);
-  }
-  60% {
-    transform: translateY(2px) scale(1.002);
+    transform: translateY(-8px);
   }
   100% {
     opacity: 1;
@@ -111,15 +181,30 @@ input[type='range']::-moz-range-thumb {
   }
 }
 .flash-in {
-  animation: flash-in 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: flash-in var(--dur-3) var(--e-out) both;
+}
+
+/* a small, one-shot attention pop for a value that just changed */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pop-in {
+  animation: pop-in var(--dur-2) var(--e-out) both;
 }
 
 @keyframes week-sweep {
   0% {
     opacity: 0;
-    transform: scale(0.92);
+    transform: scale(0.96);
   }
-  20% {
+  18% {
     opacity: 1;
     transform: scale(1);
   }
@@ -128,11 +213,11 @@ input[type='range']::-moz-range-thumb {
   }
   100% {
     opacity: 0;
-    transform: scale(1.04);
+    transform: scale(1.02);
   }
 }
 .week-sweep {
-  animation: week-sweep 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: week-sweep 0.9s var(--e-out) both;
 }
 
 @keyframes celebrate-pop {
@@ -147,7 +232,7 @@ input[type='range']::-moz-range-thumb {
   }
 }
 .celebrate {
-  animation: celebrate-pop 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: celebrate-pop 0.5s var(--e-out) both;
 }
 
 @keyframes shimmer {
@@ -179,4 +264,19 @@ input[type='range']::-moz-range-thumb {
   animation: confetti-fall linear both;
   pointer-events: none;
   z-index: 80;
+}
+
+/* ---------- reduced motion: nothing moves, everything still lands ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .confetti-piece {
+    display: none;
+  }
 }
