@@ -17,15 +17,29 @@ export interface DailyScore {
 }
 
 const TABLE = 'daily_scores'
+const SECRET_KEY = 'founder-mode-score-secret'
+
+// Proof that we own our leaderboard row. player_id is public (it's in the leaderboard
+// everyone reads), so it cannot authenticate anything — this secret can, because the
+// database column holding it is not readable with the public key. See
+// supabase/leaderboard-secure.sql.
+function scoreSecret(): string {
+  let s = localStorage.getItem(SECRET_KEY)
+  if (!s || s.length < 16) {
+    const bytes = new Uint8Array(24)
+    crypto.getRandomValues(bytes)
+    s = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    localStorage.setItem(SECRET_KEY, s)
+  }
+  return s
+}
 
 let client: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {
   if (!client) {
-    // The row-scoped UPDATE policy (supabase/leaderboard-hardening.sql) matches this header
-    // against the row's player_id, so a client can only raise its own score.
     client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { 'x-player-id': myId() } },
+      global: { headers: { 'x-player-secret': scoreSecret() } },
     })
   }
   return client
@@ -53,6 +67,7 @@ export async function submitDailyScore(
       weeks: Math.min(520, Math.max(0, Math.round(entry.weeks) || 0)),
       ending: entry.ending.slice(0, 20),
       display_name: entry.display_name ? entry.display_name.slice(0, 24) : null,
+      secret: scoreSecret(),
     }
 
     // Fetch-compare: only overwrite an existing row with an equal-or-better score.
