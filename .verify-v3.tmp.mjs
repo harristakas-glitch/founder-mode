@@ -17,9 +17,14 @@ const anon = createClient(URL, KEY)
 const ins = await owner.from('daily_scores').insert({ day: DAY, player_id: ME, company: 'HonestCo', score: 500, weeks: 52, ending: 'unicorn', display_name: 'honest', secret: MY_SECRET })
 check('owner can submit a score', !ins.error, ins.error?.message ?? '')
 
-// the secret must be unreadable
+// the secret must be unreadable — directly, and via select *
 const leak = await anon.from('daily_scores').select('player_id, secret').eq('day', DAY)
 check('secret column is NOT readable', !!leak.error || !leak.data?.[0]?.secret, leak.error ? 'blocked: ' + leak.error.message.slice(0, 50) : 'LEAKED: ' + JSON.stringify(leak.data?.[0]))
+const star = await anon.from('daily_scores').select('*').eq('day', DAY)
+check('select * does not leak the secret', !!star.error || !star.data?.[0]?.secret, star.error ? 'blocked: ' + star.error.message.slice(0, 50) : 'LEAKED via *: ' + JSON.stringify(Object.keys(star.data?.[0] ?? {})))
+// and the columns the game actually needs must still be readable
+const needed = await anon.from('daily_scores').select('player_id, company, score, weeks, ending, display_name').eq('day', DAY)
+check('game can still read the leaderboard columns', !needed.error && (needed.data?.length ?? 0) > 0, needed.error?.message?.slice(0, 60) ?? `${needed.data?.length} row(s)`)
 
 // the v2 attack: read the public id, echo it back, edit the row
 const { data: board } = await anon.from('daily_scores').select('player_id, company, score').eq('day', DAY)

@@ -27,10 +27,16 @@ alter table public.daily_scores add column if not exists secret text;
 
 -- The secret must be writable by the client but never readable by anyone using the anon key.
 -- Column-level privileges are what make the check unforgeable.
-revoke select (secret) on public.daily_scores from anon;
-revoke select (secret) on public.daily_scores from authenticated;
-grant insert (secret), update (secret) on public.daily_scores to anon;
--- NOTE: because anon cannot read this column, `select *` will fail for anon by design.
+--
+-- IMPORTANT POSTGRES DETAIL: `revoke select (secret)` alone does NOTHING while a table-wide
+-- SELECT grant exists — the table grant already covers every column, and column-level revokes
+-- cannot punch a hole in it. The table grant must be dropped first, then SELECT re-granted
+-- column by column. (Getting this wrong is silent: the column stays readable.)
+revoke select on public.daily_scores from anon, authenticated;
+grant select (id, day, player_id, company, score, weeks, ending, created_at, display_name)
+  on public.daily_scores to anon, authenticated;
+grant insert, update on public.daily_scores to anon;
+-- NOTE: because anon has no SELECT on `secret`, `select *` now fails for anon BY DESIGN.
 -- The game always selects explicit columns, so this is fine — keep it that way.
 
 -- --- 2. value bounds -----------------------------------------------------------------------
