@@ -189,7 +189,7 @@ export function Finance() {
         />
       </div>
 
-      <DebtPanel />
+      {game.rules?.debt !== false && <DebtPanel />}
       <MacroPanel />
       <UpcomingPayments />
 

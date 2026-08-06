@@ -79,24 +79,26 @@ export function Team() {
             <div>
               <b>You</b> <span className="text-mut">· Founder & CEO ({game.founderKind})</span>
               <div className="text-xs text-mut">
-                {game.founderKind === 'technical' ? 'Contributes engineering output every week' : 'Generates hype and boosts revenue'} — scaled
-                by your energy ({Math.round(game.energy)}/100)
+                {game.founderKind === 'technical' ? 'Contributes engineering output every week' : 'Generates hype and boosts revenue'}
+                {game.rules?.energy !== false && <> — scaled by your energy ({Math.round(game.energy)}/100)</>}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-28">
-              <Bar
-                value={game.energy}
-                color={game.energy < 25 ? 'var(--color-bad)' : game.energy < 50 ? 'var(--color-warn)' : 'var(--color-good)'}
-              />
+          {game.rules?.energy !== false && (
+            <div className="flex items-center gap-3">
+              <div className="w-28">
+                <Bar
+                  value={game.energy}
+                  color={game.energy < 25 ? 'var(--color-bad)' : game.energy < 50 ? 'var(--color-warn)' : 'var(--color-good)'}
+                />
+              </div>
+              <Btn disabled={game.vacationCooldown > 0} onClick={recharge} title="A real week off: +30 energy, the roadmap slips slightly">
+                🏝 {game.vacationCooldown > 0 ? `Recharge in ${game.vacationCooldown} wk` : 'Recharge week'}
+              </Btn>
             </div>
-            <Btn disabled={game.vacationCooldown > 0} onClick={recharge} title="A real week off: +30 energy, the roadmap slips slightly">
-              🏝 {game.vacationCooldown > 0 ? `Recharge in ${game.vacationCooldown} wk` : 'Recharge week'}
-            </Btn>
-          </div>
+          )}
         </div>
-        {game.energy < 30 && (
+        {game.rules?.energy !== false && game.energy < 30 && (
           <div className="mt-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-1.5 text-[12.5px] text-bad">
             You're running on fumes — your weekly contribution is badly weakened, and hitting empty forces a burnout. Take the week.
           </div>

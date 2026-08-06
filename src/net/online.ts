@@ -4,7 +4,7 @@
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
-import type { FounderKind, SectorId } from '../game/types'
+import type { FounderKind, Ruleset, SectorId } from '../game/types'
 
 export interface NetPlayer {
   id: string
@@ -25,6 +25,13 @@ export interface StartPayload {
   sector: SectorId
   cap: number
   deadline: number
+  rules?: Ruleset // host-chosen system toggles; older clients fall back to defaults
+}
+
+export interface AttackPayload {
+  fromCompany: string
+  targetId: string
+  kind: 'poach' | 'smear' | 'raid'
 }
 
 export interface EmotePayload {
@@ -42,6 +49,7 @@ export interface Handlers {
   onStart: (p: StartPayload) => void
   onEmote?: (p: EmotePayload) => void
   onChat?: (p: ChatPayload) => void
+  onAttack?: (p: AttackPayload) => void
 }
 
 let client: SupabaseClient | null = null
@@ -93,6 +101,7 @@ export async function connectRoom(code: string, me: NetPlayer, handlers: Handler
   ch.on('broadcast', { event: 'start' }, ({ payload }) => handlers.onStart(payload as StartPayload))
   ch.on('broadcast', { event: 'emote' }, ({ payload }) => handlers.onEmote?.(payload as EmotePayload))
   ch.on('broadcast', { event: 'chat' }, ({ payload }) => handlers.onChat?.(payload as ChatPayload))
+  ch.on('broadcast', { event: 'attack' }, ({ payload }) => handlers.onAttack?.(payload as AttackPayload))
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Connection timed out — check your internet and the Supabase config.')), 12_000)
     ch.subscribe(async (status) => {
@@ -124,6 +133,10 @@ export async function broadcastEmote(payload: EmotePayload): Promise<void> {
 
 export async function broadcastChat(payload: ChatPayload): Promise<void> {
   await channel?.send({ type: 'broadcast', event: 'chat', payload })
+}
+
+export async function broadcastAttack(payload: AttackPayload): Promise<void> {
+  await channel?.send({ type: 'broadcast', event: 'attack', payload })
 }
 
 export async function leaveRoom(): Promise<void> {

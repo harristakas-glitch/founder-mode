@@ -1,16 +1,31 @@
 import { useState } from 'react'
 import { Copy, DoorOpen, Play, Users } from 'lucide-react'
 import { SECTORS } from '../game/data'
-import type { SectorId } from '../game/types'
+import { PVP_RULES } from '../game/engine'
+import type { Ruleset, SectorId } from '../game/types'
 import { myId } from '../net/online'
 import { useStore } from '../store'
 import { ChatWidget } from '../ChatWidget'
+
+const RULE_LABELS: { key: keyof Ruleset; label: string; hint: string }[] = [
+  { key: 'pvp', label: '⚔️ PvP attacks', hint: 'Poach, smear and raid the other founders directly' },
+  { key: 'debt', label: '🏦 Bank debt', hint: 'Credit lines with covenants' },
+  { key: 'ventures', label: '🧪 New verticals', hint: 'Launch second product lines' },
+  { key: 'ipo', label: '🔔 IPO endgame', hint: 'Ring the bell to win big' },
+  { key: 'macroShocks', label: '📉 Macro shocks', hint: 'Crashes, rate hikes, oil spikes' },
+  { key: 'board', label: '👔 Board reviews', hint: 'Growth targets, strikes, ultimatums' },
+  { key: 'energy', label: '🔋 Founder energy', hint: 'Big moves drain you; burnout is real' },
+  { key: 'arcs', label: '📖 Story arcs', hint: 'Multi-week storylines (slower, deeper)' },
+  { key: 'oneOnOnes', label: '💬 1:1 asks', hint: 'Employees bring problems to your door' },
+  { key: 'catastrophes', label: '🔥 Catastrophes', hint: 'Breaches, CVEs, logistics meltdowns' },
+]
 
 export function Lobby() {
   const online = useStore((s) => s.online)!
   const beginMatch = useStore((s) => s.beginMatch)
   const leaveOnline = useStore((s) => s.leaveOnline)
   const [sector, setSector] = useState<SectorId>('saas')
+  const [rules, setRules] = useState<Ruleset>({ ...PVP_RULES })
   const [copied, setCopied] = useState(false)
 
   return (
@@ -70,18 +85,38 @@ export function Lobby() {
                 </button>
               ))}
             </div>
+            <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+              Match rules — lean &amp; mean by default
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {RULE_LABELS.map((r) => (
+                <button
+                  key={r.key}
+                  title={r.hint}
+                  onClick={() => setRules({ ...rules, [r.key]: !rules[r.key] })}
+                  className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-all ${
+                    rules[r.key]
+                      ? 'border-accent bg-accent/15 text-ink'
+                      : 'border-line bg-surface text-mut line-through decoration-mut/60 hover:border-accent/40'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
             <button
               disabled={online.players.length < 2}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-good py-3.5 font-bold text-white shadow-xl shadow-good/25 transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
-              onClick={() => beginMatch(sector)}
+              onClick={() => beginMatch(sector, rules)}
             >
               <Play size={17} />
               {online.players.length < 2 ? 'Waiting for at least one rival…' : `Start the match (${online.players.length} founders)`}
             </button>
           </>
         ) : (
-          <div className="mt-6 animate-pulse rounded-xl border border-line bg-surface2/50 px-4 py-3 text-center text-[14px] text-mut">
-            Waiting for the host to start the match…
+          <div className="mt-6 rounded-xl border border-line bg-surface2/50 px-4 py-3 text-center text-[14px] text-mut">
+            <span className="animate-pulse">Waiting for the host to start the match…</span>
+            <div className="mt-1.5 text-xs">The host picks the market and the match rules — battle-mode by default: PvP on, story systems off.</div>
           </div>
         )}
 

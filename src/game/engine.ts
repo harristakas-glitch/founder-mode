@@ -57,6 +57,41 @@ export function withSeed<T>(seed: number | undefined, fn: () => T): T {
   }
 }
 
+// ---------- rulesets: campaign depth vs. skirmish speed ----------
+
+export const DEFAULT_RULES: import('./types').Ruleset = {
+  arcs: true,
+  oneOnOnes: true,
+  catastrophes: true,
+  energy: true,
+  board: true,
+  debt: true,
+  ventures: true,
+  ipo: true,
+  macroShocks: true,
+  pvp: false,
+}
+
+// Multiplayer default: lean and adversarial — the drama comes from the other founders.
+export const PVP_RULES: import('./types').Ruleset = {
+  arcs: false,
+  oneOnOnes: false,
+  catastrophes: false,
+  energy: false,
+  board: false,
+  debt: true,
+  ventures: true,
+  ipo: true,
+  macroShocks: true,
+  pvp: true,
+}
+
+const ruleOn = (s: GameState, k: keyof import('./types').Ruleset): boolean => s.rules?.[k] ?? true
+
+function drainEnergy(s: GameState, n: number) {
+  if (ruleOn(s, 'energy')) s.energy = clamp(s.energy - n, 0, 100)
+}
+
 // ---------- new game ----------
 
 export interface NewGameOpts {
@@ -64,6 +99,7 @@ export interface NewGameOpts {
   challenge?: { label: string; cap: number } | null // capped run (daily / multiplayer match)
   aiRivals?: boolean // false in multiplayer — the other players ARE the rivals
   scenario?: string // scenario id from SCENARIOS
+  rules?: import('./types').Ruleset // system toggles; defaults to the full campaign
 }
 
 // Alternate starting worlds — same rules, different hand.
@@ -162,6 +198,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     energy: 80,
     vacationCooldown: 0,
     bankedPayout: 0,
+    rules: opts.rules ?? { ...DEFAULT_RULES },
     history: [],
     gameOver: null,
   }
@@ -595,6 +632,7 @@ function checkMilestones(s: GameState) {
 // ---------- new ventures: the multi-product company ----------
 
 export function canStartVenture(s: GameState): { ok: boolean; reason?: string } {
+  if (!ruleOn(s, 'ventures')) return { ok: false, reason: 'New verticals are disabled in this match' }
   if (STAGES.indexOf(s.stage) < 2) return { ok: false, reason: 'Reach Series A first — new bets need a real company underneath them' }
   if (s.pmf < 60) return { ok: false, reason: 'Find product-market fit on your core product first (PMF 60+)' }
   if (s.ventures.some((v) => !v.launched)) return { ok: false, reason: 'One un-launched bet at a time — focus is a feature' }
@@ -783,7 +821,7 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
   s.reputation = clamp(s.reputation + (downRound ? -6 : 8), 0, 100)
   s.hype = clamp(s.hype + (downRound ? 2 : 10), 0, 100)
   // New money, new masters: the board resets its expectations for the new stage.
-  s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
+  if (ruleOn(s, 'board')) s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
   if (downRound) applyEffects(s, { morale: -8 })
   s.inbox.unshift({
     id: uid(),
@@ -817,7 +855,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const marketReturn = rand(-0.025, 0.028) + (5 - m.rate) * 0.0015 - Math.max(0, m.inflation - 4) * 0.001
   m.index = Math.max(20, m.index * (1 + marketReturn))
   s.climate = clamp(s.climate + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
-  macroShocks(s)
+  if (ruleOn(s, 'macroShocks')) macroShocks(s)
 
   // --- inflation quietly eats payroll: salaries drift up with the cost of living ---
   for (const e of s.employees) e.salary = Math.round(e.salary * (1 + m.inflation / 100 / 52))
@@ -830,7 +868,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // The founder's own contribution runs on their energy tank — an exhausted founder is half a founder.
   const ipoDrag = s.ipo ? 0.85 : 1
   const rallyMult = s.rally ? s.rally.mult : 1
-  const energyMult = 0.4 + 0.6 * (s.energy / 100)
+  const energyMult = ruleOn(s, 'energy') ? 0.4 + 0.6 * (s.energy / 100) : 1
   const engPoints =
     (s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
       (s.founderKind === 'technical' ? 5 : 1.5) * energyMult) *
@@ -1053,8 +1091,8 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   // --- founder energy: slow recovery, faster erosion under stress ---
   const stressed = expenses > revenue && runway < 8
-  s.energy = clamp(s.energy + 3 - (s.ipo ? 4 : 0) - (stressed ? 3 : 0), 0, 100)
-  if (s.energy <= 5) {
+  if (ruleOn(s, 'energy')) s.energy = clamp(s.energy + 3 - (s.ipo ? 4 : 0) - (stressed ? 3 : 0), 0, 100)
+  if (ruleOn(s, 'energy') && s.energy <= 5) {
     // the body files its own board ultimatum
     s.energy = 35
     applyEffects(s, { morale: -3, features: -1 })
@@ -1069,7 +1107,10 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   }
 
   // --- one-on-ones: your people have asks of their own ---
-  maybeOneOnOne(s)
+  if (ruleOn(s, 'oneOnOnes')) maybeOneOnOne(s)
+
+  // --- PvP attack cooldown ---
+  if ((s.flags.attackCooldown ?? 0) > 0) s.flags.attackCooldown -= 1
 
   // --- IPO process ---
   tickIPO(s)
@@ -1078,8 +1119,10 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   maybeFireEvent(s)
 
   // --- story arcs: chapters open, chapters resolve ---
-  maybeStartArc(s)
-  tickArcs(s)
+  if (ruleOn(s, 'arcs')) {
+    maybeStartArc(s)
+    tickArcs(s)
+  }
 
   // --- acquisition offers: only credible companies get bought ---
   const val = valuation(s)
@@ -1187,10 +1230,12 @@ export function ipoChecklist(s: GameState): { label: string; met: boolean }[] {
 
 // When the IPO path should appear on screen: close enough to start planning for it.
 export function ipoVisible(s: GameState): boolean {
+  if (!ruleOn(s, 'ipo')) return false
   return valuation(s) >= IPO_MIN_VAL / 2 || s.stage === 'Series B' || s.stage === 'Series C'
 }
 
 export function ipoEligible(s: GameState): boolean {
+  if (!ruleOn(s, 'ipo')) return false
   return !s.ipo && !s.gameOver && ipoChecklist(s).every((c) => c.met)
 }
 
@@ -1328,6 +1373,7 @@ function macroShocks(s: GameState) {
 // ---------- bank debt: leverage with conditions ----------
 
 export function debtCapacity(s: GameState): number {
+  if (!ruleOn(s, 'debt')) return 0
   const annual = s.lastRevenue * 52
   if (annual < 250_000) return 0
   return Math.round(Math.min(annual * 0.5, 10_000_000) / 10_000) * 10_000
@@ -1531,6 +1577,7 @@ function maybeOneOnOne(s: GameState) {
 // ---------- founder self-care & personal finance ----------
 
 export function takeVacation(s: GameState) {
+  if (!ruleOn(s, 'energy')) return
   if (s.vacationCooldown > 0 || s.gameOver) return
   s.energy = clamp(s.energy + 30, 0, 100)
   s.features = clamp(s.features - 1.5, 0, 100)
@@ -1569,6 +1616,66 @@ export function sellSecondary(s: GameState) {
     title: 'Founder takes money off the table',
     body: 'A fund bought a sliver of your personal stake at a discount. De-risked founders make braver decisions — or complacent ones. The team watches which you become.',
   })
+}
+
+// ---------- PvP: what founders do to each other ----------
+
+export const ATTACK_COOLDOWN = 5
+
+export interface AttackDef {
+  id: 'poach' | 'smear' | 'raid'
+  name: string
+  emoji: string
+  cost: number
+  blurb: string
+}
+
+export const ATTACKS: AttackDef[] = [
+  { id: 'poach', name: 'Poach talent', emoji: '🎣', cost: 60_000, blurb: 'Recruiters target their team. Their morale dips; two strong candidates appear in your pool.' },
+  { id: 'smear', name: 'Smear campaign', emoji: '🗞', cost: 40_000, blurb: 'Anonymous briefings to journalists. Their hype and reputation take a hit; a little mud sticks to you too.' },
+  { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 80_000, blurb: 'A targeted campaign at their customer base. You take ~4% of their users.' },
+]
+
+export function canAttack(s: GameState): { ok: boolean; reason?: string } {
+  if (!ruleOn(s, 'pvp')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if ((s.flags.attackCooldown ?? 0) > 0) return { ok: false, reason: `Ops team recovering — ${s.flags.attackCooldown} wk` }
+  return { ok: true }
+}
+
+// The attacker's side: pay the cost, collect the spoils. targetUsers is the victim's
+// last-known user count (from presence) — spoils are computed from it.
+export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetCompany: string, targetUsers: number): boolean {
+  const def = ATTACKS.find((a) => a.id === kind)!
+  if (!canAttack(s).ok || s.cash < def.cost) return false
+  s.cash -= def.cost
+  s.flags.attackCooldown = ATTACK_COOLDOWN
+  drainEnergy(s, 4)
+  if (kind === 'poach') applyEffects(s, { special: 'talent-influx' })
+  if (kind === 'smear') s.reputation = clamp(s.reputation - 2, 0, 100)
+  if (kind === 'raid') s.users += Math.round(targetUsers * 0.04 * 0.8) // some raided users bounce
+  s.flash = `${def.emoji} ${def.name} launched against ${targetCompany}. ${kind === 'raid' ? 'Their users are getting your ads today.' : kind === 'poach' ? 'Your recruiters are working their team.' : 'The stories run tomorrow.'}`
+  return true
+}
+
+// The victim's side, applied when the attack broadcast arrives.
+export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], fromCompany: string) {
+  const def = ATTACKS.find((a) => a.id === kind)!
+  if (kind === 'poach') applyEffects(s, { morale: -6 })
+  if (kind === 'smear') applyEffects(s, { hype: -10, reputation: -3 })
+  if (kind === 'raid') applyEffects(s, { users: -0.04 })
+  s.inbox.unshift({
+    id: uid(),
+    week: s.week,
+    kind: 'news',
+    title: `${def.emoji} ${fromCompany} hit you: ${def.name.toLowerCase()}`,
+    body:
+      kind === 'poach'
+        ? `${fromCompany}'s recruiters are calling your team, one by one. Nothing personal — this is the game you're all playing.`
+        : kind === 'smear'
+          ? `Unflattering stories about your company are circulating, and the fingerprints belong to ${fromCompany}. The market notices.`
+          : `${fromCompany} is running aggressive ads squarely at your users — and some of them are converting.`,
+  })
+  s.flash = `${def.emoji} ${fromCompany} launched a ${def.name.toLowerCase()} against you!`
 }
 
 // ---------- the all-hands pitch: founder theater, with odds ----------
@@ -1752,6 +1859,7 @@ export function revenueGrowthRate(s: GameState): number {
 }
 
 function boardReview(s: GameState) {
+  if (!ruleOn(s, 'board')) return
   if (!s.board || s.week < s.board.nextReview) return
   const growth = growthRate(s)
   const target = boardEffectiveTarget(s)
@@ -1898,6 +2006,7 @@ function maybeFireEvent(s: GameState) {
   const eligible = EVENTS.filter(
     (e) =>
       (e.minWeek ?? 0) <= s.week &&
+      (!e.id.startsWith('cat-') || ruleOn(s, 'catastrophes')) &&
       (!e.cond || e.cond(s)) &&
       !s.inbox.slice(0, 8).some((m) => m.title === e.title), // avoid rapid repeats
   )

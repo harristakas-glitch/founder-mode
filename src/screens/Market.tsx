@@ -1,7 +1,16 @@
 import { Bar, Btn, Panel, StatCard, Td, Th } from '../components'
 import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
-import { acquisitionPrice, canAcquire, effectiveTam, marketSaturation, rivalValuation, valuation } from '../game/engine'
+import {
+  ATTACKS,
+  acquisitionPrice,
+  canAcquire,
+  canAttack,
+  effectiveTam,
+  marketSaturation,
+  rivalValuation,
+  valuation,
+} from '../game/engine'
 import { myId } from '../net/online'
 import { useStore } from '../store'
 
@@ -125,7 +134,48 @@ export function Market() {
         </Panel>
       </div>
 
+      {online && game.rules?.pvp && <PvpOps />}
       {!online && <Acquisitions />}
+    </div>
+  )
+}
+
+function PvpOps() {
+  const game = useStore((s) => s.game)!
+  const online = useStore((s) => s.online)!
+  const attackPlayer = useStore((s) => s.attackPlayer)
+  const targets = online.players.filter((p) => p.id !== myId() && !p.over)
+  if (targets.length === 0) return null
+  const gate = canAttack(game)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="⚔️ Dirty tricks — hit the other founders">
+        <div className="mb-2 text-xs leading-relaxed text-mut">
+          This market has one pot of users and no referee. Each operation costs cash, drains your energy, and puts your ops team on a
+          5-week cooldown — and everyone in the room will know it was you.
+        </div>
+        {!gate.ok && <div className="mb-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{gate.reason}</div>}
+        {targets.map((p) => (
+          <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
+            <span className="text-[13.5px]">
+              <b>{p.company}</b> <span className="text-mut">· {num(p.users)} users · wk {p.week}</span>
+            </span>
+            <span className="flex flex-wrap gap-2">
+              {ATTACKS.map((a) => (
+                <Btn
+                  key={a.id}
+                  disabled={!gate.ok || game.cash < a.cost}
+                  title={`${a.blurb} Costs ${money(a.cost)}.`}
+                  onClick={() => attackPlayer(p.id, a.id)}
+                >
+                  {a.emoji} {a.name} · {money(a.cost)}
+                </Btn>
+              ))}
+            </span>
+          </div>
+        ))}
+      </Panel>
     </div>
   )
 }

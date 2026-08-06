@@ -245,6 +245,7 @@ export default function App() {
             </div>
           </div>
           {game.challenge && <div className="mt-1 text-[11px] text-mut">{game.challenge.label} · ends wk {game.challenge.cap}</div>}
+          {game.rules?.energy !== false && (
           <div className="mt-2 flex items-center gap-1.5" title="Founder energy — big moves drain it, low energy weakens your weekly contribution. Recharge on the Team screen.">
             <span className="text-[9.5px] font-bold uppercase tracking-wider text-mut">Energy</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/40">
@@ -258,6 +259,7 @@ export default function App() {
             </div>
             <span className="text-[10px] font-bold tnum">{Math.round(game.energy)}</span>
           </div>
+          )}
           {online && (
             <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-accent/15 px-2 py-1 text-[11px] font-bold text-accent">
               <Globe size={11} /> Room {online.code}

@@ -1,9 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
+  DEFAULT_RULES,
+  PVP_RULES,
   acceptTermSheet,
   acquireRival,
   advanceWeek,
+  applyAttackIncoming,
+  applyAttackOutgoing,
   applyEffects,
   canStartVenture,
   drawDebt,
@@ -42,6 +46,7 @@ import { SECTORS, sectorById } from './game/data'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
+  broadcastAttack,
   broadcastChat,
   broadcastEmote,
   broadcastStart,
@@ -50,11 +55,13 @@ import {
   makeRoomCode,
   myId,
   pushState,
+  type AttackPayload,
   type ChatPayload,
   type EmotePayload,
   type NetPlayer,
   type StartPayload,
 } from './net/online'
+import type { Ruleset } from './game/types'
 
 export type ScreenId =
   | 'dashboard'
@@ -211,7 +218,8 @@ interface Store {
   hostRoom: (company: string, founder: FounderKind) => Promise<void>
   joinRoom: (code: string, company: string, founder: FounderKind) => Promise<void>
   leaveOnline: () => void
-  beginMatch: (sector: SectorId) => void
+  beginMatch: (sector: SectorId, rules?: Ruleset) => void
+  attackPlayer: (targetId: string, kind: 'poach' | 'smear' | 'raid') => void
   resumeOnline: () => Promise<void>
   cancelReady: () => void
   sendEmote: (emoji: string) => void
@@ -327,6 +335,16 @@ export const useStore = create<Store>()(
         },
         onEmote: showEmote,
         onChat: (p: ChatPayload) => appendChat(p, false),
+        onAttack: (p: AttackPayload) => {
+          if (p.targetId !== myId()) return
+          const g = get().game
+          if (!g || g.gameOver) return
+          const game = structuredClone(g)
+          applyAttackIncoming(game, p.kind, p.fromCompany)
+          sfx.ominous()
+          set({ game })
+          void pushState(myNetSummary(game))
+        },
         onStart: (p: StartPayload) => {
           const online = get().online
           if (!online || online.phase === 'playing') return
@@ -334,6 +352,7 @@ export const useStore = create<Store>()(
             seed: p.seed,
             challenge: { label: 'Online match', cap: p.cap },
             aiRivals: false, // the other players are the rivals
+            rules: p.rules ?? { ...PVP_RULES },
           })
           set({
             game: g,
@@ -532,7 +551,7 @@ export const useStore = create<Store>()(
           appendChat(payload, true) // broadcast doesn't echo to self
         },
 
-        beginMatch: (sector) => {
+        beginMatch: (sector, rules) => {
           const online = get().online
           if (!online || !online.host || online.phase !== 'lobby') return
           const payload: StartPayload = {
@@ -540,9 +559,23 @@ export const useStore = create<Store>()(
             sector,
             cap: MATCH_CAP,
             deadline: Date.now() + ROUND_SECONDS * 1000,
+            rules: rules ?? { ...PVP_RULES },
           }
           void broadcastStart(payload)
           handlers.onStart(payload) // broadcast doesn't echo to self
+        },
+
+        attackPlayer: (targetId, kind) => {
+          const { game, online } = get()
+          if (!game || !online || game.gameOver) return
+          const target = online.players.find((p) => p.id === targetId)
+          if (!target || target.over) return
+          const g = structuredClone(game)
+          if (!applyAttackOutgoing(g, kind, target.company, target.users)) return
+          sfx.ominous()
+          set({ game: g })
+          void broadcastAttack({ fromCompany: online.myCompany, targetId, kind })
+          void pushState(myNetSummary(g))
         },
 
         sendOffer: (candidateId) => {
@@ -766,6 +799,7 @@ export const useStore = create<Store>()(
           g.energy ??= 80
           g.vacationCooldown ??= 0
           g.bankedPayout ??= 0
+          g.rules ??= { ...DEFAULT_RULES }
         }
         return { ...current, ...p }
       },
