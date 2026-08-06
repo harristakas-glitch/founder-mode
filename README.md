@@ -24,6 +24,10 @@ Founder Mode is a turn-based management sim. Each turn is one week: set your tea
 | **New verticals** | Escape a saturated market: send a tiger team into a second sector with its own PMF journey and TAM. Multi-product companies stack S-curves. |
 | **IPO** | $300M valuation + $10M ARR unlocks the S-1: four weeks of scrutiny, four of roadshow, then pricing day — pop, modest debut, or a pulled offering. |
 | **Story arcs** | Multi-week narratives with memory: the MegaCorp pilot, a regulator inquiry, the influencer who turns, the acquired team that gels (or doesn't). |
+| **Founder energy** | Your own tank, 0–100. Pitches, pivots, IPOs, and board fights drain it; low energy weakens everything you touch; hitting empty forces a burnout. Recharge weeks cost roadmap time. |
+| **One-on-ones** | Employees bring their asks to your door — promotions, remote work, side projects, sabbaticals — with targeted consequences for that person's morale and salary. |
+| **Catastrophes** | Late-game, sector-flavored nightmares: the fintech breach, the social-app algorithm change, the e-commerce logistics meltdown, the dev-tools CVE. |
+| **Secondary sales** | From Series B, take real money off the table — 2% of your stake at a discount, banked into your final payout no matter how the run ends. |
 | **Events & achievements** | A 61-card event deck (every option shows its price — no hidden bills) and 26 cross-run achievement badges. |
 
 ### Modes
@@ -31,6 +35,18 @@ Founder Mode is a turn-based management sim. Each turn is one week: set your tea
 - **Free play** — solo vs AI rivals, five markets (B2B SaaS, Social, Fintech, Dev Tools, E-commerce), five scenario starts (Funding Winter, Rich Kid, Second-Time Founder, Late Entrant, Standard).
 - **Daily Challenge** — the same seeded world for every player on Earth, 104 weeks, global leaderboard.
 - **Online multiplayer** — 2–4 founders on different devices, one shared market, rounds advance when everyone is ready or a 2½-minute clock expires. Rooms with 5-letter codes, live standings, chat, emotes, refresh-proof reconnection.
+
+### Single player deep, multiplayer mean
+
+The two experiences run different rule sets. Solo campaigns turn everything on — the full education. Multiplayer defaults to **battle mode**: the slow story systems (arcs, one-on-ones, catastrophes, energy, board reviews) are switched off so turns stay fast, the economic weapons (debt, verticals, IPO, macro) stay on — and **PvP attacks** come alive:
+
+| Attack | Cost | Effect |
+|---|---|---|
+| 🎣 **Poach talent** | $60k | Their team's morale drops; two strong candidates appear in your hiring pool |
+| 🗞 **Smear campaign** | $40k | Their hype and reputation take a hit — and a little mud sticks to you |
+| ⚔️ **User raid** | $80k | You convert ~3% of their user base with targeted ads |
+
+Every operation costs cash, puts your ops team on a 5-week cooldown — and the victim is told exactly who did it. The host can toggle **any** of the ten rule systems in the lobby before starting, from a pure-PvP knife fight to a full-depth marathon.
 
 ## Tech
 
