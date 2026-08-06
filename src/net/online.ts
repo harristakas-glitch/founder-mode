@@ -18,6 +18,10 @@ export interface NetPlayer {
   payout: number
   over: boolean
   overType?: string
+  // open-book intel (multiplayer is a clear-information game; older clients omit these)
+  cash?: number
+  rev?: number // weekly revenue
+  pmf?: number
 }
 
 export interface StartPayload {

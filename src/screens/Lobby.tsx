@@ -26,6 +26,7 @@ export function Lobby() {
   const leaveOnline = useStore((s) => s.leaveOnline)
   const [sector, setSector] = useState<SectorId>('saas')
   const [rules, setRules] = useState<Ruleset>({ ...PVP_RULES })
+  const [cap, setCap] = useState(52)
   const [copied, setCopied] = useState(false)
 
   return (
@@ -85,6 +86,24 @@ export function Lobby() {
                 </button>
               ))}
             </div>
+            <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">Match length</div>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { weeks: 52, name: '⚡ Sprint — 52 weeks', blurb: 'Fast and vicious. Highest payout wins.' },
+                { weeks: 104, name: '🏁 Classic — 104 weeks', blurb: 'The full two-year war.' },
+              ].map((o) => (
+                <button
+                  key={o.weeks}
+                  onClick={() => setCap(o.weeks)}
+                  className={`rounded-lg border px-2 py-2 text-left transition-all ${
+                    cap === o.weeks ? 'border-accent bg-accent/15' : 'border-line bg-surface hover:border-accent/60'
+                  }`}
+                >
+                  <div className="text-[12.5px] font-semibold">{o.name}</div>
+                  <div className="text-[11px] text-mut">{o.blurb}</div>
+                </button>
+              ))}
+            </div>
             <div className="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
               Match rules — lean &amp; mean by default
             </div>
@@ -107,7 +126,7 @@ export function Lobby() {
             <button
               disabled={online.players.length < 2}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-good py-3.5 font-bold text-white shadow-xl shadow-good/25 transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-40"
-              onClick={() => beginMatch(sector, rules)}
+              onClick={() => beginMatch(sector, rules, cap)}
             >
               <Play size={17} />
               {online.players.length < 2 ? 'Waiting for at least one rival…' : `Start the match (${online.players.length} founders)`}

@@ -1109,8 +1109,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- one-on-ones: your people have asks of their own ---
   if (ruleOn(s, 'oneOnOnes')) maybeOneOnOne(s)
 
-  // --- PvP attack cooldown ---
+  // --- PvP attack cooldown & shield expiry ---
   if ((s.flags.attackCooldown ?? 0) > 0) s.flags.attackCooldown -= 1
+  if ((s.flags.shield ?? 0) > 0) s.flags.shield -= 1
 
   // --- IPO process ---
   tickIPO(s)
@@ -1636,6 +1637,13 @@ export const ATTACKS: AttackDef[] = [
   { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 80_000, blurb: 'A targeted campaign at their customer base. You take ~4% of their users.' },
 ]
 
+// Costs scale with your stage: $40k is a real decision at pre-seed and noise at
+// Series C, so the multiplier keeps dirty tricks a real decision all game long.
+export function attackCost(s: GameState, kind: AttackDef['id']): number {
+  const def = ATTACKS.find((a) => a.id === kind)!
+  return def.cost * (STAGES.indexOf(s.stage) + 1)
+}
+
 export function canAttack(s: GameState): { ok: boolean; reason?: string } {
   if (!ruleOn(s, 'pvp')) return { ok: false, reason: 'PvP is disabled in this match' }
   if ((s.flags.attackCooldown ?? 0) > 0) return { ok: false, reason: `Ops team recovering — ${s.flags.attackCooldown} wk` }
@@ -1646,8 +1654,9 @@ export function canAttack(s: GameState): { ok: boolean; reason?: string } {
 // last-known user count (from presence) — spoils are computed from it.
 export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetCompany: string, targetUsers: number): boolean {
   const def = ATTACKS.find((a) => a.id === kind)!
-  if (!canAttack(s).ok || s.cash < def.cost) return false
-  s.cash -= def.cost
+  const cost = attackCost(s, kind)
+  if (!canAttack(s).ok || s.cash < cost) return false
+  s.cash -= cost
   s.flags.attackCooldown = ATTACK_COOLDOWN
   drainEnergy(s, 4)
   if (kind === 'poach') applyEffects(s, { special: 'talent-influx' })
@@ -1657,9 +1666,45 @@ export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetC
   return true
 }
 
+// The counterplay: a retainer that silently eats the next incoming attack.
+// The attacker still pays and still goes on cooldown — they just hit a wall.
+export const SHIELD_WEEKS = 8
+export const SHIELD_BASE_COST = 50_000
+
+export function shieldCost(s: GameState): number {
+  return SHIELD_BASE_COST * (STAGES.indexOf(s.stage) + 1)
+}
+
+export function canBuyShield(s: GameState): { ok: boolean; reason?: string } {
+  if (!ruleOn(s, 'pvp')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if ((s.flags.shield ?? 0) > 0) return { ok: false, reason: `Crisis team already on retainer — ${s.flags.shield} wk left` }
+  return { ok: true }
+}
+
+export function buyShield(s: GameState): boolean {
+  const cost = shieldCost(s)
+  if (!canBuyShield(s).ok || s.cash < cost) return false
+  s.cash -= cost
+  s.flags.shield = SHIELD_WEEKS
+  s.flash = `🛡 Crisis team on retainer for ${SHIELD_WEEKS} weeks — the next attack on you fizzles. Your rivals don't know.`
+  return true
+}
+
 // The victim's side, applied when the attack broadcast arrives.
 export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], fromCompany: string) {
   const def = ATTACKS.find((a) => a.id === kind)!
+  if ((s.flags.shield ?? 0) > 0) {
+    s.flags.shield = 0
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: `🛡 Crisis team deflected ${fromCompany}'s ${def.name.toLowerCase()}`,
+      body: `${fromCompany} came at you — and your retainer earned every dollar. The attack fizzled before it touched morale, press, or users. The retainer is spent.`,
+    })
+    s.flash = `🛡 Your crisis team deflected ${fromCompany}'s ${def.name.toLowerCase()}!`
+    return
+  }
   if (kind === 'poach') applyEffects(s, { morale: -6 })
   if (kind === 'smear') applyEffects(s, { hype: -10, reputation: -3 })
   if (kind === 'raid') applyEffects(s, { users: -0.04 })

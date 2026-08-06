@@ -8,6 +8,7 @@ import {
   advanceWeek,
   applyAttackIncoming,
   applyAttackOutgoing,
+  buyShield,
   applyEffects,
   canStartVenture,
   drawDebt,
@@ -218,8 +219,9 @@ interface Store {
   hostRoom: (company: string, founder: FounderKind) => Promise<void>
   joinRoom: (code: string, company: string, founder: FounderKind) => Promise<void>
   leaveOnline: () => void
-  beginMatch: (sector: SectorId, rules?: Ruleset) => void
+  beginMatch: (sector: SectorId, rules?: Ruleset, cap?: number) => void
   attackPlayer: (targetId: string, kind: 'poach' | 'smear' | 'raid') => void
+  buyShield: () => void
   resumeOnline: () => Promise<void>
   cancelReady: () => void
   sendEmote: (emoji: string) => void
@@ -261,6 +263,9 @@ export const useStore = create<Store>()(
         over: !!g.gameOver,
         overType: g.gameOver?.type,
         payout: g.gameOver?.payout ?? 0,
+        cash: Math.round(g.cash),
+        rev: Math.round(g.lastRevenue),
+        pmf: Math.round(g.pmf),
       })
 
       const othersUsers = (players: NetPlayer[]): number =>
@@ -551,13 +556,13 @@ export const useStore = create<Store>()(
           appendChat(payload, true) // broadcast doesn't echo to self
         },
 
-        beginMatch: (sector, rules) => {
+        beginMatch: (sector, rules, cap) => {
           const online = get().online
           if (!online || !online.host || online.phase !== 'lobby') return
           const payload: StartPayload = {
             seed: Math.floor(Math.random() * 2 ** 31),
             sector,
-            cap: MATCH_CAP,
+            cap: cap ?? MATCH_CAP,
             deadline: Date.now() + ROUND_SECONDS * 1000,
             rules: rules ?? { ...PVP_RULES },
           }
@@ -575,6 +580,16 @@ export const useStore = create<Store>()(
           sfx.ominous()
           set({ game: g })
           void broadcastAttack({ fromCompany: online.myCompany, targetId, kind })
+          void pushState(myNetSummary(g))
+        },
+
+        buyShield: () => {
+          const { game } = get()
+          if (!game || game.gameOver) return
+          const g = structuredClone(game)
+          if (!buyShield(g)) return
+          sfx.cash()
+          set({ game: g })
           void pushState(myNetSummary(g))
         },
 

@@ -3,12 +3,16 @@ import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
 import {
   ATTACKS,
+  SHIELD_WEEKS,
   acquisitionPrice,
+  attackCost,
   canAcquire,
   canAttack,
+  canBuyShield,
   effectiveTam,
   marketSaturation,
   rivalValuation,
+  shieldCost,
   valuation,
 } from '../game/engine'
 import { myId } from '../net/online'
@@ -34,6 +38,9 @@ export function Market() {
           val: isMe ? valuation(game) : p.over ? p.payout : p.val,
           alive: isMe ? !game.gameOver : !p.over,
           you: isMe,
+          cash: isMe ? game.cash : p.cash,
+          rev: isMe ? game.lastRevenue : p.rev,
+          pmf: isMe ? game.pmf : p.pmf,
         }
       })
     : [
@@ -46,6 +53,9 @@ export function Market() {
           val: valuation(game),
           alive: true,
           you: true,
+          cash: undefined as number | undefined,
+          rev: undefined as number | undefined,
+          pmf: undefined as number | undefined,
         },
       ]
 
@@ -60,6 +70,9 @@ export function Market() {
       val: rivalValuation(r, game),
       alive: r.alive,
       you: false,
+      cash: undefined as number | undefined,
+      rev: undefined as number | undefined,
+      pmf: undefined as number | undefined,
     })),
   ].sort((a, b) => Number(b.alive) - Number(a.alive) || b.users - a.users)
 
@@ -98,8 +111,15 @@ export function Market() {
                   <Th>Company</Th>
                   <Th>Stage</Th>
                   <Th right>Users</Th>
+                  {online && (
+                    <>
+                      <Th right>Cash</Th>
+                      <Th right>Rev /wk</Th>
+                      <Th right>PMF</Th>
+                    </>
+                  )}
                   <Th right>Est. valuation</Th>
-                  <Th>Momentum</Th>
+                  {!online && <Th>Momentum</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -112,15 +132,24 @@ export function Market() {
                     </Td>
                     <Td>{r.alive ? r.stage : '☠️'}</Td>
                     <Td right>{num(r.users)}</Td>
+                    {online && (
+                      <>
+                        <Td right>{r.alive && r.cash != null ? money(r.cash) : '—'}</Td>
+                        <Td right>{r.alive && r.rev != null ? money(r.rev) : '—'}</Td>
+                        <Td right>{r.alive && r.pmf != null ? Math.round(r.pmf) : '—'}</Td>
+                      </>
+                    )}
                     <Td right>{r.alive ? money(r.val) : '—'}</Td>
-                    <Td className="w-[140px]">
-                      {r.alive && (
-                        <Bar
-                          value={r.product ?? Math.min(100, 40 + game.pmf / 2)}
-                          color={r.you ? 'var(--color-accent)' : 'var(--color-mut)'}
-                        />
-                      )}
-                    </Td>
+                    {!online && (
+                      <Td className="w-[140px]">
+                        {r.alive && (
+                          <Bar
+                            value={r.product ?? Math.min(100, 40 + game.pmf / 2)}
+                            color={r.you ? 'var(--color-accent)' : 'var(--color-mut)'}
+                          />
+                        )}
+                      </Td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -128,7 +157,7 @@ export function Market() {
           </div>
           <div className="mt-3 text-xs leading-relaxed text-mut">
             {online
-              ? 'These are your fellow founders — same market, same starting hand, one pot of users. Fallen players show their final payout.'
+              ? 'Open books: every founder sees everyone’s cash, revenue, and PMF — this is a knife fight under stadium lights, not a mystery novel. Fallen players show their final payout.'
               : 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
           </div>
         </Panel>
@@ -144,16 +173,38 @@ function PvpOps() {
   const game = useStore((s) => s.game)!
   const online = useStore((s) => s.online)!
   const attackPlayer = useStore((s) => s.attackPlayer)
+  const buyShield = useStore((s) => s.buyShield)
   const targets = online.players.filter((p) => p.id !== myId() && !p.over)
   if (targets.length === 0) return null
   const gate = canAttack(game)
+  const shieldGate = canBuyShield(game)
+  const sCost = shieldCost(game)
+  const shielded = (game.flags.shield ?? 0) > 0
 
   return (
     <div className="mt-3.5">
       <Panel title="⚔️ Dirty tricks — hit the other founders">
         <div className="mb-2 text-xs leading-relaxed text-mut">
           This market has one pot of users and no referee. Each operation costs cash, drains your energy, and puts your ops team on a
-          5-week cooldown — and everyone in the room will know it was you.
+          5-week cooldown — and everyone in the room will know it was you. Costs rise with your stage: a bigger company swings a bigger,
+          pricier bat.
+        </div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2/50 px-3 py-2.5">
+          <span className="text-[13.5px]">
+            🛡 <b>Crisis retainer</b>{' '}
+            <span className="text-mut">
+              — silently deflects the next attack on you. Lasts {SHIELD_WEEKS} weeks; your rivals can&apos;t see it.
+            </span>
+          </span>
+          {shielded ? (
+            <span className="rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-bold text-good">
+              Active — {game.flags.shield} wk left
+            </span>
+          ) : (
+            <Btn disabled={!shieldGate.ok || game.cash < sCost} title={shieldGate.reason} onClick={buyShield}>
+              Retain · {money(sCost)}
+            </Btn>
+          )}
         </div>
         {!gate.ok && <div className="mb-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{gate.reason}</div>}
         {targets.map((p) => (
@@ -162,16 +213,19 @@ function PvpOps() {
               <b>{p.company}</b> <span className="text-mut">· {num(p.users)} users · wk {p.week}</span>
             </span>
             <span className="flex flex-wrap gap-2">
-              {ATTACKS.map((a) => (
-                <Btn
-                  key={a.id}
-                  disabled={!gate.ok || game.cash < a.cost}
-                  title={`${a.blurb} Costs ${money(a.cost)}.`}
-                  onClick={() => attackPlayer(p.id, a.id)}
-                >
-                  {a.emoji} {a.name} · {money(a.cost)}
-                </Btn>
-              ))}
+              {ATTACKS.map((a) => {
+                const cost = attackCost(game, a.id)
+                return (
+                  <Btn
+                    key={a.id}
+                    disabled={!gate.ok || game.cash < cost}
+                    title={`${a.blurb} Costs ${money(cost)}.`}
+                    onClick={() => attackPlayer(p.id, a.id)}
+                  >
+                    {a.emoji} {a.name} · {money(cost)}
+                  </Btn>
+                )
+              })}
             </span>
           </div>
         ))}
