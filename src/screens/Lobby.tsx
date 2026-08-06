@@ -24,6 +24,9 @@ export function Lobby() {
   const online = useStore((s) => s.online)!
   const beginMatch = useStore((s) => s.beginMatch)
   const leaveOnline = useStore((s) => s.leaveOnline)
+  const setMyCompany = useStore((s) => s.setMyCompany)
+  // start empty when we only have the placeholder name, so the field invites typing
+  const [draftName, setDraftName] = useState(online.myCompany === 'Untitled Inc.' ? '' : online.myCompany)
   const [sector, setSector] = useState<SectorId>('saas')
   const [rules, setRules] = useState<Ruleset>({ ...PVP_RULES })
   const [cap, setCap] = useState(52)
@@ -55,18 +58,42 @@ export function Lobby() {
             <Users size={12} /> Founders in the room ({online.players.length}/4)
           </div>
           <div className="space-y-1.5">
-            {online.players.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-xl border border-line bg-surface2/60 px-4 py-2.5">
-                <span>
+            {online.players.map((p) =>
+              p.id === myId() ? (
+                // Your own row is editable: a player who joined from a shared code never saw
+                // the start screen's name field, and everyone should be able to fix a typo.
+                <div key={p.id} className="flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/5 px-3 py-2">
+                  <label htmlFor="lobby-company" className="sr-only">
+                    Your company name
+                  </label>
+                  <input
+                    id="lobby-company"
+                    type="text"
+                    value={draftName}
+                    maxLength={24}
+                    placeholder="Name your company"
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onBlur={() => setMyCompany(draftName)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    }}
+                    className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[14px] font-bold text-ink outline-none focus-visible:border-accent"
+                  />
+                  <span className="shrink-0 text-xs text-mut">
+                    you · {p.founder === 'technical' ? 'Technical' : 'Business'}
+                    {p.host && ' · host'}
+                  </span>
+                </div>
+              ) : (
+                <div key={p.id} className="flex items-center justify-between rounded-xl border border-line bg-surface2/60 px-4 py-2.5">
                   <b>{p.company}</b>
-                  {p.id === myId() && <span className="text-mut"> (you)</span>}
-                </span>
-                <span className="text-xs text-mut">
-                  {p.founder === 'technical' ? 'Technical' : 'Business'}
-                  {p.host && ' · host'}
-                </span>
-              </div>
-            ))}
+                  <span className="text-xs text-mut">
+                    {p.founder === 'technical' ? 'Technical' : 'Business'}
+                    {p.host && ' · host'}
+                  </span>
+                </div>
+              ),
+            )}
           </div>
         </div>
 

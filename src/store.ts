@@ -224,6 +224,7 @@ interface Store {
   hostRoom: (company: string, founder: FounderKind) => Promise<void>
   joinRoom: (code: string, company: string, founder: FounderKind) => Promise<void>
   leaveOnline: () => void
+  setMyCompany: (name: string) => void
   beginMatch: (sector: SectorId, rules?: Ruleset, cap?: number) => void
   attackPlayer: (targetId: string, kind: 'poach' | 'smear' | 'raid') => void
   buyShield: () => void
@@ -508,6 +509,21 @@ export const useStore = create<Store>()(
 
         joinRoom: async (code, company, founder) => {
           await connect(code.trim().toUpperCase(), false, company, founder)
+        },
+
+        // Rename yourself from inside the lobby. Every player needs this — someone who joined
+        // straight from a shared code never passed through the start screen's name field and
+        // would otherwise be stuck as "Untitled Inc." for the whole match.
+        setMyCompany: (name) => {
+          const online = get().online
+          if (!online || online.phase !== 'lobby') return // the name is baked into GameState once the match starts
+          const company = name.trim().slice(0, 24) || 'Untitled Inc.'
+          const players = online.players.map((p) => (p.id === myId() ? { ...p, company } : p))
+          set({
+            online: { ...online, myCompany: company, players },
+            onlineResume: get().onlineResume ? { ...get().onlineResume!, myCompany: company } : null,
+          })
+          void pushState({ company })
         },
 
         leaveOnline: () => {
