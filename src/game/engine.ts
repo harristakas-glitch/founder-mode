@@ -720,15 +720,33 @@ export function killVenture(s: GameState, ventureId: string) {
 
 // ---------- pivot ----------
 
-// Everything the company has learned — lifetime research and pivot scar tissue —
-// raises the floor of the next idea's demand roll. This is why you research BEFORE pivoting.
+// Everything the company has LEARNED raises the floor of the next idea's demand roll.
+// Deliberately keyed on research alone: rewarding pivot count made re-rolling on week 1
+// — before you know anything — the strongest opening in the game.
 export function pivotBonus(s: GameState): number {
-  return Math.min(0.35, s.pivots * 0.05 + s.totalResearch * 0.0015)
+  return Math.min(0.35, s.totalResearch * 0.0018)
+}
+
+export const PIVOT_COOLDOWN = 4
+export const PIVOT_COST = 15_000
+
+export function canPivot(s: GameState): { ok: boolean; reason?: string } {
+  if ((s.flags.pivotCooldown ?? 0) > 0) return { ok: false, reason: `The team is still absorbing the last pivot — ${s.flags.pivotCooldown} wk` }
+  if (s.cash < PIVOT_COST) return { ok: false, reason: `A pivot costs ${PIVOT_COST.toLocaleString()} in wind-down and rebuild` }
+  return { ok: true }
 }
 
 export function pivot(s: GameState) {
+  const gate = canPivot(s)
+  if (!gate.ok) {
+    s.flash = `Pivot unavailable — ${gate.reason}.` // never let a button silently do nothing
+    return
+  }
   const bonus = pivotBonus(s)
   s.pivots += 1
+  // a real cost in every ruleset — energy is switched off in PvP matches, so it cannot be the only one
+  s.cash -= PIVOT_COST
+  s.flags.pivotCooldown = PIVOT_COOLDOWN
   drainEnergy(s, 12) // rewriting your own conviction is exhausting
   s.features = Math.round(s.features * 0.5)
   s.quality = Math.round(s.quality * 0.7)
@@ -891,8 +909,12 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   // --- engineering & research ---
   const moraleFactor = (e: Employee) => 0.55 + (e.morale / 100) * 0.55
-  const traitMult = (e: Employee) => (e.trait === 'tenx' ? 1.5 : e.trait === 'mercenary' ? 1.15 : e.trait === 'craftsman' ? 1.1 : 1)
-  const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e)
+  const traitMult = (e: Employee) => (e.trait === 'tenx' ? 1.7 : e.trait === 'mercenary' ? 1.15 : e.trait === 'craftsman' ? 1.1 : 1)
+  // Communication overhead: every head past the first ~8 makes the whole org slightly slower.
+  // Without this, headcount has no cost but payroll, and "hire everyone you can afford" is
+  // strictly optimal forever — which removes the central question of how big to get.
+  const coordination = clamp(1 - Math.max(0, s.employees.length - COORDINATION_FREE_HEADS) * 0.015, 0.6, 1)
+  const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e) * coordination
   // an IPO process eats founder and team attention; a landed pitch lifts everything for a while.
   // The founder's own contribution runs on their energy tank — an exhausted founder is half a founder.
   const ipoDrag = s.ipo ? 0.85 : 1
@@ -919,7 +941,9 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   s.features = clamp(s.features + featureGain, 0, 100)
   s.quality = clamp(s.quality + (engPoints * aq * 0.28 + designPoints * 0.22) * (1 - s.quality / 120), 0, 100)
   // Shipping fast creates bugs; bug-fixing focus burns them down; big codebases decay a little on their own.
-  s.bugs = clamp(s.bugs + featureGain * 0.55 + s.features * 0.012 - engPoints * ab * 0.5 - craftsmen * 0.7, 0, 100)
+  // Craftsmen scrub proportionally: decisive when the codebase is a mess, negligible when it's
+  // clean. A flat rate let one hire permanently solo the bug mechanic.
+  s.bugs = clamp(s.bugs + featureGain * 0.55 + s.features * 0.012 - engPoints * ab * 0.5 - craftsmen * s.bugs * 0.04, 0, 100)
 
   // --- product-market fit: build the right thing, not just more things ---
   const researchPoints = engPoints * ar + designPoints * 0.3 + 0.5
@@ -1142,6 +1166,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // --- PvP attack cooldown & shield expiry ---
   if ((s.flags.attackCooldown ?? 0) > 0) s.flags.attackCooldown -= 1
   if ((s.flags.shield ?? 0) > 0) s.flags.shield -= 1
+  if ((s.flags.pivotCooldown ?? 0) > 0) s.flags.pivotCooldown -= 1
 
   // --- IPO process ---
   tickIPO(s)
@@ -1428,7 +1453,9 @@ export function drawDebt(s: GameState, amount: number) {
   s.debt = {
     principal: (s.debt?.principal ?? 0) + amount,
     apr,
-    covenantRevenue: Math.round(s.lastRevenue * 0.6),
+    // A covenant ratchets up, never down. Re-baselining it on every draw was a free pass:
+    // a growing company could top up its line each week and never risk a breach.
+    covenantRevenue: Math.max(s.debt?.covenantRevenue ?? 0, Math.round(s.lastRevenue * 0.7)),
   }
   s.flash =
     `🏦 Drew $${(amount / 1000).toFixed(0)}k of bank debt at ${apr}% APR. No dilution — but read the covenant: if weekly revenue drops below ` +
@@ -1652,6 +1679,13 @@ export function sellSecondary(s: GameState) {
 
 // ---------- PvP: what founders do to each other ----------
 
+// Headcount past this many people starts costing the org 1.5%/head in effectiveness.
+export const COORDINATION_FREE_HEADS = 8
+
+export function coordinationDrag(s: GameState): number {
+  return clamp(1 - Math.max(0, s.employees.length - COORDINATION_FREE_HEADS) * 0.015, 0.6, 1)
+}
+
 export const ATTACK_COOLDOWN = 5
 
 export interface AttackDef {
@@ -1700,10 +1734,12 @@ export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetC
   return true
 }
 
-// The counterplay: a retainer that silently eats the next incoming attack.
+// The counterplay: a retainer that silently eats EVERY incoming attack while it lasts.
 // The attacker still pays and still goes on cooldown — they just hit a wall.
+// It is priced as a real commitment, because that is the decision: spend big on defence
+// during the window you expect to be hit, or spend it on growth and take the hits.
 export const SHIELD_WEEKS = 8
-export const SHIELD_BASE_COST = 50_000
+export const SHIELD_BASE_COST = 120_000
 
 export function shieldCost(s: GameState): number {
   return SHIELD_BASE_COST * (STAGES.indexOf(s.stage) + 1)
@@ -1720,7 +1756,7 @@ export function buyShield(s: GameState): boolean {
   if (!canBuyShield(s).ok || s.cash < cost) return false
   s.cash -= cost
   s.flags.shield = SHIELD_WEEKS
-  s.flash = `🛡 Crisis team on retainer for ${SHIELD_WEEKS} weeks — the next attack on you fizzles. Your rivals don't know.`
+  s.flash = `🛡 Crisis team on retainer for ${SHIELD_WEEKS} weeks — attacks on you fizzle until it lapses. Your rivals don't know.`
   return true
 }
 
@@ -1730,13 +1766,13 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
   if (!def) return // unknown attack kind off the wire
   const fromCompany = String(rawFrom ?? 'A rival').slice(0, 30)
   if ((s.flags.shield ?? 0) > 0) {
-    s.flags.shield = 0
+    // the retainer runs for its full term — it is a duration you bought, not a single charge
     s.inbox.unshift({
       id: uid(),
       week: s.week,
       kind: 'news',
       title: `🛡 Crisis team deflected ${fromCompany}'s ${def.name.toLowerCase()}`,
-      body: `${fromCompany} came at you — and your retainer earned every dollar. The attack fizzled before it touched morale, press, or users. The retainer is spent.`,
+      body: `${fromCompany} came at you — and your retainer earned every dollar. The attack fizzled before it touched morale, press, or users. The team is on call for another ${s.flags.shield} week${s.flags.shield === 1 ? '' : 's'}.`,
     })
     s.flash = `🛡 Your crisis team deflected ${fromCompany}'s ${def.name.toLowerCase()}!`
     return
