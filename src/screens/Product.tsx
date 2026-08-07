@@ -13,6 +13,8 @@ import {
   resonanceEstimate,
   ventureSignal,
 } from '../game/engine'
+import { hasCapability } from '../game/modes'
+import { PMF_CAUSAL_CHAIN } from '../CareerUI'
 import { useStore } from '../store'
 
 const SIGNAL_COPY: Record<string, { text: string; cls: string }> = {
@@ -156,10 +158,15 @@ export function Product() {
   const game = useStore((s) => s.game)!
   const setAllocation = useStore((s) => s.setAllocation)
   const doPivot = useStore((s) => s.doPivot)
+  const setScreen = useStore((s) => s.setScreen)
   const engineers = game.employees.filter((e) => e.role === 'engineer').length
   const a = game.allocation
   const hasBet = game.ventures.some((v) => !v.launched)
-  const sum = Math.max(1, a.features + a.quality + a.bugs + a.research + (hasBet ? a.bet : 0))
+  // Career derives PMF from segments, so the research slider has no path to it and the engine
+  // now excludes it from the denominator entirely. Showing it would invite players to spend a
+  // fifth of engineering on nothing — which is exactly what the shipped default did.
+  const career = hasCapability(game, 'detailedPMF')
+  const sum = Math.max(1, a.features + a.quality + a.bugs + (career ? 0 : a.research) + (hasBet ? a.bet : 0))
   const signal = demandSignal(game)
   const est = resonanceEstimate(game)
 
@@ -172,6 +179,23 @@ export function Product() {
       </div>
 
       <div className="grid gap-3.5 lg:grid-cols-2">
+        {career ? (
+          <Panel title={`Product-market fit — ${Math.round(game.pmf)}`}>
+            <Bar value={game.pmf} color={game.pmf < 40 ? 'var(--color-warn)' : 'var(--color-good)'} />
+            <p className="mt-3 text-[13px] leading-relaxed">{PMF_CAUSAL_CHAIN}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-mut">
+              So this screen is upstream of PMF, not where you read it. Quality is the only lever here that reaches it: quality decides
+              how well you clear your target segment&apos;s hidden product bar, that fit decides who stays, and who stays is the score.
+              Nothing on this page moves PMF the week you do it.
+            </p>
+            <p className="mt-2 text-[13px] leading-relaxed text-mut">
+              Which segment you are aiming at, what you believe about it, and whether to change target all live on Discovery.
+            </p>
+            <Btn className="mt-3" onClick={() => setScreen('discovery')}>
+              Discovery — segments &amp; experiments →
+            </Btn>
+          </Panel>
+        ) : (
         <Panel title={`Product-market fit — ${pmfLabel(game.pmf)}`}>
           <Bar value={game.pmf} color={game.pmf < 40 ? 'var(--color-warn)' : 'var(--color-good)'} />
 
@@ -206,6 +230,8 @@ export function Product() {
           )}
         </Panel>
 
+        )}
+
         <div className="space-y-3.5">
           <StatCard
             label="Product score (execution quality)"
@@ -225,7 +251,15 @@ export function Product() {
 
       <div className="mt-3.5">
         <Panel title="Team focus (share of effort)">
-          {(['features', 'quality', 'bugs', 'research', ...(hasBet ? (['bet'] as const) : [])] as const).map((key) => (
+          {(
+            [
+              'features',
+              'quality',
+              'bugs',
+              ...(career ? [] : (['research'] as const)),
+              ...(hasBet ? (['bet'] as const) : []),
+            ] as const
+          ).map((key) => (
             <div className="mb-4 last:mb-0" key={key}>
               <div className="mb-1 flex justify-between text-[13px]">
                 <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>

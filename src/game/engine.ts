@@ -279,6 +279,10 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     gameOver: null,
   }
   if (opts.scenario && opts.scenario !== 'standard') applyScenario(state, opts.scenario)
+  // Career: research has no path to PMF, so shipping a default that points a fifth of engineering
+  // at it taught the wrong causal model from week 1. Quality is the lever that actually reaches
+  // fit, and through fit, retention — so the freed share goes there.
+  if (can(state, 'detailedPMF')) state.allocation = { features: 45, quality: 35, bugs: 20, research: 0, bet: 0 }
   state.candidates = Array.from({ length: 5 }, () => makeCandidate(state))
   state.inbox.push({
     id: uid(),
@@ -287,7 +291,10 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     title: `Welcome to ${companyName}`,
     body:
       `You quit your job, pooled $200k from savings and friends & family, and founded ${companyName}. ` +
-      `Nobody knows if the market wants what you are building — that is what user research is for. ` +
+      (can(state, 'detailedPMF')
+        ? `Nobody knows if the market wants what you are building. Discovery is where you find out who to build for; ` +
+          `product quality is how you earn them. PMF is the score you get for customers who stay. `
+        : `Nobody knows if the market wants what you are building — that is what user research is for. `) +
       `Find product-market fit before the money runs out, outgrow your rivals, and reach a $1B valuation. Good luck, founder.`,
   })
   return state
@@ -1093,14 +1100,20 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const designPoints =
     s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0) * rallyMult * careerDrag
   const craftsmen = s.employees.filter((e) => e.trait === 'craftsman').length
+  const careerOn = can(s, 'detailedPMF') && !!s.career
   const a = s.allocation
   const hasBet = s.ventures.some((v) => !v.launched)
   const betAlloc = hasBet ? a.bet : 0
-  const allocSum = Math.max(1, a.features + a.quality + a.bugs + a.research + betAlloc)
+  // Career derives PMF from segments and cohorts, so the research slider has no path to it —
+  // tickCareerPMF overwrites s.pmf later in this same tick. Left in the denominator it was worse
+  // than useless: it silently stole allocation share from quality, which IS the only lever on
+  // product fit, so raising research measurably LOWERED PMF. Zero it there.
+  const researchAlloc = careerOn ? 0 : a.research
+  const allocSum = Math.max(1, a.features + a.quality + a.bugs + researchAlloc + betAlloc)
   const af = a.features / allocSum
   const aq = a.quality / allocSum
   const ab = a.bugs / allocSum
-  const ar = a.research / allocSum
+  const ar = researchAlloc / allocSum
   const abet = betAlloc / allocSum
 
   const featureGain = engPoints * af * 0.32 * (1 - s.features / 130)
@@ -1112,11 +1125,17 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   s.bugs = clamp(s.bugs + featureGain * 0.55 + s.features * 0.012 - engPoints * ab * 0.5 - craftsmen * s.bugs * 0.04, 0, 100)
 
   // --- product-market fit: build the right thing, not just more things ---
-  const researchPoints = engPoints * ar + designPoints * 0.3 + 0.5
-  s.researchSignal += researchPoints
-  s.totalResearch += researchPoints
-  const pmfGain = (0.3 + researchPoints * 0.35 + featureGain * 0.25) * s.resonance * (1 - s.pmf / 110)
-  s.pmf = clamp(s.pmf + pmfGain - 0.5, 0, 100)
+  // Skipped entirely in Career, where tickCareerPMF derives PMF from segments and cohorts and
+  // overwrites s.pmf a few lines below. Running it anyway was not merely wasted work: the interim
+  // s.pmf it wrote was read by the milestone checks, so the research slider could tip a milestone
+  // like `users-100` in one run and not another and quietly change hype for the rest of the game.
+  if (!careerOn) {
+    const researchPoints = engPoints * ar + designPoints * 0.3 + 0.5
+    s.researchSignal += researchPoints
+    s.totalResearch += researchPoints
+    const pmfGain = (0.3 + researchPoints * 0.35 + featureGain * 0.25) * s.resonance * (1 - s.pmf / 110)
+    s.pmf = clamp(s.pmf + pmfGain - 0.5, 0, 100)
+  }
 
   const pScore = productScore(s)
 
@@ -1177,7 +1196,6 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // only the customer/PMF step differs, and only when the capability is on.
   let careerRevenueMult = 1
   let room = 1 // remaining market headroom, consumed later by tickRivals
-  const careerOn = can(s, 'detailedPMF') && !!s.career
   if (careerOn) {
     const r = tickCareerPMF(s, {
       sectorTam: sector.tam,

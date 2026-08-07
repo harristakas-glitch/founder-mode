@@ -447,7 +447,10 @@ export const EVENTS: EventDef[] = [
     id: 'user-insight',
     weight: 8,
     minWeek: 5,
-    cond: (s) => s.allocation.research > 10 && s.pmf < 70,
+    // Career has no research slider (the engine zeroes it) and derives PMF from cohorts, so this
+    // card both cannot be earned there and would hand out free PMF that the next tick overwrites.
+    // It was also the last path by which `allocation.research` still perturbed a Career run.
+    cond: (s) => !s.career && s.allocation.research > 10 && s.pmf < 70,
     title: 'A pattern in the user interviews',
     body: () =>
       'Three different users described the same unexpected way they use your product. There might be something real here.',
