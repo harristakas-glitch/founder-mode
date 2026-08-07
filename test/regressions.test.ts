@@ -98,5 +98,28 @@ const std: GameState = newGame('Std', 'saas', 'technical', { seed: 1 })
 ok(std.capabilities.storyArcs && !std.capabilities.pvpActions, 'single player: arcs on, pvp off')
 ok(DEFAULT_RULES.founderEnergy && !PVP_RULES.founderEnergy, 'mode presets unchanged')
 
+console.log('\n— Funding climate cycles, it does not absorb —')
+{
+  // A clamp is an absorbing boundary: with no mean reversion a run that wandered below -0.6 had
+  // nothing pulling it back and could sit frozen for the rest of the game, with fundraising 70%
+  // blocked the whole time. Measured before the fix: 8 runs in 40 stuck 20+ weeks, worst 49.
+  let worst = 0
+  let stuck = 0
+  for (let seed = 1; seed <= 20; seed++) {
+    let s = newGame('Climate', 'saas', 'technical', { seed })
+    let run = 0
+    let best = 0
+    for (let w = 0; w < 104; w++) {
+      s.cash = 5_000_000 // outlive the window; we are measuring the market, not the company
+      s = advanceWeek(s)
+      if (s.climate < -0.6) { run++; best = Math.max(best, run) } else run = 0
+    }
+    worst = Math.max(worst, best)
+    if (best >= 20) stuck++
+  }
+  ok(stuck === 0, `no run is frozen for 20+ consecutive weeks (${stuck}/20, worst streak ${worst} wk)`)
+  ok(worst > 0, 'downturns still happen — the fix is mean reversion, not removing bad markets')
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

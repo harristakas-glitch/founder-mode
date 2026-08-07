@@ -1076,7 +1076,14 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   m.inflation = clamp(m.inflation + rand(-0.15, 0.15) + (m.rate < m.inflation - 2 ? 0.08 : m.rate > m.inflation + 2 ? -0.08 : 0), 0, 12)
   const marketReturn = rand(-0.025, 0.028) + (5 - m.rate) * 0.0015 - Math.max(0, m.inflation - 4) * 0.001
   m.index = Math.max(20, m.index * (1 + marketReturn))
-  s.climate = clamp(s.climate + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
+  // Mean reversion. Without it climate is a pure random walk against a hard clamp, and a clamp is
+  // an absorbing boundary: a run that wandered into the frozen band (< -0.6) had nothing pulling it
+  // back and could stay there for the rest of the game. Measured over 40 seeds x 104 weeks before
+  // this line existed: 8 runs stuck 20+ consecutive frozen weeks, worst 49 — with fundraising 70%
+  // blocked throughout, which reads to the player as a broken game rather than a hard market.
+  // Funding markets are cyclical, not absorbing, so the pull scales with distance from neutral.
+  const reversion = -s.climate * 0.07
+  s.climate = clamp(s.climate + reversion + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
   if (can(s, 'macroShocks')) macroShocks(s)
 
   // --- inflation quietly eats payroll: salaries drift up with the cost of living ---
