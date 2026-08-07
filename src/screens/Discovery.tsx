@@ -1,6 +1,7 @@
 // Career-only: the Hypothesis Board, experiment catalogue and evidence log.
 // This screen is the centre of early Career play — it is where you find out that you were
 // wrong about your own market.
+import { useState } from 'react'
 import { Btn, Panel } from '../components'
 import { money } from '../format'
 import {
@@ -106,6 +107,7 @@ export function Discovery() {
 
   const segs = segmentsForSector(game.sector)
   const suggestion = suggestedExperiment(career, game.sector)
+  const [segment, setSegment] = useState<SegmentId>(career.primaryTargetSegmentId)
 
   return (
     <div>
@@ -215,17 +217,53 @@ export function Discovery() {
             </div>
           )}
 
-          {suggestion && (
-            <div className="mb-3 rounded-lg border border-line bg-surface2/50 px-3 py-2 text-[12.5px]">
-              <b>Recommended next: {experimentDef(suggestion.type).name}</b>
-              <div className="mt-0.5 text-mut">{suggestion.why}</div>
+          {suggestion ? (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface2/50 px-3 py-2 text-[12.5px]">
+              <span className="min-w-0 flex-1">
+                <b>
+                  Worth answering next: {experimentDef(suggestion.type).name} — {segmentDef(game.sector, suggestion.segmentId).name}
+                </b>
+                <div className="mt-0.5 text-mut">{suggestion.why}</div>
+              </span>
+              <Btn
+                className="shrink-0"
+                disabled={!canRunExperiment(career, suggestion.type, suggestion.segmentId, game.cash).ok}
+                onClick={() => {
+                  setSegment(suggestion.segmentId)
+                  runExperiment(suggestion.type, suggestion.segmentId)
+                }}
+              >
+                Run it
+              </Btn>
+            </div>
+          ) : (
+            <div className="mb-3 rounded-lg border border-good/30 bg-good/5 px-3 py-2 text-[12.5px] text-mut">
+              Nothing cheap left to learn — every open question is either answered or already being tested. Go and win customers; their
+              behaviour is the evidence you can't buy.
             </div>
           )}
 
+          {/* Experiments run on ANY segment. Investigating only your current bet is how you end
+              up certain about the wrong market. */}
+          <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[11px] font-bold tracking-wide text-mut uppercase">Investigate</span>
+            {segs.map((sg) => (
+              <button
+                key={sg.id}
+                onClick={() => setSegment(sg.id)}
+                className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-all ${
+                  segment === sg.id ? 'border-accent bg-accent/15 text-ink' : 'border-line bg-surface text-mut hover:border-accent/50'
+                }`}
+              >
+                {sg.name}
+                {sg.id === career.primaryTargetSegmentId && <span className="ml-1 text-[10px] text-accent">· target</span>}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-2">
             {EXPERIMENTS.map((def) => {
-              const target = career.primaryTargetSegmentId
-              const gate = canRunExperiment(career, def.type, target, game.cash)
+              const gate = canRunExperiment(career, def.type, segment, game.cash)
               return (
                 <div key={def.type} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2 last:border-b-0">
                   <span className="min-w-0 flex-1 text-[12.5px]">
@@ -236,9 +274,9 @@ export function Discovery() {
                     variant="primary"
                     disabled={!gate.ok}
                     title={gate.reason}
-                    onClick={() => runExperiment(def.type as ExperimentType, target)}
+                    onClick={() => runExperiment(def.type as ExperimentType, segment)}
                   >
-                    Run on {segmentDef(game.sector, target).name}
+                    Run on {segmentDef(game.sector, segment).name}
                   </Btn>
                 </div>
               )

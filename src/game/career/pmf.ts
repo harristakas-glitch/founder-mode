@@ -669,23 +669,60 @@ export function biggestUncertainty(career: CareerPMFState, sector: string): stri
   }
 }
 
-export function suggestedExperiment(career: CareerPMFState, sector: string): { type: ExperimentType; why: string } | null {
+/**
+ * The next question worth paying to answer — across ALL segments, not just the target.
+ *
+ * It must never repeat itself: anything already in flight on a segment is excluded, so the
+ * recommendation moves on as soon as you act on it. When the target is well understood it
+ * starts pointing at the segments you have ignored, which is usually where the surprise is.
+ */
+export function suggestedExperiment(
+  career: CareerPMFState,
+  sector: string,
+): { type: ExperimentType; segmentId: SegmentId; why: string } | null {
+  const running = new Set(career.activeExperiments.filter((e) => e.status === 'active').map((e) => `${e.segmentId}:${e.type}`))
+  // Each rung: the belief it answers, the instrument that answers it, and the bar to clear.
+  const LADDER: { metric: TruthMetric; type: ExperimentType; bar: number; why: (n: string) => string }[] = [
+    { metric: 'needIntensity', type: 'interview', bar: 0.4, why: (n) => `You have almost no read on whether ${n} feel this problem at all. Start cheap.` },
+    { metric: 'acquisitionAccessibility', type: 'landing_page', bar: 0.4, why: (n) => `You think there's a need, but nothing tells you whether ${n} can be reached affordably.` },
+    { metric: 'productRequirement', type: 'prototype', bar: 0.45, why: (n) => `Opinions say the need is there. Put something real in front of ${n} and watch what they do.` },
+    { metric: 'willingnessToPay', type: 'pricing_test', bar: 0.55, why: (n) => `Interest without proof of payment. Ask ${n} for money and see who stays.` },
+    { metric: 'retentionPotential', type: 'pilot', bar: 0.65, why: (n) => `Everything short of a real deployment looks good. Only a pilot proves ${n} stay.` },
+  ]
+
   const target = career.primaryTargetSegmentId
-  const b = career.segmentBeliefs[target]
-  if (!b) return null
-  const name = segmentDef(sector, target).name
-  const customers = totalCustomers(career, target)
-  if (b.needIntensity.confidence < 0.4)
-    return { type: 'interview', why: `You have almost no read on whether ${name} feel this problem at all. Start cheap.` }
-  if (b.acquisitionAccessibility.confidence < 0.4)
-    return { type: 'landing_page', why: `You believe there is a need, but nothing tells you whether ${name} can be reached affordably.` }
-  if (b.productRequirement.confidence < 0.45)
-    return { type: 'prototype', why: `Opinions say the need is there. Put something real in front of ${name} and watch what they do.` }
-  if (b.willingnessToPay.confidence < 0.55)
-    return { type: 'pricing_test', why: `Strong interest, no proof of payment. Ask ${name} for money and see who stays.` }
-  if (b.retentionPotential.confidence < 0.65 || (customers > 40 && (career.retentionBySegment[target] ?? 0) < 0.7))
-    return { type: 'pilot', why: `Everything short of a real deployment has been positive. A pilot is the only thing that proves ${name} stay.` }
-  return null
+  const candidates: { type: ExperimentType; segmentId: SegmentId; why: string; score: number }[] = []
+
+  for (const seg of segmentsForSector(sector)) {
+    const b = career.segmentBeliefs[seg.id]
+    if (!b) continue
+    const isTarget = seg.id === target
+    const customers = totalCustomers(career, seg.id)
+    for (const rung of LADDER) {
+      if (running.has(`${seg.id}:${rung.type}`)) continue
+      const gap = rung.bar - b[rung.metric].confidence
+      if (gap <= 0) continue
+      // The segment you are betting on matters most; an unexamined segment is worth more than
+      // one you have already studied, because that is where a wrong assumption still hides.
+      const weight = isTarget ? 1 : 0.55 + (1 - b.needIntensity.confidence) * 0.35
+      candidates.push({ type: rung.type, segmentId: seg.id, why: rung.why(segmentDef(sector, seg.id).name), score: gap * weight })
+      break // one rung per segment: answer the cheapest open question first
+    }
+    // A target that retains badly needs a pilot regardless of confidence.
+    if (isTarget && customers > 40 && (career.retentionBySegment[seg.id] ?? 0) < 0.7 && !running.has(`${seg.id}:pilot`)) {
+      candidates.push({
+        type: 'pilot',
+        segmentId: seg.id,
+        why: `${segmentDef(sector, seg.id).name} are churning. A pilot is the only way to find out whether that is the product or the price.`,
+        score: 0.9,
+      })
+    }
+  }
+
+  if (candidates.length === 0) return null
+  candidates.sort((a, b) => b.score - a.score)
+  const { type, segmentId, why } = candidates[0]
+  return { type, segmentId, why }
 }
 
 export function explanationText(e: CausalExplanation): string {

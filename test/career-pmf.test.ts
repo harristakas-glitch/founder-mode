@@ -5,6 +5,7 @@ import { generateAllTruth, generateSegmentTruth, segmentsForSector } from '../sr
 import {
   EXPERIMENTS,
   TRUTH_METRICS,
+  canRunExperiment,
   createCareerPMF,
   derivePmfForSegment,
   experimentDef,
@@ -14,6 +15,7 @@ import {
   segmentPriceFit,
   segmentProductFit,
   startExperiment,
+  suggestedExperiment,
   totalCustomers,
   updateBelief,
 } from '../src/game/career/pmf'
@@ -218,6 +220,41 @@ const migrated = migrateCareerSave({ seed: 2468, sector: 'saas', scenario: 'stan
 ok(JSON.stringify(migrated.segmentTruth) === JSON.stringify(generateAllTruth(2468, 'saas', 'standard')), 'migration rebuilds the ORIGINAL market from the seed')
 ok(totalCustomers(migrated) === 900, 'existing users become a starting cohort rather than vanishing')
 ok(migrated.journal.some((j) => j.title.includes('activated')), 'the migration is recorded in the journal')
+
+console.log('— The suggested experiment must not repeat itself —')
+let sg = newGame('Sug', 'saas', 'technical', { config: cfg({ seed: 4242 }) })
+sg.cash = 3_000_000
+sg.marketingSpend = 25_000
+const suggestions: string[] = []
+let sn = 0
+for (let w = 0; w < 24; w++) {
+  const sug = suggestedExperiment(sg.career!, sg.sector)
+  suggestions.push(sug ? `${sug.type}:${sug.segmentId}` : 'none')
+  if (sug && canRunExperiment(sg.career!, sug.type, sug.segmentId, sg.cash).ok) {
+    startExperiment(sg.career!, sg.week, sug.type, sug.segmentId, `s${sn++}`)
+    sg.cash -= experimentDef(sug.type).cashCost
+  }
+  sg.cash = 3_000_000
+  sg = advanceWeek(sg)
+}
+let longestStreak = 1
+for (let i = 0; i < suggestions.length; i++) {
+  let run = 1
+  while (i + run < suggestions.length && suggestions[i + run] === suggestions[i]) run++
+  longestStreak = Math.max(longestStreak, run)
+}
+ok(longestStreak <= 2, `a player who follows the advice never sees the same suggestion twice running (longest streak ${longestStreak})`)
+ok(new Set(suggestions).size >= 5, `suggestions vary across experiments and segments (${new Set(suggestions).size} distinct in 24 weeks)`)
+ok(
+  new Set(suggestions.map((x) => x.split(':')[1])).size >= 2,
+  'the recommendation looks beyond the current target segment',
+)
+// something already in flight is never re-recommended
+const inflightRun = newGame('Inflight', 'saas', 'technical', { config: cfg({ seed: 4242 }) })
+const first = suggestedExperiment(inflightRun.career!, inflightRun.sector)!
+startExperiment(inflightRun.career!, 1, first.type, first.segmentId, 'inflight')
+const second = suggestedExperiment(inflightRun.career!, inflightRun.sector)
+ok(!second || `${second.type}:${second.segmentId}` !== `${first.type}:${first.segmentId}`, 'work already running is never suggested again')
 
 console.log('— Retention is a 4-week snapshot, not lifetime decay —')
 let ret = newGame('Ret', 'saas', 'technical', { config: cfg({ seed: 909 }) })
