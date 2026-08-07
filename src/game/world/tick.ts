@@ -21,7 +21,7 @@ import {
   fullName,
   rivalSpec,
 } from './characters'
-import { composeNarrative } from './composer'
+import { composeNarrative, recordNarrative } from './composer'
 import { recordCompanyMemory, sortedCharacterIds } from './memory'
 import { emptyLivingWorld, enforceLivingWorldLimits, markWeekGenerated, shouldGenerateForWeek } from './persistence'
 import { tickRelationship, upsertRelationship } from './relationships'
@@ -122,18 +122,27 @@ export function tickLivingWorld(s: GameState): void {
   enforceLivingWorldLimits(world)
 }
 
+/** Weeks between check-ins. Every week was noise; a month makes it an event you notice. */
+export const BEAT_INTERVAL_WEEKS = 4
+
 /**
- * One composed message a week, at most. The Narrative Director (brief §24) decides what deserves
- * attention and is a later phase; until it exists this picks the longest-serving active employee,
- * which is deterministic and gives the composer a real character with real memories to draw on.
+ * A colleague raises something with you. Deliberately a CHOICE, not a news item: the composer
+ * writes people asking for things ("put me in front of the board once, that is the whole ask"),
+ * and a request the player cannot answer is worse than no message at all — it reads as a broken
+ * game. The Narrative Director (brief §24) will decide what deserves attention and with what
+ * weight; until it lands this is a fixed cadence with a rotating speaker.
  */
 function composeWeeklyBeat(s: GameState, world: LivingWorldState, seed: number): void {
-  const ids = sortedCharacterIds(world)
-  const speaker = ids
+  if (s.week % BEAT_INTERVAL_WEEKS !== 0) return
+
+  const cast = sortedCharacterIds(world)
     .map((id) => world.characters[id])
     .filter((c) => c && c.status === 'active' && c.role === 'employee')
-    .sort((a, b) => a.createdWeek - b.createdWeek || a.id.localeCompare(b.id))[0]
-  if (!speaker) return
+  if (cast.length === 0) return
+
+  // Rotate. Picking the longest-serving employee meant the same person spoke every single time,
+  // for the whole run — the fastest way to make a cast of characters feel like one stuck NPC.
+  const speaker = cast[Math.floor(s.week / BEAT_INTERVAL_WEEKS) % cast.length]
 
   const composed = composeNarrative({
     seed,
@@ -148,13 +157,40 @@ function composeWeeklyBeat(s: GameState, world: LivingWorldState, seed: number):
   })
   if (!composed) return
 
+  // The composed id is already unique and deterministic, so it doubles as the message id — and
+  // avoids importing uid() from the engine, which would close an import cycle (engine → tick).
+  const id = composed.id
+  // Map back to the SIMULATION's employee: `target.morale` is applied by resolveChoiceOnState via
+  // meta.employeeId, and our cast ids are derived, so without this the per-person consequence
+  // would silently do nothing.
+  const employee = s.employees.find((e) => stableCastId('emp', e.name, e.role) === speaker.id)
   s.inbox.unshift({
-    id: composed.id,
+    id,
     week: s.week,
-    kind: 'news',
-    title: `${fullName(speaker)} — ${composed.subject}`,
-    body: composed.body,
+    kind: 'choice',
+    title: `${fullName(speaker)} wants a word`,
+    body: `${composed.subject}\n\n${composed.body}`,
+    choices: [
+      {
+        label: 'Make the time — hear them out properly',
+        resultText: `You block an hour. ${speaker.firstName} leaves lighter than they arrived, and the room notices.`,
+        effects: { morale: 4 },
+        target: { morale: 10 },
+      },
+      {
+        label: 'Not this week — you have a company to run',
+        resultText: `"Sure. Whenever." ${speaker.firstName} says it kindly, and means it less than they did last time.`,
+        effects: { morale: -2 },
+        target: { morale: -12 },
+      },
+    ],
+    meta: employee ? { employeeId: employee.id } : undefined,
   })
+
+  // Record AFTER emitting. Without this the usage buffers stay empty, every fragment stays off
+  // cooldown forever, and the composer keeps re-picking its favourites — which is exactly how the
+  // same subject line came back four weeks later with half the same body.
+  world.narrative = recordNarrative(world.narrative, composed, id)
 }
 
 export { characterIdentityKey }

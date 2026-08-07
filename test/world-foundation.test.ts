@@ -83,6 +83,26 @@ for (let w = 1; w <= 20; w++) {
 }
 ok(seen.size >= 8, `repetition control keeps it varied (${seen.size} distinct bodies over 20 weeks)`)
 
+console.log('\n— The weekly check-in is an event you can answer (player report, wk 42/46) —')
+{
+  // Shipped as: the same employee, every single week, with a repeating subject line and no way to
+  // respond — a character asking "put me in front of the board once" and no button to say yes.
+  // A request the player cannot answer is worse than no message at all.
+  const long = play(4242, 60)
+  const beats = long.inbox.filter((m) => /wants a word/.test(m.title))
+  ok(beats.length > 0 && beats.length <= 60 / 4 + 1, `cadence is a month, not a week (${beats.length} in 60 wk)`)
+  ok(new Set(beats.map((m) => m.title)).size > 1, `the speaker rotates (${new Set(beats.map((m) => m.title)).size} distinct people)`)
+  ok(
+    new Set(beats.map((m) => m.body)).size === beats.length,
+    `no two check-ins say the same thing (${new Set(beats.map((m) => m.body)).size}/${beats.length} distinct)`,
+  )
+  ok(beats.every((m) => m.kind === 'choice' && (m.choices?.length ?? 0) === 2), 'every check-in can actually be answered')
+  ok(
+    (long.world?.narrative.entries.length ?? 0) > 0,
+    'usage is recorded after emitting — without it every fragment stays off cooldown forever',
+  )
+}
+
 console.log('\n— Inert when off (brief §89: the acceptance criterion) —')
 const OFF = {
   proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false,
