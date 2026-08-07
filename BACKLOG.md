@@ -100,7 +100,32 @@ bankruptcy, not a value play) — **do not change the numbers.** The problem is 
 UI never explains the trade. **Suggested:** a line on the panel — "selling 2% for the cash value
 of 1.4%; this only pays off if the run ends badly."
 
-### 4.3 The PvP retune is unmeasured in a real arena
+### 4.3 Career: Enterprise Bet looks dominant, Disciplined Discovery underperforms
+Measured with `npx tsx test/career-bots.ts` (8 seeds, 90 weeks, SaaS):
+
+| Strategy | Alive | Customers | 4wk retention | Rev/wk | Valuation | Wk to $2k/wk |
+|---|---|---|---|---|---|---|
+| Careless Growth | 8/8 | 472 | 25% | $1.2k | $2.7M | never |
+| Disciplined Discovery | 4/8 | 212 | 62% | $1.0k | $2.4M | never |
+| Enterprise Bet | 7/8 | 423 | 66% | $4.7k | $5.5M | 36 |
+
+Enterprise Bet leads on revenue (4×), valuation (2×), PMF status and time-to-revenue, and is
+near the top on survival. **Disciplined Discovery — the strategy the mode is meant to teach —
+finishes worst on almost every axis and dies half the time.**
+
+Two candidate causes, not yet separated:
+1. **Bot artifact.** The disciplined bot holds marketing at $3k/wk until 4-week retention
+   exceeds 0.72, but the median it achieves is 0.62 — so it starves itself indefinitely while
+   paying $4k–28k per experiment. A gate it can rarely pass is a bot bug, not a game truth.
+2. **Real imbalance.** High willingness-to-pay segments may simply pay for themselves faster
+   than discovery pays off, making research a luxury rather than an edge.
+
+**Done when:** the disciplined bot scales on a reachable trigger (e.g. retention above the
+*segment's* believed potential rather than a fixed 0.72), the three strategies are re-measured,
+and either the spread is defensible or the economics are retuned. Do not declare "no dominant
+strategy" again without a table showing what each strategy loses on.
+
+### 4.4 The PvP retune is unmeasured in a real arena
 The shield, poach, raid-leverage and attack-cost changes were verified mechanically (unit
 tests) but **not** re-measured in 4-player matches. The original audit's arena numbers are now
 stale. **Done when:** a 4-player arena harness re-runs builder / raider / smearer / poacher

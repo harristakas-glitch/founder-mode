@@ -22,7 +22,7 @@ PLAY
 | Experience | Promise | What it is |
 |---|---|---|
 | **Quick Play** — 30–60 min · Solo | *Build a unicorn tonight.* | Fast startup management. Start a company, make the big decisions and see how far you can take it. |
-| **Career** — Deep Simulation · Solo · Multi-session | *Build the company. Become the CEO.* | A deeper founder simulation about product, people, strategy and capital. |
+| **Career** — Deep Simulation · Solo · Multi-session | *Build the company. Become the CEO.* | A deeper founder simulation about product, people, strategy and capital. Runs its own product-market-fit simulation. |
 | **Arena** — 2–4 Players · Online | *Outbuild your friends.* | Compete against other founders in the same market. |
 
 Quick Play has three **formats**:
@@ -31,15 +31,15 @@ Quick Play has three **formats**:
 - **Daily Challenge** — *Same world. Same seed. One shot.* Everyone gets the same company today: 104 weeks, market locked, global leaderboard.
 - **Scenarios** — *Different starts. Different problems.* Five alternate hands: Standard, Funding Winter, Rich Kid, Second-Time Founder, Late Entrant.
 
-**Career is Early Access and says so in the UI.** Today it runs the same simulation as Quick Play. What it already has is its own capability table, so the deep systems on the roadmap — customer discovery, founder attention, executives, board politics — can switch on there without touching Quick Play or Arena.
+**Career is Early Access and says so in the UI.** It is no longer a reskin of Quick Play: Phase 1 shipped, and Career now replaces the single hidden PMF number with [a full discovery simulation](#career-you-do-not-know-your-market-yet) — segments, beliefs, experiments and cohorts. The rest of the roadmap (founder attention, executives, board politics) is still to come.
 
-Everything that differs between the three lives in `src/game/modes.ts` as **capabilities**, resolved once per run (`MODE base → FORMAT → SCENARIO → lobby overrides`). The engine never asks "which mode is this?", only "is this capability on?" — so moving a system between experiences is a one-table edit. Capabilities that aren't built yet are listed and left `false`; the game never claims functionality it doesn't have.
+Everything that differs between the three lives in `src/game/modes.ts` as **capabilities**, resolved once per run (`MODE base → FORMAT → SCENARIO → lobby overrides`). The engine never asks "which mode is this?", only "is this capability on?" — so moving a system between experiences is a one-table edit. Capabilities that aren't built yet are listed and left `false`; the game never claims functionality it doesn't have. Career's five extra capabilities (`detailedPMF`, `customerSegments`, `customerResearch`, `hypothesisBoard`, `decisionJournal`) are what switch the discovery simulation on, and they are `false` everywhere else.
 
 ### Core systems
 
 | System | What it does |
 |---|---|
-| **Product-market fit** | Every idea has a hidden market resonance. Research reveals it; pivoting rerolls it (your accumulated research improves the odds). Without PMF, users churn as fast as they arrive. |
+| **Product-market fit** | Every idea has a hidden market resonance. Research reveals it; pivoting rerolls it (your accumulated research improves the odds). Without PMF, users churn as fast as they arrive. *Career replaces this whole row — see below.* |
 | **Rivals** | Three AI competitors per market with their own funding rounds, launches, and failures. They steal your users when their product is better — or you can **acquire them** (cash or stock, with rebuff risk). |
 | **Fundraising** | Pre-seed → Series C. Term sheets price off your valuation and the funding climate; round sizes chase growth. Down rounds hurt. A one-time emergency bridge exists for companies worth saving — 15% of the company, and there is no second one. |
 | **The board** | Investor money brings growth targets, reviewed every ten weeks. Pass by user growth, revenue growth, or real profitability. Three strikes = ultimatum; keep failing = you're fired. |
@@ -56,6 +56,48 @@ Everything that differs between the three lives in `src/game/modes.ts` as **capa
 | **Catastrophes** | Late-game, sector-flavored nightmares: the fintech breach, the social-app algorithm change, the e-commerce logistics meltdown, the dev-tools CVE. |
 | **Secondary sales** | From Series B, take real money off the table — 2% of the company at a 30% discount, banked into your final payout no matter how the run ends. Once per stage. |
 | **Events & achievements** | A 66-card event deck (every option shows its price — no hidden bills) and 26 cross-run achievement badges. |
+
+### Career: you do not know your market yet
+
+Career Phase 1 — **PMF Discovery 2.0** — is shipped. Quick Play asks whether your idea resonates. Career asks *with whom*, and makes you pay to find out. Full spec and status: [docs/career-phase-1-pmf-discovery.md](docs/career-phase-1-pmf-discovery.md). Code: `src/game/career/`.
+
+**Three customer segments per sector**, fifteen in all, with genuinely different economics rather than three names for the same market.
+
+| Sector | Cheap to reach, quick to leave | Harder to win, but they stay | Slow, demanding, pays like it |
+|---|---|---|---|
+| **B2B SaaS** | Freelancers | Small Teams | Enterprise |
+| **Dev Tools** | Individual Developers | Startup Engineering Teams | Enterprise Engineering |
+| **E-commerce** | Individual Sellers | Growing Brands | Enterprise Retailers |
+| **Fintech** | Everyday Consumers | SMB Finance Teams | Regulated Institutions |
+| **Social** | Casual Users | Creators | Brand Advertisers |
+
+Each segment holds nine hidden numbers — problem intensity, willingness to pay, retention potential, reachability, product bar, market size, competitive intensity, sales cycle, expansion potential. They are generated once from `(seed, sector, scenario, segmentId)` and **never rerolled**: not by research, not by a pivot, not by reloading the save. Variance around each archetype is wide enough that a campaign can hand you an unusually rich freelancer market, or an enterprise segment that simply is not there. Which segment is best is a fact about your seed, and you have to go and find it.
+
+**You never see those numbers.** You see beliefs: an estimate, a band that narrows as confidence rises, and a confidence label. Every segment starts with one metric given a *confident and badly wrong* prior — the assumption worth killing. Evidence updates belief in proportion to how much it deserves to be trusted, and confidence saturates: you cannot become certain from a chair.
+
+**Five experiments, on a reliability hierarchy.** Stated intent is cheap and weak; behaviour is slow and strong.
+
+| Experiment | Time | Cash | Also costs | Base reliability | Measures |
+|---|---|---|---|---|---|
+| Customer interviews | 2 wks | $4,000 | — | 0.34 | problem intensity, product bar, willingness to pay |
+| Landing page test | 2 wks | $6,000 | $3k/wk marketing | 0.44 | reachability, problem intensity, market size |
+| Prototype test | 3 wks | $12,000 | 35% of engineering | 0.62 | product bar, problem intensity, retention potential |
+| Pricing test | 3 wks | $9,000 | 10% eng, $2k/wk marketing | 0.70 | willingness to pay, reachability |
+| Paid pilot | 7 wks | $28,000 | 45% of engineering | 0.88 | retention potential, willingness to pay, product bar, expansion |
+
+Three can run at once. They take real weeks, eat real roadmap, and the results arrive in your inbox when they finish — not when you click.
+
+**Evidence has quality, and cheap evidence lies in a predictable direction.** Effective reliability falls further with a small sample, a weak team, and a hard-to-reach segment (your sample is whoever answered). Interviews and landing pages *systematically overstate* willingness to pay and problem intensity. The test suite measures the bias: interviews overstate willingness to pay by **21.1 points** on average, a pricing test by **2.9**. That is the nine-of-twelve-said-they'd-pay-and-two-actually-did lesson, encoded. The reverse trap exists too — run a prototype test with a weak product and you get a false negative on a market that was fine.
+
+**Customers arrive in cohorts.** Each week's intake keeps its own acquisition price and product quality, and retention is resolved per cohort, per week — roughly 1% weekly churn where everything fits, 15–20% where it doesn't. Four-week retention is measured per segment. Aggregate growth can hide a rotting base, which is the entire reason cohorts exist.
+
+**PMF is an output, never an input.** It is read off customers who stayed and paid, with only a small contribution from confidence. Below 15 customers, perfect research caps out at *Problem validated* — research alone can never manufacture PMF. High acquisition with low retention scores as *Showing value*, not fit. Both are asserted in `test/career-pmf.test.ts`. The ladder runs Unproven → No clear demand → Early signal → Problem validated → Showing value → Emerging PMF → Strong PMF → Scalable PMF.
+
+**Changing your mind costs something.** A segment pivot triggers 2–6 weeks of repositioning — sized by how far apart the two segments' product bars and price tolerances are — at 0.7× product output and 0.55× acquisition. Existing customers are not deleted; nobody is optimising for them any more. It goes in the journal, as does every experiment, price change and focus change.
+
+Alongside the numbers, each week produces **causal explanations** ("customer count is rising, but retention is 41% — this growth is rented, not owned"), the **biggest open uncertainty**, and a **suggested next experiment** with its reasoning. The Career-only **Discovery** screen holds the Hypothesis Board, the experiment catalogue, your bet (target segment, pricing, product focus) and the decision journal. It is gated on the `hypothesisBoard` capability, so it never appears in Quick Play or Arena.
+
+**Quick Play, Daily Challenge and Arena are unchanged.** They keep the simple PMF model and carry no Career state at all — `career` is absent from those saves, and the test suite asserts it for all three.
 
 ### Arena: lean, fast, mean
 
@@ -90,12 +132,14 @@ Fully client-side single-page app — no game server.
 ```
 src/
   game/            # the simulation: modes (the capability model), engine, data, arcs, achievements, types
-  screens/         # one file per screen (Dashboard, Product, Market, Finance, Lobby, NewGame, …)
+    career/        # Career-only PMF discovery: types, segments, pmf, tick
+  screens/         # one file per screen (Dashboard, Product, Market, Discovery, Finance, Lobby, NewGame, …)
   net/             # Supabase: config, realtime rooms, leaderboard, auth
   components.tsx   # shared UI primitives (charts, cards, avatars)
   store.ts         # Zustand store: game actions + online match protocol
   App.tsx          # shell: nav, topbar, overlays, result screens
-test/              # modes, rules and regression suites (plain tsx scripts)
+test/              # modes, career-pmf, rules and regression suites (plain tsx scripts)
+docs/              # design specs for the bigger systems
 supabase/          # SQL to run in the Supabase SQL editor
 scripts/           # singlefile.mjs — bundles the game into one HTML file
 ```
@@ -105,16 +149,18 @@ scripts/           # singlefile.mjs — bundles the game into one HTML file
 ```bash
 npm install
 npm run dev        # dev server on :5173
-npm test           # three suites: modes, rules, regressions
+npm test           # four suites: modes, career-pmf, rules, regressions
 npm run build      # type-check + production build to dist/
 node scripts/singlefile.mjs   # optional: self-contained "Founder Mode.html"
 ```
 
 `npm test` runs headless against the real engine: `test/modes.test.ts` checks the three-mode
-capability model (resolution order, sanitisation, legacy-save migration), `test/rules.test.ts`
-checks that Arena's ruleset actually suppresses the systems it claims to and that attacks,
-costs, cooldowns and the shield behave, and `test/regressions.test.ts` pins determinism and
-past bug fixes.
+capability model (resolution order, sanitisation, legacy-save migration), `test/career-pmf.test.ts`
+checks the discovery simulation (truth never rerolls, instrument bias is measured in points,
+PMF cannot be researched into existence, and Quick Play/Daily/Arena carry no Career state),
+`test/rules.test.ts` checks that Arena's ruleset actually suppresses the systems it claims to
+and that attacks, costs, cooldowns and the shield behave, and `test/regressions.test.ts` pins
+determinism and past bug fixes.
 
 Deploys automatically to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`).
 
@@ -156,6 +202,16 @@ Nothing simulates the game server-side, so a determined player can still submit 
 ## Balance philosophy
 
 Every mechanic ships with headless bot validation: careless play should die by week ~45, disciplined SaaS play reaches a unicorn around week 130–180, Social is a winnable lottery, and no cost is ever hidden — the game may surprise you with situations, never with invoices.
+
+Career's discovery layer was validated the same way — three bot strategies over 8 seeds and 90 weeks, checking that the three produce genuinely different companies rather than converging on one plateau:
+
+| Strategy | Survived | Customers | Retention | Best PMF reached |
+|---|---|---|---|---|
+| **Careless Growth** — spend, never research | 6 / 8 | ~474 | 28% | never past *Showing value* |
+| **Disciplined Discovery** — experiment first, scale late | 7 / 8 | ~238 | 72% | mostly *Emerging PMF* |
+| **Enterprise Bet** — pivot high, price premium, build to the bar | 7 / 8 | ~527 | 87% | *Strong* or *Scalable* in 7 / 8 |
+
+Careless growth buys customers fastest and keeps almost none of them — at 28% retention the base is rented, not owned, and it never crosses into fit. Disciplined discovery ends with the smallest company and the cleanest one. The enterprise bet finishes ahead on this sample, but it is the slowest and most expensive line to run, and it only pays when the seed actually put a strong high-end segment there. Finding out whether it did is what the experiments are for.
 
 ---
 

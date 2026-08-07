@@ -13,7 +13,7 @@ import {
 } from './data'
 import { ARC_DEFS } from './arcs'
 import { resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
-import { tickCareerPMF } from './career/tick'
+import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import type {
   Candidate,
@@ -1012,12 +1012,17 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const ipoDrag = s.ipo ? 0.85 : 1
   const rallyMult = s.rally ? s.rally.mult : 1
   const energyMult = can(s, 'founderEnergy') ? 0.4 + 0.6 * (s.energy / 100) : 1
+  // Career: running experiments and repositioning both cost real engineering weeks. Without
+  // this, experiments were free in product terms and the repositioning penalty did nothing.
+  const careerDrag = can(s, 'detailedPMF') && s.career ? careerProductDrag(s) : 1
   const engPoints =
     (s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
       (s.founderKind === 'technical' ? 5 : 1.5) * energyMult) *
     ipoDrag *
-    rallyMult
-  const designPoints = s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0) * rallyMult
+    rallyMult *
+    careerDrag
+  const designPoints =
+    s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0) * rallyMult * careerDrag
   const craftsmen = s.employees.filter((e) => e.trait === 'craftsman').length
   const a = s.allocation
   const hasBet = s.ventures.some((v) => !v.launched)
@@ -1107,7 +1112,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     const r = tickCareerPMF(s, {
       sectorTam: sector.tam,
       sectorAcqBase: sector.acqBase,
-      marketingSpend: adSpend,
+      marketingSpend: Math.max(0, adSpend - careerMarketingDrain(s)),
       rng: () => RNG.next(),
       uid,
     })

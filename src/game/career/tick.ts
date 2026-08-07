@@ -40,6 +40,27 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
  * Advance the Career PMF subsystem by one week. Mutates `s` (which is already a clone inside
  * advanceWeek) and returns the numbers the shared simulation needs.
  */
+
+/**
+ * How much of this week's engineering output Career eats: experiments consume real product
+ * capacity, and a repositioning halves velocity while the roadmap is rebuilt. Computed
+ * separately from the weekly tick because the engineering block runs BEFORE it.
+ */
+export function careerProductDrag(s: GameState): number {
+  const c = s.career
+  if (!c) return 1
+  const expDrain = c.activeExperiments.filter((e) => e.status === 'active').reduce((a, e) => a + e.productCapacityCost, 0)
+  const repos = c.repositioning ? c.repositioning.productPenalty : 1
+  return Math.max(0.3, (1 - Math.min(0.7, expDrain)) * repos)
+}
+
+/** Marketing budget consumed by running experiments — a landing page test buys its own ads. */
+export function careerMarketingDrain(s: GameState): number {
+  const c = s.career
+  if (!c) return 0
+  return c.activeExperiments.filter((e) => e.status === 'active').reduce((a, e) => a + e.marketingCapacityCost, 0)
+}
+
 export function tickCareerPMF(
   s: GameState,
   opts: { sectorTam: number; sectorAcqBase: number; marketingSpend: number; rng: () => number; uid: () => string },
