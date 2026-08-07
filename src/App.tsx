@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Mail,
   Menu,
+  Microscope,
   Package,
   Swords,
   TrendingUp,
@@ -38,6 +39,7 @@ import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
 import { Inbox } from './screens/Inbox'
 import { Career } from './screens/Career'
+import { Discovery } from './screens/Discovery'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
@@ -53,11 +55,12 @@ const SECTOR_ACCENTS: Record<string, [string, string]> = {
   ecommerce: ['#fbbf24', '#fb923c'],
 }
 
-const NAV: { id: ScreenId; label: string; icon: typeof Mail }[] = [
+const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'inbox', label: 'Inbox', icon: Mail },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'hiring', label: 'Hiring', icon: UserPlus },
+  { id: 'discovery', label: 'Discovery', icon: Microscope, careerOnly: true },
   { id: 'product', label: 'Product', icon: Package },
   { id: 'growth', label: 'Growth', icon: TrendingUp },
   { id: 'market', label: 'Market', icon: Swords },
@@ -216,7 +219,7 @@ export default function App() {
 
   const nav = (
     <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-      {NAV.map((n) => {
+      {NAV.filter((n) => !n.careerOnly || hasCapability(game, 'hypothesisBoard')).map((n) => {
         const Icon = n.icon
         const active = screen === n.id
         return (
@@ -551,6 +554,7 @@ export default function App() {
             {screen === 'finance' && <Finance />}
             {screen === 'fundraising' && <Fundraising />}
             {screen === 'career' && <Career />}
+            {screen === 'discovery' && <Discovery />}
           </div>
         </main>
 

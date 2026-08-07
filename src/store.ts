@@ -45,6 +45,8 @@ function awardAchievements(g: GameState) {
   }
 }
 import { SECTORS, sectorById } from './game/data'
+import { addJournal, canRunExperiment, experimentDef, segmentDef, startExperiment } from './game/career/pmf'
+import { repositionTo } from './game/career/tick'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
@@ -86,6 +88,7 @@ export type ScreenId =
   | 'fundraising'
   | 'inbox'
   | 'career'
+  | 'discovery'
 
 export interface RunRecord {
   company: string
@@ -262,6 +265,11 @@ interface Store {
   fire: (employeeId: string) => void
   giveRaise: (employeeId: string) => void
   doPivot: () => void
+  // --- Career: PMF Discovery ---
+  runExperiment: (type: import('./game/career/types').ExperimentType, segmentId: string) => void
+  setTargetSegment: (segmentId: string) => void
+  setPricing: (p: import('./game/career/types').PricingStrategy) => void
+  setProductFocus: (f: import('./game/career/types').ProductFocus) => void
   fileIPO: () => void
   startBet: (sector: SectorId) => void
   shelveBet: (ventureId: string) => void
@@ -738,6 +746,77 @@ export const useStore = create<Store>()(
           const game = structuredClone(g)
           pivot(game)
           sfx.pivot()
+          set({ game })
+        },
+
+        // ---- Career: PMF Discovery 2.0 ----
+        runExperiment: (type, segmentId) => {
+          const g = get().game
+          if (!g?.career || !hasCapability(g, 'customerResearch')) return
+          const gate = canRunExperiment(g.career, type, segmentId, g.cash)
+          if (!gate.ok) {
+            set({ game: { ...g, flash: `Can't run that experiment — ${gate.reason}.` } })
+            return
+          }
+          const game = structuredClone(g)
+          const def = experimentDef(type)
+          startExperiment(game.career!, game.week, type, segmentId, uid())
+          game.cash -= def.cashCost
+          const segName = segmentDef(game.sector, segmentId).name
+          addJournal(game.career!, {
+            week: game.week,
+            category: 'experiment',
+            title: `Started: ${def.name} — ${segName}`,
+            description: def.blurb,
+            relatedSegmentId: segmentId,
+          })
+          game.flash = `🔬 ${def.name} started on ${segName}. Results in ${def.weeks} weeks — research takes time, which is the point.`
+          sfx.week()
+          set({ game })
+        },
+
+        setTargetSegment: (segmentId) => {
+          const g = get().game
+          if (!g?.career || g.career.primaryTargetSegmentId === segmentId) return
+          const game = structuredClone(g)
+          repositionTo(game, segmentId, game.week)
+          sfx.pivot()
+          set({ game })
+        },
+
+        setPricing: (p) => {
+          const g = get().game
+          if (!g?.career || g.career.pricing === p) return
+          const game = structuredClone(g)
+          const from = game.career!.pricing
+          game.career!.pricing = p
+          addJournal(game.career!, {
+            week: game.week,
+            category: 'pricing',
+            title: `Pricing: ${from} → ${p}`,
+            description:
+              p === 'premium'
+                ? 'Asking for more. Fewer will convert; those who do are worth more — if they stay.'
+                : p === 'low'
+                  ? 'Cheaper to say yes to. More customers, thinner economics.'
+                  : 'Priced at the middle of the market.',
+          })
+          game.flash = `💲 Pricing moved to ${p}. Conversion and retention will re-rate over the next few weeks.`
+          set({ game })
+        },
+
+        setProductFocus: (f) => {
+          const g = get().game
+          if (!g?.career || g.career.focus === f) return
+          const game = structuredClone(g)
+          game.career!.focus = f
+          addJournal(game.career!, {
+            week: game.week,
+            category: 'strategy',
+            title: `Product focus: ${f.replace('_', ' ')}`,
+            description: 'What the roadmap optimises for. Segments value these differently.',
+          })
+          game.flash = `🧭 Product now optimised for ${f.replace('_', ' ')}.`
           set({ game })
         },
 

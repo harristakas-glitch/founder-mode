@@ -252,6 +252,8 @@ export interface GameState {
   // systems are switched on. See ./modes — the engine asks hasCapability(), never the mode.
   config: import('./modes').GameConfig
   capabilities: import('./modes').GameCapabilities
+  /** Career only. Absent on Quick Play and Arena saves — the deep PMF subsystem. */
+  career?: import('./career/types').CareerPMFState
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

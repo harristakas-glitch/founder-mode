@@ -45,10 +45,14 @@ ok(resolveGameRules(cfg({ format: 'daily_challenge' })).maxTurns === 104, 'Daily
 ok(resolveGameRules(cfg()).maxTurns === undefined, 'a standard Quick run is open-ended')
 ok(arena.humanRivals && arena.pvpActions && !arena.aiRivals, 'Arena is human rivals with PvP, no AI competitors')
 ok(!arena.storyArcs && !arena.founderEnergy && !arena.boardReviews, 'Arena drops the slow narrative systems')
-ok(career.storyArcs, 'Career currently runs the Quick simulation')
+ok(career.storyArcs, 'Career keeps the shared narrative systems')
+ok(career.detailedPMF && career.customerSegments && career.hypothesisBoard, 'Career enables PMF Discovery 2.0')
+ok(!quick.detailedPMF && !arena.detailedPMF && !dailyCaps.detailedPMF, 'Quick Play, Daily and Arena keep the simple PMF model')
 
 console.log('— Unimplemented capabilities must stay off —')
-const PLANNED = ['detailedPMF', 'customerSegments', 'hypothesisBoard', 'founderAttention', 'executives', 'boardPolitics', 'sharedTalentMarket', 'negotiations'] as const
+// Still unbuilt. detailedPMF/customerSegments/customerResearch/hypothesisBoard/decisionJournal
+// moved off this list when Career Phase 1 shipped them for real.
+const PLANNED = ['founderAttention', 'founderDependency', 'cofounders', 'executives', 'delegation', 'boardPolitics', 'sharedTalentMarket', 'negotiations', 'livingWorld'] as const
 ok(
   PLANNED.every((k) => !career[k] && !quick[k] && !arena[k]),
   'no mode claims a Career/Arena system that does not exist yet',

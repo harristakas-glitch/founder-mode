@@ -13,6 +13,8 @@ import {
 } from './data'
 import { ARC_DEFS } from './arcs'
 import { resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
+import { tickCareerPMF } from './career/tick'
+import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import type {
   Candidate,
   Choice,
@@ -109,6 +111,20 @@ export function migrateLegacySave(g: GameState): GameState {
     }
   }
   if (!g.capabilities) g.capabilities = resolveGameRules(g.config).capabilities
+  // A Career save from before PMF Discovery 2.0 has no subsystem: rebuild the market from the
+  // same seed so its truth is what it always would have been, and fold existing users into a
+  // starting cohort rather than deleting them.
+  if (g.capabilities.detailedPMF && !g.career) {
+    g.career = migrateCareerSave({
+      seed: g.config.seed,
+      sector: g.sector,
+      scenario: g.config.scenario,
+      week: g.week,
+      users: g.users,
+      researchSignal: g.researchSignal,
+      pmf: g.pmf,
+    })
+  }
   return g
 }
 
@@ -254,6 +270,11 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     bankedPayout: 0,
     config: opts.config!,
     capabilities: resolveGameRules(opts.config!).capabilities,
+    // Career only: the deep discovery subsystem. Its market truth is generated once, here,
+    // from the run's seed — and never regenerated for the life of the campaign.
+    career: resolveGameRules(opts.config!).capabilities.detailedPMF
+      ? createCareerPMF(opts.config!.seed, sector, opts.config!.scenario)
+      : undefined,
     history: [],
     gameOver: null,
   }
@@ -1077,9 +1098,28 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     rand(0.7, 1.3)
   s.hype = clamp(s.hype + hypeGain, 0, 100)
 
+  // --- CAREER: segment-based discovery replaces the single-number PMF model -------------
+  // Everything else in this function (cash, product work, events, board, valuation) is shared;
+  // only the customer/PMF step differs, and only when the capability is on.
+  let careerRevenueMult = 1
+  let room = 1 // remaining market headroom, consumed later by tickRivals
+  if (can(s, 'detailedPMF') && s.career) {
+    const r = tickCareerPMF(s, {
+      sectorTam: sector.tam,
+      sectorAcqBase: sector.acqBase,
+      marketingSpend: adSpend,
+      rng: () => RNG.next(),
+      uid,
+    })
+    s.users = r.customers
+    s.pmf = clamp(r.companyPmfScore, 0, 100) // downstream systems still read a single number
+    careerRevenueMult = r.revenueMultiplier
+    room = Math.pow(1 - marketSaturation(s, externalUsers), 1.2)
+  } else {
+
   // --- users: acquisition is gated by PMF, and the market is finite ---
   const saturation = marketSaturation(s, externalUsers)
-  const room = Math.pow(1 - saturation, 1.2)
+  room = Math.pow(1 - saturation, 1.2)
   const pmfAcq = 0.35 + (0.65 * s.pmf) / 100
   // paid acquisition: big budgets buy users directly, at a CAC that worsens with saturation and channel fatigue
   const paid = paidUsersPerWeek(s, adSpend) * room * rand(0.8, 1.2)
@@ -1088,6 +1128,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const churnMult = clamp(2.4 - s.pmf / 45 - s.quality / 250 + s.bugs / 200, 0.3, 3)
   const churned = s.users * sector.churn * churnMult
   s.users = Math.max(0, Math.round(s.users + acquired + wordOfMouth - churned))
+  } // end Quick Play / Arena acquisition path
 
   // --- revenue & costs: people only pay for things they need ---
   const salesPoints = s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0) * rallyMult
@@ -1095,7 +1136,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const conversion = 0.25 + (0.75 * s.pmf) / 100
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
   const scaleBoost = s.sector === 'social' ? 1 + Math.log10(Math.max(10, s.users)) / 3 : 1
-  const coreRevenue = s.users * sector.arpuWeekly * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150)
+  const coreRevenue = s.users * sector.arpuWeekly * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult
   const ventureRevenue = s.ventures.reduce((acc, v) => {
     if (!v.launched) return acc
     const vs = sectorById(v.sector)

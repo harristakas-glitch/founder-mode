@@ -38,7 +38,8 @@ export interface GameConfig {
 //
 // ENFORCED (flipping the flag changes behaviour): aiRivals, storyArcs, oneOnOnes,
 //   catastrophes, founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame,
-//   macroShocks, pvpActions, leaderboard.
+//   macroShocks, pvpActions, leaderboard, detailedPMF, customerSegments, customerResearch,
+//   hypothesisBoard, decisionJournal.
 //
 // DESCRIPTIVE (true statements about the experience, but nothing branches on them yet):
 //   humanRivals   — Arena's opponents come from the room's presence list, not this flag.
@@ -211,8 +212,17 @@ const QUICK_BASE_RULES: GameRules = {
 const CAREER_BASE_RULES: GameRules = {
   ...QUICK_BASE_RULES,
   mode: 'career',
-  simulationDepth: 'standard', // becomes 'deep' when the Career systems land
-  capabilities: { ...QUICK_BASE_RULES.capabilities },
+  simulationDepth: 'deep',
+  pmfDepth: 'deep',
+  capabilities: {
+    ...QUICK_BASE_RULES.capabilities,
+    // Career Phase 1 — PMF Discovery 2.0. Segment truth, beliefs, evidence, cohorts.
+    detailedPMF: true,
+    customerSegments: true,
+    customerResearch: true,
+    hypothesisBoard: true,
+    decisionJournal: true,
+  },
 }
 
 // Arena is the lean competitive format: the slow narrative systems are off so turns stay
