@@ -66,6 +66,7 @@ import {
   defaultCapabilities,
   hasCapability,
   resolveGameRules,
+  type CapabilityKey,
   sanitizeCapabilities,
   type GameCapabilities,
   type GameConfig,
@@ -94,6 +95,14 @@ export interface RunRecord {
 }
 
 const HALL_KEY = 'founder-mode-hall'
+
+/**
+ * Brief §28: components ask for a capability, never for a mode.
+ *   const detailedPMF = useGameCapability('detailedPMF')
+ */
+export function useGameCapability(key: CapabilityKey): boolean {
+  return useStore((s) => s.game?.capabilities?.[key] ?? false)
+}
 
 export function readHall(): RunRecord[] {
   try {
@@ -146,8 +155,10 @@ function recordRun(g: GameState) {
   runs.sort((a, b) => b.score - a.score)
   localStorage.setItem(HALL_KEY, JSON.stringify(runs.slice(0, 10)))
   // daily challenge scores also go to the global leaderboard (no-op until Supabase is configured)
+  // Brief §30: leaderboard availability is a CAPABILITY, not a format check. The label is
+  // still parsed for the challenge number, but the capability decides whether we submit.
   const daily = g.challenge?.label.match(/^Daily #(\d+)/)
-  if (daily)
+  if (daily && hasCapability(g, 'leaderboard'))
     void submitDailyScore(Number(daily[1]), {
       company: g.companyName,
       score,

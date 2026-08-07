@@ -810,11 +810,27 @@ function GameOver({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {game.challenge?.label.startsWith('Daily') && (
+        {hasCapability(game, 'leaderboard') && game.challenge?.label.startsWith('Daily') && (
           <div className="mt-5 text-left">
             <DailyLeaderboard day={Number(game.challenge.label.match(/#(\d+)/)?.[1] ?? 0)} highlightPlayerId={myId()} />
           </div>
         )}
+
+        {/* Brief §35: where you go next depends on what you just played. */}
+        <div className="mt-5 rounded-xl border border-line/60 bg-surface2/40 px-4 py-3 text-[13px] text-mut">
+          {game.config?.format === 'daily_challenge' ? (
+            <>Same world for everyone today — compare your score above, then come back tomorrow for a new one.</>
+          ) : game.config?.format === 'scenario' ? (
+            <>
+              That was the <b className="text-ink">{game.config.scenario}</b> scenario. Another start, another set of problems —
+              try a different one from Quick Play.
+            </>
+          ) : game.config?.mode === 'career' ? (
+            <>Career is still growing: deeper product, people and board systems are on the way.</>
+          ) : (
+            <>Ready for something else? Career goes deeper, and Arena puts you against other founders.</>
+          )}
+        </div>
 
         <div className="mt-5 rounded-2xl border border-line/60 bg-black/20 p-3 text-left">
           <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">The story of {game.companyName}</div>

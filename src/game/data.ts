@@ -142,6 +142,10 @@ export interface EventDef {
   weight: number
   minWeek?: number
   cond?: (s: GameState) => boolean
+  // Brief §33: optional scoping. Absent = fires everywhere, which is every card in the deck today.
+  modes?: import('./modes').GameMode[]
+  formats?: import('./modes').GameFormat[]
+  requiresCapabilities?: Array<keyof import('./modes').GameCapabilities>
   title: string
   body: (s: GameState) => string
   choices?: (s: GameState) => Choice[]

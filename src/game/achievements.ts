@@ -1,6 +1,7 @@
 // Achievements: persistent badges across runs, rewarding cross-system play.
 // Earned ids live in localStorage; checks run every week and at every ending.
 import type { GameState } from './types'
+import type { GameFormat, GameMode } from './modes'
 import { avgMorale, valuation } from './engine'
 
 export interface AchievementDef {
@@ -9,6 +10,16 @@ export interface AchievementDef {
   name: string
   desc: string
   check: (g: GameState) => boolean
+  // Brief §32: optional scoping. Absent = available everywhere, which is every badge today.
+  modes?: GameMode[]
+  formats?: GameFormat[]
+}
+
+/** An achievement is eligible unless it explicitly restricts itself to other modes/formats. */
+export function achievementApplies(a: AchievementDef, g: GameState): boolean {
+  if (a.modes && !a.modes.includes(g.config?.mode ?? 'quick')) return false
+  if (a.formats && !a.formats.includes(g.config?.format ?? 'standard')) return false
+  return true
 }
 
 const won = (g: GameState) => !!g.gameOver && (g.gameOver.payout ?? 0) > 0 && g.gameOver.type !== 'bankrupt' && g.gameOver.type !== 'fired'
@@ -63,6 +74,7 @@ export function checkAchievements(g: GameState): AchievementDef[] {
   const fresh: AchievementDef[] = []
   for (const a of ACHIEVEMENTS) {
     if (earned.has(a.id)) continue
+    if (!achievementApplies(a, g)) continue
     try {
       if (a.check(g)) {
         earned.add(a.id)

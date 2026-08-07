@@ -180,7 +180,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     candidates: [],
     offersOut: [],
     pendingHires: [],
-    rivals: opts.aiRivals === false ? [] : makeRivals(sec.tam),
+    rivals: (opts.aiRivals ?? resolveGameRules(opts.config!).capabilities.aiRivals) ? makeRivals(sec.tam) : [],
     climate: rand(-0.3, 0.5),
     inbox: [],
     termSheets: [],
@@ -2153,6 +2153,11 @@ function maybeFireEvent(s: GameState) {
     (e) =>
       (e.minWeek ?? 0) <= s.week &&
       (!e.id.startsWith('cat-') || can(s, 'catastrophes')) &&
+      // Brief §33: cards may opt into a mode/format/capability. Unrestricted cards (the whole
+      // deck today) behave exactly as before.
+      (!e.modes || e.modes.includes(s.config?.mode ?? 'quick')) &&
+      (!e.formats || e.formats.includes(s.config?.format ?? 'standard')) &&
+      (!e.requiresCapabilities || e.requiresCapabilities.every((k) => can(s, k))) &&
       (!e.cond || e.cond(s)) &&
       !s.inbox.slice(0, 8).some((m) => m.title === e.title), // avoid rapid repeats
   )

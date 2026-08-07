@@ -34,6 +34,20 @@ export interface GameConfig {
   overrides?: Partial<GameCapabilities>
 }
 
+// ENFORCED vs DESCRIPTIVE — read this before assuming a flag does something.
+//
+// ENFORCED (flipping the flag changes behaviour): aiRivals, storyArcs, oneOnOnes,
+//   catastrophes, founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame,
+//   macroShocks, pvpActions, leaderboard.
+//
+// DESCRIPTIVE (true statements about the experience, but nothing branches on them yet):
+//   humanRivals   — Arena's opponents come from the room's presence list, not this flag.
+//   seededWorld   — every run seeds from config.seed; the flag records that it is SHARED.
+//   causalExplanations — the autopsy/benchmarks always explain; nothing gates them.
+//   singleAttempt — enforced at the data layer (unique (day, player_id), keep-higher-score),
+//                   not in the client. Replaying today is still allowed by design.
+//
+// PLANNED capabilities are all false and must stay false until the feature exists.
 export interface GameCapabilities {
   // ---- implemented today -------------------------------------------------------------
   aiRivals: boolean // AI competitors in your market
