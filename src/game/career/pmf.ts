@@ -214,6 +214,7 @@ export function startExperiment(
   type: ExperimentType,
   segmentId: SegmentId,
   id: string,
+  standing = false,
 ): ActiveExperiment {
   const def = experimentDef(type)
   const exp: ActiveExperiment = {
@@ -228,6 +229,7 @@ export function startExperiment(
     sampleSize: def.sampleSize,
     expectedEvidenceMetrics: def.metrics,
     status: 'active',
+    standing,
   }
   career.activeExperiments.push(exp)
   return exp

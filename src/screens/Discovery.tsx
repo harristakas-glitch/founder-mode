@@ -6,6 +6,7 @@ import { Btn, Panel } from '../components'
 import { money } from '../format'
 import {
   EXPERIMENTS,
+  PMF_CUSTOMER_FLOOR,
   METRIC_LABEL,
   TRUTH_METRICS,
   beliefBand,
@@ -100,6 +101,7 @@ export function Discovery() {
   const game = useStore((s) => s.game)!
   const career = game.career
   const runExperiment = useStore((s) => s.runExperiment)
+  const setExperimentStanding = useStore((s) => s.setExperimentStanding)
   const setTargetSegment = useStore((s) => s.setTargetSegment)
   const setPricing = useStore((s) => s.setPricing)
   const setProductFocus = useStore((s) => s.setProductFocus)
@@ -204,8 +206,23 @@ export function Discovery() {
                       <b>
                         {def.name} — {segmentDef(game.sector, e.segmentId).name}
                       </b>
-                      <span className="text-mut tnum">
-                        Week {elapsed} / {done}
+                      <span className="flex items-center gap-2">
+                        <button
+                          className={`rounded-md border px-1.5 py-px text-[10.5px] font-bold uppercase tracking-wide transition-colors ${
+                            e.standing ? 'border-good/50 bg-good/15 text-good' : 'border-line2 text-mut hover:border-accent hover:text-ink'
+                          }`}
+                          title={
+                            e.standing
+                              ? 'Standing study: restarts itself when it finishes, while the cash lasts. Click to let it stop.'
+                              : 'One-off. Click to make it a standing study that renews itself.'
+                          }
+                          onClick={() => setExperimentStanding(e.id, !e.standing)}
+                        >
+                          ↻ {e.standing ? 'Standing' : 'One-off'}
+                        </button>
+                        <span className="text-mut tnum">
+                          Week {elapsed} / {done}
+                        </span>
                       </span>
                     </div>
                     <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/40">
@@ -261,6 +278,15 @@ export function Discovery() {
             ))}
           </div>
 
+          <div className="mb-2.5 rounded-lg border border-line/60 bg-surface2/40 px-3 py-2 text-[12px] leading-relaxed text-mut">
+            <b className="text-ink">What research does, exactly.</b> It moves what you <i>believe</i> about a segment — never what the
+            segment <i>is</i>, and never PMF on its own. PMF is scored on customers who stay. Research is how you find out where to aim
+            before you spend a quarter building for the wrong people, and below {PMF_CUSTOMER_FLOOR} customers it is the only thing that
+            can move the number at all (to a ceiling of 40). <b className="text-ink">Designers run studies best</b> — they count triple
+            toward how reliable a result is, marketers 1.5×, everyone else once. Product <i>quality</i> also raises reliability; shipping
+            more <i>features</i> does nothing for it.
+          </div>
+
           <div className="space-y-2">
             {EXPERIMENTS.map((def) => {
               const gate = canRunExperiment(career, def.type, segment, game.cash)
@@ -270,14 +296,27 @@ export function Discovery() {
                     <b>{def.name}</b> <span className="text-mut">· {def.weeks} wk · {money(def.cashCost)}</span>
                     <div className="text-[11.5px] text-mut">{def.blurb}</div>
                   </span>
-                  <Btn
-                    variant="primary"
-                    disabled={!gate.ok}
-                    title={gate.reason}
-                    onClick={() => runExperiment(def.type as ExperimentType, segment)}
-                  >
-                    Run on {segmentDef(game.sector, segment).name}
-                  </Btn>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <Btn
+                      variant="primary"
+                      disabled={!gate.ok}
+                      title={gate.reason}
+                      onClick={() => runExperiment(def.type as ExperimentType, segment)}
+                    >
+                      Run once
+                    </Btn>
+                    <Btn
+                      disabled={!gate.ok}
+                      title={
+                        gate.ok
+                          ? `Keep this study running on ${segmentDef(game.sector, segment).name}: it restarts itself every ${def.weeks} wk while the cash lasts.`
+                          : gate.reason
+                      }
+                      onClick={() => runExperiment(def.type as ExperimentType, segment, true)}
+                    >
+                      ↻ Standing
+                    </Btn>
+                  </span>
                 </div>
               )
             })}

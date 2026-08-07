@@ -21,6 +21,7 @@ import {
   segmentPriceFit,
   segmentProductFit,
   segmentsForSector,
+  startExperiment,
   totalCustomers,
   updateBelief,
   type SegmentPmf,
@@ -113,7 +114,12 @@ export function tickCareerPMF(
   const productPenalty = career.repositioning ? career.repositioning.productPenalty : 1
 
   // --- experiments -------------------------------------------------------------------------
-  const executionQuality = clamp01(0.25 + (s.quality / 100) * 0.5 + Math.min(0.25, s.employees.length * 0.04))
+  // Who runs a study changes what it is worth. Designers do user research for a living, so they
+  // count triple; everyone else contributes as a body in the room. Previously headcount of any
+  // kind counted the same, which made "should I hire a designer for discovery?" a question with
+  // no answer.
+  const researchHeads = s.employees.reduce((a, e) => a + (e.role === 'designer' ? 3 : e.role === 'marketer' ? 1.5 : 1), 0)
+  const executionQuality = clamp01(0.25 + (s.quality / 100) * 0.4 + Math.min(0.35, researchHeads * 0.035))
   let productCapacityDrain = 0
   let learned: string | null = null
 
@@ -145,7 +151,12 @@ export function tickCareerPMF(
       body:
         evidence.map((e) => `• ${e.summary}`).join('\n') +
         `\n\nConfidence on ${evidence[0].metric === 'willingnessToPay' ? 'willingness to pay' : 'the headline question'}: ` +
-        `${Math.round(confBefore * 100)}% → ${Math.round(confAfter * 100)}%.`,
+        `${Math.round(confBefore * 100)}% → ${Math.round(confAfter * 100)}%.` +
+        // The single most-asked question about this screen: what did that DO? Answer it in the
+        // message rather than making the player infer it from a number that did not move.
+        `\n\nWhat this changes: what you BELIEVE about ${segName}, not what they are. It does not move ` +
+        `PMF on its own — PMF is scored on customers who stay. What it buys you is knowing where to ` +
+        `aim before you spend the quarter building for the wrong people.`,
     })
     addJournal(career, {
       week: s.week,
@@ -154,6 +165,24 @@ export function tickCareerPMF(
       description: evidence[0].summary,
       relatedSegmentId: exp.segmentId,
     })
+  }
+  // Standing studies renew themselves while the cash lasts. Discovery is a programme you fund,
+  // not a button you press every three weeks.
+  for (const done of career.activeExperiments) {
+    if (done.status !== 'complete' || !done.standing) continue
+    const def = experimentDef(done.type)
+    if (s.cash < def.cashCost * 1.5) {
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'system',
+        title: `Standing study paused — ${def.name}`,
+        body: `The rolling ${def.name.toLowerCase()} on ${segmentDef(sector, done.segmentId).name} has stopped: it costs ${'$'}${def.cashCost.toLocaleString()} a cycle and the account cannot carry it. Restart it from Discovery when there is room.`,
+      })
+      continue
+    }
+    s.cash -= def.cashCost
+    startExperiment(career, s.week, done.type, done.segmentId, uid(), true)
   }
   career.activeExperiments = career.activeExperiments.filter((e) => e.status === 'active')
 

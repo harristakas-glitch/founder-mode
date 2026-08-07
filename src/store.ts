@@ -285,7 +285,9 @@ interface Store {
   giveRaise: (employeeId: string) => void
   doPivot: () => void
   // --- Career: PMF Discovery ---
-  runExperiment: (type: import('./game/career/types').ExperimentType, segmentId: string) => void
+  runExperiment: (type: import('./game/career/types').ExperimentType, segmentId: string, standing?: boolean) => void
+  /** Turn a running study's auto-renew on or off without cancelling it. */
+  setExperimentStanding: (experimentId: string, standing: boolean) => void
   setTargetSegment: (segmentId: string) => void
   setPricing: (p: import('./game/career/types').PricingStrategy) => void
   setProductFocus: (f: import('./game/career/types').ProductFocus) => void
@@ -960,7 +962,20 @@ export const useStore = create<Store>()(
         },
 
         // ---- Career: PMF Discovery 2.0 ----
-        runExperiment: (type, segmentId) => {
+        setExperimentStanding: (experimentId, standing) => {
+          const g = get().game
+          if (!g?.career) return
+          const game = structuredClone(g)
+          const exp = game.career!.activeExperiments.find((e) => e.id === experimentId)
+          if (!exp) return
+          exp.standing = standing
+          game.flash = standing
+            ? `${experimentDef(exp.type).name} is now a standing study — it will renew itself while the cash lasts.`
+            : `${experimentDef(exp.type).name} will finish and stop.`
+          set({ game })
+        },
+
+        runExperiment: (type, segmentId, standing = false) => {
           const g = get().game
           if (!g?.career || !hasCapability(g, 'customerResearch')) return
           const gate = canRunExperiment(g.career, type, segmentId, g.cash)
@@ -970,13 +985,13 @@ export const useStore = create<Store>()(
           }
           const game = structuredClone(g)
           const def = experimentDef(type)
-          startExperiment(game.career!, game.week, type, segmentId, uid())
+          startExperiment(game.career!, game.week, type, segmentId, uid(), standing)
           game.cash -= def.cashCost
           const segName = segmentDef(game.sector, segmentId).name
           addJournal(game.career!, {
             week: game.week,
             category: 'experiment',
-            title: `Started: ${def.name} — ${segName}`,
+            title: `Started: ${def.name} — ${segName}${standing ? ' (standing)' : ''}`,
             description: def.blurb,
             relatedSegmentId: segmentId,
           })

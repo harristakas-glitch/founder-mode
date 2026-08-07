@@ -63,6 +63,12 @@ export interface ActiveExperiment {
   sampleSize: number
   expectedEvidenceMetrics: TruthMetric[]
   status: 'active' | 'complete' | 'cancelled'
+  /**
+   * Keep this study running: when it completes, start the same one again on the same segment for
+   * as long as the cash lasts. Discovery is a programme, not a button — re-clicking the same
+   * experiment every three weeks was busywork that taught the player nothing.
+   */
+  standing?: boolean
 }
 
 export interface CustomerCohort {
