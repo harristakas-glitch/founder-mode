@@ -86,6 +86,28 @@ Deploys automatically to GitHub Pages on every push to `main` (`.github/workflow
 
 Known-but-unfixed work lives in [BACKLOG.md](BACKLOG.md).
 
+### Versions and rolling back
+
+Tagged versions live under [Releases](https://github.com/harristakas-glitch/founder-mode/releases).
+Each release marks a state where the tests, the type-check and the build all passed, and has a
+self-contained `.html` build attached — double-click it to play that exact version offline, which
+is the fastest way to check whether a bug is new.
+
+To put the site back on a previous version:
+
+```bash
+git revert --no-commit v1.0.0..HEAD && git commit -m "Roll back to v1.0.0" && git push
+```
+
+That undoes everything after the tag while keeping the history intact (nothing is erased, so you
+can roll forward again). Then run the **Deploy to GitHub Pages** workflow from the Actions tab.
+
+To cut a new version once `npm test` and `npm run build` pass:
+
+```bash
+git tag -a v1.1.0 -m "what changed" && git push origin v1.1.0
+```
+
 ### Online features setup
 
 The game runs fully offline/anonymous without any of this. To enable online play on a fork:
