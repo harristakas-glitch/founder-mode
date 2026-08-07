@@ -104,6 +104,7 @@ export interface PersistedWorld {
   promises: PromiseRecord[]
   narrative: NarrativeHistory
   lastGeneratedWeek?: number
+  narrativeLastSeen?: Record<string, number>
 }
 
 /**
@@ -185,6 +186,7 @@ export function toPersistedWorld(world: LivingWorldState, rebuild?: CharacterReb
     promises: world.promises,
     narrative: world.narrative,
     lastGeneratedWeek: world.lastGeneratedWeek,
+    narrativeLastSeen: world.narrativeLastSeen,
   })
 }
 
@@ -452,6 +454,16 @@ export function fromPersistedWorld(raw: unknown, rebuild?: CharacterRebuilder): 
       .filter((p): p is PromiseRecord => p !== null),
     narrative: normalizeNarrative(raw.narrative),
     lastGeneratedWeek: optNum(raw.lastGeneratedWeek),
+    // Novelty must survive a reload: if it reset, the Director would treat every story as
+    // first-time again and the same one could lead week after week — the exact repetition this
+    // phase exists to remove. Values are coerced because this is user-writable localStorage.
+    narrativeLastSeen: (() => {
+      const r = (raw as Record<string, unknown>).narrativeLastSeen
+      if (!r || typeof r !== 'object' || Array.isArray(r)) return undefined
+      const out: Record<string, number> = {}
+      for (const [k, v] of Object.entries(r as Record<string, unknown>)) if (typeof v === 'number' && Number.isFinite(v)) out[k] = v
+      return out
+    })(),
   }
   prune(world)
   enforceLivingWorldLimits(world)

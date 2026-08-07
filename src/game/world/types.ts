@@ -471,4 +471,10 @@ export interface LivingWorldState {
   narrative: NarrativeHistory
   /** Guards against a second pass over the same week after a reload — §72. */
   lastGeneratedWeek?: number
+  /**
+   * Candidate type → the week it last led. The Director's novelty term (§27) reads this, which is
+   * what stops the same kind of story leading week after week. Persisted, because novelty that
+   * resets on reload would let the repetition straight back in.
+   */
+  narrativeLastSeen?: Record<string, number>
 }
