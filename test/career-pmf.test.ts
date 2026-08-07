@@ -219,6 +219,42 @@ ok(JSON.stringify(migrated.segmentTruth) === JSON.stringify(generateAllTruth(246
 ok(totalCustomers(migrated) === 900, 'existing users become a starting cohort rather than vanishing')
 ok(migrated.journal.some((j) => j.title.includes('activated')), 'the migration is recorded in the journal')
 
+console.log('— Retention is a 4-week snapshot, not lifetime decay —')
+let ret = newGame('Ret', 'saas', 'technical', { config: cfg({ seed: 909 }) })
+ret.cash = 8_000_000
+ret.marketingSpend = 30_000
+ret.allocation = { features: 35, quality: 35, bugs: 20, research: 10, bet: 0 }
+const retTrace: number[] = []
+for (let w = 0; w < 40; w++) {
+  ret.cash = 8_000_000
+  ret = advanceWeek(ret)
+  if (w > 10) retTrace.push(ret.career!.retentionBySegment[ret.career!.primaryTargetSegmentId] ?? 0)
+}
+const early = retTrace[0]
+const late = retTrace[retTrace.length - 1]
+ok(late > 0.2, `retention does not decay toward zero over time (${(late * 100).toFixed(0)}%)`)
+ok(Math.abs(late - early) < 0.45, `retention is a stable measure, not a monotonic slide (${(early * 100).toFixed(0)}% -> ${(late * 100).toFixed(0)}%)`)
+ok(
+  ret.career!.cohorts.filter((c) => c.retentionAt4wk !== undefined).length > 0,
+  'cohorts snapshot their four-week retention once and keep it',
+)
+
+// neglecting bugs must cost retention, and therefore PMF — this is the lesson the owner hit
+function allocRun(alloc: { features: number; quality: number; bugs: number; research: number; bet: number }) {
+  let g2 = newGame('A', 'saas', 'technical', { config: cfg({ seed: 4242 }) })
+  g2.allocation = alloc
+  for (let w = 0; w < 40; w++) {
+    g2.cash = 20_000_000
+    g2.marketingSpend = 25_000
+    g2 = advanceWeek(g2)
+  }
+  return g2
+}
+const neglected = allocRun({ features: 70, quality: 15, bugs: 15, research: 0, bet: 0 })
+const maintained = allocRun({ features: 40, quality: 25, bugs: 35, research: 0, bet: 0 })
+ok(neglected.bugs > maintained.bugs, `shipping features without fixing bugs accumulates them (${Math.round(neglected.bugs)} vs ${Math.round(maintained.bugs)})`)
+ok(maintained.pmf > neglected.pmf, `and that costs PMF — bug-neglect ${Math.round(neglected.pmf)} vs maintained ${Math.round(maintained.pmf)}`)
+
 console.log('— Briefing, explanations and capacity drain are real (not inert) —')
 let br = newGame('Brief', 'saas', 'technical', { config: cfg({ seed: 606 }) })
 br.cash = 3_000_000

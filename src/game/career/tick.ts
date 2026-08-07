@@ -196,15 +196,25 @@ export function tickCareerPMF(
     const before = c.activeCustomers
     c.activeCustomers = Math.max(0, Math.round(c.activeCustomers * keep))
     churnedTotal += before - c.activeCustomers
+    // Freeze this cohort's four-week number the week it turns four weeks old. Measuring
+    // "everything older than 4 weeks" instead made the metric lifetime survival, which decays
+    // forever — so retention (and therefore PMF) could only ever fall.
+    if (c.retentionAt4wk === undefined && s.week - c.acquiredWeek >= 4 && c.startingCustomers > 0) {
+      c.retentionAt4wk = clamp01(c.activeCustomers / c.startingCustomers)
+    }
   }
   career.cohorts = career.cohorts.filter((c) => c.activeCustomers > 0).slice(-60)
 
   // --- 4-week retention, measured per segment ----------------------------------------------
   for (const seg of segs) {
-    const mature = career.cohorts.filter((c) => c.segmentId === seg.id && s.week - c.acquiredWeek >= 4)
-    const started = mature.reduce((a, c) => a + c.startingCustomers, 0)
-    const still = mature.reduce((a, c) => a + c.activeCustomers, 0)
-    career.retentionBySegment[seg.id] = started > 0 ? clamp01(still / started) : career.retentionBySegment[seg.id] ?? 0
+    // Average the most recent cohorts' four-week snapshots, weighted by size. This tracks
+    // whether the company is getting BETTER at keeping people, and rises when fit improves.
+    const measured = career.cohorts.filter((c) => c.segmentId === seg.id && c.retentionAt4wk !== undefined).slice(-10)
+    const weight = measured.reduce((a, c) => a + c.startingCustomers, 0)
+    career.retentionBySegment[seg.id] =
+      weight > 0
+        ? clamp01(measured.reduce((a, c) => a + c.retentionAt4wk! * c.startingCustomers, 0) / weight)
+        : (career.retentionBySegment[seg.id] ?? 0)
   }
 
   // --- derived PMF, per segment ------------------------------------------------------------

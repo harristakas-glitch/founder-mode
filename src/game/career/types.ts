@@ -74,6 +74,8 @@ export interface CustomerCohort {
   acquisitionCost: number
   priceAtAcquisition: number
   productQualityAtAcquisition: number
+  /** Share of this cohort still active when it turned four weeks old. Snapshotted once. */
+  retentionAt4wk?: number
 }
 
 export interface RepositioningState {
