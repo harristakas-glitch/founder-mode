@@ -43,6 +43,7 @@ import { Discovery } from './screens/Discovery'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
+import { PMF_CAUSAL_CHAIN } from './CareerUI'
 import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
 
@@ -464,7 +465,11 @@ export default function App() {
               <Ticker value={totalUsers(game)} format={num} />
               <TrendBadge value={usersTrend} />
             </Stat>
-            <Stat k="PMF" tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
+            <Stat
+              k="PMF"
+              tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}
+              title={hasCapability(game, 'detailedPMF') ? PMF_CAUSAL_CHAIN : undefined}
+            >
               <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
             </Stat>
             <Stat k="Valuation">
@@ -593,10 +598,10 @@ export default function App() {
   )
 }
 
-function Stat({ k, tone, children }: { k: string; tone?: 'good' | 'bad' | 'warn'; children: React.ReactNode }) {
+function Stat({ k, tone, title, children }: { k: string; tone?: 'good' | 'bad' | 'warn'; title?: string; children: React.ReactNode }) {
   const cls = tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : tone === 'warn' ? 'text-warn' : ''
   return (
-    <div className="shrink-0 leading-tight">
+    <div className="shrink-0 leading-tight" title={title}>
       <div className="text-[10px] font-semibold whitespace-nowrap uppercase tracking-[0.08em] text-mut">{k}</div>
       <div className={`mt-0.5 flex items-baseline whitespace-nowrap text-[15px] font-bold tnum ${cls}`}>{children}</div>
     </div>

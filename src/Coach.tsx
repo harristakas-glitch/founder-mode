@@ -3,12 +3,11 @@
 import { useEffect, useState } from 'react'
 import { GraduationCap, X } from 'lucide-react'
 import { STAGE_THRESHOLDS } from './game/data'
+import { PMF_CUSTOMER_FLOOR, totalCustomers } from './game/career/pmf'
 import { valuation } from './game/engine'
+import { hasCapability } from './game/modes'
 import type { GameState } from './game/types'
 import { useStore, type ScreenId } from './store'
-
-const DONE_KEY = 'fm-coach-done'
-const STEP_KEY = 'fm-coach-step'
 
 interface CoachStep {
   text: string
@@ -16,6 +15,45 @@ interface CoachStep {
   gotoLabel?: string
   done: (g: GameState, screen: ScreenId) => boolean
 }
+
+// Career runs a different track. Its lesson is not "allocate research and hire carefully" —
+// it is that PMF is an OUTPUT you cannot push on, so the steps walk the causal chain:
+// research → belief, experiment → evidence, customers → retention, retention → PMF.
+const CAREER_STEPS: CoachStep[] = [
+  {
+    text: "You don't know your market yet. Research improves what you KNOW; paying customers prove whether you were RIGHT. Everything about the market lives on Discovery.",
+    goto: 'discovery',
+    gotoLabel: 'Open Discovery',
+    done: (_g, screen) => screen === 'discovery',
+  },
+  {
+    text: 'You are already targeting a segment — it was picked from an opinion, not a fact. The Hypothesis Board shows what you believe about each one and how little of it is evidence. Keep your target or switch it, then start investigating.',
+    done: (g) => {
+      const c = g.career
+      if (!c) return false
+      return c.activeExperiments.length > 0 || c.evidence.length > 0 || c.journal.some((j) => j.category === 'pivot')
+    },
+  },
+  {
+    text: 'Run an experiment on that segment. Interviews are cheap, and people are generous with opinions they never act on; a paid pilot is slow, expensive and hard to argue with. Evidence takes weeks to land — advance the week.',
+    done: (g) => (g.career?.evidence.length ?? 0) > 0,
+  },
+  {
+    text: `Evidence moved your BELIEFS. It did not move your PMF, and it never will. PMF here is read off real behaviour: below ${PMF_CUSTOMER_FLOOR} retained customers in a segment the score is capped no matter how good the research looks. Go and win customers.`,
+    done: (g) => (g.career ? totalCustomers(g.career, g.career.primaryTargetSegmentId) >= PMF_CUSTOMER_FLOOR : false),
+  },
+  {
+    text: 'Now watch 4-week retention on Discovery — the share of a cohort still paying a month later. That number is most of your PMF score. If it is low, more marketing just buys a bigger leak: fix product fit or price first.',
+    goto: 'discovery',
+    gotoLabel: 'Check retention',
+    done: (g) => {
+      const c = g.career
+      if (!c) return false
+      const target = c.primaryTargetSegmentId
+      return (c.retentionBySegment[target] ?? 0) >= 0.7 && totalCustomers(c, target) >= PMF_CUSTOMER_FLOOR
+    },
+  },
+]
 
 const STEPS: CoachStep[] = [
   {
@@ -60,7 +98,26 @@ const STEPS: CoachStep[] = [
   },
 ]
 
+// Two tracks, two sets of saved progress: finishing the Quick Play tutorial must not skip
+// Career's, and vice versa. The key remounts the component so it re-reads the right keys.
 export function Coach() {
+  const game = useStore((s) => s.game)
+  if (!game) return null
+  const track: Track = hasCapability(game, 'detailedPMF') ? 'career' : 'quick'
+  return <CoachTrack key={track} track={track} />
+}
+
+type Track = 'quick' | 'career'
+
+const TRACKS: Record<Track, { steps: CoachStep[]; doneKey: string; stepKey: string; maxWeek: number }> = {
+  quick: { steps: STEPS, doneKey: 'fm-coach-done', stepKey: 'fm-coach-step', maxWeek: 40 },
+  // Career is multi-session and its lessons only land once customers exist, so the coach
+  // stays available for longer.
+  career: { steps: CAREER_STEPS, doneKey: 'fm-coach-career-done', stepKey: 'fm-coach-career-step', maxWeek: 70 },
+}
+
+function CoachTrack({ track }: { track: Track }) {
+  const { steps: STEPS, doneKey: DONE_KEY, stepKey: STEP_KEY, maxWeek } = TRACKS[track]
   const game = useStore((s) => s.game)
   const screen = useStore((s) => s.screen)
   const setScreen = useStore((s) => s.setScreen)
@@ -79,11 +136,11 @@ export function Coach() {
       localStorage.setItem(STEP_KEY, String(next))
       if (next >= STEPS.length) localStorage.setItem(DONE_KEY, '1')
     }
-  }, [game, screen, step, dismissed])
+  }, [game, screen, step, dismissed, STEPS, STEP_KEY, DONE_KEY])
 
   if (dismissed || !game || game.gameOver || step >= STEPS.length) return null
   // a veteran mid-game doesn't need the kindergarten track
-  if (game.week > 40) return null
+  if (game.week > maxWeek) return null
   const s = STEPS[step]
 
   return (

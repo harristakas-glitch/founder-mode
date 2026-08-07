@@ -266,7 +266,7 @@ export function tickCareerPMF(
   career.lastBriefing = {
     week: s.week,
     customersDelta: netDelta,
-    revenueDeltaPct: 0, // filled by the engine once revenue is known
+    revenueDeltaPct: 0, // filled by advanceWeek once the shared revenue formula has run
     retentionDeltaPct: Math.round(((retentionNow - beforeRetention) * 100 + Number.EPSILON) * 10) / 10,
     why: explanations[0]?.primaryCause ?? `Steady week targeting ${targetName}.`,
     learned,

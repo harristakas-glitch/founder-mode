@@ -16,6 +16,8 @@ import {
   valuation,
   weeklyBurn,
 } from '../game/engine'
+import { FounderBriefing, PmfExplainer, careerActive } from '../CareerUI'
+import { PMF_LABEL, segmentSnapshots } from '../game/career/pmf'
 import { useStore } from '../store'
 
 // This week vs last: the one-glance digest of what just happened.
@@ -125,12 +127,28 @@ function attentionItems(game: ReturnType<typeof useStore.getState>['game']): Att
       text: `${game.termSheets.length} term sheet${game.termSheets.length === 1 ? '' : 's'} on the table — they expire.`,
       action: { label: 'Review', screen: 'fundraising' },
     })
-  if (game.week > 6 && game.pmf < pmfPace * 0.6)
-    out.push({
-      tone: 'warn',
-      text: `PMF ${Math.round(game.pmf)} against ~${Math.round(pmfPace)} expected by week ${game.week}. The market isn't biting — research harder, or pivot.`,
-      action: { label: 'Product', screen: 'product' },
-    })
+  // Career derives PMF from retained customers, so "research harder" is actively wrong advice
+  // there — the fix is retention, and the screen that shows it is Discovery.
+  if (game.week > 6 && game.pmf < pmfPace * 0.6) {
+    const career = careerActive(game) ? game.career! : null
+    const retention = career ? (career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) : 0
+    out.push(
+      career
+        ? {
+            tone: 'warn',
+            text:
+              retention > 0
+                ? `PMF ${Math.round(game.pmf)} — it is read off customers who stay, and only ${Math.round(retention * 100)}% of your target segment is still here after four weeks.`
+                : `PMF ${Math.round(game.pmf)} — nothing has retained long enough to measure yet. Research moves your beliefs; only paying customers who stay move PMF.`,
+            action: { label: 'Discovery', screen: 'discovery' },
+          }
+        : {
+            tone: 'warn',
+            text: `PMF ${Math.round(game.pmf)} against ~${Math.round(pmfPace)} expected by week ${game.week}. The market isn't biting — research harder, or pivot.`,
+            action: { label: 'Product', screen: 'product' },
+          },
+    )
+  }
   if (game.bugs > 55)
     out.push({
       tone: 'warn',
@@ -181,6 +199,21 @@ function AttentionStrip() {
   )
 }
 
+// In Career the number is derived, so the label under it should name the status the
+// simulation actually assigned rather than Quick Play's generic band.
+function careerPmfLabel(game: ReturnType<typeof useStore.getState>['game']): string | null {
+  if (!careerActive(game) || !game) return null
+  const rows = segmentSnapshots({
+    career: game.career!,
+    sector: game.sector,
+    quality: game.quality,
+    sectorTam: sectorById(game.sector).tam,
+  })
+  const best = [...rows].sort((a, b) => b.score - a.score)[0]
+  if (!best) return null
+  return `${PMF_LABEL[best.status]} in ${best.name} — derived from customers who stayed`
+}
+
 export function Dashboard() {
   const game = useStore((s) => s.game)!
   const setScreen = useStore((s) => s.setScreen)
@@ -197,6 +230,8 @@ export function Dashboard() {
         Week {game.week} · {game.stage} · You own {pct(game.founderEquity, 1)} of the company
       </div>
 
+      {/* Career: what just happened and why, before what needs doing about it. */}
+      <FounderBriefing />
       <AttentionStrip />
       <WeekDigest />
 
@@ -251,10 +286,13 @@ export function Dashboard() {
       </div>
 
       <div className="mt-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-3">
-        <StatCard label="Product-market fit" numeric={game.pmf} format={(n) => `${Math.round(n)}/100`} delta={pmfLabel(game.pmf)} tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined} />
+        <StatCard label="Product-market fit" numeric={game.pmf} format={(n) => `${Math.round(n)}/100`} delta={careerPmfLabel(game) ?? pmfLabel(game.pmf)} tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined} />
         <StatCard label="Hype" numeric={game.hype} format={(n) => `${Math.round(n)}/100`} delta={game.hype < 15 ? 'Nobody is talking about you' : undefined} />
         <StatCard label="Team morale" numeric={avgMorale(game)} format={(n) => `${Math.round(n)}/100`} tone={avgMorale(game) < 45 ? 'down' : undefined} delta={avgMorale(game) < 45 ? 'People are looking at the exits' : undefined} />
       </div>
+
+      {/* Career: the PMF number above is an output. Say what it is made of, where it is read. */}
+      <PmfExplainer />
 
       <div className="mt-3.5">
         <Benchmarks />

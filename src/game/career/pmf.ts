@@ -405,6 +405,13 @@ export interface SegmentPmf {
 }
 
 /**
+ * Below this many retained customers in a segment there is nothing real to read, so the score
+ * is capped at "problem validated" however confident the research is. The UI shows this number
+ * to the player, so it lives here rather than as a literal in two places.
+ */
+export const PMF_CUSTOMER_FLOOR = 15
+
+/**
  * PMF is an OUTPUT, never an input. It is read off real behaviour — customers who stayed and
  * paid — with only a small contribution from evidence confidence. Research alone can never
  * manufacture it, which is the single most important rule in this system.
@@ -420,7 +427,7 @@ export function derivePmfForSegment(args: {
   ceiling: number
 }): SegmentPmf {
   const { segmentId, customers, retention4wk, priceFit, productFit, truth, beliefs, ceiling } = args
-  if (customers < 15) {
+  if (customers < PMF_CUSTOMER_FLOOR) {
     // Nothing real yet: research can raise this only to 'problem validated', never further.
     const confidence = TRUTH_METRICS.reduce((a, m) => a + beliefs[m].confidence, 0) / TRUTH_METRICS.length
     const believedNeed = beliefs.needIntensity.estimate
@@ -455,6 +462,73 @@ export const PMF_LABEL: Record<PmfStatus, string> = {
   emerging: 'Emerging PMF',
   strong: 'Strong PMF',
   scalable: 'Scalable PMF',
+}
+
+/** A segment as the weekly tick scores it, plus the presentation bits the UI needs. */
+export interface SegmentSnapshot extends SegmentPmf {
+  name: string
+  blurb: string
+  isTarget: boolean
+  productFit: number
+  priceFit: number
+  ceiling: number
+}
+
+/**
+ * Read-only view of every segment, scored exactly the way `tickCareerPMF` scores it. Pure — it
+ * calls the same functions the simulation does and mutates nothing. It exists so the UI can
+ * show the player what the tick already computed without duplicating a single formula.
+ */
+export function segmentSnapshots(args: {
+  career: CareerPMFState
+  sector: string
+  quality: number
+  sectorTam: number
+}): SegmentSnapshot[] {
+  const { career, sector, quality, sectorTam } = args
+  const out: SegmentSnapshot[] = []
+  for (const def of segmentsForSector(sector)) {
+    const truth = career.segmentTruth[def.id]
+    const beliefs = career.segmentBeliefs[def.id]
+    if (!truth || !beliefs) continue // a save from before this segment existed
+    const productFit = segmentProductFit(truth, quality, career.focus, sector, def.id)
+    const priceFit = segmentPriceFit(truth, career.pricing)
+    const ceiling = segmentCeiling(truth, sectorTam)
+    const pmf = derivePmfForSegment({
+      segmentId: def.id,
+      customers: totalCustomers(career, def.id),
+      retention4wk: career.retentionBySegment[def.id] ?? 0,
+      priceFit,
+      productFit,
+      truth,
+      beliefs,
+      ceiling,
+    })
+    out.push({
+      ...pmf,
+      name: def.name,
+      blurb: def.blurb,
+      isTarget: career.primaryTargetSegmentId === def.id,
+      productFit,
+      priceFit,
+      ceiling,
+    })
+  }
+  return out
+}
+
+/**
+ * The one sentence that answers "why isn't PMF moving?" for a segment. Reads only what the
+ * player can already see — customers and retention — and never reveals the hidden truth.
+ */
+export function pmfBlocker(s: SegmentSnapshot): string | null {
+  if (s.customers < PMF_CUSTOMER_FLOOR)
+    return `Under ${PMF_CUSTOMER_FLOOR} retained customers — the score is capped here however good the research looks.`
+  if (s.retention4wk > 0 && s.retention4wk < 0.62)
+    return 'Retention is most of the score, and below roughly 62% a cohort drains faster than marketing can refill it.'
+  if (s.priceFit < 45) return 'Priced above what this segment pays, so most of the interest never converts.'
+  if (s.productFit < 50) return "The product doesn't clear this segment's bar yet."
+  return null
 }
 
 // ---------- creation & migration ----------

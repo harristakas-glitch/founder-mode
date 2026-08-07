@@ -17,7 +17,7 @@ import {
   totalCustomers,
   updateBelief,
 } from '../src/game/career/pmf'
-import { repositionTo } from '../src/game/career/tick'
+import { careerProductDrag, repositionTo } from '../src/game/career/tick'
 import type { ActiveExperiment, SegmentTruth } from '../src/game/career/types'
 
 const fails: string[] = []
@@ -218,6 +218,28 @@ const migrated = migrateCareerSave({ seed: 2468, sector: 'saas', scenario: 'stan
 ok(JSON.stringify(migrated.segmentTruth) === JSON.stringify(generateAllTruth(2468, 'saas', 'standard')), 'migration rebuilds the ORIGINAL market from the seed')
 ok(totalCustomers(migrated) === 900, 'existing users become a starting cohort rather than vanishing')
 ok(migrated.journal.some((j) => j.title.includes('activated')), 'the migration is recorded in the journal')
+
+console.log('— Briefing, explanations and capacity drain are real (not inert) —')
+let br = newGame('Brief', 'saas', 'technical', { config: cfg({ seed: 606 }) })
+br.cash = 3_000_000
+br.marketingSpend = 30_000
+for (let w = 0; w < 12; w++) br = advanceWeek(br)
+ok(!!br.career!.lastBriefing, 'a weekly founder briefing is produced')
+ok(br.career!.lastBriefing!.week === br.week, 'the briefing is for the current week')
+const revenues = br.history.map((h) => h.revenue).filter((r) => r > 0)
+ok(revenues.length < 2 || br.career!.lastBriefing!.revenueDeltaPct !== 0, `revenueDeltaPct is populated, not permanently 0 (${br.career!.lastBriefing!.revenueDeltaPct}%)`)
+ok(typeof br.career!.lastBriefing!.uncertainty === 'string' && br.career!.lastBriefing!.uncertainty.length > 10, 'the briefing names a biggest uncertainty')
+ok(Object.values(br.career!.retentionBySegment).some((v) => typeof v === 'number'), 'per-segment retention is tracked')
+
+// experiments must cost engineering time, and repositioning must slow the product down
+const idle = newGame('Idle', 'saas', 'technical', { config: cfg({ seed: 707 }) })
+const busy = newGame('Busy', 'saas', 'technical', { config: cfg({ seed: 707 }) })
+startExperiment(busy.career!, 1, 'pilot', busy.career!.primaryTargetSegmentId, 'x1')
+ok(careerProductDrag(busy) < careerProductDrag(idle), `running a pilot costs engineering capacity (${careerProductDrag(busy).toFixed(2)} vs ${careerProductDrag(idle).toFixed(2)})`)
+const repositioned = newGame('Repos', 'saas', 'technical', { config: cfg({ seed: 707 }) })
+const otherSeg = segmentsForSector('saas').find((x) => x.id !== repositioned.career!.primaryTargetSegmentId)!
+repositionTo(repositioned, otherSeg.id, 1)
+ok(careerProductDrag(repositioned) < careerProductDrag(idle), 'repositioning slows product velocity, not just marketing')
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

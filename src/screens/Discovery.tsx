@@ -17,6 +17,7 @@ import {
   totalCustomers,
 } from '../game/career/pmf'
 import type { ExperimentType, SegmentId } from '../game/career/types'
+import { PMF_CAUSAL_CHAIN, SegmentHealth } from '../CareerUI'
 import { useStore } from '../store'
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -37,6 +38,7 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
   const def = segmentDef(game.sector, segmentId)
   const isTarget = career.primaryTargetSegmentId === segmentId
   const customers = totalCustomers(career, segmentId)
+  const retention = career.retentionBySegment[segmentId] ?? 0
   const evidence = career.evidence.filter((e) => e.segmentId === segmentId).slice(0, 4)
 
   return (
@@ -50,6 +52,7 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
         </div>
         <span className="text-[12px] text-mut">
           {customers > 0 ? `${customers.toLocaleString()} customers` : 'no customers yet'}
+          {retention > 0 && ` · ${Math.round(retention * 100)}% 4-wk retention`}
         </span>
       </div>
       <div className="mt-1 text-[12.5px] text-mut">{def.blurb}</div>
@@ -111,9 +114,21 @@ export function Discovery() {
         You don't know your market yet. Research improves what you <i>know</i>; customers prove whether you were <i>right</i>.
       </div>
 
+      {/* the scoreboard: what customers are doing, before anything you believe about them */}
+      <div className="mb-3.5">
+        <SegmentHealth />
+      </div>
+
+      <div className="mb-3.5 rounded-2xl border border-line/70 bg-surface/60 px-4 py-3 text-[13px] leading-relaxed">
+        {PMF_CAUSAL_CHAIN}
+      </div>
+
       {/* strategy row */}
       <Panel title="Your bet">
-        <div className="text-[12.5px] text-mut">Who you are building for, what the product optimises for, and what you charge.</div>
+        <div className="text-[12.5px] leading-snug text-mut">
+          Who you are building for, what the product optimises for, and what you charge. All three are guesses until customers stay —
+          and switching target costs weeks of velocity, because the roadmap was built for somebody else.
+        </div>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {segs.map((sg) => (
             <button
@@ -171,6 +186,10 @@ export function Discovery() {
       {/* experiments */}
       <div className="mt-3.5">
         <Panel title="Experiments">
+          <div className="mb-3 text-[12.5px] leading-snug text-mut">
+            Experiments buy evidence, not customers. Each one costs cash, weeks and some engineering capacity; the slow, expensive ones
+            measure behaviour and are hard to argue with, the cheap ones measure opinions and flatter you.
+          </div>
           {career.activeExperiments.length > 0 && (
             <div className="mb-3 space-y-1.5">
               {career.activeExperiments.map((e) => {
@@ -230,7 +249,11 @@ export function Discovery() {
 
       {/* hypothesis board */}
       <div className="mt-3.5">
-        <div className="mb-2 text-[11px] font-bold tracking-[0.1em] text-mut uppercase">Hypothesis board</div>
+        <div className="mb-1 text-[11px] font-bold tracking-[0.1em] text-mut uppercase">Hypothesis board</div>
+        <div className="mb-2.5 max-w-[95ch] text-[12.5px] leading-snug text-mut">
+          What you currently believe about each segment, and how much of it is actually evidence. The bar under each line is confidence,
+          not quality — a belief can be confident and wrong, and evidence changes these numbers without changing your PMF.
+        </div>
         <div className="grid gap-3.5 lg:grid-cols-3">
           {segs.map((sg) => (
             <SegmentHypotheses key={sg.id} segmentId={sg.id} />

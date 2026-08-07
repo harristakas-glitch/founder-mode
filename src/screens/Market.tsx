@@ -16,6 +16,7 @@ import {
   valuation,
 } from '../game/engine'
 import { hasCapability } from '../game/modes'
+import { SegmentHealth } from '../CareerUI'
 import { myId } from '../net/online'
 import { useStore } from '../store'
 
@@ -101,6 +102,13 @@ export function Market() {
           delta={online ? 'share of captured users, vs the other founders' : 'share of captured users, vs living rivals'}
         />
       </div>
+
+      {/* Career: the market is three different customer segments, not one pool of users. */}
+      {hasCapability(game, 'detailedPMF') && (
+        <div className="mt-3.5">
+          <SegmentHealth title="Your segments — customers, retention, PMF" />
+        </div>
+      )}
 
       <div className="mt-3.5">
         <Panel title="Leaderboard">

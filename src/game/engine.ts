@@ -1157,6 +1157,13 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const cashAtStart = s.cash
   s.cash += revenue - expenses
   const cashAfterOperations = s.cash // everything below here (fees, events) is a one-off hit
+  // Career's founder briefing reports a revenue move; it can only be known here, after the
+  // shared revenue formula has run. Previously left at 0, so the briefing always claimed flat.
+  if (s.career?.lastBriefing) {
+    const prevRevenue = prev.lastRevenue
+    s.career.lastBriefing.revenueDeltaPct =
+      prevRevenue > 0 ? Math.round(((revenue - prevRevenue) / prevRevenue) * 1000) / 10 : revenue > 0 ? 100 : 0
+  }
   s.lastRevenue = revenue
   s.lastExpenses = expenses
   covenantCheck(s)
