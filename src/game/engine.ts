@@ -12,6 +12,7 @@ import {
   sectorById,
 } from './data'
 import { ARC_DEFS } from './arcs'
+import { resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import type {
   Candidate,
   Choice,
@@ -57,39 +58,34 @@ export function withSeed<T>(seed: number | undefined, fn: () => T): T {
   }
 }
 
-// ---------- rulesets: campaign depth vs. skirmish speed ----------
+// ---------- capabilities ----------
+// The engine never asks which mode it is running. It asks whether a capability is on, and
+// the answer was resolved once from the run's config (see ./modes).
 
-export const DEFAULT_RULES: import('./types').Ruleset = {
-  arcs: true,
-  oneOnOnes: true,
-  catastrophes: true,
-  energy: true,
-  board: true,
-  debt: true,
-  ventures: true,
-  ipo: true,
-  macroShocks: true,
-  pvp: false,
+/** Legacy bridge: old saves and older multiplayer clients still speak the 10-key Ruleset. */
+export function capabilitiesFromLegacyRules(r: Partial<import('./types').Ruleset> | undefined | null): Partial<GameCapabilities> {
+  if (!r || typeof r !== 'object') return {}
+  const map: [keyof import('./types').Ruleset, CapabilityKey][] = [
+    ['arcs', 'storyArcs'],
+    ['oneOnOnes', 'oneOnOnes'],
+    ['catastrophes', 'catastrophes'],
+    ['energy', 'founderEnergy'],
+    ['board', 'boardReviews'],
+    ['debt', 'bankDebt'],
+    ['ventures', 'multipleVerticals'],
+    ['ipo', 'ipoEndgame'],
+    ['macroShocks', 'macroShocks'],
+    ['pvp', 'pvpActions'],
+  ]
+  const out: Partial<GameCapabilities> = {}
+  for (const [from, to] of map) if (typeof r[from] === 'boolean') out[to] = r[from] as boolean
+  return out
 }
 
-// Multiplayer default: lean and adversarial — the drama comes from the other founders.
-export const PVP_RULES: import('./types').Ruleset = {
-  arcs: false,
-  oneOnOnes: false,
-  catastrophes: false,
-  energy: false,
-  board: false,
-  debt: true,
-  ventures: true,
-  ipo: true,
-  macroShocks: true,
-  pvp: true,
-}
-
-const ruleOn = (s: GameState, k: keyof import('./types').Ruleset): boolean => s.rules?.[k] ?? true
+const can = (s: GameState, k: CapabilityKey): boolean => s.capabilities?.[k] ?? false
 
 function drainEnergy(s: GameState, n: number) {
-  if (ruleOn(s, 'energy')) s.energy = clamp(s.energy - n, 0, 100)
+  if (can(s, 'founderEnergy')) s.energy = clamp(s.energy - n, 0, 100)
 }
 
 // ---------- new game ----------
@@ -99,7 +95,10 @@ export interface NewGameOpts {
   challenge?: { label: string; cap: number } | null // capped run (daily / multiplayer match)
   aiRivals?: boolean // false in multiplayer — the other players ARE the rivals
   scenario?: string // scenario id from SCENARIOS
-  rules?: import('./types').Ruleset // system toggles; defaults to the full campaign
+  /** Preferred: the whole run configuration. Capabilities are resolved from it. */
+  config?: GameConfig
+  /** Escape hatch for tests/bots that want to force individual capabilities on or off. */
+  capabilities?: Partial<GameCapabilities>
 }
 
 // Alternate starting worlds — same rules, different hand.
@@ -141,7 +140,18 @@ function applyScenario(s: GameState, id: string) {
 }
 
 export function newGame(companyName: string, sector: SectorId, founderKind: FounderKind, opts: NewGameOpts = {}): GameState {
-  return withSeed(opts.seed, () => buildGame(companyName, sector, founderKind, opts))
+  // A run is fully described by its config, and the config decides the seed — so the same
+  // config always deals the same world. Callers that pass only the legacy options get a
+  // Quick Play standard config built for them.
+  const config: GameConfig = opts.config ?? {
+    mode: 'quick',
+    format: opts.challenge?.label?.startsWith('Daily') ? 'daily_challenge' : opts.scenario && opts.scenario !== 'standard' ? 'scenario' : 'standard',
+    sector,
+    scenario: opts.scenario,
+    seed: opts.seed ?? Math.floor(Math.random() * 2 ** 31),
+  }
+  if (opts.capabilities) config.overrides = { ...config.overrides, ...opts.capabilities }
+  return withSeed(config.seed, () => buildGame(companyName, sector, founderKind, { ...opts, config }))
 }
 
 function buildGame(companyName: string, sector: SectorId, founderKind: FounderKind, opts: NewGameOpts): GameState {
@@ -198,7 +208,8 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     energy: 80,
     vacationCooldown: 0,
     bankedPayout: 0,
-    rules: opts.rules ?? { ...DEFAULT_RULES },
+    config: opts.config!,
+    capabilities: resolveGameRules(opts.config!).capabilities,
     history: [],
     gameOver: null,
   }
@@ -659,7 +670,7 @@ function checkMilestones(s: GameState) {
 // ---------- new ventures: the multi-product company ----------
 
 export function canStartVenture(s: GameState): { ok: boolean; reason?: string } {
-  if (!ruleOn(s, 'ventures')) return { ok: false, reason: 'New verticals are disabled in this match' }
+  if (!can(s, 'multipleVerticals')) return { ok: false, reason: 'New verticals are disabled in this match' }
   if (STAGES.indexOf(s.stage) < 2) return { ok: false, reason: 'Reach Series A first — new bets need a real company underneath them' }
   if (s.pmf < 60) return { ok: false, reason: 'Find product-market fit on your core product first (PMF 60+)' }
   if (s.ventures.some((v) => !v.launched)) return { ok: false, reason: 'One un-launched bet at a time — focus is a feature' }
@@ -867,7 +878,7 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
   s.reputation = clamp(s.reputation + (downRound ? -6 : 8), 0, 100)
   s.hype = clamp(s.hype + (downRound ? 2 : 10), 0, 100)
   // New money, new masters: the board resets its expectations for the new stage.
-  if (ruleOn(s, 'board')) s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
+  if (can(s, 'boardReviews')) s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
   if (downRound) applyEffects(s, { morale: -8 })
   s.inbox.unshift({
     id: uid(),
@@ -902,7 +913,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   const marketReturn = rand(-0.025, 0.028) + (5 - m.rate) * 0.0015 - Math.max(0, m.inflation - 4) * 0.001
   m.index = Math.max(20, m.index * (1 + marketReturn))
   s.climate = clamp(s.climate + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
-  if (ruleOn(s, 'macroShocks')) macroShocks(s)
+  if (can(s, 'macroShocks')) macroShocks(s)
 
   // --- inflation quietly eats payroll: salaries drift up with the cost of living ---
   for (const e of s.employees) e.salary = Math.round(e.salary * (1 + m.inflation / 100 / 52))
@@ -919,7 +930,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   // The founder's own contribution runs on their energy tank — an exhausted founder is half a founder.
   const ipoDrag = s.ipo ? 0.85 : 1
   const rallyMult = s.rally ? s.rally.mult : 1
-  const energyMult = ruleOn(s, 'energy') ? 0.4 + 0.6 * (s.energy / 100) : 1
+  const energyMult = can(s, 'founderEnergy') ? 0.4 + 0.6 * (s.energy / 100) : 1
   const engPoints =
     (s.employees.filter((e) => e.role === 'engineer').reduce((a, e) => a + eff(e), 0) +
       (s.founderKind === 'technical' ? 5 : 1.5) * energyMult) *
@@ -1145,8 +1156,8 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
 
   // --- founder energy: slow recovery, faster erosion under stress ---
   const stressed = expenses > revenue && runway < 8
-  if (ruleOn(s, 'energy')) s.energy = clamp(s.energy + 3 - (s.ipo ? 4 : 0) - (stressed ? 3 : 0), 0, 100)
-  if (ruleOn(s, 'energy') && s.energy <= 5) {
+  if (can(s, 'founderEnergy')) s.energy = clamp(s.energy + 3 - (s.ipo ? 4 : 0) - (stressed ? 3 : 0), 0, 100)
+  if (can(s, 'founderEnergy') && s.energy <= 5) {
     // the body files its own board ultimatum
     s.energy = 35
     applyEffects(s, { morale: -3, features: -1 })
@@ -1161,7 +1172,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   }
 
   // --- one-on-ones: your people have asks of their own ---
-  if (ruleOn(s, 'oneOnOnes')) maybeOneOnOne(s)
+  if (can(s, 'oneOnOnes')) maybeOneOnOne(s)
 
   // --- PvP attack cooldown & shield expiry ---
   if ((s.flags.attackCooldown ?? 0) > 0) s.flags.attackCooldown -= 1
@@ -1175,7 +1186,7 @@ export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
   maybeFireEvent(s)
 
   // --- story arcs: chapters open, chapters resolve ---
-  if (ruleOn(s, 'arcs')) {
+  if (can(s, 'storyArcs')) {
     maybeStartArc(s)
     tickArcs(s)
   }
@@ -1292,12 +1303,12 @@ export function ipoChecklist(s: GameState): { label: string; met: boolean }[] {
 
 // When the IPO path should appear on screen: close enough to start planning for it.
 export function ipoVisible(s: GameState): boolean {
-  if (!ruleOn(s, 'ipo')) return false
+  if (!can(s, 'ipoEndgame')) return false
   return valuation(s) >= IPO_MIN_VAL / 2 || s.stage === 'Series B' || s.stage === 'Series C'
 }
 
 export function ipoEligible(s: GameState): boolean {
-  if (!ruleOn(s, 'ipo')) return false
+  if (!can(s, 'ipoEndgame')) return false
   return !s.ipo && !s.gameOver && ipoChecklist(s).every((c) => c.met)
 }
 
@@ -1436,7 +1447,7 @@ function macroShocks(s: GameState) {
 // ---------- bank debt: leverage with conditions ----------
 
 export function debtCapacity(s: GameState): number {
-  if (!ruleOn(s, 'debt')) return 0
+  if (!can(s, 'bankDebt')) return 0
   const annual = s.lastRevenue * 52
   if (annual < 250_000) return 0
   return Math.round(Math.min(annual * 0.5, 10_000_000) / 10_000) * 10_000
@@ -1643,7 +1654,7 @@ function maybeOneOnOne(s: GameState) {
 // ---------- founder self-care & personal finance ----------
 
 export function takeVacation(s: GameState) {
-  if (!ruleOn(s, 'energy')) return
+  if (!can(s, 'founderEnergy')) return
   if (s.vacationCooldown > 0 || s.gameOver) return
   s.energy = clamp(s.energy + 30, 0, 100)
   s.features = clamp(s.features - 1.5, 0, 100)
@@ -1719,7 +1730,7 @@ export function attackCost(s: GameState, kind: AttackDef['id']): number {
 }
 
 export function canAttack(s: GameState): { ok: boolean; reason?: string } {
-  if (!ruleOn(s, 'pvp')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if (!can(s, 'pvpActions')) return { ok: false, reason: 'PvP is disabled in this match' }
   if ((s.flags.attackCooldown ?? 0) > 0) return { ok: false, reason: `Ops team recovering — ${s.flags.attackCooldown} wk` }
   return { ok: true }
 }
@@ -1759,7 +1770,7 @@ export function shieldCost(s: GameState): number {
 }
 
 export function canBuyShield(s: GameState): { ok: boolean; reason?: string } {
-  if (!ruleOn(s, 'pvp')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if (!can(s, 'pvpActions')) return { ok: false, reason: 'PvP is disabled in this match' }
   if ((s.flags.shield ?? 0) > 0) return { ok: false, reason: `Crisis team already on retainer — ${s.flags.shield} wk left` }
   return { ok: true }
 }
@@ -1993,7 +2004,7 @@ export function revenueGrowthRate(s: GameState): number {
 
 function boardReview(s: GameState) {
   if (s.gameOver) return // an ending this week (IPO pricing, acquisition) stands
-  if (!ruleOn(s, 'board')) return
+  if (!can(s, 'boardReviews')) return
   if (!s.board || s.week < s.board.nextReview) return
   const growth = growthRate(s)
   const target = boardEffectiveTarget(s)
@@ -2141,7 +2152,7 @@ function maybeFireEvent(s: GameState) {
   const eligible = EVENTS.filter(
     (e) =>
       (e.minWeek ?? 0) <= s.week &&
-      (!e.id.startsWith('cat-') || ruleOn(s, 'catastrophes')) &&
+      (!e.id.startsWith('cat-') || can(s, 'catastrophes')) &&
       (!e.cond || e.cond(s)) &&
       !s.inbox.slice(0, 8).some((m) => m.title === e.title), // avoid rapid repeats
   )

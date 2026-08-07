@@ -2,6 +2,7 @@ import { Megaphone } from 'lucide-react'
 import { Bar, Btn, Panel, RoleAvatar, SkillRing, TraitChip } from '../components'
 import { money, pct } from '../format'
 import { pitchOptions, weeklyPayroll } from '../game/engine'
+import { hasCapability } from '../game/modes'
 import { useStore } from '../store'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -80,11 +81,11 @@ export function Team() {
               <b>You</b> <span className="text-mut">· Founder & CEO ({game.founderKind})</span>
               <div className="text-xs text-mut">
                 {game.founderKind === 'technical' ? 'Contributes engineering output every week' : 'Generates hype and boosts revenue'}
-                {game.rules?.energy !== false && <> — scaled by your energy ({Math.round(game.energy)}/100)</>}
+                {hasCapability(game, 'founderEnergy') && <> — scaled by your energy ({Math.round(game.energy)}/100)</>}
               </div>
             </div>
           </div>
-          {game.rules?.energy !== false && (
+          {hasCapability(game, 'founderEnergy') && (
             <div className="flex items-center gap-3">
               <div className="w-28">
                 <Bar
@@ -98,7 +99,7 @@ export function Team() {
             </div>
           )}
         </div>
-        {game.rules?.energy !== false && game.energy < 30 && (
+        {hasCapability(game, 'founderEnergy') && game.energy < 30 && (
           <div className="mt-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-1.5 text-[13px] text-bad">
             You're running on fumes — your weekly contribution is badly weakened, and hitting empty forces a burnout. Take the week.
           </div>

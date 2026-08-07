@@ -128,12 +128,10 @@ Carried over from the design pass. None are defects; all are real improvements.
 
 ## 6. Engineering / robustness
 
-### 6.1 Move the bot test harnesses into the repo
-The balance and regression harnesses currently live in a scratch directory and will be lost.
-They are the only real test coverage this project has: rules/PvP assertions, hostile-input
-regressions, seeded-determinism checks, a NaN hunt, and win-rate measurement.
-**Done when:** they live under `test/` (or `scripts/`), run via an npm script, and CI runs them
-on push.
+### 6.1 Move the bot test harnesses into the repo — **done 2026-08-07**
+Now `test/modes.test.ts`, `test/rules.test.ts` and `test/regressions.test.ts`, run with
+`npm test`. Remaining: wire them into CI on push, and note that `tsc -b` does not currently
+type-check `test/` (they are executed through tsx).
 
 ### 6.2 The weekly simulation isn't seeded
 `newGame` is wrapped in `withSeed`, so everyone gets an identical *starting world* — but

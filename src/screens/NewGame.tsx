@@ -3,6 +3,7 @@ import { CalendarDays, Check, Globe, LogIn, LogOut, Rocket } from 'lucide-react'
 import { SECTORS, sectorById } from '../game/data'
 import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
 import { SCENARIOS } from '../game/engine'
+import { MODE_META, QUICK_FORMAT_META, type GameFormat, type GameMode } from '../game/modes'
 import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
@@ -39,7 +40,6 @@ const label = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.1em] tex
 const inputCls =
   'w-full rounded-xl border border-line bg-surface px-4 py-3 text-[15px] transition-colors placeholder:text-mut/50 focus:border-accent'
 
-type Mode = 'free' | 'daily' | 'online'
 
 function AchievementGallery() {
   const earned = earnedAchievements()
@@ -117,7 +117,10 @@ export function NewGame() {
   const joinRoom = useStore((s) => s.joinRoom)
   const connecting = useStore((s) => s.connecting)
   const daily = dailyInfo()
-  const [mode, setMode] = useState<Mode>('free')
+  // The product has three top-level experiences; Daily Challenge is a FORMAT inside Quick
+  // Play, not a fourth pillar. `experience === null` shows the pick-an-experience landing.
+  const [experience, setExperience] = useState<GameMode | null>(null)
+  const [format, setFormat] = useState<GameFormat>('standard')
   const [sector, setSector] = useState<SectorId>('saas')
   const [name, setName] = useState('')
   const [founder, setFounder] = useState<FounderKind>('technical')
@@ -146,27 +149,93 @@ export function NewGame() {
         </div>
         <p className="mt-1.5 mb-7 text-mut">You have $200,000, an empty office, and a dream. Build a unicorn — or die trying.</p>
 
-        <label className={label}>Game mode</label>
-        <div className="grid gap-2.5 sm:grid-cols-3">
-          <Pick
-            selected={mode === 'free'}
-            onClick={() => setMode('free')}
-            title="Free play"
-            blurb="Solo vs AI rivals. Pick your market, no time limit."
-          />
-          <Pick
-            selected={mode === 'daily'}
-            onClick={() => setMode('daily')}
-            title={`Daily Challenge #${daily.id}`}
-            blurb={`Today's market: ${sectorById(daily.sector).name}. Same world for everyone, ${MATCH_CAP} weeks, highest payout wins.`}
-          />
-          <Pick
-            selected={mode === 'online'}
-            onClick={() => setMode('online')}
-            title="Online with friends"
-            blurb="2-4 founders, different devices, one market. Rounds advance when everyone is ready — or when the clock runs out."
-          />
-        </div>
+        {!experience && (
+          <>
+            <label className={label}>Choose your experience</label>
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {(['quick', 'career', 'arena'] as GameMode[]).map((m) => {
+                const meta = MODE_META[m]
+                return (
+                  <button
+                    key={m}
+                    onClick={() => {
+                      setExperience(m)
+                      setFormat('standard')
+                    }}
+                    className="rounded-2xl border border-line bg-surface p-4 text-left transition-all hover:border-accent hover:bg-surface2"
+                  >
+                    <div className="text-[22px]">{meta.icon}</div>
+                    <div className="mt-1 text-[15px] font-extrabold">{meta.name}</div>
+                    <div className="mt-0.5 text-[13px] font-semibold text-accent">{meta.promise}</div>
+                    <div className="mt-1.5 text-[12.5px] leading-snug text-mut">{meta.blurb}</div>
+                    <div className="mt-2 text-[11px] font-semibold tracking-wide text-mut uppercase">{meta.meta}</div>
+                    {m === 'career' && (
+                      <div className="mt-1.5 inline-block rounded-full border border-warn/40 bg-warn/10 px-2 py-px text-[10px] font-bold text-warn">
+                        Early Access
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Daily stays one tap away without becoming a fourth pillar. */}
+            <button
+              onClick={() => {
+                setExperience('quick')
+                setFormat('daily_challenge')
+              }}
+              className="mt-2.5 flex w-full items-center justify-between rounded-2xl border border-line bg-surface2/50 px-4 py-3 text-left transition-all hover:border-accent"
+            >
+              <span>
+                <span className="text-[11px] font-bold tracking-wider text-mut uppercase">Today's challenge</span>
+                <span className="ml-2 text-[13.5px] font-semibold">
+                  #{daily.id} · {sectorById(daily.sector).name}
+                </span>
+              </span>
+              <span className="text-[13px] font-bold text-accent">Ready now →</span>
+            </button>
+          </>
+        )}
+
+        {experience && (
+          <button
+            className="mb-3 text-[13px] font-semibold text-mut transition-colors hover:text-ink"
+            onClick={() => setExperience(null)}
+          >
+            ← All experiences
+          </button>
+        )}
+
+        {experience === 'quick' && (
+          <>
+            <label className={label}>Quick Play — pick a format</label>
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {(['standard', 'daily_challenge', 'scenario'] as GameFormat[]).map((f) => {
+                const meta = QUICK_FORMAT_META[f]
+                return (
+                  <Pick
+                    key={f}
+                    selected={format === f}
+                    onClick={() => setFormat(f)}
+                    title={f === 'daily_challenge' ? `${meta.name} #${daily.id}` : meta.name}
+                    blurb={`${meta.promise} ${meta.blurb}`}
+                  />
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {experience === 'career' && (
+          <div className="rounded-2xl border border-line bg-surface p-4">
+            <div className="text-[15px] font-extrabold">{MODE_META.career.promise}</div>
+            <p className="mt-1 text-[13px] leading-relaxed text-mut">
+              {MODE_META.career.blurb} Career runs on the same simulation as Quick Play today — the deeper systems (customer
+              discovery, founder attention, executives, board politics) are being built and will switch on here first.
+            </p>
+          </div>
+        )}
 
         <label className={`${label} mt-6`}>Your company</label>
         {/* stacks on phones — a 12-character-wide name field is not a name field */}
@@ -196,23 +265,23 @@ export function NewGame() {
           </div>
         </div>
 
-        {mode === 'daily' && (
+        {experience === 'quick' && format === 'daily_challenge' && (
           <div className="mt-4">
             <DailyLeaderboard day={daily.id} />
           </div>
         )}
 
-        {mode !== 'online' && (
+        {(experience === 'quick' || experience === 'career') && (
           <>
             <label className={`${label} mt-6`}>
-              Pick your market {mode === 'daily' && <span className="normal-case tracking-normal">— locked by today's challenge</span>}
+              Pick your market {format === 'daily_challenge' && <span className="normal-case tracking-normal">— locked by today's challenge</span>}
             </label>
             <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
               {SECTORS.map((s) => (
                 <Pick
                   key={s.id}
-                  disabled={mode === 'daily'}
-                  selected={(mode === 'daily' ? daily.sector : sector) === s.id}
+                  disabled={format === 'daily_challenge'}
+                  selected={(format === 'daily_challenge' ? daily.sector : sector) === s.id}
                   onClick={() => setSector(s.id)}
                   title={s.name}
                   blurb={s.blurb}
@@ -220,7 +289,7 @@ export function NewGame() {
               ))}
             </div>
 
-            {mode === 'free' && (
+            {format === 'scenario' && (
               <>
                 <label className={`${label} mt-6`}>Scenario</label>
                 <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
@@ -235,15 +304,30 @@ export function NewGame() {
                 the option list the player has scrolled */}
             <button
               className="sticky bottom-4 z-10 mt-7 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-accent text-[16px] font-bold text-bg shadow-[var(--elev-3)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.99]"
-              onClick={() => startGame({ mode, sector, name: name.trim(), founder, scenario })}
+              onClick={() =>
+                startGame({
+                  mode: experience === 'career' ? 'career' : 'quick',
+                  format: experience === 'career' ? 'standard' : format,
+                  sector,
+                  name: name.trim(),
+                  founder,
+                  scenario: format === 'scenario' ? scenario : 'standard',
+                })
+              }
             >
-              {mode === 'daily' ? <CalendarDays size={18} /> : <Rocket size={18} />}
-              {mode === 'daily' ? `Play Daily #${daily.id}` : 'Found the company'}
+              {format === 'daily_challenge' ? <CalendarDays size={18} /> : <Rocket size={18} />}
+              {format === 'daily_challenge'
+                ? `Play Daily #${daily.id}`
+                : experience === 'career'
+                  ? 'Start Career'
+                  : format === 'scenario'
+                    ? 'Start Scenario'
+                    : 'Start Run'}
             </button>
           </>
         )}
 
-        {mode === 'online' && (
+        {experience === 'arena' && (
           <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
             {!onlineConfigured ? (
               <div className="text-[13px] leading-relaxed text-mut">

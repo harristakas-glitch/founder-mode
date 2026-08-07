@@ -118,19 +118,19 @@ export interface Message {
   meta?: { acquisitionAmount?: number; arcInstance?: string; employeeId?: string }
 }
 
-// Which game systems are active in this run. Single-player campaigns run everything;
-// multiplayer skirmishes default to a lean, PvP-focused subset — and the host can toggle each.
+// Legacy shape, kept only so old saves and older multiplayer clients can be migrated.
+// The live model is GameCapabilities in ./modes — do not add fields here.
 export interface Ruleset {
-  arcs: boolean // multi-week story arcs
-  oneOnOnes: boolean // employee 1:1 asks
-  catastrophes: boolean // sector-nightmare events
-  energy: boolean // founder energy & burnout
-  board: boolean // investor board reviews & ultimatums
-  debt: boolean // bank credit line
-  ventures: boolean // new product lines
-  ipo: boolean // the IPO endgame
-  macroShocks: boolean // oil shocks, crashes, rate moves (base macro drift always runs)
-  pvp: boolean // direct attacks between players (multiplayer only)
+  arcs: boolean
+  oneOnOnes: boolean
+  catastrophes: boolean
+  energy: boolean
+  board: boolean
+  debt: boolean
+  ventures: boolean
+  ipo: boolean
+  macroShocks: boolean
+  pvp: boolean
 }
 
 // A running story arc: a chain of events across weeks that remembers your choices.
@@ -248,7 +248,10 @@ export interface GameState {
   energy: number // 0-100: the founder's own tank — big moves drain it, low energy weakens everything you touch
   vacationCooldown: number // weeks until the next recharge week
   bankedPayout: number // personal money already taken off the table via secondary sales
-  rules: Ruleset // which systems are switched on for this run
+  // What this run IS (mode, format, sector, scenario, seed) and, resolved from it, which
+  // systems are switched on. See ./modes — the engine asks hasCapability(), never the mode.
+  config: import('./modes').GameConfig
+  capabilities: import('./modes').GameCapabilities
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

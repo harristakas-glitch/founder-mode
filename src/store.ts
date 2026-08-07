@@ -1,14 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
-  DEFAULT_RULES,
-  PVP_RULES,
   acceptTermSheet,
   acquireRival,
   advanceWeek,
   applyAttackIncoming,
   applyAttackOutgoing,
   buyShield,
+  capabilitiesFromLegacyRules,
   applyEffects,
   canStartVenture,
   drawDebt,
@@ -63,7 +62,16 @@ import {
   type NetPlayer,
   type StartPayload,
 } from './net/online'
-import type { Ruleset } from './game/types'
+import {
+  defaultCapabilities,
+  hasCapability,
+  resolveGameRules,
+  sanitizeCapabilities,
+  type GameCapabilities,
+  type GameConfig,
+  type GameFormat,
+  type GameMode,
+} from './game/modes'
 
 export type ScreenId =
   | 'dashboard'
@@ -159,7 +167,9 @@ export function dailyInfo(): { seed: number; id: number; sector: SectorId } {
 }
 
 export interface NewGameSetup {
-  mode: 'free' | 'daily'
+  /** quick | career — Arena has its own room flow */
+  mode: Exclude<GameMode, 'arena'>
+  format: GameFormat
   sector: SectorId
   name: string
   founder: FounderKind
@@ -225,7 +235,7 @@ interface Store {
   joinRoom: (code: string, company: string, founder: FounderKind) => Promise<void>
   leaveOnline: () => void
   setMyCompany: (name: string) => void
-  beginMatch: (sector: SectorId, rules?: Ruleset, cap?: number) => void
+  beginMatch: (sector: SectorId, caps?: Partial<GameCapabilities>, cap?: number) => void
   attackPlayer: (targetId: string, kind: 'poach' | 'smear' | 'raid') => void
   buyShield: () => void
   resumeOnline: () => Promise<void>
@@ -289,19 +299,18 @@ export const useStore = create<Store>()(
       const validStart = (
         p: StartPayload,
         players: NetPlayer[],
-      ): { seed: number; sector: SectorId; cap: number; rules: Ruleset } | null => {
+      ): { seed: number; sector: SectorId; cap: number; caps: Partial<GameCapabilities> } | null => {
         const host = players.find((x) => x.host)
         if (host && p.hostId && p.hostId !== host.id) return null
         if (!SECTORS.some((s) => s.id === p.sector)) return null
         if (!Number.isFinite(p.seed)) return null
         if (!Number.isInteger(p.cap) || p.cap < 1 || p.cap > 520) return null
-        const rules = { ...PVP_RULES }
-        if (p.rules && typeof p.rules === 'object') {
-          for (const k of Object.keys(rules) as (keyof Ruleset)[]) {
-            if (typeof p.rules[k] === 'boolean') rules[k] = p.rules[k]
-          }
+        // accept the new capability payload, and still understand the old 10-key Ruleset
+        const caps: Partial<GameCapabilities> = {
+          ...capabilitiesFromLegacyRules(p.rules),
+          ...sanitizeCapabilities(p.caps),
         }
-        return { seed: p.seed, sector: p.sector, cap: p.cap, rules }
+        return { seed: p.seed, sector: p.sector, cap: p.cap, caps }
       }
 
       // Called on every presence sync: catch up if behind, advance if everyone is ready.
@@ -381,7 +390,7 @@ export const useStore = create<Store>()(
           if (p.targetId !== myId()) return
           const g = get().game
           if (!g || g.gameOver) return
-          if (!(g.rules?.pvp ?? false)) return // attacks don't exist in a match where PvP is off
+          if (!hasCapability(g, 'pvpActions')) return // attacks don't exist in a match where PvP is off
           // one hit per attacker per week, however many packets they send
           const key = `${p.fromId ?? p.fromCompany}@${g.week}`
           if (attacksTakenThisWeek.has(key)) return
@@ -397,11 +406,17 @@ export const useStore = create<Store>()(
           if (!online || online.phase === 'playing') return
           const start = validStart(p, online.players)
           if (!start) return // malformed, or not from the host
-          const g = newGame(online.myCompany, start.sector, online.myFounder, {
+          const config: GameConfig = {
+            mode: 'arena',
+            format: 'standard',
+            sector: start.sector,
             seed: start.seed,
+            overrides: start.caps,
+          }
+          const g = newGame(online.myCompany, start.sector, online.myFounder, {
+            config,
             challenge: { label: 'Online match', cap: start.cap },
             aiRivals: false, // the other players are the rivals
-            rules: start.rules,
           })
           set({
             game: g,
@@ -465,13 +480,23 @@ export const useStore = create<Store>()(
         setScreen: (screen) => set({ screen }),
 
         startGame: (setup) => {
-          const daily = setup.mode === 'daily'
+          const daily = setup.format === 'daily_challenge'
           const info = dailyInfo()
           const sector = daily ? info.sector : setup.sector
-          const seed = daily ? info.seed : undefined
-          const challenge = daily ? { label: `Daily #${info.id}`, cap: MATCH_CAP } : null
+          const config: GameConfig = {
+            mode: setup.mode,
+            format: setup.format,
+            sector,
+            scenario: daily ? undefined : setup.scenario,
+            seed: daily ? info.seed : Math.floor(Math.random() * 2 ** 31),
+          }
+          const rules = resolveGameRules(config)
           set({
-            game: newGame(setup.name || 'Untitled Inc.', sector, setup.founder, { seed, challenge, scenario: daily ? undefined : setup.scenario }),
+            game: newGame(setup.name || 'Untitled Inc.', sector, setup.founder, {
+              config,
+              challenge: rules.maxTurns ? { label: daily ? `Daily #${info.id}` : 'Capped run', cap: rules.maxTurns } : null,
+              scenario: config.scenario,
+            }),
             online: null,
             screen: 'dashboard',
           })
@@ -615,7 +640,7 @@ export const useStore = create<Store>()(
           appendChat(payload, true) // broadcast doesn't echo to self
         },
 
-        beginMatch: (sector, rules, cap) => {
+        beginMatch: (sector, caps, cap) => {
           const online = get().online
           if (!online || !online.host || online.phase !== 'lobby') return
           const payload: StartPayload = {
@@ -623,7 +648,7 @@ export const useStore = create<Store>()(
             sector,
             cap: cap ?? MATCH_CAP,
             deadline: Date.now() + ROUND_SECONDS * 1000,
-            rules: rules ?? { ...PVP_RULES },
+            caps: caps ?? defaultCapabilities('arena'),
             hostId: myId(),
           }
           void broadcastStart(payload)
@@ -875,7 +900,22 @@ export const useStore = create<Store>()(
           g.energy ??= 80
           g.vacationCooldown ??= 0
           g.bankedPayout ??= 0
-          g.rules ??= { ...DEFAULT_RULES }
+          // Legacy saves predate the mode/format model: everything solo becomes Quick Play
+          // Standard (or Daily if it was a dated challenge), and multiplayer becomes Arena.
+          // Career is never assigned automatically — it is an explicit player choice.
+          if (!g.config) {
+            const wasDaily = typeof g.challenge?.label === 'string' && g.challenge.label.startsWith('Daily')
+            const wasOnline = g.challenge?.label === 'Online match'
+            g.config = {
+              mode: wasOnline ? 'arena' : 'quick',
+              format: wasDaily ? 'daily_challenge' : g.scenario && g.scenario !== 'standard' ? 'scenario' : 'standard',
+              sector: g.sector,
+              scenario: g.scenario ?? undefined,
+              seed: 0, // unknown for an in-flight legacy run; only affects fresh worlds
+              overrides: capabilitiesFromLegacyRules((g as unknown as { rules?: import('./game/types').Ruleset }).rules),
+            }
+          }
+          g.capabilities ??= resolveGameRules(g.config).capabilities
         }
         return { ...current, ...p }
       },

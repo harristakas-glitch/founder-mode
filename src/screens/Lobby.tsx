@@ -1,21 +1,21 @@
 import { useState } from 'react'
 import { Copy, DoorOpen, Play, Users } from 'lucide-react'
 import { SECTORS } from '../game/data'
-import { PVP_RULES } from '../game/engine'
-import type { Ruleset, SectorId } from '../game/types'
+import { defaultCapabilities, type CapabilityKey, type GameCapabilities } from '../game/modes'
+import type { SectorId } from '../game/types'
 import { myId } from '../net/online'
 import { useStore } from '../store'
 import { ChatWidget } from '../ChatWidget'
 
-const RULE_LABELS: { key: keyof Ruleset; label: string; hint: string }[] = [
-  { key: 'pvp', label: '⚔️ PvP attacks', hint: 'Poach, smear and raid the other founders directly' },
-  { key: 'debt', label: '🏦 Bank debt', hint: 'Credit lines with covenants' },
-  { key: 'ventures', label: '🧪 New verticals', hint: 'Launch second product lines' },
-  { key: 'ipo', label: '🔔 IPO endgame', hint: 'Ring the bell to win big' },
+const RULE_LABELS: { key: CapabilityKey; label: string; hint: string }[] = [
+  { key: 'pvpActions', label: '⚔️ PvP attacks', hint: 'Poach, smear and raid the other founders directly' },
+  { key: 'bankDebt', label: '🏦 Bank debt', hint: 'Credit lines with covenants' },
+  { key: 'multipleVerticals', label: '🧪 New verticals', hint: 'Launch second product lines' },
+  { key: 'ipoEndgame', label: '🔔 IPO endgame', hint: 'Ring the bell to win big' },
   { key: 'macroShocks', label: '📉 Macro shocks', hint: 'Crashes, rate hikes, oil spikes' },
-  { key: 'board', label: '👔 Board reviews', hint: 'Growth targets, strikes, ultimatums' },
-  { key: 'energy', label: '🔋 Founder energy', hint: 'Big moves drain you; burnout is real' },
-  { key: 'arcs', label: '📖 Story arcs', hint: 'Multi-week storylines (slower, deeper)' },
+  { key: 'boardReviews', label: '👔 Board reviews', hint: 'Growth targets, strikes, ultimatums' },
+  { key: 'founderEnergy', label: '🔋 Founder energy', hint: 'Big moves drain you; burnout is real' },
+  { key: 'storyArcs', label: '📖 Story arcs', hint: 'Multi-week storylines (slower, deeper)' },
   { key: 'oneOnOnes', label: '💬 1:1 asks', hint: 'Employees bring problems to your door' },
   { key: 'catastrophes', label: '🔥 Catastrophes', hint: 'Breaches, CVEs, logistics meltdowns' },
 ]
@@ -28,7 +28,7 @@ export function Lobby() {
   // start empty when we only have the placeholder name, so the field invites typing
   const [draftName, setDraftName] = useState(online.myCompany === 'Untitled Inc.' ? '' : online.myCompany)
   const [sector, setSector] = useState<SectorId>('saas')
-  const [rules, setRules] = useState<Ruleset>({ ...PVP_RULES })
+  const [rules, setRules] = useState<GameCapabilities>(defaultCapabilities('arena'))
   const [cap, setCap] = useState(52)
   const [copied, setCopied] = useState(false)
 

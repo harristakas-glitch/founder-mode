@@ -13,6 +13,7 @@ import {
   weeklyOffice,
   weeklyPayroll,
 } from '../game/engine'
+import { hasCapability } from '../game/modes'
 import { useStore } from '../store'
 
 function MacroPanel() {
@@ -192,7 +193,7 @@ export function Finance() {
         />
       </div>
 
-      {game.rules?.debt !== false && <DebtPanel />}
+      {hasCapability(game, 'bankDebt') && <DebtPanel />}
       <MacroPanel />
       <UpcomingPayments />
 

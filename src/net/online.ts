@@ -30,7 +30,10 @@ export interface StartPayload {
   sector: SectorId
   cap: number
   deadline: number
-  rules?: Ruleset // host-chosen system toggles; older clients fall back to defaults
+  /** Host-chosen capability toggles. Receivers whitelist keys — never trust this shape. */
+  caps?: Record<string, boolean>
+  /** @deprecated legacy 10-key Ruleset from clients older than the mode/format model. */
+  rules?: Ruleset
   hostId?: string // who claims to be starting the match — checked against presence
 }
 

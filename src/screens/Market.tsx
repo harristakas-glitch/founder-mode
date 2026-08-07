@@ -15,6 +15,7 @@ import {
   shieldCost,
   valuation,
 } from '../game/engine'
+import { hasCapability } from '../game/modes'
 import { myId } from '../net/online'
 import { useStore } from '../store'
 
@@ -163,7 +164,7 @@ export function Market() {
         </Panel>
       </div>
 
-      {online && game.rules?.pvp && <PvpOps />}
+      {online && hasCapability(game, 'pvpActions') && <PvpOps />}
       {!online && <Acquisitions />}
     </div>
   )

@@ -24,6 +24,7 @@ import { useStore, type ScreenId } from './store'
 import { avgMorale, hasPendingDecision, runwayWeeks, totalUsers, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
 import { myId } from './net/online'
+import { hasCapability } from './game/modes'
 import { isMuted, setMuted } from './sound'
 import { NewGame } from './screens/NewGame'
 import { Lobby } from './screens/Lobby'
@@ -326,7 +327,7 @@ export default function App() {
             </div>
           </div>
           {game.challenge && <div className="mt-1 text-[11px] text-mut">{game.challenge.label} · ends wk {game.challenge.cap}</div>}
-          {game.rules?.energy !== false && (
+          {hasCapability(game, 'founderEnergy') && (
           <div className="mt-2 flex items-center gap-1.5" title="Founder energy — big moves drain it, low energy weakens your weekly contribution. Recharge on the Team screen.">
             <span className="text-[10px] font-bold uppercase tracking-wider text-mut">Energy</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/40">
