@@ -99,7 +99,7 @@ export const RIVAL_NAMES = [
 ]
 
 export const TRAITS: Record<string, { label: string; blurb: string }> = {
-  tenx: { label: '10x', blurb: 'Ships 50% more than their skill suggests. Everyone knows it, including them.' },
+  tenx: { label: '10x', blurb: 'Ships 70% more than their skill suggests. Everyone knows it, including them.' },
   craftsman: { label: 'Craftsman', blurb: 'Slightly more output, and quietly squashes bugs wherever they go.' },
   mercenary: { label: 'Mercenary', blurb: '15% more output, but loyalty ends where a better offer begins — they bail early when things wobble.' },
   culture: { label: 'Culture carrier', blurb: 'Keeps everyone else a little happier, every single week.' },
