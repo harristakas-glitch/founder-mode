@@ -8,6 +8,7 @@
 // a long time. A player can hold high confidence in a correct, disappointing conclusion.
 
 import type {
+  CustomerCohort,
   ActiveExperiment,
   CareerPMFState,
   CausalExplanation,
@@ -332,6 +333,29 @@ export function segmentPriceFit(truth: SegmentTruth, pricing: PricingStrategy): 
 
 export function revenueMultiplier(pricing: PricingStrategy): number {
   return pricing === 'low' ? 0.55 : pricing === 'premium' ? 1.75 : 1
+}
+
+/**
+ * Account expansion: a retained customer is worth more the longer they stay, and how much more is
+ * the segment's `expansionPotential`. That metric was generated, believed, and measured by a $28k
+ * paid pilot — and then read by no formula anywhere, so players were paying for evidence about a
+ * number the simulation ignored. It is the difference between a segment you farm and one you
+ * merely hold.
+ *
+ * Deliberately gentle and capped: this multiplies revenue that is already calibrated, and the
+ * point is to reward retention, not to open a second growth engine.
+ */
+export function expansionMultiplier(cohorts: CustomerCohort[], truth: Record<SegmentId, SegmentTruth>, week: number): number {
+  const live = cohorts.filter((c) => c.activeCustomers > 0)
+  const heads = live.reduce((a, c) => a + c.activeCustomers, 0)
+  if (heads === 0) return 1
+  // customer-weighted mean of each cohort's own maturity, so one old cohort cannot carry the company
+  const lift = live.reduce((a, c) => {
+    const potential = (truth[c.segmentId]?.expansionPotential ?? 50) / 100
+    const years = Math.min(2, Math.max(0, week - c.acquiredWeek) / 52)
+    return a + c.activeCustomers * (1 + potential * 0.45 * years)
+  }, 0)
+  return lift / heads
 }
 
 // ---------- acquisition & retention ----------

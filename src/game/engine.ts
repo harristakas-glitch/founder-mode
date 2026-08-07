@@ -886,6 +886,12 @@ export const PIVOT_COOLDOWN = 4
 export const PIVOT_COST = 15_000
 
 export function canPivot(s: GameState): { ok: boolean; reason?: string } {
+  // A Quick Play pivot rerolls `resonance` — the hidden number it exists to escape. Career has no
+  // resonance: demand lives in segmentTruth, which a pivot never touches, and neither does it
+  // change sector or target. So it only ever destroyed progress (measured PMF 57 → 23) with no
+  // upside available. Career's real instrument is repositionTo, on Discovery.
+  if (can(s, 'detailedPMF'))
+    return { ok: false, reason: 'Career changes direction by repositioning on a different customer segment — see Discovery.' }
   if ((s.flags.pivotCooldown ?? 0) > 0) return { ok: false, reason: `The team is still absorbing the last pivot — ${s.flags.pivotCooldown} wk` }
   if (s.cash < PIVOT_COST) return { ok: false, reason: `A pivot costs ${PIVOT_COST.toLocaleString()} in wind-down and rebuild` }
   return { ok: true }

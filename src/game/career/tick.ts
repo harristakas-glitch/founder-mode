@@ -14,6 +14,7 @@ import {
   resolveCohortRetention,
   resolveExperiment,
   resolveSegmentAcquisition,
+  expansionMultiplier,
   revenueMultiplier,
   segmentCeiling,
   segmentDef,
@@ -309,7 +310,7 @@ export function tickCareerPMF(
   return {
     customers,
     companyPmfScore: best.score,
-    revenueMultiplier: revenueMultiplier(career.pricing),
+    revenueMultiplier: revenueMultiplier(career.pricing) * expansionMultiplier(career.cohorts, career.segmentTruth, s.week),
     segmentPmf,
     productCapacityDrain: Math.min(0.7, productCapacityDrain) * (2 - productPenalty),
   }
@@ -334,6 +335,17 @@ export function repositionTo(s: GameState, newSegment: SegmentId, week: number):
     marketingPenalty: 0.55,
   }
   career.primaryTargetSegmentId = newSegment
+
+  // Retune the roadmap to what the new segment actually values. segmentProductFit scores the
+  // focus by its rank in that segment's `values`: +18 for its first choice, +9 for its second,
+  // −8 for anything else. Leaving the old focus in place therefore swung product fit by up to 26
+  // points the moment you repositioned, silently and in the wrong direction — the opposite of
+  // what "we are rebuilding around these customers" should mean. A focus the new segment already
+  // ranks first or second is kept, since that is a deliberate choice the player may want.
+  const wanted = segmentDef(s.sector, newSegment).values
+  const keptFocus = wanted.indexOf(career.focus) <= 1 && wanted.indexOf(career.focus) >= 0
+  if (!keptFocus) career.focus = wanted[0]
+
   const fromName = segmentDef(s.sector, from).name
   const toName = segmentDef(s.sector, newSegment).name
   const retention = career.retentionBySegment[from] ?? 0
@@ -342,9 +354,10 @@ export function repositionTo(s: GameState, newSegment: SegmentId, week: number):
     category: 'pivot',
     title: `Segment pivot: ${fromName} → ${toName}`,
     description:
-      retention > 0
+      (retention > 0
         ? `${fromName} retention had settled at ${Math.round(retention * 100)}%. Betting the roadmap on ${toName} instead.`
-        : `Redirecting the company at ${toName} before spending more on ${fromName}.`,
+        : `Redirecting the company at ${toName} before spending more on ${fromName}.`) +
+      (keptFocus ? '' : ` The roadmap retunes for ${career.focus.replace('_', ' ')}, which is what ${toName} actually values.`),
     relatedSegmentId: newSegment,
   })
   s.flash = `🎯 Now targeting ${toName}. The team needs ~${weeks} weeks to turn the ship — product and marketing both suffer until then.`
