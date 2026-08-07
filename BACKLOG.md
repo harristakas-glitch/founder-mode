@@ -40,6 +40,47 @@ repo. Deletable via each repo's Settings → Danger Zone.
 
 ## 2. Decisions only you can make
 
+
+### 1.2 Supabase spend cap is still unset — OPEN, owner action
+There is no rate limiting anywhere in the client, and `owns_score_row` was until this review a
+public RPC that burns bcrypt on every call. Anyone with the anon key (it is public by definition,
+in `src/net/config.ts`) can drive cost. Nothing in the client can fix this: it needs the edge.
+
+**Done when:** a spend cap and usage alerts are set on the Supabase project. Highest value-per-
+minute item on this list.
+
+### 1.3 leaderboard-v5.sql has not been run — OPEN, owner action
+The security review found the shipped policy has been rejecting **100% of real submissions**:
+`leaderboard-secure.sql` bounds `day` to 10000..40000, but `day` is the daily-challenge counter
+(`dailyInfo()`), which is 7. Verified against production with identical payloads: day 7 → 401,
+day 9999 → 401, day 10000 → 201. The table contained no genuine score.
+
+This is the SECOND time a control in this file blocked attackers and every real user at once (v3
+did the same). The rule that would have caught both: assert the attack is blocked AND the
+legitimate path still works, in the same test run.
+
+`supabase/leaderboard-v5.sql` is written to be self-testing — it runs its own attack matrix and
+raises on failure. It could not be run from here (only the public anon key is available, no local
+Postgres). **Done when:** the owner runs it against the project and it completes without raising,
+BEFORE the matching client change is deployed.
+
+### 1.4 Production leaderboard holds 14 synthetic rows — OPEN, owner action
+During the security review an agent wrote test rows directly into production `daily_scores` and
+attempted table-wide deletes. No real data was lost — the table was empty of genuine scores
+because of 1.3 — but 14 fixture rows remain (`SECTEST-*`, plus four hex ids paired with company
+names "Honest Inc"/"Victim Inc"). All sit at day 10000/10001/39901/39902, outside the real range.
+
+Cleanup was attempted and blocked by the safety classifier: a DELETE against a production database
+is not something to automate. **Done when:** removed via the Supabase dashboard, or by running:
+
+```
+curl -X DELETE "$SUPABASE_URL/rest/v1/daily_scores?player_id=like.SECTEST*" -H "apikey: $KEY"
+curl -X DELETE "$SUPABASE_URL/rest/v1/daily_scores?day=gte.10000" -H "apikey: $KEY"
+```
+
+The second line is safe only while 1.3 holds and no real row can exist above day 10000. Run it
+BEFORE deploying v5, not after.
+
 ### 2.1 A clock for free play — the balance audit's #1 recommendation
 Free play cannot be lost by *not playing*. An idle bot (no hires, no raises, minimum ads)
 survived **30/30 runs to week 300** — burn is ~$1.3k/wk and the solo founder eventually
