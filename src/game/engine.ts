@@ -343,6 +343,75 @@ function rollTrait(skill: number): import('./types').TraitId | null {
   return null
 }
 
+/** One founder's sealed offer for a shared-pool candidate. */
+export interface HiringBid {
+  playerId: string
+  company: string
+  /** % over the candidate's asking salary. 0 means "asking price". */
+  premiumPct: number
+  reputation: number
+  runwayWeeks: number
+}
+
+/**
+ * Who the candidate picks when several founders want them.
+ *
+ * Deliberately NOT first-come-first-served: a click race rewards reflexes and network latency,
+ * not judgement. The candidate weighs the money against the company — so a contested hire is won
+ * either by paying over the odds or by having built somewhere people want to work, and you commit
+ * your number without seeing anyone else's.
+ *
+ * Pure and seeded, so every client resolves the same auction to the same winner.
+ */
+export function pickHiringWinner(c: Candidate, bids: HiringBid[], seed: number, week: number): HiringBid | null {
+  if (bids.length === 0) return null
+  // The better someone is, the more options they have, and the less a pay bump alone moves them.
+  const moneyWeight = 1 - (clamp(c.skill, 1, 10) - 1) / 22
+  const scored = withSeed(mixSeed(seed, week, 0xb1d), () =>
+    // sort first so the jitter draw order is stable regardless of message arrival order
+    [...bids]
+      .sort((a, b) => a.playerId.localeCompare(b.playerId))
+      .map((b) => ({
+        bid: b,
+        score:
+          b.premiumPct * moneyWeight + // money talks loudest
+          (b.reputation - 50) / 2 + // but a good name is worth roughly 25 points of salary
+          (b.runwayWeeks < 10 ? -30 : b.runwayWeeks > 40 ? 8 : 0) + // nobody joins a company that looks doomed
+          rand(-6, 6), // and people are not spreadsheets
+      })),
+  )
+  scored.sort((x, y) => y.score - x.score || x.bid.playerId.localeCompare(y.bid.playerId))
+  return scored[0].bid
+}
+
+/**
+ * The room's shared candidate market, for Arena. Derived purely from the match seed and the week
+ * so every client renders the identical five people with identical ids — a pool built from each
+ * player's own state (stage, reputation, `uid()`) would give everyone a different market and there
+ * would be nothing to contest. The pool is replaced wholesale each week: in a fast PvP format,
+ * hesitating should cost you the hire.
+ */
+export function sharedCandidates(seed: number, week: number): Candidate[] {
+  return withSeed(mixSeed(seed, week, 0x51ce), () =>
+    Array.from({ length: 5 }, (_, i) => {
+      const role = pick<Role>(['engineer', 'engineer', 'engineer', 'designer', 'marketer', 'sales'])
+      // no stage/reputation term: the market is the room's, not any one founder's
+      const skill = clamp(Math.round(rand(2, 8)), 1, 10)
+      const salary = Math.round((ROLE_BASE[role] + skill * 13_000 + rand(-6000, 6000)) / 1000) * 1000
+      return {
+        id: `mk-${week}-${i}`, // stable across clients; the id IS the thing being contested
+        name: randomName(),
+        role,
+        skill,
+        salary,
+        weeksLeft: 1,
+        notice: Math.round(rand(1, 3)),
+        trait: rollTrait(skill),
+      }
+    }),
+  )
+}
+
 export function makeCandidate(s: GameState): Candidate {
   const role = pick<Role>(['engineer', 'engineer', 'engineer', 'designer', 'marketer', 'sales'])
   const stageBonus = STAGES.indexOf(s.stage) * 0.7
@@ -1261,8 +1330,14 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   tickRivals(s, room)
 
   // --- candidates rotate ---
-  s.candidates = s.candidates.filter((c) => (c.weeksLeft -= 1) > 0)
-  while (s.candidates.length < 5) s.candidates.push(makeCandidate(s))
+  if (can(s, 'sharedHiringPool') && s.config?.seed !== undefined) {
+    // Arena: one market for the room, refreshed whole every week. Anyone already claimed this
+    // week is gone from it, because the claim resolution pulled them out before the week ran.
+    s.candidates = sharedCandidates(s.config.seed, s.week)
+  } else {
+    s.candidates = s.candidates.filter((c) => (c.weeksLeft -= 1) > 0)
+    while (s.candidates.length < 5) s.candidates.push(makeCandidate(s))
+  }
 
   // --- term sheets & cooldowns expire ---
   s.termSheets = s.termSheets.filter((t) => (t.weeksLeft -= 1) > 0)

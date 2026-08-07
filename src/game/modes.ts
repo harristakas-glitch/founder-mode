@@ -63,6 +63,7 @@ export interface GameCapabilities {
   ipoEndgame: boolean // S-1, roadshow, pricing day
   macroShocks: boolean // crashes, rate hikes, oil spikes (base macro drift always runs)
   pvpActions: boolean // direct attacks between players
+  sharedHiringPool: boolean // one candidate market for the whole room; earliest claim wins
   causalExplanations: boolean // the game tells you WHY something happened
   leaderboard: boolean // scores submitted to the global board
   seededWorld: boolean // everyone gets the identical starting world
@@ -138,6 +139,7 @@ const NO_CAPABILITIES: GameCapabilities = {
   ipoEndgame: false,
   macroShocks: false,
   pvpActions: false,
+  sharedHiringPool: false,
   causalExplanations: false,
   leaderboard: false,
   seededWorld: false,
@@ -247,6 +249,7 @@ const ARENA_BASE_RULES: GameRules = {
     ipoEndgame: true,
     macroShocks: true,
     pvpActions: true,
+    sharedHiringPool: true,
     causalExplanations: true,
     seededWorld: true,
   },

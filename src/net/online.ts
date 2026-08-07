@@ -53,6 +53,16 @@ export interface AttackPayload {
   fromId?: string // sender's player id, for receiver-side rate limiting
 }
 
+export interface BidPayload {
+  candidateId: string
+  playerId: string
+  company: string
+  premiumPct: number
+  reputation: number
+  runwayWeeks: number
+  week: number
+}
+
 export interface EmotePayload {
   from: string
   emoji: string
@@ -69,6 +79,7 @@ export interface Handlers {
   onEmote?: (p: EmotePayload) => void
   onChat?: (p: ChatPayload) => void
   onAttack?: (p: AttackPayload) => void
+  onBid?: (p: BidPayload) => void
 }
 
 let client: SupabaseClient | null = null
@@ -200,6 +211,22 @@ function wire(ch: RealtimeChannel, handlers: Handlers) {
     const p = (payload ?? {}) as Record<string, unknown>
     const text = str(p.text, 200)
     if (text) safe(() => handlers.onChat?.({ from: str(p.from, 30, 'Someone'), text }))
+  })
+  ch.on('broadcast', { event: 'bid' }, ({ payload }) => {
+    const p = (payload ?? {}) as Record<string, unknown>
+    if (typeof p.candidateId !== 'string' || typeof p.playerId !== 'string') return
+    safe(() =>
+      handlers.onBid?.({
+        candidateId: p.candidateId as string,
+        playerId: (p.playerId as string).slice(0, 64),
+        company: str(p.company, 30, 'A rival'),
+        // peer-reported and therefore bounded: an unbounded premium would auto-win every auction
+        premiumPct: Math.min(100, Math.max(0, num(p.premiumPct, 100))),
+        reputation: Math.min(100, Math.max(0, num(p.reputation, 100))),
+        runwayWeeks: Math.min(999, num(p.runwayWeeks, 999)),
+        week: Math.floor(num(p.week, 10_000)),
+      }),
+    )
   })
   ch.on('broadcast', { event: 'attack' }, ({ payload }) => {
     const p = (payload ?? {}) as Record<string, unknown>
@@ -360,6 +387,10 @@ export async function pushState(patch: Partial<NetPlayer>): Promise<void> {
 
 export async function broadcastStart(payload: StartPayload): Promise<void> {
   await channel?.send({ type: 'broadcast', event: 'start', payload })
+}
+
+export async function broadcastBid(payload: BidPayload): Promise<void> {
+  await channel?.send({ type: 'broadcast', event: 'bid', payload })
 }
 
 export async function broadcastEmote(payload: EmotePayload): Promise<void> {

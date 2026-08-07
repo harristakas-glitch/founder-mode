@@ -16,10 +16,12 @@ import {
   marketingMax,
   killVenture,
   newGame,
+  pickHiringWinner,
   pitchInvestors,
   pitchTeam,
   pivot,
   repayDebt,
+  runwayWeeks,
   resolveChoiceOnState,
   sellSecondary,
   startIPO,
@@ -51,6 +53,7 @@ import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
   broadcastAttack,
+  broadcastBid,
   broadcastChat,
   broadcastEmote,
   broadcastStart,
@@ -62,6 +65,7 @@ import {
   myId,
   pushState,
   type AttackPayload,
+  type BidPayload,
   type ChatPayload,
   type EmotePayload,
   type NetPlayer,
@@ -207,6 +211,8 @@ export interface OnlineSession {
   myFounder: FounderKind
   players: NetPlayer[]
   deadline: number | null // ms epoch when the current round auto-readies
+  /** Sealed offers on the shared candidate pool, for the week currently being played. */
+  bids: BidPayload[]
   error: string | null
 }
 
@@ -265,7 +271,8 @@ interface Store {
   signIn: (provider: AuthProvider) => Promise<string | null>
   signOutUser: () => Promise<void>
   // --- in-game actions ---
-  sendOffer: (candidateId: string) => void
+  /** premiumPct is only meaningful under `sharedHiringPool`, where the offer is a sealed bid. */
+  sendOffer: (candidateId: string, premiumPct?: number) => void
   fire: (employeeId: string) => void
   giveRaise: (employeeId: string) => void
   doPivot: () => void
@@ -313,6 +320,42 @@ export const useStore = create<Store>()(
       // sum is capped again so no combination of peers can crush everyone's growth headroom.
       const othersUsers = (players: NetPlayer[]): number =>
         Math.min(1e10, players.reduce((a, p) => (p.id === myId() || p.over ? a : a + (Number.isFinite(p.users) ? Math.max(0, p.users) : 0)), 0))
+
+      /**
+       * Settle the room's shared candidate market for this week. Every founder ran the same pure
+       * `pickHiringWinner` over the same bids, so all clients agree on who got whom without a
+       * server refereeing it.
+       */
+      const settleHiring = (g: GameState, bids: BidPayload[]): GameState => {
+        if (bids.length === 0) return g
+        const seed = g.config?.seed
+        if (seed === undefined) return g
+        const game = structuredClone(g)
+        const byCandidate = new Map<string, BidPayload[]>()
+        for (const b of bids) {
+          if (b.week !== game.week) continue
+          byCandidate.set(b.candidateId, [...(byCandidate.get(b.candidateId) ?? []), b])
+        }
+        const won: string[] = []
+        const lost: string[] = []
+        for (const [candidateId, list] of byCandidate) {
+          const cand = game.candidates.find((c) => c.id === candidateId)
+          if (!cand) continue
+          const winner = pickHiringWinner(cand, list, seed, game.week)
+          if (!winner) continue
+          game.candidates = game.candidates.filter((c) => c.id !== candidateId)
+          if (winner.playerId === myId()) {
+            // pay the premium you offered — the auction is only meaningful if the bid binds
+            won.push(`${cand.name}${winner.premiumPct > 0 ? ` (+${winner.premiumPct}%)` : ''}`)
+            game.offersOut.push({ ...cand, salary: Math.round((cand.salary * (1 + winner.premiumPct / 100)) / 1000) * 1000 })
+          } else if (list.some((b) => b.playerId === myId())) {
+            lost.push(`${cand.name} went to ${winner.company}`)
+          }
+        }
+        const parts = [won.length ? `Won: ${won.join(', ')}` : '', lost.length ? `Lost: ${lost.join(', ')}` : ''].filter(Boolean)
+        if (parts.length) game.flash = `Hiring market — ${parts.join(' · ')}`
+        return game
+      }
 
       let advancing = false
       // My own readiness is owned locally, never read back off the wire. `channel.track` round-trips
@@ -363,7 +406,7 @@ export const useStore = create<Store>()(
           awardAchievements(g)
           myReady = false
           // we arrive mid-round: give ourselves the rest of this round, not an expired clock
-          set({ game: g, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000 } })
+          set({ game: g, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000, bids: [] } })
           void pushState({ ...myNetSummary(g), ready: false })
         }
 
@@ -393,10 +436,14 @@ export const useStore = create<Store>()(
         const allReady = living.every((p) => p.ready && p.week >= game.week)
         if (!allReady) return
         if (game.gameOver) return
+        // The shared hiring market settles before the week runs: every founder's sealed offer is
+        // in by now (the week cannot advance until everyone is ready), so the candidate can choose.
+        const settled = hasCapability(game, 'sharedHiringPool') ? settleHiring(game, online.bids) : game
+
         let next: GameState
         advancing = true
         try {
-          next = advanceWeek(game, othersUsers(players))
+          next = advanceWeek(settled, othersUsers(players))
         } catch (e) {
           console.error('week failed to simulate; staying put', e)
           return
@@ -463,6 +510,14 @@ export const useStore = create<Store>()(
           }
           set({ online: { ...online, players } })
           maybeNetAdvance()
+        },
+        onBid: (p: BidPayload) => {
+          const { game, online } = get()
+          if (!game || !online || p.week !== game.week) return // a bid for another week is stale
+          if (!hasCapability(game, 'sharedHiringPool')) return
+          // one bid per founder per candidate: a late one replaces the earlier
+          const bids = [...online.bids.filter((b) => !(b.playerId === p.playerId && b.candidateId === p.candidateId)), p]
+          set({ online: { ...online, bids } })
         },
         onEmote: showEmote,
         onChat: (p: ChatPayload) => appendChat(p, false),
@@ -537,6 +592,7 @@ export const useStore = create<Store>()(
               myFounder: founder,
               players: [me],
               deadline: null,
+              bids: [],
               error: null,
             },
             onlineResume: { code, host, phase: 'lobby', sector: 'saas', myCompany: me.company, myFounder: founder },
@@ -676,6 +732,7 @@ export const useStore = create<Store>()(
                 myFounder: r.myFounder,
                 players: [me],
                 deadline: r.phase === 'playing' ? Date.now() + ROUND_SECONDS * 1000 : null,
+                bids: [],
                 error: null,
               },
             })
@@ -761,11 +818,39 @@ export const useStore = create<Store>()(
           void pushState(myNetSummary(g))
         },
 
-        sendOffer: (candidateId) => {
+        sendOffer: (candidateId, premiumPct = 0) => {
           const g = get().game
           if (!g) return
           const c = g.candidates.find((x) => x.id === candidateId)
           if (!c) return
+
+          // Arena: the pool is shared, so an offer is a sealed bid rather than an instant hire.
+          // Nothing leaves the pool until the round ends and the candidate picks.
+          const online = get().online
+          if (hasCapability(g, 'sharedHiringPool') && online) {
+            const premium = Math.min(100, Math.max(0, Math.round(premiumPct)))
+            const runway = runwayWeeks(g)
+            const mine: BidPayload = {
+              candidateId,
+              playerId: myId(),
+              company: online.myCompany,
+              premiumPct: premium,
+              reputation: Math.round(g.reputation),
+              runwayWeeks: Number.isFinite(runway) ? Math.round(runway) : 999,
+              week: g.week,
+            }
+            const bids = [...online.bids.filter((b) => !(b.playerId === mine.playerId && b.candidateId === candidateId)), mine]
+            set({
+              online: { ...online, bids },
+              game: {
+                ...g,
+                flash: `Offer in for ${c.name}${premium > 0 ? ` at +${premium}%` : ' at asking'}. They decide when the round ends — you can't see what your rivals offered.`,
+              },
+            })
+            void broadcastBid(mine)
+            return
+          }
+
           const game = structuredClone(g)
           game.candidates = game.candidates.filter((x) => x.id !== candidateId)
           game.offersOut.push(c)

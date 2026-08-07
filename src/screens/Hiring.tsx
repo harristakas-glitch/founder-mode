@@ -1,7 +1,60 @@
+import { useState } from 'react'
 import { Btn, Panel, SkillDots, Td, Th, TraitChip } from '../components'
 import { money } from '../format'
 import { recruiterFee, runwayAfterHire, runwayWeeks, weeklyBurn } from '../game/engine'
+import { hasCapability } from '../game/modes'
+import { myId } from '../net/online'
 import { useStore } from '../store'
+
+const PREMIUMS = [0, 10, 25, 50]
+
+/**
+ * Arena's contested hire. The pool is the whole room's, so an offer is a sealed bid: you pick a
+ * premium over asking without seeing anyone else's number, and the candidate chooses at the end of
+ * the round on money, reputation and runway. Deliberately not a click race — that would reward
+ * reflexes and latency instead of judgement.
+ */
+function BidControl({ candidateId }: { candidateId: string }) {
+  const sendOffer = useStore((s) => s.sendOffer)
+  const online = useStore((s) => s.online)
+  const [premium, setPremium] = useState(0)
+  const bids = online?.bids.filter((b) => b.candidateId === candidateId) ?? []
+  const mine = bids.find((b) => b.playerId === myId())
+  const rivals = bids.filter((b) => b.playerId !== myId()).length
+
+  return (
+    <div className="mt-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {PREMIUMS.map((p) => (
+          <button
+            key={p}
+            disabled={!!mine}
+            onClick={() => setPremium(p)}
+            className={`rounded-lg border px-2 py-1 text-[12px] font-semibold transition-colors disabled:opacity-40 ${
+              premium === p ? 'border-accent bg-accent/15 text-ink' : 'border-line2 text-mut hover:border-accent hover:text-ink'
+            }`}
+          >
+            {p === 0 ? 'Asking' : `+${p}%`}
+          </button>
+        ))}
+      </div>
+      <Btn variant="primary" className="mt-2 w-full" disabled={!!mine} onClick={() => sendOffer(candidateId, premium)}>
+        {mine ? `Offer in at ${mine.premiumPct === 0 ? 'asking' : `+${mine.premiumPct}%`}` : 'Make sealed offer'}
+      </Btn>
+      <div className="mt-1 text-[11.5px] leading-snug text-mut">
+        {rivals > 0 ? (
+          <span className="text-warn">
+            ⚔ {rivals} rival{rivals === 1 ? '' : 's'} also bidding — amount hidden
+          </span>
+        ) : mine ? (
+          'No rivals on them yet. They answer when the round ends.'
+        ) : (
+          'Bid blind. They weigh the money against your reputation and runway.'
+        )}
+      </div>
+    </div>
+  )
+}
 
 const ROLE_HELP: Record<string, string> = {
   engineer: 'Builds features, improves quality, fixes bugs, does research',
@@ -14,6 +67,10 @@ export function Hiring() {
   const game = useStore((s) => s.game)!
   const sendOffer = useStore((s) => s.sendOffer)
   const runway = runwayWeeks(game)
+  // must match sendOffer's own branch exactly — gating the UI on the capability alone let the
+  // sealed-bid controls render in a session that would silently take the single-player path
+  const online = useStore((st) => st.online)
+  const shared = hasCapability(game, 'sharedHiringPool') && !!online
 
   return (
     <div>
@@ -23,6 +80,15 @@ export function Hiring() {
         {runway === Infinity ? '∞' : `${Math.floor(runway)} wk`}. The <b className="text-ink">runway after</b> column shows what hiring
         that person does to it — under ~20 weeks is living dangerously, and candidates start declining offers below ~10.
       </div>
+
+      {shared && (
+        <div className="mb-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed">
+          <b>One market, every founder.</b> These five people are the same five your rivals are looking at, and the whole pool is
+          replaced next week. Offers are <b>sealed</b>: choose a premium over asking without seeing anyone else&apos;s number, and at
+          the end of the round the candidate picks — weighing the money against your reputation and how safe your runway looks. Winning
+          a contested hire means paying over the odds, or being somewhere worth joining.
+        </div>
+      )}
 
       {(game.offersOut.length > 0 || game.pendingHires.length > 0) && (
         <div className="mb-3.5 grid gap-3.5 md:grid-cols-2">
@@ -91,9 +157,13 @@ export function Hiring() {
                 <span className="text-mut">Leaves the pool in</span>
                 <span className="text-right tnum">{c.weeksLeft} wk</span>
               </div>
-              <Btn variant="primary" className="mt-3 w-full" onClick={() => sendOffer(c.id)}>
-                Send offer
-              </Btn>
+              {shared ? (
+                <BidControl candidateId={c.id} />
+              ) : (
+                <Btn variant="primary" className="mt-3 w-full" onClick={() => sendOffer(c.id)}>
+                  Send offer
+                </Btn>
+              )}
             </Panel>
           )
         })}
@@ -144,9 +214,15 @@ export function Hiring() {
                       {c.weeksLeft} wk
                     </Td>
                     <Td right>
-                      <Btn variant="primary" onClick={() => sendOffer(c.id)}>
-                        Send offer
-                      </Btn>
+                      {shared ? (
+                        <div className="min-w-[210px]">
+                          <BidControl candidateId={c.id} />
+                        </div>
+                      ) : (
+                        <Btn variant="primary" onClick={() => sendOffer(c.id)}>
+                          Send offer
+                        </Btn>
+                      )}
                     </Td>
                   </tr>
                 )
