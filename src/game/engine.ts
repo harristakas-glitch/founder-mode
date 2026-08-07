@@ -15,6 +15,7 @@ import { ARC_DEFS } from './arcs'
 import { resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
+import { livingWorldActive, tickLivingWorld } from './world/tick'
 import type {
   Candidate,
   Choice,
@@ -1496,6 +1497,14 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   } else if (s.challenge && s.week >= s.challenge.cap) {
     s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(val * s.founderEquity + s.bankedPayout) }
   }
+
+  // The living world runs LAST, once every fact for the week exists — including the ending, so a
+  // postmortem can read it. It interprets; it never decides. With its capabilities off it returns
+  // immediately, which is what keeps this line invisible to Quick Play and Arena.
+  // Guarded rather than called unconditionally: `seeded` bumps s.flags.rngTick, so an
+  // unconditional call would shift the RNG stream for every mode and silently change Quick Play
+  // and Arena outcomes even with the whole system switched off.
+  if (livingWorldActive(s)) seeded(s, () => tickLivingWorld(s))
 
   return s
 }

@@ -49,6 +49,7 @@ function awardAchievements(g: GameState) {
 import { SECTORS, sectorById } from './game/data'
 import { addJournal, canRunExperiment, experimentDef, segmentDef, startExperiment } from './game/career/pmf'
 import { repositionTo } from './game/career/tick'
+import { migrateLivingWorldSlice } from './game/world/persistence'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
@@ -1204,6 +1205,12 @@ export const useStore = create<Store>()(
           // Standard (or Daily if it was a dated challenge), and multiplayer becomes Arena.
           // Career is never assigned automatically — it is an explicit player choice.
           migrateLegacySave(g) // brief §31 — see engine.ts
+          // Living world (brief §68/§69). A save written before the system has no `world` at all,
+          // which is legal — the weekly tick creates one. A save that HAS one is re-validated
+          // rather than trusted: it is user-writable localStorage, and a malformed slice must not
+          // reach the composer. An unreadable slice is dropped, not repaired; characters are
+          // deterministic from the seed, so the cost of rebuilding is one week of drift.
+          g.world = migrateLivingWorldSlice(g.world)
         }
         return { ...current, ...p }
       },

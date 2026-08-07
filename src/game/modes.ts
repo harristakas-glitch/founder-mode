@@ -15,6 +15,7 @@
 // `false` until they are built. The game must never claim functionality it does not have.
 
 import type { SectorId } from './types'
+import type { LivingWorldDepth } from './world/types'
 
 export type GameMode = 'quick' | 'career' | 'arena'
 
@@ -94,7 +95,28 @@ export interface GameCapabilities {
   detailedIPO: boolean
   decisionJournal: boolean
   educationalPostmortem: boolean
-  livingWorld: boolean
+  livingWorld: boolean // umbrella flag: the world has persistent people at all
+
+  // ---- planned: Living World (docs/procedural-living-world-system.md §2) --------------
+  // Every mode declares a livingWorldDepth, but these gate the actual systems: depth sets the
+  // shape of the experience, capabilities decide which parts of it are switched on. Branch on
+  // these, never on the depth string alone.
+  proceduralNarrative: boolean // messages composed from fragments instead of prewritten prose
+  proceduralMedia: boolean // headlines about you, your rivals and the market
+  narrativeDirector: boolean // scores candidate stories and picks what deserves the week
+  persistentCharacters: boolean // people are generated once and remembered, not re-rolled
+  characterMemory: boolean // they remember what you did to them
+  companyMemory: boolean // the company's own notable history, for "since the Series A" comparisons
+  relationships: boolean // trust/respect/alignment/dependence, per person
+  advisorOpinions: boolean // named advisors argue, with their own biases
+  structuredInterviews: boolean // customer interviews answered in character
+  structuredEmployeeConversations: boolean // replaces the fixed 1:1 templates
+  proceduralBoardMeetings: boolean // board sessions composed from the board's actual grievances
+  promises: boolean // commitments the world holds you to
+  longTermCallbacks: boolean // week 48 remembers week 18
+  rivalArchetypes: boolean // rivals have a posture, not just momentum
+  rivalNarrative: boolean // rivals get narrated, not just tabulated
+  proceduralPostmortem: boolean // the ending is written from what actually happened
 
   // ---- planned: Arena ----------------------------------------------------------------
   sharedCustomerMarket: boolean
@@ -123,6 +145,9 @@ export interface GameRules {
   pmfDepth: 'simple' | 'deep'
   employeeDepth: 'simple' | 'deep'
   fundraisingDepth: 'simple' | 'deep'
+  /** Living World §1. How alive the world is meant to feel in this mode. Declares intent only —
+   *  the livingWorld* capabilities above decide what actually runs, and they are all still false. */
+  livingWorldDepth: LivingWorldDepth
 }
 
 // Everything off. Base rules switch on only what they actually provide.
@@ -169,6 +194,22 @@ const NO_CAPABILITIES: GameCapabilities = {
   decisionJournal: false,
   educationalPostmortem: false,
   livingWorld: false,
+  proceduralNarrative: false,
+  proceduralMedia: false,
+  narrativeDirector: false,
+  persistentCharacters: false,
+  characterMemory: false,
+  companyMemory: false,
+  relationships: false,
+  advisorOpinions: false,
+  structuredInterviews: false,
+  structuredEmployeeConversations: false,
+  proceduralBoardMeetings: false,
+  promises: false,
+  longTermCallbacks: false,
+  rivalArchetypes: false,
+  rivalNarrative: false,
+  proceduralPostmortem: false,
   sharedCustomerMarket: false,
   sharedTalentMarket: false,
   sharedInvestorMarket: false,
@@ -192,8 +233,16 @@ const QUICK_BASE_RULES: GameRules = {
   pmfDepth: 'simple',
   employeeDepth: 'simple',
   fundraisingDepth: 'simple',
+  livingWorldDepth: 'light',
   capabilities: {
     ...NO_CAPABILITIES,
+    // Brief §3. Only the Phase 1–3 systems are wired; advisors, promises, interviews and board
+    // meetings stay off until their own phases land, so a capability is never on before the code
+    // that honours it exists. Quick Play gets people and company history, not a relationship sim.
+    proceduralNarrative: true,
+    persistentCharacters: true,
+    companyMemory: true,
+    characterMemory: true,
     aiRivals: true,
     storyArcs: true,
     oneOnOnes: true,
@@ -216,8 +265,13 @@ const CAREER_BASE_RULES: GameRules = {
   mode: 'career',
   simulationDepth: 'deep',
   pmfDepth: 'deep',
+  livingWorldDepth: 'deep',
   capabilities: {
     ...QUICK_BASE_RULES.capabilities,
+    // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
+    // company history and composed narrative, and adds the one system Quick Play deliberately
+    // leaves off — a real relationship with each person, which is what makes them remember you.
+    relationships: true,
     // Career Phase 1 — PMF Discovery 2.0. Segment truth, beliefs, evidence, cohorts.
     detailedPMF: true,
     customerSegments: true,
@@ -241,8 +295,15 @@ const ARENA_BASE_RULES: GameRules = {
   pmfDepth: 'simple',
   employeeDepth: 'simple',
   fundraisingDepth: 'simple',
+  livingWorldDepth: 'competitive',
   capabilities: {
     ...NO_CAPABILITIES,
+    // Brief §3: Arena dramatises what the players did to each other. Characters and company
+    // history yes; no deep character memory and no relationship simulation — humans create the
+    // story here, and the narrative layer only has to make it visible.
+    proceduralNarrative: true,
+    persistentCharacters: true,
+    companyMemory: true,
     humanRivals: true,
     bankDebt: true,
     multipleVerticals: true,

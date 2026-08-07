@@ -263,6 +263,12 @@ export interface GameState {
   capabilities: import('./modes').GameCapabilities
   /** Career only. Absent on Quick Play and Arena saves — the deep PMF subsystem. */
   career?: import('./career/types').CareerPMFState
+  /**
+   * The Procedural Living World: persistent people, what they remember, and what has already been
+   * told. Absent on every save written before it existed and on any run whose livingWorldDepth is
+   * 'off' — readers must tolerate undefined rather than assume it was built.
+   */
+  world?: import('./world/types').LivingWorldState
   history: HistoryPoint[]
   gameOver: GameOver | null
 }
