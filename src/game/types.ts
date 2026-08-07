@@ -8,6 +8,15 @@ export interface Sector {
   name: string
   blurb: string
   arpuWeekly: number // revenue per active user per week (at full PMF & conversion)
+  /**
+   * Career's revenue per *customer* per week. Career counts named, retained accounts in the
+   * hundreds where Quick Play counts raw users in the tens of thousands, so charging the Quick
+   * Play rate left every Career company structurally unprofitable — revenue ran 5–20× under
+   * payroll in all five sectors and survival was just a question of how slowly $200k drained.
+   * Calibrated so a few hundred well-retained customers can carry a small team. The sector's
+   * character is preserved in the ratios: a social user is still worth a fraction of a B2B seat.
+   */
+  careerArpu: number
   acqBase: number // base user acquisition scale
   viral: number // word-of-mouth growth factor
   churn: number // weekly churn base

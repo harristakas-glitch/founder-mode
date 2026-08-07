@@ -179,57 +179,62 @@ stale. **Done when:** a 4-player arena harness re-runs builder / raider / smeare
 strategies over 25+ matches and confirms attacking is viable but not dominant, and that buying
 a shield is no longer a net loss.
 
-### 4.5 `resolveChoiceOnState` is the one player action that isn't seeded
-Every other engine entry point goes through `seeded()` or `withSeed()`, per brief §39: same seed
-plus same decisions must replay identically. `resolveChoiceOnState` does not, and the
-`applyEffects` path it calls draws `rand(5, 8)` and `randomName()` when a choice hires someone —
-so those draws come from `Math.random`. Found because the bot harness returned a different result
-on every run of the same seeds: survival moved by 3/24 between identical invocations.
+### 4.5 `resolveChoiceOnState` is the one player action that isn't seeded — RESOLVED
+`resolveChoiceOnState` now delegates to `resolveChoiceOnStateInner` inside `seeded(s, …)` like
+every other engine entry point, so the `rand(5, 8)` / `randomName()` draws in `applyEffects` come
+from the seeded generator. The `stable()`/`withSeed` workaround in `test/career-bots.ts` is
+deleted, and two consecutive `npm run bots` runs are byte-identical without it. Replays, shared
+seeds and leaderboard verification involving an inbox choice with a hire attached no longer
+diverge.
 
-This is not harness-only. Any replay, shared seed or leaderboard verification that involves an
-inbox choice with a hire attached will diverge. `test/career-bots.ts` works around it by wrapping
-its own pre-week actions in `withSeed`; the workaround should be deleted when the engine is fixed.
+### 4.6 4-week retention reads 100% on cohorts too small to measure — RESOLVED
+Fixed at the source rather than by discarding small cohorts. `CustomerCohort` gained
+`exactCustomers`: decay runs on the unrounded count and `activeCustomers` is its rounded shadow,
+so 3 × 0.95 is 2.85 rather than being rounded back to 3 forever. The four-week snapshot is taken
+off the exact figure, so a small cohort reports a real rate instead of a rounding artifact. The
+reconciliation path that removes users keeps both counts in step, or decay would resurrect them.
 
-**Done when:** `resolveChoiceOnState` is wrapped in `seeded(s, …)` like its siblings, a
-regression test asserts that resolving the same choice on the same seed twice gives identical
-state, and the harness workaround is removed.
+This was propping up the whole economy: measuring retention honestly roughly halved Career
+revenue (SaaS Disciplined $3,689 → $1,595/wk), which is what exposed 4.7 as an economy-wide
+problem rather than a two-sector one.
 
-### 4.6 4-week retention reads 100% on cohorts too small to measure
-`tickCareerPMF` snapshots a cohort's four-week retention as
-`round(activeCustomers) / startingCustomers`. On a cohort of 1–5 people the rounding never loses
-anyone, so the snapshot is exactly 100%. Measured over 5 SaaS seeds to week 30: at $800/wk
-marketing, 42 of 131 snapshots read 100% and the median cohort was 8 people; at $12k/wk, 1 of 79.
+### 4.7 Two sectors kill every strategy — RESOLVED, and it was all five
+The diagnosis in the original entry was wrong. Instrumenting deaths showed B2B SaaS companies
+"surviving" on $548/wk of revenue against $5,571/wk of expenses — they were not solvent, they
+were draining the starting $200k more slowly than the others. **Every Career company in every
+sector was structurally unprofitable.** E-commerce and Social were not uniquely broken; they were
+simply the fastest to run out of road.
 
-The effect is that a company that has barely started reads as having perfect retention, and
-because retention is 46 of the 100 points in `derivePmfForSegment`, PMF is systematically
-flattering exactly when the player has the least evidence. It also silently defeats any
-retention-based gate: the disciplined bot's 0.72 gate opened at week 6–11 on fake readings.
+Cause: Career billed customers at `sector.arpuWeekly`, which is calibrated for Quick Play's user
+volumes (tens of thousands). Career counts retained *accounts* in the hundreds, so a sector whose
+ARPU assumes consumer scale can never fund a team — Social needed ~80,000 customers at $0.12 to
+cover payroll and tops out near 4,000.
 
-**Proposal (needs owner approval — it changes balance):** skip the snapshot for cohorts below
-some minimum size, or weight the segment average by cohort size *and* discard cohorts under
-~5 people. `PMF_CUSTOMER_FLOOR` (15) already exists for exactly this reason at the segment level;
-the cohort level has no equivalent. **Done when:** small cohorts no longer produce 100% readings
-and `npm run bots` is re-run to confirm the strategy spread is unchanged.
+Fix: `Sector.careerArpu`, used by the engine only when `detailedPMF` is on, so Quick Play and
+Arena are untouched. Calibrated so a few hundred well-retained customers carry a small team, with
+sector character preserved in the ratios — a social user is still worth a fraction of a B2B seat.
+saas 22, devtools 24, fintech 18, ecommerce 12, social 1.8.
 
-### 4.7 Two sectors kill every strategy
-`npm run bots -- all` over 24 seeds, survivors at week 90:
+Survivors at week 90, 24 seeds (before → after):
 
 | Sector | Careless | Disciplined | Enterprise |
 |---|---|---|---|
-| B2B SaaS | 19/24 | 20/24 | 19/24 |
-| Dev Tools | 21/24 | 17/24 | 17/24 |
-| E-commerce | **0/24** | **3/24** | **2/24** |
-| Fintech | 19/24 | 13/24 | 15/24 |
-| Social App | **2/24** | **0/24** | **0/24** |
+| B2B SaaS | 22 → 24/24 | 20 → 20/24 | 18 → 22/24 |
+| Dev Tools | 20 → 20/24 | 17 → 17/24 | 20 → 20/24 |
+| E-commerce | 1 → 5/24 | 2 → 11/24 | 8 → 6/24 |
+| Fintech | 18 → 23/24 | 15 → 21/24 | 14 → 16/24 |
+| Social App | 2 → 12/24 | 1 → 13/24 | 0 → 8/24 |
 
-E-commerce and Social are not hard, they are unsurvivable — no strategy clears 3/24, and Social
-reaches $2k/wk in 0 of 72 runs across all three strategies. This is a *sector* problem, not a
-strategy problem: the same three bots are fine in three of five sectors. Most likely candidates
-are `arpuWeekly` versus `churn` in `src/game/data.ts` for those two sectors, and for Social the
-fact that its best segment (Casual Users) has willingness-to-pay 10.
+Disciplined Discovery is now the strongest strategy in all five sectors, which is the outcome the
+mode exists to teach.
 
-**Done when:** the two sectors are diagnosed (revenue per customer against weekly burn), retuned,
-and `npm run bots -- all` shows survival in the same band as the other three.
+**Two caveats left open, deliberately.** (1) The `$2k/wk` yardstick in the bot report is now
+obsolete — every strategy clears it by roughly week 10, so it no longer discriminates and should
+be replaced with a higher bar or with weeks-to-profitability. (2) Social and E-commerce still sit
+at 11–13/24 against 20–24/24 for SaaS and Fintech. That is plausibly correct sector character
+(high volume, thin margin, high churn), but it has *not* been separated from the alternative
+explanation: the bots' hiring and marketing rules are keyed off revenue and may simply overspend
+in high-volume sectors. Do not read the remaining gap as intended difficulty until that is tested.
 
 ---
 

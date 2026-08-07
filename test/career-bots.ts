@@ -5,17 +5,15 @@
 //
 // Read this before trusting a number out of it:
 //
-//  * **Determinism.** `resolveChoiceOnState` is the one player action the engine does not wrap
-//    in `seeded()`, so an inbox choice that hires someone draws from `Math.random` and the same
-//    seed produces a different run every time. Until that is fixed in the engine, the harness
-//    wraps its own pre-week actions in `withSeed` so a measurement is reproducible. Remove the
-//    wrapper and the survival counts move by 3/24 between identical runs.
+//  * **Determinism.** Every engine entry point the bot calls is seeded, so identical input
+//    produces byte-identical output. The harness used to need its own `withSeed` wrapper because
+//    `resolveChoiceOnState` drew from `Math.random`; that hole is closed in the engine now.
 //  * **Fair levers.** Every strategy sets pricing, product focus and engineering allocation —
 //    the levers that actually move Career outcomes. What differs is *how each one decides*:
 //    Careless guesses, Enterprise bets a fixed hand, Disciplined reads its own beliefs. Giving
 //    only one bot the levers measures the levers, not the strategy.
 
-import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState, withSeed, valuation } from '../src/game/engine'
+import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState, valuation } from '../src/game/engine'
 import {
   canRunExperiment,
   experimentDef,
@@ -42,28 +40,20 @@ function cfg(seed: number, sector: SectorId) {
   return { mode: 'career' as const, format: 'standard' as const, sector, seed }
 }
 
-/** Make the bot's own engine calls reproducible — see the determinism note at the top. */
-function stable<T>(s: GameState, fn: () => T): T {
-  const seed = s.config?.seed ?? 0
-  return withSeed((Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(s.week, 0xc2b2ae35)) >>> 0, fn)
-}
-
 function common(s: GameState) {
-  stable(s, () => {
-    for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
-    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
-    if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
-    const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
-    // Hire against what the business can carry, not against a runway number. The earlier
-    // version hired 8 people on $1k/wk of revenue and every strategy died of payroll, which
-    // told us nothing about the strategies.
-    const affordable = Math.min(8, 1 + Math.floor(s.lastRevenue / 2500))
-    if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < affordable && s.candidates.length) {
-      const best = [...s.candidates].sort((a, b) => b.skill - a.skill)[0]
-      s.candidates = s.candidates.filter((x) => x.id !== best.id)
-      s.offersOut.push(best)
-    }
-  })
+  for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
+  if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
+  if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
+  const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
+  // Hire against what the business can carry, not against a runway number. The earlier
+  // version hired 8 people on $1k/wk of revenue and every strategy died of payroll, which
+  // told us nothing about the strategies.
+  const affordable = Math.min(8, 1 + Math.floor(s.lastRevenue / 2500))
+  if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < affordable && s.candidates.length) {
+    const best = [...s.candidates].sort((a, b) => b.skill - a.skill)[0]
+    s.candidates = s.candidates.filter((x) => x.id !== best.id)
+    s.offersOut.push(best)
+  }
 }
 
 function tryExperiment(s: GameState, type: ExperimentType, seg: string) {
@@ -235,7 +225,8 @@ function report(name: string, runs: GameState[]) {
 
 const SEEDS = Array.from({ length: 24 }, (_, i) => 11 * (i + 1))
 const ALL_SECTORS: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
-const SECTORS: SectorId[] = process.argv.includes('all') ? ALL_SECTORS : ['saas', 'fintech']
+const picked = ALL_SECTORS.filter((x) => process.argv.includes(x))
+const SECTORS: SectorId[] = process.argv.includes('all') ? ALL_SECTORS : picked.length ? picked : ['saas', 'fintech']
 
 console.log(`— Career bot strategies · ${SEEDS.length} seeds × 90 weeks · median [worst…best] —`)
 for (const sector of SECTORS) {

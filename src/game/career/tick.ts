@@ -82,6 +82,7 @@ export function tickCareerPMF(
       segmentId: target,
       startingCustomers: s.users - tracked,
       activeCustomers: s.users - tracked,
+      exactCustomers: s.users - tracked,
       acquisitionCost: 0,
       priceAtAcquisition: career.pricing === 'low' ? 26 : career.pricing === 'premium' ? 82 : 52,
       productQualityAtAcquisition: s.quality,
@@ -90,8 +91,11 @@ export function tickCareerPMF(
     // something removed users (a churn event, an outage) — take it off the newest cohorts
     let toRemove = tracked - s.users
     for (let i = career.cohorts.length - 1; i >= 0 && toRemove > 0; i--) {
-      const take = Math.min(career.cohorts[i].activeCustomers, toRemove)
-      career.cohorts[i].activeCustomers -= take
+      const c = career.cohorts[i]
+      const take = Math.min(c.activeCustomers, toRemove)
+      c.activeCustomers -= take
+      // keep the unrounded count in step, or decay would resurrect the people we just removed
+      c.exactCustomers = Math.max(0, (c.exactCustomers ?? c.activeCustomers + take) - take)
       toRemove -= take
     }
   }
@@ -178,6 +182,7 @@ export function tickCareerPMF(
       segmentId: target,
       startingCustomers: acquired,
       activeCustomers: acquired,
+      exactCustomers: acquired,
       acquisitionCost: marketingSpend,
       priceAtAcquisition: career.pricing === 'low' ? 26 : career.pricing === 'premium' ? 82 : 52,
       productQualityAtAcquisition: s.quality,
@@ -194,13 +199,18 @@ export function tickCareerPMF(
     const price = segmentPriceFit(truth, career.pricing)
     const keep = resolveCohortRetention({ truth, productFit: fit, priceFit: price, bugs: s.bugs, weeksSinceAcquired: s.week - c.acquiredWeek })
     const before = c.activeCustomers
-    c.activeCustomers = Math.max(0, Math.round(c.activeCustomers * keep))
+    // Decay the unrounded count, then round only for display. Rounding first let a cohort of a
+    // handful of people survive intact week after week and report perfect retention.
+    const exact = Math.max(0, (c.exactCustomers ?? c.activeCustomers) * keep)
+    c.exactCustomers = exact
+    c.activeCustomers = Math.max(0, Math.round(exact))
     churnedTotal += before - c.activeCustomers
     // Freeze this cohort's four-week number the week it turns four weeks old. Measuring
     // "everything older than 4 weeks" instead made the metric lifetime survival, which decays
     // forever — so retention (and therefore PMF) could only ever fall.
     if (c.retentionAt4wk === undefined && s.week - c.acquiredWeek >= 4 && c.startingCustomers > 0) {
-      c.retentionAt4wk = clamp01(c.activeCustomers / c.startingCustomers)
+      // off the exact count: `3/3 = 100%` on a rounded cohort is a rounding artifact, not evidence
+      c.retentionAt4wk = clamp01(exact / c.startingCustomers)
     }
   }
   career.cohorts = career.cohorts.filter((c) => c.activeCustomers > 0).slice(-60)

@@ -1108,7 +1108,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // only the customer/PMF step differs, and only when the capability is on.
   let careerRevenueMult = 1
   let room = 1 // remaining market headroom, consumed later by tickRivals
-  if (can(s, 'detailedPMF') && s.career) {
+  const careerOn = can(s, 'detailedPMF') && !!s.career
+  if (careerOn) {
     const r = tickCareerPMF(s, {
       sectorTam: sector.tam,
       sectorAcqBase: sector.acqBase,
@@ -1141,7 +1142,12 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const conversion = 0.25 + (0.75 * s.pmf) / 100
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
   const scaleBoost = s.sector === 'social' ? 1 + Math.log10(Math.max(10, s.users)) / 3 : 1
-  const coreRevenue = s.users * sector.arpuWeekly * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult
+  // Career counts retained accounts in the hundreds where Quick Play counts users in the tens of
+  // thousands, so it bills at its own per-customer rate. Charging the Quick Play rate left every
+  // Career company structurally unprofitable in all five sectors — revenue ran far under payroll
+  // and "surviving" only meant draining the starting $200k more slowly.
+  const arpu = careerOn ? sector.careerArpu : sector.arpuWeekly
+  const coreRevenue = s.users * arpu * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult
   const ventureRevenue = s.ventures.reduce((acc, v) => {
     if (!v.launched) return acc
     const vs = sectorById(v.sector)
@@ -2345,7 +2351,17 @@ function tickArcs(s: GameState) {
 }
 
 // The single source of truth for answering an inbox decision — used by the UI store and by tests.
+/**
+ * Resolving a decision draws randomness — a choice that hires someone rolls skill and a name — so it
+ * has to be seeded like every other player action. Left unwrapped it was the one hole in §39: the
+ * same seed plus the same decisions produced different runs, which breaks replays and leaderboard
+ * verification, not just the bot harness.
+ */
 export function resolveChoiceOnState(s: GameState, messageId: string, choiceIndex: number): void {
+  seeded(s, () => resolveChoiceOnStateInner(s, messageId, choiceIndex))
+}
+
+function resolveChoiceOnStateInner(s: GameState, messageId: string, choiceIndex: number): void {
   const msg = s.inbox.find((x) => x.id === messageId)
   if (!msg || msg.resolved || !msg.choices) return
   const choice = msg.choices[choiceIndex]

@@ -74,6 +74,14 @@ export interface CustomerCohort {
   acquisitionCost: number
   priceAtAcquisition: number
   productQualityAtAcquisition: number
+  /**
+   * Unrounded survivor count. Customers are shown as whole people, but churn is a rate: rounding
+   * 3 × 0.95 back to 3 every week meant a small cohort never lost anyone and reported 100%
+   * retention forever — and retention is most of the PMF score, so PMF flattered the player
+   * exactly when they had the least evidence. Decay runs on this; `activeCustomers` is its
+   * rounded shadow. Absent on saves written before this existed — fall back to activeCustomers.
+   */
+  exactCustomers?: number
   /** Share of this cohort still active when it turned four weeks old. Snapshotted once. */
   retentionAt4wk?: number
 }
