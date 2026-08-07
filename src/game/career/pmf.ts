@@ -131,6 +131,34 @@ export const EXPERIMENTS: ExperimentDef[] = [
 
 export const experimentDef = (t: ExperimentType): ExperimentDef => EXPERIMENTS.find((e) => e.type === t) ?? EXPERIMENTS[0]
 
+/**
+ * The headline question each instrument exists to answer, and the confidence at which that
+ * question counts as answered.
+ *
+ * One table, two readers: `suggestedExperiment` uses it to decide what to recommend next, and the
+ * standing-study renewal uses it to decide when to stop charging. They MUST agree — a rolling
+ * study that keeps billing for a question the game has stopped recommending is a pure drain,
+ * because `updateBelief` gains `reliability × 0.28 × (1 − confidence)` and so buys asymptotically
+ * nothing once confidence is high.
+ */
+export const EXPERIMENT_ANSWERS: Record<ExperimentType, { metric: TruthMetric; bar: number }> = {
+  interview: { metric: 'needIntensity', bar: 0.4 },
+  landing_page: { metric: 'acquisitionAccessibility', bar: 0.4 },
+  prototype: { metric: 'productRequirement', bar: 0.45 },
+  pricing_test: { metric: 'willingnessToPay', bar: 0.55 },
+  pilot: { metric: 'retentionPotential', bar: 0.65 },
+}
+
+/**
+ * Has this study answered what it was for? A standing study that has cleared its bar is retired
+ * rather than renewed — it is a programme that finishes, not a subscription.
+ */
+export function experimentAnswered(career: CareerPMFState, type: ExperimentType, segmentId: SegmentId): boolean {
+  const { metric, bar } = EXPERIMENT_ANSWERS[type]
+  const b = career.segmentBeliefs[segmentId]?.[metric]
+  return !!b && b.confidence >= bar
+}
+
 // ---------- beliefs ----------
 
 function belief(estimate: number, confidence: number): MetricBelief {
@@ -708,13 +736,21 @@ export function suggestedExperiment(
 ): { type: ExperimentType; segmentId: SegmentId; why: string } | null {
   const running = new Set(career.activeExperiments.filter((e) => e.status === 'active').map((e) => `${e.segmentId}:${e.type}`))
   // Each rung: the belief it answers, the instrument that answers it, and the bar to clear.
-  const LADDER: { metric: TruthMetric; type: ExperimentType; bar: number; why: (n: string) => string }[] = [
-    { metric: 'needIntensity', type: 'interview', bar: 0.4, why: (n) => `You have almost no read on whether ${n} feel this problem at all. Start cheap.` },
-    { metric: 'acquisitionAccessibility', type: 'landing_page', bar: 0.4, why: (n) => `You think there's a need, but nothing tells you whether ${n} can be reached affordably.` },
-    { metric: 'productRequirement', type: 'prototype', bar: 0.45, why: (n) => `Opinions say the need is there. Put something real in front of ${n} and watch what they do.` },
-    { metric: 'willingnessToPay', type: 'pricing_test', bar: 0.55, why: (n) => `Interest without proof of payment. Ask ${n} for money and see who stays.` },
-    { metric: 'retentionPotential', type: 'pilot', bar: 0.65, why: (n) => `Everything short of a real deployment looks good. Only a pilot proves ${n} stay.` },
-  ]
+  // Bars come from EXPERIMENT_ANSWERS so the recommendation and the standing-study renewal can
+  // never drift apart; only the prose lives here.
+  const WHY: Record<ExperimentType, (n: string) => string> = {
+    interview: (n) => `You have almost no read on whether ${n} feel this problem at all. Start cheap.`,
+    landing_page: (n) => `You think there's a need, but nothing tells you whether ${n} can be reached affordably.`,
+    prototype: (n) => `Opinions say the need is there. Put something real in front of ${n} and watch what they do.`,
+    pricing_test: (n) => `Interest without proof of payment. Ask ${n} for money and see who stays.`,
+    pilot: (n) => `Everything short of a real deployment looks good. Only a pilot proves ${n} stay.`,
+  }
+  const LADDER = (['interview', 'landing_page', 'prototype', 'pricing_test', 'pilot'] as ExperimentType[]).map((type) => ({
+    type,
+    metric: EXPERIMENT_ANSWERS[type].metric,
+    bar: EXPERIMENT_ANSWERS[type].bar,
+    why: WHY[type],
+  }))
 
   const target = career.primaryTargetSegmentId
   const candidates: { type: ExperimentType; segmentId: SegmentId; why: string; score: number }[] = []

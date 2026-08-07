@@ -2,7 +2,7 @@
 //   1. every client renders the IDENTICAL five candidates, or there is nothing to contest;
 //   2. every client resolves a contested hire to the SAME winner, with no server refereeing it.
 // Both are pure functions of (seed, week), so they are testable without a socket.
-import { pickHiringWinner, sharedCandidates, type HiringBid } from '../src/game/engine'
+import { pickHiringWinner, recruiterFee, sharedCandidates, type HiringBid } from '../src/game/engine'
 import type { Candidate } from '../src/game/types'
 
 const fails: string[] = []
@@ -80,6 +80,61 @@ ok((await hiringCommitment('mk-3-0', 25, makeNonce(), 'alice')) !== c1, 'a fresh
 // the whole point: the amount is not recoverable from what goes over the wire
 const guesses = await Promise.all([0, 10, 25, 50].map((p) => hiringCommitment('mk-3-0', p, 'guessed-nonce', 'alice')))
 ok(!guesses.includes(c1), 'enumerating every possible premium does not reveal the bid without the nonce')
+
+console.log('\n— No bid always wins, and no bid is free —')
+// The premium is clamped to [0,100] in the store and again on the wire, so the money term tops out
+// at 59–100 score points while reputation + runway + jitter top out at 39. A max bid therefore
+// beats an indifferent rival every time, but reputation still beats money when money is equal.
+const pool200: Candidate[] = []
+for (let w = 1; w <= 200; w++) pool200.push(...sharedCandidates(12345, w))
+const rate = (x: HiringBid, y: HiringBid, filter?: (c: Candidate) => boolean) => {
+  let wins = 0
+  let n = 0
+  pool200.forEach((c, i) => {
+    if (filter && !filter(c)) return
+    n++
+    if (pickHiringWinner(c, [x, y], 12345, i)?.playerId === x.playerId) wins++
+  })
+  return n ? wins / n : 0
+}
+ok(rate(bid('rich', 100), bid('cheap', 0)) === 1, 'a maxed bid beats an asking-price bid at equal reputation — money does talk')
+ok(
+  rate(bid('rich', 100, 0, 5), bid('beloved', 0, 100, 60)) < 0.5,
+  'but a maxed bid from a disreputable, doomed company LOSES to a great company at asking price',
+)
+ok(
+  rate(bid('poor-name', 100, 0), bid('good-name', 100, 100)) === 0,
+  'with money equal, reputation decides — there is no bid that always wins',
+)
+// and the premium binds: settleHiring pushes the boosted salary, so the recruiter fee scales too
+const skilled = pool200.find((c) => c.skill >= 8)!
+const boosted = Math.round((skilled.salary * 2) / 1000) * 1000
+ok(boosted > skilled.salary, 'winning at +100% doubles the salary that lands in offersOut')
+ok(
+  recruiterFee({ ...skilled, salary: boosted }) > recruiterFee(skilled),
+  'and the recruiter fee scales with it — a contested hire is never free',
+)
+
+console.log('\n— Winning the auction has to move the candidate —')
+// Regression: acceptChance ignored the premium entirely, so a founder could commit +100% to win a
+// sealed bid and still be declined a quarter of the time for reasons unrelated to the bid.
+const accept = (rep: number, runway: number, salary: number, c: Candidate, climate = 0) => {
+  const marketRate = ROLE_BASE_TEST[c.role] + c.skill * 13_000
+  const overPay = Math.min(1, Math.max(-0.2, (salary - marketRate) / Math.max(1, marketRate)))
+  return Math.min(0.97, Math.max(0.05, 0.72 + rep / 400 + overPay * 0.18 - (runway < 10 ? 0.25 : 0) + (climate < -0.2 ? 0.08 : 0)))
+}
+const ROLE_BASE_TEST: Record<string, number> = { engineer: 62_000, designer: 55_000, marketer: 50_000, sales: 52_000 }
+const atAsking = accept(10, 30, skilled.salary, skilled)
+const atMax = accept(10, 30, boosted, skilled)
+ok(atMax > atAsking + 0.1, `paying over the odds materially improves acceptance (${(atAsking * 100).toFixed(0)}% → ${(atMax * 100).toFixed(0)}%)`)
+ok(
+  Math.abs(accept(10, 30, ROLE_BASE_TEST[skilled.role] + skilled.skill * 13_000, skilled) - 0.745) < 0.01,
+  'an offer at the market rate is unchanged from before the fix — Quick Play balance is untouched',
+)
+ok(
+  accept(10, -3, skilled.salary, skilled) < accept(10, 30, skilled.salary, skilled),
+  'a company already out of cash scares candidates off — negative runway is the worst case, not an exempt one',
+)
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

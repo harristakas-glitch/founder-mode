@@ -11,6 +11,9 @@ import {
   biggestUncertainty,
   derivePmfForSegment,
   experimentDef,
+  experimentAnswered,
+  EXPERIMENT_ANSWERS,
+  METRIC_LABEL,
   resolveCohortRetention,
   resolveExperiment,
   resolveSegmentAcquisition,
@@ -167,10 +170,37 @@ export function tickCareerPMF(
     })
   }
   // Standing studies renew themselves while the cash lasts. Discovery is a programme you fund,
-  // not a button you press every three weeks.
+  // not a button you press every three weeks — but a programme finishes.
   for (const done of career.activeExperiments) {
     if (done.status !== 'complete' || !done.standing) continue
     const def = experimentDef(done.type)
+    // Retire once the study has answered what it was for. Belief gains scale with
+    // `(1 − confidence)`, so past its bar a renewal charges full price for nothing measurable:
+    // measured over 24 seeds × 5 sectors, flagging every experiment standing cost 37–72% of median
+    // founder net and up to 10/24 runs' survival against the identical strategy without it.
+    if (experimentAnswered(career, done.type, done.segmentId)) {
+      const { metric, bar } = EXPERIMENT_ANSWERS[done.type]
+      const conf = career.segmentBeliefs[done.segmentId][metric].confidence
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'system',
+        title: `Standing study concluded — ${def.name}`,
+        body:
+          `The rolling ${def.name.toLowerCase()} on ${segmentDef(sector, done.segmentId).name} has answered its question: ` +
+          `confidence on ${METRIC_LABEL[metric].toLowerCase()} is ${Math.round(conf * 100)}%, past the ${Math.round(bar * 100)}% ` +
+          `where more of the same instrument stops moving the number. It has been retired rather than renewed, ` +
+          `saving ${'$'}${def.cashCost.toLocaleString()} a cycle. Point the budget at a question you cannot yet answer.`,
+      })
+      addJournal(career, {
+        week: s.week,
+        category: 'discovery',
+        title: `Retired: standing ${def.name.toLowerCase()}`,
+        description: `${METRIC_LABEL[metric]} on ${segmentDef(sector, done.segmentId).name} reached ${Math.round(conf * 100)}% confidence. Further repeats of this study buy nothing.`,
+        relatedSegmentId: done.segmentId,
+      })
+      continue
+    }
     if (s.cash < def.cashCost * 1.5) {
       s.inbox.unshift({
         id: uid(),

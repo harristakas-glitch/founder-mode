@@ -4,8 +4,10 @@ import { hasCapability, type GameConfig } from '../src/game/modes'
 import { generateAllTruth, generateSegmentTruth, segmentsForSector } from '../src/game/career/segments'
 import {
   EXPERIMENTS,
+  EXPERIMENT_ANSWERS,
   TRUTH_METRICS,
   canRunExperiment,
+  experimentAnswered,
   createCareerPMF,
   derivePmfForSegment,
   experimentDef,
@@ -313,6 +315,53 @@ const repositioned = newGame('Repos', 'saas', 'technical', { config: cfg({ seed:
 const otherSeg = segmentsForSector('saas').find((x) => x.id !== repositioned.career!.primaryTargetSegmentId)!
 repositionTo(repositioned, otherSeg.id, 1)
 ok(careerProductDrag(repositioned) < careerProductDrag(idle), 'repositioning slows product velocity, not just marketing')
+
+console.log('— A standing study is a programme that finishes, not a subscription —')
+// Flagging every study standing must not be strictly worse than running them one-off. It was:
+// the renewal charged full price forever for a belief that had stopped moving, because
+// `updateBelief` gains scale with (1 - confidence).
+{
+  const seg = 'small_teams'
+  const sat = newGame('Sat', 'saas', 'technical', { config: cfg({ seed: 4242 }) })
+  const b = sat.career!.segmentBeliefs[seg]
+  for (const t of EXPERIMENTS) {
+    const { metric, bar } = EXPERIMENT_ANSWERS[t.type]
+    b[metric] = { ...b[metric], confidence: bar + 0.01 }
+    ok(experimentAnswered(sat.career!, t.type, seg), `${t.name} counts as answered once ${metric} passes ${bar}`)
+    b[metric] = { ...b[metric], confidence: bar - 0.05 }
+    ok(!experimentAnswered(sat.career!, t.type, seg), `${t.name} is still open just below the bar`)
+  }
+
+  // The recommendation ladder and the renewal must agree, or the game bills for a study it has
+  // stopped recommending. Drive every belief past its bar and check both go quiet together.
+  const done = newGame('Done', 'saas', 'technical', { config: cfg({ seed: 4243 }) })
+  for (const sg of segmentsForSector('saas')) {
+    const bb = done.career!.segmentBeliefs[sg.id]
+    for (const m of TRUTH_METRICS) bb[m] = { ...bb[m], confidence: 0.95 }
+  }
+  ok(suggestedExperiment(done.career!, 'saas') === null, 'nothing left to recommend once every belief is confident')
+  ok(
+    EXPERIMENTS.every((t) => experimentAnswered(done.career!, t.type, done.career!.primaryTargetSegmentId)),
+    'and nothing left to renew either — the two thresholds cannot drift apart',
+  )
+
+  // End to end: a standing pilot on a saturated belief must stop taking money.
+  let rich = newGame('Rich', 'saas', 'technical', { config: cfg({ seed: 4244 }) })
+  const tgt = rich.career!.primaryTargetSegmentId
+  const rb = rich.career!.segmentBeliefs[tgt]
+  rb.retentionPotential = { ...rb.retentionPotential, confidence: 0.9 }
+  startExperiment(rich.career!, rich.week, 'pilot', tgt, 'standing-1', true)
+  rich.cash = 5_000_000
+  rich.marketingSpend = 0
+  const cashBefore = rich.cash
+  for (let w = 0; w < 20; w++) rich = advanceWeek(rich)
+  ok(
+    rich.career!.activeExperiments.filter((e) => e.type === 'pilot').length === 0,
+    'a standing pilot whose question is answered is retired, not renewed',
+  )
+  // 20 weeks would be two renewals at $28k had it kept rolling; office+infra alone is a few hundred
+  ok(cashBefore - rich.cash < 28_000, `and it stops charging (spent $${Math.round(cashBefore - rich.cash).toLocaleString()} over 20 weeks)`)
+}
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

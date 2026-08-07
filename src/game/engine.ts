@@ -1279,7 +1279,23 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const offerNews: string[] = []
   for (const c of [...s.offersOut]) {
     const runwayNow = s.cash / Math.max(1, expenses - revenue)
-    const acceptChance = 0.72 + s.reputation / 400 - (runwayNow > 0 && runwayNow < 10 ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0)
+    // A company burning cash it does not have is the WORST case, not an exempt one. The guard
+    // used to read `runwayNow > 0 && runwayNow < 10`, and a negative runway (cash already below
+    // zero) failed the first half — so a founder who was bankrupt next week had the same 74.5%
+    // acceptance as a healthy one, while a founder with nine weeks of cash was punished 25 points.
+    const looksDoomed = runwayNow < 10
+    // Money on the table moves people. Without this the Arena sealed-bid auction was incoherent:
+    // you could win a contested hire by committing +100% — doubling both salary and the recruiter
+    // fee — and the candidate would still decline a quarter of the time for reasons that had
+    // nothing to do with the number you had just bid. Derived from the offer itself rather than
+    // from a stored bid, so it works identically for a Quick Play offer at the asking price.
+    const marketRate = ROLE_BASE[c.role] + c.skill * 13_000
+    const overPay = clamp((c.salary - marketRate) / Math.max(1, marketRate), -0.2, 1)
+    const acceptChance = clamp(
+      0.72 + s.reputation / 400 + overPay * 0.18 - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0),
+      0.05,
+      0.97,
+    )
     if (RNG.next() < acceptChance) {
       s.pendingHires.push({ candidate: c, weeksUntilStart: c.notice })
       offerNews.push(`${c.name} accepted (starts in ${c.notice} wk)`)
