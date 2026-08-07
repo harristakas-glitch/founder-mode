@@ -266,6 +266,247 @@ input[type='range']::-moz-range-thumb {
   z-index: 80;
 }
 
+/* ============================================================================
+   HOME — "the gate"
+   The first screen is the entrance to a world, not a form. Depth comes from
+   three cheap layers (accent aurora → hairline grid → vignette) behind flat
+   content, and every accented surface reads from --ha / --ha2, which the screen
+   rebinds as the player picks a mode and a market. Nothing here animates on a
+   loop; motion is one-shot entrance + pointer feedback only.
+   ========================================================================== */
+
+.home-root {
+  --ha: var(--color-accent);
+  --ha2: var(--color-accent2);
+}
+
+.home-bg,
+.home-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* accent aurora — retints when the chosen mode / market changes */
+.home-bg::before {
+  content: '';
+  position: absolute;
+  inset: -25%;
+  background:
+    radial-gradient(900px 560px at 16% 4%, color-mix(in oklab, var(--ha) 26%, transparent), transparent 62%),
+    radial-gradient(760px 520px at 88% 26%, color-mix(in oklab, var(--ha2) 20%, transparent), transparent 60%);
+  transition: background 420ms var(--e-out);
+}
+
+/* hairline grid, faded out below the fold so it never fights the content */
+.home-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 58px 58px;
+  -webkit-mask-image: radial-gradient(120% 78% at 50% 0%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(120% 78% at 50% 0%, #000 0%, transparent 72%);
+}
+
+.home-vignette {
+  background: radial-gradient(135% 100% at 50% 38%, transparent 42%, rgba(3, 6, 14, 0.7) 100%);
+}
+
+/* the global focus ring, retinted to whatever world the player is standing in */
+.home-root :focus-visible {
+  outline-color: var(--ha);
+}
+
+/* ---------- title ---------- */
+.home-title {
+  font-size: clamp(2.9rem, 11vw, 5.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  font-weight: 800;
+}
+.home-title .l2 {
+  background: linear-gradient(100deg, var(--ha) 0%, var(--ha2) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.home-rule {
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--ha) 65%, transparent), transparent);
+}
+
+/* ---------- entrance: a short, ordered settle. Never blocks input. ---------- */
+@keyframes home-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.home-in {
+  animation: home-in 380ms var(--e-out) both;
+  animation-delay: var(--d, 0ms);
+}
+
+/* ---------- mode cards: three worlds, each with its own light ---------- */
+.mode-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid var(--color-line);
+  background:
+    linear-gradient(165deg, color-mix(in oklab, var(--mc) 11%, var(--color-surface)) 0%, var(--color-bg2) 64%);
+  text-align: left;
+  transition:
+    transform var(--dur-2) var(--e-out),
+    border-color var(--dur-2) var(--e-out),
+    box-shadow var(--dur-2) var(--e-out);
+}
+.mode-card::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--mc), transparent);
+  opacity: 0.7;
+}
+.mode-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(460px 220px at 50% -12%, color-mix(in oklab, var(--mc) 34%, transparent), transparent 72%);
+  transition: opacity var(--dur-2) var(--e-out);
+}
+.mode-card:hover,
+.mode-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--mc) 55%, var(--color-line));
+  box-shadow:
+    0 18px 42px -20px color-mix(in oklab, var(--mc) 70%, transparent),
+    var(--elev-2);
+}
+.mode-card:hover::after,
+.mode-card:focus-visible::after {
+  opacity: 1;
+}
+.mode-card:active {
+  transform: translateY(-1px);
+}
+
+.mode-emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  font-size: 22px;
+  line-height: 1;
+  border: 1px solid color-mix(in oklab, var(--mc) 40%, transparent);
+  background: color-mix(in oklab, var(--mc) 14%, transparent);
+}
+
+/* ---------- selectable option (format / market / scenario / founder) ---------- */
+.opt {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in oklab, var(--color-surface) 78%, transparent);
+  text-align: left;
+  transition:
+    border-color var(--dur-1) var(--e-out),
+    background-color var(--dur-1) var(--e-out),
+    transform var(--dur-1) var(--e-out);
+}
+.opt:hover:not(:disabled) {
+  border-color: var(--color-line2);
+  background: color-mix(in oklab, var(--color-surface2) 70%, transparent);
+}
+.opt:active:not(:disabled) {
+  transform: scale(0.995);
+}
+.opt[data-on='true'] {
+  border-color: color-mix(in oklab, var(--oc, var(--ha)) 70%, transparent);
+  background: color-mix(in oklab, var(--oc, var(--ha)) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--oc, var(--ha)) 22%, transparent);
+}
+.opt:disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.opt-tick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--oc, var(--ha));
+  color: var(--color-bg);
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity var(--dur-1) var(--e-out),
+    transform var(--dur-1) var(--e-out);
+}
+.opt[data-on='true'] .opt-tick {
+  opacity: 1;
+  transform: none;
+}
+
+/* five-step attribute meter, FM-style: derived from the sector's real numbers */
+.pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 1.5px;
+  background: var(--color-line2);
+}
+.pip[data-on='true'] {
+  background: var(--oc, var(--ha));
+}
+
+/* ---------- the way in ---------- */
+.launch-btn {
+  background: linear-gradient(160deg, var(--ha), color-mix(in oklab, var(--ha2) 65%, var(--ha)));
+  color: #08101f;
+  transition:
+    filter var(--dur-1) var(--e-out),
+    transform var(--dur-1) var(--e-out);
+}
+.launch-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.launch-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+/* ---------- reduced motion: nothing moves, everything still lands ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .home-in {
+    animation-delay: 0ms !important;
+  }
+  .mode-card:hover,
+  .mode-card:focus-visible,
+  .mode-card:active,
+  .opt:active:not(:disabled),
+  .launch-btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 /* ---------- reduced motion: nothing moves, everything still lands ---------- */
 @media (prefers-reduced-motion: reduce) {
   *,
