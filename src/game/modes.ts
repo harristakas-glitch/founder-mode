@@ -114,6 +114,9 @@ export interface GameRules {
   maxTurns?: number
   turnTimerSeconds?: number
   startingCash: number
+  /** Brief §9/§11. Reserved: 1 everywhere today; Career will slow progression when its
+   *  longer-horizon systems land. Nothing multiplies by it yet. */
+  progressionMultiplier: number
   simulationDepth: 'simple' | 'standard' | 'deep'
   pmfDepth: 'simple' | 'deep'
   employeeDepth: 'simple' | 'deep'
@@ -181,6 +184,7 @@ const QUICK_BASE_RULES: GameRules = {
   format: 'standard',
   turnUnit: 'week',
   startingCash: 200_000,
+  progressionMultiplier: 1,
   simulationDepth: 'standard',
   pmfDepth: 'simple',
   employeeDepth: 'simple',
@@ -218,6 +222,7 @@ const ARENA_BASE_RULES: GameRules = {
   format: 'standard',
   turnUnit: 'week',
   startingCash: 200_000,
+  progressionMultiplier: 1,
   maxTurns: 52,
   turnTimerSeconds: 150,
   simulationDepth: 'standard',

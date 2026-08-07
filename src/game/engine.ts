@@ -88,6 +88,50 @@ function drainEnergy(s: GameState, n: number) {
   if (can(s, 'founderEnergy')) s.energy = clamp(s.energy - n, 0, 100)
 }
 
+
+// ---------- legacy save migration (brief §31) ----------
+// Saves written before the mode/format model carry no config. Solo runs become Quick Play
+// Standard, dated challenges become Daily, scenario saves keep their scenario, and anything
+// labelled an online match becomes Arena. Career is NEVER assigned automatically — it is an
+// explicit player choice, so an old save must not silently become one.
+export function migrateLegacySave(g: GameState): GameState {
+  if (!g.config) {
+    const label = typeof g.challenge?.label === 'string' ? g.challenge.label : ''
+    const wasDaily = label.startsWith('Daily')
+    const wasOnline = label === 'Online match'
+    g.config = {
+      mode: wasOnline ? 'arena' : 'quick',
+      format: wasDaily ? 'daily_challenge' : g.scenario && g.scenario !== 'standard' ? 'scenario' : 'standard',
+      sector: g.sector,
+      scenario: g.scenario ?? undefined,
+      seed: 0, // unknown for an in-flight legacy run; only shapes freshly dealt worlds
+      overrides: capabilitiesFromLegacyRules((g as unknown as { rules?: import('./types').Ruleset }).rules),
+    }
+  }
+  if (!g.capabilities) g.capabilities = resolveGameRules(g.config).capabilities
+  return g
+}
+
+// ---------- deterministic simulation (brief §39) ----------
+// The same seed + mode + format + scenario + decisions must produce the same outcome, so
+// EVERY draw has to come from the run's seed rather than Math.random(). Each entry point
+// reseeds from (config.seed, week, tick) and bumps the tick, so repeated actions in the same
+// week still differ from each other while remaining reproducible on replay.
+function mixSeed(seed: number, week: number, tick: number): number {
+  let h = (seed ^ 0x9e3779b9) >>> 0
+  h = Math.imul(h ^ week, 0x85ebca6b) >>> 0
+  h = Math.imul(h ^ tick, 0xc2b2ae35) >>> 0
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+/** Wrap a mutating engine entry point so its randomness is reproducible. Do not nest. */
+function seeded<T>(s: GameState, fn: () => T): T {
+  const base = s.config?.seed
+  if (base === undefined) return fn() // legacy in-flight save with no config: behave as before
+  s.flags.rngTick = (s.flags.rngTick ?? 0) + 1
+  return withSeed(mixSeed(base, s.week, s.flags.rngTick), fn)
+}
+
 // ---------- new game ----------
 
 export interface NewGameOpts {
@@ -687,6 +731,9 @@ function SECTORS_IDS(): SectorId[] {
 }
 
 export function startVenture(s: GameState, sector: SectorId) {
+  return seeded(s, () => startVentureInner(s, sector))
+}
+function startVentureInner(s: GameState, sector: SectorId) {
   if (!canStartVenture(s).ok) return
   if (!availableVentureSectors(s).includes(sector)) return
   s.ventures.push({
@@ -748,6 +795,9 @@ export function canPivot(s: GameState): { ok: boolean; reason?: string } {
 }
 
 export function pivot(s: GameState) {
+  return seeded(s, () => pivotInner(s))
+}
+function pivotInner(s: GameState) {
   const gate = canPivot(s)
   if (!gate.ok) {
     s.flash = `Pivot unavailable — ${gate.reason}.` // never let a button silently do nothing
@@ -789,6 +839,9 @@ export function nextStage(s: GameState): Stage | null {
 }
 
 export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Message } {
+  return seeded(s, () => pitchInvestorsInner(s))
+}
+function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Message } {
   if (s.ipo) {
     const message: Message = {
       id: uid(),
@@ -899,6 +952,13 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
 
 // externalUsers: other human players' users in the same market (multiplayer).
 export function advanceWeek(prev: GameState, externalUsers = 0): GameState {
+  // seeded on (seed, the week being simulated) so a replay of the same decisions matches
+  const base = prev.config?.seed
+  if (base === undefined) return advanceWeekInner(prev, externalUsers)
+  return withSeed(mixSeed(base, prev.week + 1, 0), () => advanceWeekInner(prev, externalUsers))
+}
+
+function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const s: GameState = structuredClone(prev)
   const sector = sectorById(s.sector)
   s.week += 1
@@ -1738,6 +1798,9 @@ export function canAttack(s: GameState): { ok: boolean; reason?: string } {
 // The attacker's side: pay the cost, collect the spoils. targetUsers is the victim's
 // last-known user count (from presence) — spoils are computed from it.
 export function applyAttackOutgoing(s: GameState, kind: AttackDef['id'], targetCompany: string, rawTargetUsers: number): boolean {
+  return seeded(s, () => applyAttackOutgoingInner(s, kind, targetCompany, rawTargetUsers))
+}
+function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCompany: string, rawTargetUsers: number): boolean {
   const def = ATTACKS.find((a) => a.id === kind)
   if (!def) return false
   const targetUsers = Number.isFinite(rawTargetUsers) && rawTargetUsers > 0 ? Math.min(rawTargetUsers, 1e10) : 0
@@ -1866,6 +1929,9 @@ export function pitchOptions(s: GameState): PitchOption[] {
 }
 
 export function pitchTeam(s: GameState, id: PitchOption['id']): void {
+  return seeded(s, () => pitchTeamInner(s, id))
+}
+function pitchTeamInner(s: GameState, id: PitchOption['id']): void {
   if (s.pitchCooldown > 0 || s.employees.length === 0) return
   const opt = pitchOptions(s).find((o) => o.id === id)!
   s.pitchCooldown = PITCH_COOLDOWN
@@ -1926,6 +1992,9 @@ export function canAcquire(s: GameState, r: Rival): { ok: boolean; reason?: stri
 }
 
 export function acquireRival(s: GameState, rivalId: string, method: 'cash' | 'stock'): boolean {
+  return seeded(s, () => acquireRivalInner(s, rivalId, method))
+}
+function acquireRivalInner(s: GameState, rivalId: string, method: 'cash' | 'stock'): boolean {
   const r = s.rivals.find((x) => x.id === rivalId)
   if (!r || !canAcquire(s, r).ok) return false
   const price = acquisitionPrice(s, r)

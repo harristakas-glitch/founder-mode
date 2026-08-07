@@ -147,7 +147,7 @@ export function NewGame() {
           </h1>
           <AuthCorner />
         </div>
-        <p className="mt-1.5 mb-7 text-mut">You have $200,000, an empty office, and a dream. Build a unicorn — or die trying.</p>
+        <p className="mt-1.5 mb-7 text-mut">Build companies. Make decisions. Live with the consequences.</p>
 
         {!experience && (
           <>
@@ -174,6 +174,7 @@ export function NewGame() {
                         Early Access
                       </div>
                     )}
+                    <div className="mt-2.5 text-[13px] font-bold text-accent">{meta.cta} →</div>
                   </button>
                 )
               })}

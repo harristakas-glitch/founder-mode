@@ -24,7 +24,7 @@ import { useStore, type ScreenId } from './store'
 import { avgMorale, hasPendingDecision, runwayWeeks, totalUsers, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
 import { myId } from './net/online'
-import { hasCapability } from './game/modes'
+import { MODE_META, hasCapability } from './game/modes'
 import { isMuted, setMuted } from './sound'
 import { NewGame } from './screens/NewGame'
 import { Lobby } from './screens/Lobby'
@@ -326,7 +326,17 @@ export default function App() {
               </div>
             </div>
           </div>
-          {game.challenge && <div className="mt-1 text-[11px] text-mut">{game.challenge.label} · ends wk {game.challenge.cap}</div>}
+          {/* Brief §38: a quiet mode indicator — same brand, different experience. */}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-mut">
+            <span className="rounded-full border border-line2 px-1.5 py-px font-semibold">
+              {MODE_META[game.config?.mode ?? 'quick'].icon} {MODE_META[game.config?.mode ?? 'quick'].name}
+            </span>
+            {game.challenge && (
+              <span>
+                {game.challenge.label} · ends wk {game.challenge.cap}
+              </span>
+            )}
+          </div>
           {hasCapability(game, 'founderEnergy') && (
           <div className="mt-2 flex items-center gap-1.5" title="Founder energy — big moves drain it, low energy weakens your weekly contribution. Recharge on the Team screen.">
             <span className="text-[10px] font-bold uppercase tracking-wider text-mut">Energy</span>
@@ -713,6 +723,19 @@ function MatchOver({ onClose }: { onClose: () => void }) {
   )
 }
 
+// Every result CTA lands on the experience picker — the one place a new run is chosen.
+function ResultCta({ label }: { label: string }) {
+  const abandonGame = useStore((s) => s.abandonGame)
+  return (
+    <button
+      onClick={abandonGame}
+      className="rounded-lg border border-line2 px-3 py-1.5 text-[12.5px] font-semibold transition-colors hover:border-accent hover:text-ink"
+    >
+      {label} →
+    </button>
+  )
+}
+
 function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame } = useStore()
   const dialogRef = useDialog(onClose)
@@ -816,20 +839,29 @@ function GameOver({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* Brief §35: where you go next depends on what you just played. */}
-        <div className="mt-5 rounded-xl border border-line/60 bg-surface2/40 px-4 py-3 text-[13px] text-mut">
+        {/* Brief §35: what you just played decides what you're offered next. */}
+        <div className="mt-5 rounded-xl border border-line/60 bg-surface2/40 px-4 py-3 text-left text-[13px] text-mut">
           {game.config?.format === 'daily_challenge' ? (
-            <>Same world for everyone today — compare your score above, then come back tomorrow for a new one.</>
+            <>Same world for everyone today — your score is on the board above. A new one lands tomorrow.</>
           ) : game.config?.format === 'scenario' ? (
             <>
-              That was the <b className="text-ink">{game.config.scenario}</b> scenario. Another start, another set of problems —
-              try a different one from Quick Play.
+              That was the <b className="text-ink">{game.config.scenario}</b> scenario. Different starts, different problems.
             </>
           ) : game.config?.mode === 'career' ? (
             <>Career is still growing: deeper product, people and board systems are on the way.</>
           ) : (
-            <>Ready for something else? Career goes deeper, and Arena puts you against other founders.</>
+            <>Ready for something else? Career goes deeper; Arena puts you against other founders.</>
           )}
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {game.config?.format === 'scenario' && <ResultCta label="Try another scenario" />}
+            {game.config?.format === 'standard' && game.config?.mode === 'quick' && (
+              <>
+                <ResultCta label="Try Career" />
+                <ResultCta label="Challenge friends in Arena" />
+              </>
+            )}
+            {game.config?.mode === 'career' && <ResultCta label="Play a Quick run" />}
+          </div>
         </div>
 
         <div className="mt-5 rounded-2xl border border-line/60 bg-black/20 p-3 text-left">

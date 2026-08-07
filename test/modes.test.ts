@@ -9,7 +9,7 @@ import {
   type GameConfig,
   type GameMode,
 } from '../src/game/modes'
-import { advanceWeek, capabilitiesFromLegacyRules, newGame } from '../src/game/engine'
+import { advanceWeek, capabilitiesFromLegacyRules, migrateLegacySave, newGame, pitchInvestors, pivot } from '../src/game/engine'
 
 const fails: string[] = []
 const ok = (cond: boolean, msg: string) => {
@@ -91,6 +91,55 @@ ok(Object.keys(capabilitiesFromLegacyRules(undefined)).length === 0, 'a save wit
 
 console.log('— defaultCapabilities helper —')
 ok(defaultCapabilities('quick').aiRivals && !defaultCapabilities('arena').aiRivals, 'defaults differ per mode')
+
+
+console.log('— Persistence: legacy saves migrate (brief §31/§41) —')
+const legacySave = (over: Record<string, unknown>) =>
+  migrateLegacySave({
+    ...newGame('Legacy', 'saas', 'technical', { config: cfg() }),
+    config: undefined as never,
+    capabilities: undefined as never,
+    ...over,
+  } as never)
+
+const solo = legacySave({ challenge: null, scenario: null })
+ok(solo.config.mode === 'quick' && solo.config.format === 'standard', 'legacy solo -> quick / standard')
+const legacyDaily = legacySave({ challenge: { label: 'Daily #12', cap: 104 }, scenario: null })
+ok(legacyDaily.config.mode === 'quick' && legacyDaily.config.format === 'daily_challenge', 'legacy Daily -> quick / daily_challenge')
+ok(legacyDaily.capabilities.leaderboard && legacyDaily.capabilities.singleAttempt, 'migrated Daily regains its challenge capabilities')
+const legacyMp = legacySave({ challenge: { label: 'Online match', cap: 52 }, scenario: null })
+ok(legacyMp.config.mode === 'arena' && legacyMp.config.format === 'standard', 'legacy multiplayer -> arena / standard')
+const legacyScenario = legacySave({ challenge: null, scenario: 'winter' })
+ok(legacyScenario.config.format === 'scenario' && legacyScenario.config.scenario === 'winter', 'scenario saves keep their scenario')
+ok([solo, legacyDaily, legacyMp, legacyScenario].every((g) => g.config.mode !== 'career'), 'no legacy save is ever silently turned into Career')
+const careerSave = newGame('C', 'saas', 'technical', { config: cfg({ mode: 'career' }) })
+ok(migrateLegacySave(structuredClone(careerSave)).config.mode === 'career', 'a Career save restores as Career')
+const legacyRules = legacySave({ challenge: { label: 'Online match', cap: 52 }, scenario: null, rules: { arcs: false, oneOnOnes: false, catastrophes: false, energy: false, board: false, debt: true, ventures: true, ipo: true, macroShocks: true, pvp: true } })
+ok(!legacyRules.capabilities.storyArcs && legacyRules.capabilities.pvpActions, 'old Ruleset toggles survive the migration')
+
+console.log('— Determinism with decisions (brief §39/§41) —')
+function play(seed: number, mode: 'quick' | 'career' = 'quick', format: 'standard' | 'daily_challenge' = 'standard') {
+  let s = newGame('D', 'saas', 'technical', { config: cfg({ mode, format, seed }) })
+  for (let w = 0; w < 25 && !s.gameOver; w++) {
+    // a fixed decision script: same actions every replay
+    if (w === 3) pivot(s)
+    if (w === 6) pitchInvestors(s)
+    if (w === 9 && s.candidates[0]) {
+      const c = s.candidates[0]
+      s.candidates = s.candidates.filter((x) => x.id !== c.id)
+      s.offersOut.push(c)
+    }
+    s = advanceWeek(s)
+  }
+  return [s.week, Math.round(s.cash), Math.round(s.users), Math.round(s.pmf * 100), Math.round(s.hype * 100), s.employees.length].join('|')
+}
+const runA = play(31337)
+const runB = play(31337)
+ok(runA === runB, `same seed + same decisions reproduce exactly (${runA})`)
+ok(play(31337) !== play(4242), 'a different seed produces a different run')
+const dailyA = play(20260807, 'quick', 'daily_challenge')
+const dailyB = play(20260807, 'quick', 'daily_challenge')
+ok(dailyA === dailyB, 'Daily Challenge is reproducible for the same seed and decisions')
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

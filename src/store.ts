@@ -8,6 +8,7 @@ import {
   applyAttackOutgoing,
   buyShield,
   capabilitiesFromLegacyRules,
+  migrateLegacySave,
   applyEffects,
   canStartVenture,
   drawDebt,
@@ -914,19 +915,7 @@ export const useStore = create<Store>()(
           // Legacy saves predate the mode/format model: everything solo becomes Quick Play
           // Standard (or Daily if it was a dated challenge), and multiplayer becomes Arena.
           // Career is never assigned automatically — it is an explicit player choice.
-          if (!g.config) {
-            const wasDaily = typeof g.challenge?.label === 'string' && g.challenge.label.startsWith('Daily')
-            const wasOnline = g.challenge?.label === 'Online match'
-            g.config = {
-              mode: wasOnline ? 'arena' : 'quick',
-              format: wasDaily ? 'daily_challenge' : g.scenario && g.scenario !== 'standard' ? 'scenario' : 'standard',
-              sector: g.sector,
-              scenario: g.scenario ?? undefined,
-              seed: 0, // unknown for an in-flight legacy run; only affects fresh worlds
-              overrides: capabilitiesFromLegacyRules((g as unknown as { rules?: import('./game/types').Ruleset }).rules),
-            }
-          }
-          g.capabilities ??= resolveGameRules(g.config).capabilities
+          migrateLegacySave(g) // brief §31 — see engine.ts
         }
         return { ...current, ...p }
       },
