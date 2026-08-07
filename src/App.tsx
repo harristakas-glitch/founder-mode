@@ -24,7 +24,7 @@ import {
 import { useStore, type ScreenId } from './store'
 import { avgMorale, hasPendingDecision, runwayWeeks, totalUsers, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
-import { myId } from './net/online'
+import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
 import { MODE_META, hasCapability } from './game/modes'
 import { isMuted, setMuted } from './sound'
 import { NewGame } from './screens/NewGame'
@@ -182,7 +182,11 @@ export default function App() {
   const me = online?.players.find((p) => p.id === myId())
   const myReady = !!me?.ready
   // a lone entry is usually just a pre-sync view of ourselves after a reconnect — not a finished match
-  const matchOver = !!online && online.phase === 'playing' && online.players.length > 1 && online.players.every((p) => p.over)
+  // The match is decided once at most one founder is still contesting it — everyone else has either
+  // finished or walked away. Requiring `every(p => p.over)` stranded a lone survivor forever when
+  // their rival simply closed the tab: nobody left to play, and no ending either.
+  const matchOver =
+    !!online && online.phase === 'playing' && online.players.length > 1 && online.players.filter((p) => isContesting(p)).length <= 1
 
   // when the round clock runs out, decisions resolve conservatively and the week is forced
   useEffect(() => {
@@ -374,11 +378,17 @@ export default function App() {
               {online.players.map((p) => (
                 <div key={p.id} className="flex items-center justify-between text-[12px]">
                   <span className={`truncate ${p.id === myId() ? 'font-bold' : 'text-mut'}`}>
-                    {p.over ? '☠️ ' : ''}
+                    {p.over ? '☠️ ' : hasForfeited(p) ? '🚪 ' : ''}
                     {p.company}
                   </span>
                   {p.over ? (
                     <span className="text-mut">out</span>
+                  ) : hasForfeited(p) ? (
+                    <span className="text-mut">left</span>
+                  ) : p.absent ? (
+                    <span className="text-warn" title="Lost their connection — they have a little while to come back.">
+                      ⟳
+                    </span>
                   ) : p.ready ? (
                     <Check size={13} className="text-good" />
                   ) : (
@@ -678,10 +688,18 @@ function MatchOver({ onClose }: { onClose: () => void }) {
   const { online, game, abandonGame } = useStore()
   const dialogRef = useDialog(onClose)
   if (!online) return null
-  const ranked = [...online.players].sort((a, b) => b.payout - a.payout)
+  // A founder still standing when everyone else quit or died has no payout yet — they are the
+  // winner, not a $0 last place. Rank the living above the finished, and value them on the company
+  // they still own rather than a payout they never had to take.
+  const figure = (p: NetPlayer) => (isContesting(p) ? (p.id === myId() && game ? valuation(game) : p.val) : p.payout)
+  const label = (p: NetPlayer) =>
+    hasForfeited(p) ? 'left the match' : isContesting(p) ? 'last one standing' : (p.overType ?? 'timeup')
+  const ranked = [...online.players].sort(
+    (a, b) => Number(isContesting(b)) - Number(isContesting(a)) || figure(b) - figure(a),
+  )
   const shareText =
     `Founder Mode — online match result:\n` +
-    ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(p.payout)}`).join('\n') +
+    ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(figure(p))}`).join('\n') +
     `\nPlay: ${GAME_URL}`
   return (
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Match over" className="fixed inset-0 z-[60] flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
@@ -707,11 +725,11 @@ function MatchOver({ onClose }: { onClose: () => void }) {
                   {p.company}
                 </b>{' '}
                 <span className="text-mut">
-                  {ENDING_EMOJI[p.overType ?? 'timeup']} {p.overType ?? 'timeup'}
+                  {hasForfeited(p) ? '🚪' : isContesting(p) ? '🏁' : ENDING_EMOJI[p.overType ?? 'timeup']} {label(p)}
                   {p.id === myId() && ' · you'}
                 </span>
               </span>
-              <b className={`tnum ${p.payout > 0 ? 'text-good' : 'text-mut'}`}>{money(p.payout)}</b>
+              <b className={`tnum ${figure(p) > 0 ? 'text-good' : 'text-mut'}`}>{money(figure(p))}</b>
             </div>
           ))}
         </div>

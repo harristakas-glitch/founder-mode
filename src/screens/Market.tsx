@@ -17,7 +17,7 @@ import {
 } from '../game/engine'
 import { hasCapability } from '../game/modes'
 import { SegmentHealth } from '../CareerUI'
-import { myId } from '../net/online'
+import { hasForfeited, myId } from '../net/online'
 import { useStore } from '../store'
 
 export function Market() {
@@ -44,7 +44,8 @@ export function Market() {
           rev: isMe ? game.lastRevenue : p.rev,
           pmf: isMe ? game.pmf : p.pmf,
           // still in the match, just not visible on the wire this instant
-          absent: !isMe && !!p.absent,
+          absent: !isMe && !!p.absent && !hasForfeited(p),
+          gone: !isMe && hasForfeited(p),
         }
       })
     : [
@@ -61,6 +62,7 @@ export function Market() {
           rev: undefined as number | undefined,
           pmf: undefined as number | undefined,
           absent: false,
+          gone: false,
         },
       ]
 
@@ -79,6 +81,7 @@ export function Market() {
       rev: undefined as number | undefined,
       pmf: undefined as number | undefined,
       absent: false,
+      gone: false,
     })),
   ].sort((a, b) => Number(b.alive) - Number(a.alive) || b.users - a.users)
 
@@ -142,6 +145,7 @@ export function Market() {
                     <Td>
                       <b>{r.name}</b>
                       {!r.alive && <span className="text-mut"> · shut down</span>}
+                      {r.alive && r.gone && <span className="text-mut"> · left the match</span>}
                       {r.alive && r.absent && (
                         <span className="text-warn" title="We've lost their connection. They're still in the match and still hold their users.">
                           {' '}

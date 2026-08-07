@@ -432,8 +432,14 @@ export const useStore = create<Store>()(
           // leaderboard AND from the market-share denominator, which then read as 100% share.
           let players = incoming
           if (online.phase === 'playing') {
-            const merged = new Map(incoming.map((p) => [p.id, { ...p, absent: false }]))
-            for (const prev of online.players) if (!merged.has(prev.id)) merged.set(prev.id, { ...prev, absent: true })
+            const now = Date.now()
+            const merged = new Map<string, NetPlayer>(
+              incoming.map((p) => [p.id, { ...p, absent: false, absentSince: undefined }]),
+            )
+            for (const prev of online.players) {
+              // keep the ORIGINAL absentSince across syncs, or the clock restarts every second
+              if (!merged.has(prev.id)) merged.set(prev.id, { ...prev, absent: true, absentSince: prev.absentSince ?? now })
+            }
             players = [...merged.values()].sort((a, b) => Number(b.host) - Number(a.host) || a.company.localeCompare(b.company))
           }
           // my own row is locally owned — a stale echo must never un-ready me (see `myReady`)

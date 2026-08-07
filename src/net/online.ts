@@ -26,6 +26,8 @@ export interface NetPlayer {
    * here rather than deleting them — see the roster merge in `onPlayers`.
    */
   absent?: boolean
+  /** Client-local only: ms epoch when we lost sight of them. Cleared the moment they reappear. */
+  absentSince?: number
   // open-book intel (multiplayer is a clear-information game; older clients omit these)
   cash?: number
   rev?: number // weekly revenue
@@ -123,6 +125,22 @@ export function normalizePlayer(raw: unknown, key: string): NetPlayer | null {
     overType: typeof p.overType === 'string' ? p.overType.slice(0, 20) : undefined,
     playing: p.playing === true,
   }
+}
+
+/**
+ * How long a player can stay invisible before the room writes them off. Generous on purpose: a
+ * browser refresh drops presence for a few seconds and must never cost someone the match.
+ */
+export const FORFEIT_MS = 75_000
+
+/** Gone long enough to count as having walked away. Players who already finished keep their real ending. */
+export function hasForfeited(p: NetPlayer, now = Date.now()): boolean {
+  return !p.over && !!p.absent && p.absentSince !== undefined && now - p.absentSince > FORFEIT_MS
+}
+
+/** Still contesting the market: not finished, not walked away. */
+export function isContesting(p: NetPlayer, now = Date.now()): boolean {
+  return !p.over && !hasForfeited(p, now)
 }
 
 function readPlayers(): NetPlayer[] {
