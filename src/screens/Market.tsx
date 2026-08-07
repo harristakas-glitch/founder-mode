@@ -43,6 +43,8 @@ export function Market() {
           cash: isMe ? game.cash : p.cash,
           rev: isMe ? game.lastRevenue : p.rev,
           pmf: isMe ? game.pmf : p.pmf,
+          // still in the match, just not visible on the wire this instant
+          absent: !isMe && !!p.absent,
         }
       })
     : [
@@ -58,6 +60,7 @@ export function Market() {
           cash: undefined as number | undefined,
           rev: undefined as number | undefined,
           pmf: undefined as number | undefined,
+          absent: false,
         },
       ]
 
@@ -75,6 +78,7 @@ export function Market() {
       cash: undefined as number | undefined,
       rev: undefined as number | undefined,
       pmf: undefined as number | undefined,
+      absent: false,
     })),
   ].sort((a, b) => Number(b.alive) - Number(a.alive) || b.users - a.users)
 
@@ -138,6 +142,12 @@ export function Market() {
                     <Td>
                       <b>{r.name}</b>
                       {!r.alive && <span className="text-mut"> · shut down</span>}
+                      {r.alive && r.absent && (
+                        <span className="text-warn" title="We've lost their connection. They're still in the match and still hold their users.">
+                          {' '}
+                          · reconnecting
+                        </span>
+                      )}
                     </Td>
                     <Td>{r.alive ? r.stage : '☠️'}</Td>
                     <Td right>{num(r.users)}</Td>

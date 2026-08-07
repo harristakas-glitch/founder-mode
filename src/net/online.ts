@@ -19,6 +19,13 @@ export interface NetPlayer {
   over: boolean
   overType?: string
   playing?: boolean // in the match (vs still sitting in the lobby) — absent on older clients
+  /**
+   * Client-local only: never sent, never read off the wire. Supabase presence is ephemeral, so a
+   * backgrounded tab or a blipped socket drops a peer from the next sync even though they are
+   * still in the match. Once a match is under way the store keeps those players and flags them
+   * here rather than deleting them — see the roster merge in `onPlayers`.
+   */
+  absent?: boolean
   // open-book intel (multiplayer is a clear-information game; older clients omit these)
   cash?: number
   rev?: number // weekly revenue

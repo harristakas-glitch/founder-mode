@@ -100,30 +100,77 @@ bankruptcy, not a value play) — **do not change the numbers.** The problem is 
 UI never explains the trade. **Suggested:** a line on the panel — "selling 2% for the cash value
 of 1.4%; this only pays off if the run ends badly."
 
-### 4.3 Career: Enterprise Bet looks dominant, Disciplined Discovery underperforms
-Measured with `npx tsx test/career-bots.ts` (8 seeds, 90 weeks, SaaS):
+### 4.3 Career strategy spread — RESOLVED: it was the bot, but not the gate we blamed
+Re-measured with `npm run bots` (24 seeds × 90 weeks, deterministic) after the cohort-retention
+fix. Median, with [worst…best] across seeds:
 
-| Strategy | Alive | Customers | 4wk retention | Rev/wk | Valuation | Wk to $2k/wk |
+**B2B SaaS**
+
+| Strategy | Alive | Customers | 4wk retention | Rev/wk | Valuation | Reached $2k/wk |
 |---|---|---|---|---|---|---|
-| Careless Growth | 8/8 | 472 | 25% | $1.2k | $2.7M | never |
-| Disciplined Discovery | 4/8 | 212 | 62% | $1.0k | $2.4M | never |
-| Enterprise Bet | 7/8 | 423 | 66% | $4.7k | $5.5M | 36 |
+| Careless Growth | 19/24 | 373 [238…837] | 48% [40…70] | $909 [$0.5k…$3.5k] | $2.7M [1.3…4.6] | 2/24 |
+| Disciplined Discovery | 20/24 | 476 [175…744] | 67% [48…85] | $3,689 [$1.7k…$9.1k] | $4.8M [2.7…11.2] | 21/24, wk 36 |
+| Enterprise Bet | 19/24 | 355 [158…722] | 64% [53…92] | $3,249 [$1.3k…$10.6k] | $4.4M [2.7…10.6] | 21/24, wk 44 |
 
-Enterprise Bet leads on revenue (4×), valuation (2×), PMF status and time-to-revenue, and is
-near the top on survival. **Disciplined Discovery — the strategy the mode is meant to teach —
-finishes worst on almost every axis and dies half the time.**
+**Fintech** (second sector, to check the result isn't a single-market artifact)
 
-Two candidate causes, not yet separated:
-1. **Bot artifact.** The disciplined bot holds marketing at $3k/wk until 4-week retention
-   exceeds 0.72, but the median it achieves is 0.62 — so it starves itself indefinitely while
-   paying $4k–28k per experiment. A gate it can rarely pass is a bot bug, not a game truth.
-2. **Real imbalance.** High willingness-to-pay segments may simply pay for themselves faster
-   than discovery pays off, making research a luxury rather than an edge.
+| Strategy | Alive | Customers | 4wk retention | Rev/wk | Valuation | Reached $2k/wk |
+|---|---|---|---|---|---|---|
+| Careless Growth | 19/24 | 388 | 46% | $357 | $2.1M | 0/24 |
+| Disciplined Discovery | 13/24 | 482 | 62% | $1,607 | $3.0M | 8/24, wk 68 |
+| Enterprise Bet | 15/24 | 372 | 61% | $1,413 | $2.8M | 6/24, wk 70 |
 
-**Done when:** the disciplined bot scales on a reachable trigger (e.g. retention above the
-*segment's* believed potential rather than a fixed 0.72), the three strategies are re-measured,
-and either the spread is defensible or the economics are retuned. Do not declare "no dominant
-strategy" again without a table showing what each strategy loses on.
+**Verdict: bot bug, not an economic imbalance.** Discovery and the enterprise bet now finish
+within noise of each other on every axis, and both beat careless spending on revenue and
+valuation by 3–4× — a gap far outside noise. The strategies genuinely trade off:
+
+- **Careless Growth** loses on money. It survives as well as anyone (it barely spends) but
+  reaches $2k/wk in 2 of 24 SaaS runs and 0 of 24 fintech runs. It stays alive by staying small.
+- **Enterprise Bet** loses on speed: median week 44 to $2k/wk vs 36 for discovery in SaaS, and
+  fewer customers. Betting the hand without checking it costs you the time you'd have saved.
+- **Disciplined Discovery** loses on survival where evidence is expensive: 13/24 in fintech vs
+  19/24 careless. Buying evidence is a real cost, and in low-reachability markets it can kill you.
+
+The gap between Disciplined and Enterprise (13% revenue, 9% valuation, 1 survivor) is **inside
+the noise at 24 seeds — do not read it as a ranking.** The Careless gap is not.
+
+**The 4.3 hypothesis was wrong.** Reverting the 0.72 marketing gate on its own changes nothing
+(20→22 alive, $3.7k→$3.4k rev — noise), because tiny cohorts round to 100% retention and the
+gate opened at week 6–11 anyway. Removing each fix one at a time (SaaS / fintech medians):
+
+| Fix removed | Alive | Rev/wk |
+|---|---|---|
+| *(all four fixes, shipped)* | 20/24 · 13/24 | $3,689 · $1,607 |
+| revert marketing gate to 0.72 | 22/24 · 15/24 | $3,354 · $1,509 |
+| revert experiment budget rule | **10/24 · 6/24** | $2,491 · $970 |
+| revert price/focus/allocation | 19/24 · 15/24 | **$1,084 · $471** |
+| revert discovery marketing floor | 22/24 · 18/24 | $3,069 · $1,538 |
+| all four reverted (the old bot) | 13/24 · 11/24 | $934 · $374 |
+
+Two real bot bugs, both in `test/career-bots.ts`, now fixed:
+
+1. **The disciplined bot never used the levers the other two bots used.** Careless and Enterprise
+   each set pricing, product focus and engineering allocation; the disciplined bot left all three
+   at defaults for 90 weeks. The harness was comparing a configured company against an
+   unconfigured one, and calling the difference "strategy". Worth 3.4× revenue on its own — it is
+   the entire original gap. It now sets all three *from its own beliefs*, which is the point of
+   the mode.
+2. **It had no discovery budget and bankrupted itself buying pilots.** A pilot's reliability is
+   throttled by segment reachability, so reaching the bot's 0.7 confidence bar on retention costs
+   8–13 pilots — $224k–$364k and 56–91 weeks, more than the starting cash and longer than the
+   campaign. It bought evidence it could never finish collecting. Now it only starts an experiment
+   it can carry (cash > 8× cost), and uses the confidence bars the game itself recommends to the
+   player in `suggestedExperiment` rather than a stricter set invented in the harness.
+
+Also changed, both neutral in the numbers but kept because the old behaviour was indefensible:
+the marketing gate is now "enough retained customers to read the number, at or above the 62%
+payback threshold the game itself states in `pmfBlocker`, and not still falling" instead of an
+absolute 0.72 some segments cannot reach; and the pre-scale marketing budget now covers the
+marketing its own experiments consume (a landing-page test eats $3k/wk, so a $3k budget bought
+literally zero customers).
+
+**Resolved.** No change to `src/game/**`. Three findings that fell out of this and are *not*
+resolved are filed as 4.5, 4.6 and 4.7.
 
 ### 4.4 The PvP retune is unmeasured in a real arena
 The shield, poach, raid-leverage and attack-cost changes were verified mechanically (unit
@@ -131,6 +178,58 @@ tests) but **not** re-measured in 4-player matches. The original audit's arena n
 stale. **Done when:** a 4-player arena harness re-runs builder / raider / smearer / poacher
 strategies over 25+ matches and confirms attacking is viable but not dominant, and that buying
 a shield is no longer a net loss.
+
+### 4.5 `resolveChoiceOnState` is the one player action that isn't seeded
+Every other engine entry point goes through `seeded()` or `withSeed()`, per brief §39: same seed
+plus same decisions must replay identically. `resolveChoiceOnState` does not, and the
+`applyEffects` path it calls draws `rand(5, 8)` and `randomName()` when a choice hires someone —
+so those draws come from `Math.random`. Found because the bot harness returned a different result
+on every run of the same seeds: survival moved by 3/24 between identical invocations.
+
+This is not harness-only. Any replay, shared seed or leaderboard verification that involves an
+inbox choice with a hire attached will diverge. `test/career-bots.ts` works around it by wrapping
+its own pre-week actions in `withSeed`; the workaround should be deleted when the engine is fixed.
+
+**Done when:** `resolveChoiceOnState` is wrapped in `seeded(s, …)` like its siblings, a
+regression test asserts that resolving the same choice on the same seed twice gives identical
+state, and the harness workaround is removed.
+
+### 4.6 4-week retention reads 100% on cohorts too small to measure
+`tickCareerPMF` snapshots a cohort's four-week retention as
+`round(activeCustomers) / startingCustomers`. On a cohort of 1–5 people the rounding never loses
+anyone, so the snapshot is exactly 100%. Measured over 5 SaaS seeds to week 30: at $800/wk
+marketing, 42 of 131 snapshots read 100% and the median cohort was 8 people; at $12k/wk, 1 of 79.
+
+The effect is that a company that has barely started reads as having perfect retention, and
+because retention is 46 of the 100 points in `derivePmfForSegment`, PMF is systematically
+flattering exactly when the player has the least evidence. It also silently defeats any
+retention-based gate: the disciplined bot's 0.72 gate opened at week 6–11 on fake readings.
+
+**Proposal (needs owner approval — it changes balance):** skip the snapshot for cohorts below
+some minimum size, or weight the segment average by cohort size *and* discard cohorts under
+~5 people. `PMF_CUSTOMER_FLOOR` (15) already exists for exactly this reason at the segment level;
+the cohort level has no equivalent. **Done when:** small cohorts no longer produce 100% readings
+and `npm run bots` is re-run to confirm the strategy spread is unchanged.
+
+### 4.7 Two sectors kill every strategy
+`npm run bots -- all` over 24 seeds, survivors at week 90:
+
+| Sector | Careless | Disciplined | Enterprise |
+|---|---|---|---|
+| B2B SaaS | 19/24 | 20/24 | 19/24 |
+| Dev Tools | 21/24 | 17/24 | 17/24 |
+| E-commerce | **0/24** | **3/24** | **2/24** |
+| Fintech | 19/24 | 13/24 | 15/24 |
+| Social App | **2/24** | **0/24** | **0/24** |
+
+E-commerce and Social are not hard, they are unsurvivable — no strategy clears 3/24, and Social
+reaches $2k/wk in 0 of 72 runs across all three strategies. This is a *sector* problem, not a
+strategy problem: the same three bots are fine in three of five sectors. Most likely candidates
+are `arpuWeekly` versus `churn` in `src/game/data.ts` for those two sectors, and for Social the
+fact that its best segment (Casual Users) has willingness-to-pay 10.
+
+**Done when:** the two sectors are diagnosed (revenue per customer against weekly burn), retuned,
+and `npm run bots -- all` shows survival in the same band as the other three.
 
 ---
 

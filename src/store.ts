@@ -311,6 +311,11 @@ export const useStore = create<Store>()(
         Math.min(1e10, players.reduce((a, p) => (p.id === myId() || p.over ? a : a + (Number.isFinite(p.users) ? Math.max(0, p.users) : 0)), 0))
 
       let advancing = false
+      // My own readiness is owned locally, never read back off the wire. `channel.track` round-trips
+      // asynchronously, so a presence sync can carry a stale copy of me and silently un-ready me —
+      // and since the week only moves on a sync or a ready click, there was nothing left to retrigger
+      // it. Both clients then sat on "Waiting for rivals" forever.
+      let myReady = false
       const attacksTakenThisWeek = new Set<string>()
 
       // The 'start' broadcast is unauthenticated: only the presence-declared host may open a match,
@@ -337,43 +342,72 @@ export const useStore = create<Store>()(
       const maybeNetAdvance = () => {
         const { game, online } = get()
         if (!game || !online || online.phase !== 'playing' || advancing) return
-        const players = online.players
-        if (players.length === 0) return
+        if (online.players.length === 0) return
+        // My own row is locally owned, so a stale presence echo can never un-ready me or rewind my week.
+        const players = online.players.map((p) =>
+          p.id === myId() ? { ...p, ready: myReady, week: game.week, absent: false } : p,
+        )
 
         // catch up if the room has moved past us (e.g. we reconnected). A peer can advertise any
         // week it likes, so never simulate past the match cap or for more than a sane number of turns.
-        const cap = game.challenge?.cap ?? MATCH_CAP
-        const maxWeek = Math.min(cap, Math.max(...players.map((p) => p.week)))
-        if (!game.gameOver && maxWeek > game.week) {
-          advancing = true
-          let g = game
-          for (let i = 0; i < CATCH_UP_LIMIT && g.week < maxWeek && !g.gameOver; i++) g = advanceWeek(g, othersUsers(players))
+        // Commit a simulated week. `advancing` MUST come back down even if advanceWeek throws —
+        // leaving it latched used to brick the client for the rest of the match, and because the
+        // other players wait on our readiness it took the whole room down with it.
+        const commit = (g: GameState) => {
           if (g.gameOver) recordRun(g)
-          advancing = false
           weekSounds(g)
           awardAchievements(g)
+          myReady = false
           // we arrive mid-round: give ourselves the rest of this round, not an expired clock
           set({ game: g, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000 } })
           void pushState({ ...myNetSummary(g), ready: false })
+        }
+
+        const cap = game.challenge?.cap ?? MATCH_CAP
+        const maxWeek = Math.min(cap, Math.max(...players.map((p) => p.week)))
+        if (!game.gameOver && maxWeek > game.week) {
+          let g = game
+          advancing = true
+          try {
+            for (let i = 0; i < CATCH_UP_LIMIT && g.week < maxWeek && !g.gameOver; i++) g = advanceWeek(g, othersUsers(players))
+          } catch (e) {
+            console.error('catch-up failed; staying on the current week', e)
+            return
+          } finally {
+            advancing = false
+          }
+          commit(g)
           return
         }
 
-        // advance when every living player who is actually in the match is ready for this week.
-        // Someone still sitting in the lobby (joined late, or mid-reconnect) must not deadlock the room.
-        const living = players.filter((p) => !p.over && p.playing !== false)
+        // Advance when every living player who is actually in the match is ready for this week.
+        // Someone still sitting in the lobby (joined late, or mid-reconnect) must not deadlock the
+        // room — and neither must someone whose presence dropped: they keep their leaderboard row
+        // and their share of the market, but they cannot hold the clock.
+        const living = players.filter((p) => !p.over && p.playing !== false && !p.absent)
         if (living.length === 0) return
         const allReady = living.every((p) => p.ready && p.week >= game.week)
         if (!allReady) return
         if (game.gameOver) return
+        let next: GameState
         advancing = true
-        const next = advanceWeek(game, othersUsers(players))
-        if (next.gameOver) recordRun(next)
-        advancing = false
-        weekSounds(next)
-        awardAchievements(next)
-        set({ game: next, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000 } })
-        void pushState({ ...myNetSummary(next), ready: false })
+        try {
+          next = advanceWeek(game, othersUsers(players))
+        } catch (e) {
+          console.error('week failed to simulate; staying put', e)
+          return
+        } finally {
+          advancing = false
+        }
+        commit(next)
       }
+
+      // Safety net. The week only moved on a presence sync or a ready click, so one dropped or
+      // stale sync could leave every player ready and the room frozen with no event left to
+      // retrigger it. Re-checking on a timer makes that state self-healing instead of terminal.
+      setInterval(() => {
+        if (get().online?.phase === 'playing') maybeNetAdvance()
+      }, 1000)
 
       // toast an emote for ~4 seconds
       const showEmote = (p: EmotePayload) => {
@@ -388,9 +422,22 @@ export const useStore = create<Store>()(
       }
 
       const handlers = {
-        onPlayers: (players: NetPlayer[]) => {
+        onPlayers: (incoming: NetPlayer[]) => {
           const online = get().online
           if (!online) return
+          // Presence is ephemeral: a backgrounded tab or a blipped socket drops a peer from the next
+          // sync even though they are still in the match. In a lobby that is correct — people really
+          // do leave. Once the match is under way the roster is fixed, so keep everyone we have seen
+          // and flag them absent rather than deleting them. Deleting erased a rival from the
+          // leaderboard AND from the market-share denominator, which then read as 100% share.
+          let players = incoming
+          if (online.phase === 'playing') {
+            const merged = new Map(incoming.map((p) => [p.id, { ...p, absent: false }]))
+            for (const prev of online.players) if (!merged.has(prev.id)) merged.set(prev.id, { ...prev, absent: true })
+            players = [...merged.values()].sort((a, b) => Number(b.host) - Number(a.host) || a.company.localeCompare(b.company))
+          }
+          // my own row is locally owned — a stale echo must never un-ready me (see `myReady`)
+          players = players.map((p) => (p.id === myId() ? { ...p, ready: myReady, absent: false } : p))
           // host migration: if the host vanished from a lobby, the lowest player id takes the chair
           if (online.phase === 'lobby' && players.length > 0 && !players.some((p) => p.host)) {
             const minId = [...players].sort((a, b) => a.id.localeCompare(b.id))[0].id
@@ -542,6 +589,7 @@ export const useStore = create<Store>()(
           // online: mark myself ready; the week moves when everyone is
           if (game.gameOver) return
           sfx.week()
+          myReady = true
           const players = online.players.map((p) => (p.id === myId() ? { ...p, ready: true } : p))
           set({ online: { ...online, players } })
           void pushState({ ready: true, ...myNetSummary(game) })
@@ -626,6 +674,7 @@ export const useStore = create<Store>()(
         cancelReady: () => {
           const { game, online } = get()
           if (!game || !online || online.phase !== 'playing' || game.gameOver) return
+          myReady = false
           const players = online.players.map((p) => (p.id === myId() ? { ...p, ready: false } : p))
           set({ online: { ...online, players } })
           void pushState({ ready: false })

@@ -1,34 +1,69 @@
 // Career PMF bot strategies (brief §53). Purpose is to detect broken or dominant play,
 // not to make every bot succeed.
-import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState } from '../src/game/engine'
-import { canRunExperiment, experimentDef, segmentsForSector, startExperiment, totalCustomers, PMF_LABEL, derivePmfForSegment, segmentPriceFit, segmentProductFit, segmentCeiling } from '../src/game/career/pmf'
-import { repositionTo } from '../src/game/career/tick'
+//
+// Run: `npm run bots` (saas + fintech), or `npm run bots -- all` for every sector.
+//
+// Read this before trusting a number out of it:
+//
+//  * **Determinism.** `resolveChoiceOnState` is the one player action the engine does not wrap
+//    in `seeded()`, so an inbox choice that hires someone draws from `Math.random` and the same
+//    seed produces a different run every time. Until that is fixed in the engine, the harness
+//    wraps its own pre-week actions in `withSeed` so a measurement is reproducible. Remove the
+//    wrapper and the survival counts move by 3/24 between identical runs.
+//  * **Fair levers.** Every strategy sets pricing, product focus and engineering allocation —
+//    the levers that actually move Career outcomes. What differs is *how each one decides*:
+//    Careless guesses, Enterprise bets a fixed hand, Disciplined reads its own beliefs. Giving
+//    only one bot the levers measures the levers, not the strategy.
+
+import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState, withSeed, valuation } from '../src/game/engine'
+import {
+  canRunExperiment,
+  experimentDef,
+  segmentsForSector,
+  segmentDef,
+  startExperiment,
+  totalCustomers,
+  PMF_LABEL,
+  PMF_CUSTOMER_FLOOR,
+  derivePmfForSegment,
+  segmentPriceFit,
+  segmentProductFit,
+  segmentCeiling,
+} from '../src/game/career/pmf'
+import { repositionTo, careerMarketingDrain } from '../src/game/career/tick'
 import { sectorById } from '../src/game/data'
-import { valuation } from '../src/game/engine'
-import type { GameState } from '../src/game/types'
+import type { GameState, SectorId } from '../src/game/types'
 import type { ExperimentType } from '../src/game/career/types'
 
 let ids = 0
 const uid = () => `bot${ids++}`
 
-function cfg(seed: number) {
-  return { mode: 'career' as const, format: 'standard' as const, sector: 'saas' as const, seed }
+function cfg(seed: number, sector: SectorId) {
+  return { mode: 'career' as const, format: 'standard' as const, sector, seed }
+}
+
+/** Make the bot's own engine calls reproducible — see the determinism note at the top. */
+function stable<T>(s: GameState, fn: () => T): T {
+  const seed = s.config?.seed ?? 0
+  return withSeed((Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(s.week, 0xc2b2ae35)) >>> 0, fn)
 }
 
 function common(s: GameState) {
-  for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
-  if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
-  if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
-  const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
-  // Hire against what the business can carry, not against a runway number. The earlier
-  // version hired 8 people on $1k/wk of revenue and every strategy died of payroll, which
-  // told us nothing about the strategies.
-  const affordable = Math.min(8, 1 + Math.floor(s.lastRevenue / 2500))
-  if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < affordable && s.candidates.length) {
-    const best = [...s.candidates].sort((a, b) => b.skill - a.skill)[0]
-    s.candidates = s.candidates.filter((x) => x.id !== best.id)
-    s.offersOut.push(best)
-  }
+  stable(s, () => {
+    for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
+    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
+    if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
+    const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
+    // Hire against what the business can carry, not against a runway number. The earlier
+    // version hired 8 people on $1k/wk of revenue and every strategy died of payroll, which
+    // told us nothing about the strategies.
+    const affordable = Math.min(8, 1 + Math.floor(s.lastRevenue / 2500))
+    if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < affordable && s.candidates.length) {
+      const best = [...s.candidates].sort((a, b) => b.skill - a.skill)[0]
+      s.candidates = s.candidates.filter((x) => x.id !== best.id)
+      s.offersOut.push(best)
+    }
+  })
 }
 
 function tryExperiment(s: GameState, type: ExperimentType, seg: string) {
@@ -39,13 +74,15 @@ function tryExperiment(s: GameState, type: ExperimentType, seg: string) {
   }
 }
 
-// 1. Picks the easiest segment, barely researches, spends hard.
-function carelessGrowth(seed: number, weeks = 90) {
-  let s = newGame('Careless', 'saas', 'technical', { config: cfg(seed) })
-  const segs = segmentsForSector('saas')
+// 1. Picks the easiest segment, barely researches, spends hard. Ships features, never quality.
+function carelessGrowth(seed: number, sector: SectorId, weeks = 90) {
+  let s = newGame('Careless', sector, 'technical', { config: cfg(seed, sector) })
+  const segs = segmentsForSector(sector)
   const easiest = [...segs].sort((a, b) => b.base.acquisitionAccessibility - a.base.acquisitionAccessibility)[0]
   repositionTo(s, easiest.id, 1)
   s.career!.pricing = 'low'
+  s.career!.focus = segmentDef(sector, easiest.id).values[0]
+  s.allocation = { features: 65, quality: 10, bugs: 10, research: 15, bet: 0 }
   for (let w = 0; w < weeks && !s.gameOver; w++) {
     common(s)
     s.marketingSpend = Math.min(Math.max(2_000, s.lastRevenue * 1.2), s.cash * 0.06, 200_000)
@@ -54,46 +91,86 @@ function carelessGrowth(seed: number, weeks = 90) {
   return s
 }
 
-// 2. Interviews → prototype → pricing → pilot, targets on evidence, scales only after retention.
-function disciplinedDiscovery(seed: number, weeks = 90) {
-  let s = newGame('Disciplined', 'saas', 'technical', { config: cfg(seed) })
+// 2. Interviews → prototype → pricing → pilot, targets on evidence, prices and builds for the
+//    segment its beliefs point at, and scales only once retention means something.
+function disciplinedDiscovery(seed: number, sector: SectorId, weeks = 90) {
+  let s = newGame('Disciplined', sector, 'technical', { config: cfg(seed, sector) })
+  const retentionHistory: number[] = []
   for (let w = 0; w < weeks && !s.gameOver; w++) {
     common(s)
     const c = s.career!
     const target = c.primaryTargetSegmentId
     const b = c.segmentBeliefs[target]
-    // run the cheapest experiment that still answers an open question
-    if (b.needIntensity.confidence < 0.45) tryExperiment(s, 'interview', target)
-    else if (b.acquisitionAccessibility.confidence < 0.45) tryExperiment(s, 'landing_page', target)
-    else if (b.productRequirement.confidence < 0.5) tryExperiment(s, 'prototype', target)
-    else if (b.willingnessToPay.confidence < 0.6) tryExperiment(s, 'pricing_test', target)
-    else if (b.retentionPotential.confidence < 0.7) tryExperiment(s, 'pilot', target)
+
+    // Run the cheapest experiment that still answers an open question — but only when the
+    // company can carry it. Without the budget rule the bot bought $28k pilots on a dwindling
+    // balance forever: a pilot's reliability is throttled by segment reachability, so reaching
+    // the old 0.7 bar on retention costs 8–13 pilots ($224k–$364k, 56–91 weeks) — more than the
+    // starting cash and longer than the campaign. It went bankrupt buying evidence it could
+    // never finish collecting. Confidence bars are the ones the game itself recommends to the
+    // player in `suggestedExperiment`, rather than a stricter set invented here.
+    const afford = (t: ExperimentType) => s.cash > experimentDef(t).cashCost * 8
+    if (b.needIntensity.confidence < 0.4) { if (afford('interview')) tryExperiment(s, 'interview', target) }
+    else if (b.acquisitionAccessibility.confidence < 0.4) { if (afford('landing_page')) tryExperiment(s, 'landing_page', target) }
+    else if (b.productRequirement.confidence < 0.45) { if (afford('prototype')) tryExperiment(s, 'prototype', target) }
+    else if (b.willingnessToPay.confidence < 0.55) { if (afford('pricing_test')) tryExperiment(s, 'pricing_test', target) }
+    else if (b.retentionPotential.confidence < 0.65) { if (afford('pilot')) tryExperiment(s, 'pilot', target) }
 
     // after week 30, switch to the segment whose evidence looks best
     if (s.week === 30) {
-      const scored = segmentsForSector('saas').map((sg) => {
+      const scored = segmentsForSector(sector).map((sg) => {
         const bb = c.segmentBeliefs[sg.id]
         return { id: sg.id, v: bb.needIntensity.estimate * 0.4 + bb.willingnessToPay.estimate * 0.35 + bb.retentionPotential.estimate * 0.55 }
       })
       const best = scored.sort((x, y) => y.v - x.v)[0]
       if (best.id !== target) repositionTo(s, best.id, s.week)
     }
-    // only scale once the base actually holds
-    const retention = c.retentionBySegment[c.primaryTargetSegmentId] ?? 0
-    s.marketingSpend = retention > 0.72 ? Math.min(Math.max(4_000, s.lastRevenue * 1.1), s.cash * 0.05, 180_000) : Math.min(3_000, s.cash * 0.004)
+
+    // Act on the beliefs. A bot that researches willingness to pay and then never changes its
+    // price is not disciplined, it is inert — and it was losing to bots that simply guessed.
+    const now = c.primaryTargetSegmentId
+    const belief = c.segmentBeliefs[now]
+    c.pricing = belief.willingnessToPay.estimate >= 70 ? 'premium' : belief.willingnessToPay.estimate >= 40 ? 'market' : 'low'
+    c.focus = segmentDef(sector, now).values[0]
+    s.allocation =
+      belief.productRequirement.estimate > 65
+        ? { features: 30, quality: 45, bugs: 15, research: 10, bet: 0 }
+        : { features: 45, quality: 30, bugs: 15, research: 10, bet: 0 }
+
+    // Scale when the retention number MEANS something, not when it clears an absolute bar the
+    // segment may be incapable of. Three conditions, all visible to a player:
+    //   1. enough retained customers that the measurement is real (the game's own PMF floor),
+    //   2. at or above the payback threshold the game itself states (`pmfBlocker`, 62%),
+    //   3. not still falling.
+    // The old test was `retention > 0.72`. In fintech and social that bar is out of reach for
+    // most seeds; in saas and devtools it opened at week 6–11, but on 1–5 person cohorts whose
+    // rounding makes them read 100% (see BACKLOG 4.6). Neither is a decision worth making.
+    const retention = c.retentionBySegment[now] ?? 0
+    retentionHistory.push(retention)
+    const fourWeeksAgo = retentionHistory[retentionHistory.length - 5]
+    const settled = fourWeeksAgo === undefined || retention >= fourWeeksAgo - 0.02
+    const proven = totalCustomers(c, now) >= PMF_CUSTOMER_FLOOR && retention >= 0.62 && settled
+
+    // Below the gate it still has to fund the marketing its own experiments consume — a landing
+    // page test eats $3k/wk of budget, so a $3k budget bought literally no customers and the
+    // company could never accumulate a cohort big enough to measure.
+    const discoveryFloor = careerMarketingDrain(s) + 3_000
+    s.marketingSpend = proven
+      ? Math.min(Math.max(4_000, s.lastRevenue * 1.1), s.cash * 0.05, 180_000)
+      : Math.min(discoveryFloor, s.cash * 0.02)
     s = advanceWeek(s)
   }
   return s
 }
 
 // 3. Bets on the high-value segment, invests in product, accepts slow growth.
-function enterpriseBet(seed: number, weeks = 90) {
-  let s = newGame('Enterprise', 'saas', 'technical', { config: cfg(seed) })
-  const segs = segmentsForSector('saas')
+function enterpriseBet(seed: number, sector: SectorId, weeks = 90) {
+  let s = newGame('Enterprise', sector, 'technical', { config: cfg(seed, sector) })
+  const segs = segmentsForSector(sector)
   const richest = [...segs].sort((a, b) => b.base.willingnessToPay - a.base.willingnessToPay)[0]
   repositionTo(s, richest.id, 1)
   s.career!.pricing = 'premium'
-  s.career!.focus = 'enterprise_readiness'
+  s.career!.focus = segmentDef(sector, richest.id).values[0]
   s.allocation = { features: 30, quality: 45, bugs: 15, research: 10, bet: 0 }
   for (let w = 0; w < weeks && !s.gameOver; w++) {
     common(s)
@@ -105,52 +182,65 @@ function enterpriseBet(seed: number, weeks = 90) {
   return s
 }
 
-function report(name: string, runs: GameState[]) {
-  const alive = runs.filter((r) => !r.gameOver).length
-  const dead = runs.filter((r) => r.gameOver?.type === 'bankrupt' || r.gameOver?.type === 'fired').length
-  const cust = runs.map((r) => r.users).sort((a, b) => a - b)
-  const cash = runs.map((r) => Math.round(r.cash)).sort((a, b) => a - b)
-  const mid = Math.floor(runs.length / 2)
-  const pmfs = runs.map((r) => {
-    if (!r.career) return 'n/a'
-    const tam = sectorById(r.sector).tam
-    const best = segmentsForSector(r.sector)
-      .map((sg) => {
-        const t = r.career!.segmentTruth[sg.id]
-        return derivePmfForSegment({
-          segmentId: sg.id,
-          customers: totalCustomers(r.career!, sg.id),
-          retention4wk: r.career!.retentionBySegment[sg.id] ?? 0,
-          priceFit: segmentPriceFit(t, r.career!.pricing),
-          productFit: segmentProductFit(t, r.quality, r.career!.focus, r.sector, sg.id),
-          truth: t,
-          beliefs: r.career!.segmentBeliefs[sg.id],
-          ceiling: segmentCeiling(t, tam),
-        })
+// ---------- reporting ----------
+// Medians with a best/worst spread. With 24 seeds a 10% gap between two strategies is noise;
+// only differences you can see in the spread are worth acting on.
+
+const q = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(xs.length * p))]
+const money = (n: number) => '$' + Math.round(n).toLocaleString()
+
+function bestPmfLabel(r: GameState): string {
+  if (!r.career) return 'n/a'
+  const tam = sectorById(r.sector).tam
+  const best = segmentsForSector(r.sector)
+    .map((sg) => {
+      const t = r.career!.segmentTruth[sg.id]
+      return derivePmfForSegment({
+        segmentId: sg.id,
+        customers: totalCustomers(r.career!, sg.id),
+        retention4wk: r.career!.retentionBySegment[sg.id] ?? 0,
+        priceFit: segmentPriceFit(t, r.career!.pricing),
+        productFit: segmentProductFit(t, r.quality, r.career!.focus, r.sector, sg.id),
+        truth: t,
+        beliefs: r.career!.segmentBeliefs[sg.id],
+        ceiling: segmentCeiling(t, tam),
       })
-      .sort((a, b) => b.score - a.score)[0]
-    return PMF_LABEL[best.status]
-  })
-  const counts: Record<string, number> = {}
-  for (const p of pmfs) counts[p] = (counts[p] ?? 0) + 1
-  const retention = runs.map((r) => (r.career ? (r.career.retentionBySegment[r.career.primaryTargetSegmentId] ?? 0) : 0)).sort((a, b) => a - b)
-  const rev = runs.map((r) => Math.round(r.lastRevenue)).sort((a, b) => a - b)
-  const val = runs.map((r) => Math.round(valuation(r))).sort((a, b) => a - b)
-  const spent = runs.map((r) => Math.round(r.career ? r.career.cohorts.reduce((a, c) => a + c.acquisitionCost, 0) : 0)).sort((a, b) => a - b)
-  const firstRev = runs
-    .map((r) => r.history.find((x) => x.revenue > 2000)?.week ?? 999)
-    .sort((a, b) => a - b)
-  console.log(
-    `${name.padEnd(22)} alive ${String(alive).padStart(2)}/${runs.length} · died ${dead} · median customers ${cust[mid].toLocaleString().padStart(8)} · median cash ${('$' + cash[mid].toLocaleString()).padStart(12)} · median 4wk retention ${(retention[mid] * 100).toFixed(0)}%`,
-  )
-  console.log(`${' '.repeat(22)} best-segment PMF: ${Object.entries(counts).map(([k, v]) => `${k}×${v}`).join(', ')}`)
-  console.log(
-    `${' '.repeat(22)} median rev/wk $${rev[mid].toLocaleString()} · median valuation $${(val[mid] / 1e6).toFixed(1)}M · median wk to $2k/wk revenue ${firstRev[mid] === 999 ? 'never' : firstRev[mid]} · median ad spend $${spent[mid].toLocaleString()}`,
-  )
+    })
+    .sort((a, b) => b.score - a.score)[0]
+  return PMF_LABEL[best.status]
 }
 
-const SEEDS = [11, 22, 33, 44, 55, 66, 77, 88]
-console.log('— Career bot strategies, 8 seeds, 90 weeks —\n')
-report('Careless Growth', SEEDS.map((s) => carelessGrowth(s)))
-report('Disciplined Discovery', SEEDS.map((s) => disciplinedDiscovery(s)))
-report('Enterprise Bet', SEEDS.map((s) => enterpriseBet(s)))
+function report(name: string, runs: GameState[]) {
+  const alive = runs.filter((r) => !r.gameOver).length
+  const cust = runs.map((r) => r.users)
+  const retention = runs.map((r) => (r.career ? (r.career.retentionBySegment[r.career.primaryTargetSegmentId] ?? 0) : 0))
+  const rev = runs.map((r) => r.lastRevenue)
+  const val = runs.map((r) => valuation(r))
+  const firstRev = runs.map((r) => r.history.find((x) => x.revenue > 2000)?.week ?? 999)
+  const reached = firstRev.filter((w) => w < 999).length
+  const counts: Record<string, number> = {}
+  for (const r of runs) {
+    const l = bestPmfLabel(r)
+    counts[l] = (counts[l] ?? 0) + 1
+  }
+  const spread = (xs: number[], fmt: (n: number) => string) => `${fmt(q(xs, 0.5))} [${fmt(Math.min(...xs))}…${fmt(Math.max(...xs))}]`
+  console.log(
+    `  ${name.padEnd(22)} alive ${String(alive).padStart(2)}/${runs.length} · customers ${spread(cust, (n) => Math.round(n).toLocaleString()).padEnd(24)} · 4wk retention ${spread(retention, (n) => `${Math.round(n * 100)}%`).padEnd(20)}`,
+  )
+  console.log(
+    `  ${' '.repeat(22)} rev/wk ${spread(rev, money).padEnd(28)} · valuation ${spread(val, (n) => `$${(n / 1e6).toFixed(1)}M`).padEnd(26)} · reached $2k/wk ${reached}/${runs.length}${reached ? ` (median wk ${q(firstRev.filter((w) => w < 999), 0.5)})` : ''}`,
+  )
+  console.log(`  ${' '.repeat(22)} best-segment PMF: ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}×${v}`).join(', ')}`)
+}
+
+const SEEDS = Array.from({ length: 24 }, (_, i) => 11 * (i + 1))
+const ALL_SECTORS: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
+const SECTORS: SectorId[] = process.argv.includes('all') ? ALL_SECTORS : ['saas', 'fintech']
+
+console.log(`— Career bot strategies · ${SEEDS.length} seeds × 90 weeks · median [worst…best] —`)
+for (const sector of SECTORS) {
+  console.log(`\n${sectorById(sector).name}`)
+  report('Careless Growth', SEEDS.map((s) => carelessGrowth(s, sector)))
+  report('Disciplined Discovery', SEEDS.map((s) => disciplinedDiscovery(s, sector)))
+  report('Enterprise Bet', SEEDS.map((s) => enterpriseBet(s, sector)))
+}
