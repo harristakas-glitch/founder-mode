@@ -53,6 +53,35 @@ export interface AttackPayload {
   fromId?: string // sender's player id, for receiver-side rate limiting
 }
 
+/**
+ * Phase 1 of a sealed bid: the hash only. Broadcasting the amount directly would let a modified
+ * client read a rival's premium off the wire and undercut it, which is exactly the thing a sealed
+ * bid is supposed to prevent.
+ */
+export interface CommitPayload {
+  candidateId: string
+  playerId: string
+  company: string
+  commitment: string // sha256(candidateId|premiumPct|nonce|playerId)
+  week: number
+}
+
+/**
+ * Phase 2: the amount and the nonce, sent when the founder locks their turn in. Safe to reveal
+ * then — every bid is already committed, so knowing a rival's number cannot change your own. A
+ * reveal that does not hash back to its commitment is discarded, and so is a missing one.
+ */
+export interface RevealPayload {
+  candidateId: string
+  playerId: string
+  company: string
+  premiumPct: number
+  nonce: string
+  reputation: number
+  runwayWeeks: number
+  week: number
+}
+
 export interface BidPayload {
   candidateId: string
   playerId: string
@@ -79,7 +108,8 @@ export interface Handlers {
   onEmote?: (p: EmotePayload) => void
   onChat?: (p: ChatPayload) => void
   onAttack?: (p: AttackPayload) => void
-  onBid?: (p: BidPayload) => void
+  onCommit?: (p: CommitPayload) => void
+  onReveal?: (p: RevealPayload) => void
 }
 
 let client: SupabaseClient | null = null
@@ -212,16 +242,30 @@ function wire(ch: RealtimeChannel, handlers: Handlers) {
     const text = str(p.text, 200)
     if (text) safe(() => handlers.onChat?.({ from: str(p.from, 30, 'Someone'), text }))
   })
-  ch.on('broadcast', { event: 'bid' }, ({ payload }) => {
+  ch.on('broadcast', { event: 'commit' }, ({ payload }) => {
     const p = (payload ?? {}) as Record<string, unknown>
-    if (typeof p.candidateId !== 'string' || typeof p.playerId !== 'string') return
+    if (typeof p.candidateId !== 'string' || typeof p.playerId !== 'string' || typeof p.commitment !== 'string') return
     safe(() =>
-      handlers.onBid?.({
+      handlers.onCommit?.({
+        candidateId: p.candidateId as string,
+        playerId: (p.playerId as string).slice(0, 64),
+        company: str(p.company, 30, 'A rival'),
+        commitment: (p.commitment as string).slice(0, 64),
+        week: Math.floor(num(p.week, 10_000)),
+      }),
+    )
+  })
+  ch.on('broadcast', { event: 'reveal' }, ({ payload }) => {
+    const p = (payload ?? {}) as Record<string, unknown>
+    if (typeof p.candidateId !== 'string' || typeof p.playerId !== 'string' || typeof p.nonce !== 'string') return
+    safe(() =>
+      handlers.onReveal?.({
         candidateId: p.candidateId as string,
         playerId: (p.playerId as string).slice(0, 64),
         company: str(p.company, 30, 'A rival'),
         // peer-reported and therefore bounded: an unbounded premium would auto-win every auction
         premiumPct: Math.min(100, Math.max(0, num(p.premiumPct, 100))),
+        nonce: (p.nonce as string).slice(0, 64),
         reputation: Math.min(100, Math.max(0, num(p.reputation, 100))),
         runwayWeeks: Math.min(999, num(p.runwayWeeks, 999)),
         week: Math.floor(num(p.week, 10_000)),
@@ -389,8 +433,29 @@ export async function broadcastStart(payload: StartPayload): Promise<void> {
   await channel?.send({ type: 'broadcast', event: 'start', payload })
 }
 
-export async function broadcastBid(payload: BidPayload): Promise<void> {
-  await channel?.send({ type: 'broadcast', event: 'bid', payload })
+export async function broadcastCommit(payload: CommitPayload): Promise<void> {
+  await channel?.send({ type: 'broadcast', event: 'commit', payload })
+}
+
+export async function broadcastReveal(payload: RevealPayload): Promise<void> {
+  await channel?.send({ type: 'broadcast', event: 'reveal', payload })
+}
+
+/** 128 bits of nonce: enough that a commitment cannot be brute-forced back to its premium. */
+export function makeNonce(): string {
+  const b = new Uint8Array(16)
+  crypto.getRandomValues(b)
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * The binding hash. Includes the player id so a commitment cannot be replayed by someone else,
+ * and the candidate id so it cannot be moved to a different auction.
+ */
+export async function hiringCommitment(candidateId: string, premiumPct: number, nonce: string, playerId: string): Promise<string> {
+  const data = new TextEncoder().encode(`${candidateId}|${premiumPct}|${nonce}|${playerId}`)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hash), (x) => x.toString(16).padStart(2, '0')).join('')
 }
 
 export async function broadcastEmote(payload: EmotePayload): Promise<void> {

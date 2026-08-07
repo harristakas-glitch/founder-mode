@@ -65,5 +65,21 @@ for (let w = 0; w < 40; w++)
   if (pickHiringWinner(cand, [bid('doomed', 25, 50, 4), bid('safe', 0, 50, 60)], 7, w)?.playerId === 'doomed') doomedWins++
 ok(doomedWins <= 12, `nobody joins a company with four weeks of runway unless paid a lot (${doomedWins}/40)`)
 
+console.log('\n— Sealed bids: the commitment binds —')
+const { hiringCommitment, makeNonce } = await import('../src/net/online')
+
+const nonce = makeNonce()
+const c1 = await hiringCommitment('mk-3-0', 25, nonce, 'alice')
+ok(nonce.length === 32, 'nonce is 128 bits of randomness, not brute-forceable from the hash')
+ok(c1.length === 64 && /^[0-9a-f]+$/.test(c1), 'commitment is a sha-256 hex digest')
+ok((await hiringCommitment('mk-3-0', 25, nonce, 'alice')) === c1, 'the same sealed bid always hashes the same — a valid reveal verifies')
+ok((await hiringCommitment('mk-3-0', 26, nonce, 'alice')) !== c1, 'changing the PREMIUM after seeing a rival breaks the commitment')
+ok((await hiringCommitment('mk-3-1', 25, nonce, 'alice')) !== c1, 'a commitment cannot be moved to a different candidate')
+ok((await hiringCommitment('mk-3-0', 25, nonce, 'bob')) !== c1, 'a commitment cannot be replayed by another founder')
+ok((await hiringCommitment('mk-3-0', 25, makeNonce(), 'alice')) !== c1, 'a fresh nonce gives a fresh commitment')
+// the whole point: the amount is not recoverable from what goes over the wire
+const guesses = await Promise.all([0, 10, 25, 50].map((p) => hiringCommitment('mk-3-0', p, 'guessed-nonce', 'alice')))
+ok(!guesses.includes(c1), 'enumerating every possible premium does not reveal the bid without the nonce')
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

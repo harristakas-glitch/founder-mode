@@ -53,7 +53,10 @@ import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
   broadcastAttack,
-  broadcastBid,
+  broadcastCommit,
+  broadcastReveal,
+  hiringCommitment,
+  makeNonce,
   broadcastChat,
   broadcastEmote,
   broadcastStart,
@@ -66,6 +69,8 @@ import {
   pushState,
   type AttackPayload,
   type BidPayload,
+  type CommitPayload,
+  type RevealPayload,
   type ChatPayload,
   type EmotePayload,
   type NetPlayer,
@@ -211,7 +216,9 @@ export interface OnlineSession {
   myFounder: FounderKind
   players: NetPlayer[]
   deadline: number | null // ms epoch when the current round auto-readies
-  /** Sealed offers on the shared candidate pool, for the week currently being played. */
+  /** Phase 1: hashes only. Tells you WHO is bidding on whom, never how much. */
+  commits: CommitPayload[]
+  /** Phase 2: reveals that hashed back to their commitment. Only these become real bids. */
   bids: BidPayload[]
   error: string | null
 }
@@ -363,6 +370,8 @@ export const useStore = create<Store>()(
       // and since the week only moves on a sync or a ready click, there was nothing left to retrigger
       // it. Both clients then sat on "Waiting for rivals" forever.
       let myReady = false
+      /** My own sealed bid this round — I hold the nonce until it is time to reveal. */
+      let myBid: { candidateId: string; premiumPct: number; nonce: string; reputation: number; runwayWeeks: number; week: number } | null = null
       const attacksTakenThisWeek = new Set<string>()
 
       // The 'start' broadcast is unauthenticated: only the presence-declared host may open a match,
@@ -405,8 +414,9 @@ export const useStore = create<Store>()(
           weekSounds(g)
           awardAchievements(g)
           myReady = false
+          myBid = null
           // we arrive mid-round: give ourselves the rest of this round, not an expired clock
-          set({ game: g, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000, bids: [] } })
+          set({ game: g, online: { ...get().online!, deadline: Date.now() + ROUND_SECONDS * 1000, commits: [], bids: [] } })
           void pushState({ ...myNetSummary(g), ready: false })
         }
 
@@ -511,13 +521,42 @@ export const useStore = create<Store>()(
           set({ online: { ...online, players } })
           maybeNetAdvance()
         },
-        onBid: (p: BidPayload) => {
+        onCommit: (p: CommitPayload) => {
           const { game, online } = get()
-          if (!game || !online || p.week !== game.week) return // a bid for another week is stale
+          if (!game || !online || p.week !== game.week) return // a commitment for another week is stale
           if (!hasCapability(game, 'sharedHiringPool')) return
-          // one bid per founder per candidate: a late one replaces the earlier
-          const bids = [...online.bids.filter((b) => !(b.playerId === p.playerId && b.candidateId === p.candidateId)), p]
-          set({ online: { ...online, bids } })
+          // one target per founder per round — see sendOffer for why selective reveal needs this
+          const commits = [...online.commits.filter((c) => c.playerId !== p.playerId), p]
+          set({ online: { ...online, commits } })
+        },
+
+        onReveal: (p: RevealPayload) => {
+          const { game, online } = get()
+          if (!game || !online || p.week !== game.week) return
+          if (!hasCapability(game, 'sharedHiringPool')) return
+          // Verify NOW, while we can await the digest — settlement runs synchronously inside the
+          // week advance and must not have to hash anything.
+          void (async () => {
+            const commit = get().online?.commits.find((c) => c.playerId === p.playerId && c.candidateId === p.candidateId)
+            if (!commit) return // revealing something you never committed to buys you nothing
+            const expected = await hiringCommitment(p.candidateId, p.premiumPct, p.nonce, p.playerId)
+            if (expected !== commit.commitment) {
+              console.warn('discarded a hiring reveal that did not match its commitment', p.playerId)
+              return
+            }
+            const cur = get().online
+            if (!cur || get().game?.week !== p.week) return
+            const bid: BidPayload = {
+              candidateId: p.candidateId,
+              playerId: p.playerId,
+              company: p.company,
+              premiumPct: p.premiumPct,
+              reputation: p.reputation,
+              runwayWeeks: p.runwayWeeks,
+              week: p.week,
+            }
+            set({ online: { ...cur, bids: [...cur.bids.filter((b) => b.playerId !== p.playerId), bid] } })
+          })()
         },
         onEmote: showEmote,
         onChat: (p: ChatPayload) => appendChat(p, false),
@@ -592,6 +631,7 @@ export const useStore = create<Store>()(
               myFounder: founder,
               players: [me],
               deadline: null,
+              commits: [],
               bids: [],
               error: null,
             },
@@ -660,8 +700,24 @@ export const useStore = create<Store>()(
           if (game.gameOver) return
           sfx.week()
           myReady = true
-          const players = online.players.map((p) => (p.id === myId() ? { ...p, ready: true } : p))
-          set({ online: { ...online, players } })
+          // Reveal as we lock in. Safe now: every bid is already committed, so a rival seeing our
+          // number cannot change theirs. Sent BEFORE the ready flag so it lands first.
+          if (myBid && myBid.week === game.week && hasCapability(game, 'sharedHiringPool')) {
+            const r: RevealPayload = { ...myBid, playerId: myId(), company: online.myCompany }
+            const asBid: BidPayload = {
+              candidateId: r.candidateId,
+              playerId: r.playerId,
+              company: r.company,
+              premiumPct: r.premiumPct,
+              reputation: r.reputation,
+              runwayWeeks: r.runwayWeeks,
+              week: r.week,
+            }
+            set({ online: { ...online, bids: [...online.bids.filter((b) => b.playerId !== r.playerId), asBid] } })
+            void broadcastReveal(r)
+          }
+          const players = get().online!.players.map((p) => (p.id === myId() ? { ...p, ready: true } : p))
+          set({ online: { ...get().online!, players } })
           void pushState({ ready: true, ...myNetSummary(game) })
           maybeNetAdvance()
         },
@@ -732,6 +788,7 @@ export const useStore = create<Store>()(
                 myFounder: r.myFounder,
                 players: [me],
                 deadline: r.phase === 'playing' ? Date.now() + ROUND_SECONDS * 1000 : null,
+                commits: [],
                 bids: [],
                 error: null,
               },
@@ -825,29 +882,33 @@ export const useStore = create<Store>()(
           if (!c) return
 
           // Arena: the pool is shared, so an offer is a sealed bid rather than an instant hire.
-          // Nothing leaves the pool until the round ends and the candidate picks.
+          // Only the HASH goes out now; the amount is revealed when the founder locks their turn.
           const online = get().online
           if (hasCapability(g, 'sharedHiringPool') && online) {
+            // One target per round. Without this a founder could commit on all five candidates
+            // and reveal only the one they won, which defeats the point of committing at all.
+            if (online.commits.some((c) => c.playerId === myId())) {
+              set({ game: { ...g, flash: 'You are already courting someone this round — one target per week.' } })
+              return
+            }
             const premium = Math.min(100, Math.max(0, Math.round(premiumPct)))
             const runway = runwayWeeks(g)
-            const mine: BidPayload = {
-              candidateId,
-              playerId: myId(),
-              company: online.myCompany,
-              premiumPct: premium,
-              reputation: Math.round(g.reputation),
-              runwayWeeks: Number.isFinite(runway) ? Math.round(runway) : 999,
-              week: g.week,
-            }
-            const bids = [...online.bids.filter((b) => !(b.playerId === mine.playerId && b.candidateId === candidateId)), mine]
+            const nonce = makeNonce()
+            myBid = { candidateId, premiumPct: premium, nonce, reputation: Math.round(g.reputation), runwayWeeks: Number.isFinite(runway) ? Math.round(runway) : 999, week: g.week }
             set({
-              online: { ...online, bids },
               game: {
                 ...g,
-                flash: `Offer in for ${c.name}${premium > 0 ? ` at +${premium}%` : ' at asking'}. They decide when the round ends — you can't see what your rivals offered.`,
+                flash: `Offer sealed for ${c.name}${premium > 0 ? ` at +${premium}%` : ' at asking'}. Nobody can see the number — not even over the wire — until the round locks.`,
               },
             })
-            void broadcastBid(mine)
+            void (async () => {
+              const commitment = await hiringCommitment(candidateId, premium, nonce, myId())
+              const cur = get().online
+              if (!cur) return
+              const mine: CommitPayload = { candidateId, playerId: myId(), company: cur.myCompany, commitment, week: g.week }
+              set({ online: { ...get().online!, commits: [...get().online!.commits.filter((x) => x.playerId !== myId()), mine] } })
+              void broadcastCommit(mine)
+            })()
             return
           }
 

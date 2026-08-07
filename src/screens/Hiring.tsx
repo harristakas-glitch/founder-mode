@@ -18,9 +18,13 @@ function BidControl({ candidateId }: { candidateId: string }) {
   const sendOffer = useStore((s) => s.sendOffer)
   const online = useStore((s) => s.online)
   const [premium, setPremium] = useState(0)
-  const bids = online?.bids.filter((b) => b.candidateId === candidateId) ?? []
-  const mine = bids.find((b) => b.playerId === myId())
-  const rivals = bids.filter((b) => b.playerId !== myId()).length
+  const commits = online?.commits ?? []
+  const here = commits.filter((c) => c.candidateId === candidateId)
+  const mine = here.find((c) => c.playerId === myId())
+  const rivals = here.filter((c) => c.playerId !== myId())
+  // one target per round: a commitment on someone else locks out the rest of the market
+  const elsewhere = commits.find((c) => c.playerId === myId() && c.candidateId !== candidateId)
+  const locked = !!mine || !!elsewhere
 
   return (
     <div className="mt-2.5">
@@ -28,7 +32,7 @@ function BidControl({ candidateId }: { candidateId: string }) {
         {PREMIUMS.map((p) => (
           <button
             key={p}
-            disabled={!!mine}
+            disabled={locked}
             onClick={() => setPremium(p)}
             className={`rounded-lg border px-2 py-1 text-[12px] font-semibold transition-colors disabled:opacity-40 ${
               premium === p ? 'border-accent bg-accent/15 text-ink' : 'border-line2 text-mut hover:border-accent hover:text-ink'
@@ -38,18 +42,20 @@ function BidControl({ candidateId }: { candidateId: string }) {
           </button>
         ))}
       </div>
-      <Btn variant="primary" className="mt-2 w-full" disabled={!!mine} onClick={() => sendOffer(candidateId, premium)}>
-        {mine ? `Offer in at ${mine.premiumPct === 0 ? 'asking' : `+${mine.premiumPct}%`}` : 'Make sealed offer'}
+      <Btn variant="primary" className="mt-2 w-full" disabled={locked} onClick={() => sendOffer(candidateId, premium)}>
+        {mine ? 'Offer sealed' : elsewhere ? 'Courting someone else' : 'Seal offer'}
       </Btn>
       <div className="mt-1 text-[11.5px] leading-snug text-mut">
-        {rivals > 0 ? (
+        {rivals.length > 0 ? (
           <span className="text-warn">
-            ⚔ {rivals} rival{rivals === 1 ? '' : 's'} also bidding — amount hidden
+            ⚔ {rivals.map((r) => r.company).join(', ')} also bidding — {rivals.length === 1 ? 'their number is' : 'their numbers are'} sealed
           </span>
         ) : mine ? (
-          'No rivals on them yet. They answer when the round ends.'
+          'Sealed. Opens when you lock in your week.'
+        ) : elsewhere ? (
+          'One target per round — you have already committed elsewhere.'
         ) : (
-          'Bid blind. They weigh the money against your reputation and runway.'
+          'Bid blind. They weigh money against your reputation and runway.'
         )}
       </div>
     </div>
@@ -86,7 +92,9 @@ export function Hiring() {
           <b>One market, every founder.</b> These five people are the same five your rivals are looking at, and the whole pool is
           replaced next week. Offers are <b>sealed</b>: choose a premium over asking without seeing anyone else&apos;s number, and at
           the end of the round the candidate picks — weighing the money against your reputation and how safe your runway looks. Winning
-          a contested hire means paying over the odds, or being somewhere worth joining.
+          a contested hire means paying over the odds, or being somewhere worth joining. Only a <b>hash</b> of your offer goes over the
+          wire while the round is live, so not even a modified client can read your number and undercut it. You court{' '}
+          <b>one candidate per round</b>.
         </div>
       )}
 
