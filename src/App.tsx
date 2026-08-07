@@ -131,6 +131,7 @@ function useDialog(onClose: () => void) {
 export default function App() {
   const { game, online, screen, setScreen, advance, abandonGame, resolveChoice, cancelReady, sendEmote } = useStore()
   const reconnecting = useStore((s) => s.reconnecting)
+  const link = useStore((s) => s.link)
   const emotes = useStore((s) => s.emotes)
   const [navOpen, setNavOpen] = useState(false)
 
@@ -602,6 +603,16 @@ export default function App() {
 
       <ChatWidget />
       {celebrate && <Confetti key={`${game.week}-${game.gameOver?.type ?? 'w'}`} />}
+      {/* The socket climbs back on its own — this just stops the silence being mistaken for a freeze. */}
+      {online && link === 'reconnecting' && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-full border border-warn/50 bg-bg2/95 px-4 py-2 text-[13px] font-semibold text-warn shadow-[var(--elev-2)] backdrop-blur"
+        >
+          <span className="mr-2 inline-block animate-pulse">⟳</span>
+          Reconnecting to the room… your match is still running
+        </div>
+      )}
       {matchOver && !resultsClosed && <MatchOver onClose={() => setResultsClosed(true)} />}
       {!online && game.gameOver && !resultsClosed && <GameOver onClose={() => setResultsClosed(true)} />}
     </div>

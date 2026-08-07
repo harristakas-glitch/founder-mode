@@ -152,13 +152,35 @@ function readPlayers(): NetPlayer[] {
   return players.sort((a, b) => Number(b.host) - Number(a.host) || a.company.localeCompare(b.company))
 }
 
-export async function connectRoom(code: string, me: NetPlayer, handlers: Handlers): Promise<void> {
-  await leaveRoom()
-  const ch = getClient().channel(`fm-room-${code}`, {
-    config: { presence: { key: me.id }, broadcast: { self: false } },
-  })
-  channel = ch
-  myState = me
+/** What the UI should say about the socket. */
+export type LinkState = 'live' | 'reconnecting' | 'offline'
+
+let roomCode: string | null = null
+let liveHandlers: Handlers | null = null
+let rejoinTimer: ReturnType<typeof setTimeout> | null = null
+let rejoinAttempt = 0
+let joinedOnce = false
+let linkState: LinkState = 'offline'
+let onLink: ((s: LinkState) => void) | null = null
+let wakeWired = false
+
+/** Subscribe to connection health so the UI can say "reconnecting" instead of going quiet. */
+export function onLinkStateChange(cb: ((s: LinkState) => void) | null): void {
+  onLink = cb
+}
+
+export function getLinkState(): LinkState {
+  return linkState
+}
+
+function setLink(next: LinkState) {
+  if (linkState === next) return
+  linkState = next
+  onLink?.(next)
+}
+
+/** Attach every listener this room needs. Called fresh on each (re)join — channels aren't reusable. */
+function wire(ch: RealtimeChannel, handlers: Handlers) {
   // Broadcast payloads are unauthenticated JSON from any peer — coerce before handing them on,
   // and never let one malformed message throw inside the socket callback.
   const safe = (fn: () => void) => {
@@ -193,19 +215,141 @@ export async function connectRoom(code: string, me: NetPlayer, handlers: Handler
       }),
     )
   })
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Connection timed out — check your internet and the Supabase config.')), 12_000)
+}
+
+/**
+ * Open (or reopen) the room channel. The subscribe callback fires for the WHOLE life of the
+ * channel, not just the first join — handling only the initial status was why a dropped socket
+ * left the player silently disconnected until they reloaded the page.
+ */
+function openChannel(initial: boolean): Promise<void> {
+  const code = roomCode
+  const handlers = liveHandlers
+  const me = myState
+  if (!code || !handlers || !me) return Promise.resolve()
+
+  const ch = getClient().channel(`fm-room-${code}`, {
+    config: { presence: { key: me.id }, broadcast: { self: false } },
+  })
+  channel = ch
+  wire(ch, handlers)
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false
+    const timer = initial
+      ? setTimeout(() => {
+          settled = true
+          reject(new Error('Connection timed out — check your internet and the Supabase config.'))
+        }, 12_000)
+      : null
+
     ch.subscribe(async (status) => {
+      // a status from a channel we've already replaced (or left) is not ours to act on
+      if (channel !== ch) return
+
       if (status === 'SUBSCRIBED') {
-        clearTimeout(timer)
-        await ch.track(me as unknown as Record<string, unknown>)
-        resolve()
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        clearTimeout(timer)
-        reject(new Error(`Could not join the room (${status}). Check the Supabase config and try again.`))
+        if (timer) clearTimeout(timer)
+        joinedOnce = true
+        rejoinAttempt = 0
+        setLink('live')
+        // Re-announce ourselves on EVERY join. Presence is per-channel, so a silent reconnect
+        // that skipped this would put us back in the room as a ghost with no state.
+        try {
+          if (myState) await ch.track(myState as unknown as Record<string, unknown>)
+        } catch {
+          // the next rejoin will retry the track
+        }
+        if (!settled) {
+          settled = true
+          resolve()
+        }
+        return
+      }
+
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (initial && !joinedOnce) {
+          if (timer) clearTimeout(timer)
+          if (!settled) {
+            settled = true
+            reject(new Error(`Could not join the room (${status}). Check the Supabase config and try again.`))
+          }
+          return
+        }
+        // we were live and lost it — climb back on our own rather than making the player reload
+        scheduleRejoin()
+        if (!settled) {
+          settled = true
+          resolve()
+        }
       }
     })
   })
+}
+
+/** Exponential backoff, capped, one attempt in flight at a time. */
+function scheduleRejoin() {
+  if (!roomCode || rejoinTimer) return
+  setLink('reconnecting')
+  const wait = Math.min(15_000, 800 * 2 ** rejoinAttempt)
+  rejoinAttempt++
+  rejoinTimer = setTimeout(async () => {
+    rejoinTimer = null
+    if (!roomCode) return
+    const dead = channel
+    channel = null
+    if (dead) {
+      try {
+        await getClient().removeChannel(dead)
+      } catch {
+        // removing an already-dead channel is fine
+      }
+    }
+    try {
+      await openChannel(false)
+    } catch {
+      scheduleRejoin()
+    }
+  }, wait)
+}
+
+/**
+ * A backgrounded tab gets its timers throttled and its socket quietly killed, so returning to the
+ * page is the single most common moment to discover you are disconnected. Retry immediately
+ * instead of waiting out the backoff.
+ */
+function wake() {
+  if (!roomCode) return
+  if (channel && channel.state === 'joined') {
+    void pushState({}) // re-assert presence in case the server dropped our entry
+    return
+  }
+  rejoinAttempt = 0
+  if (rejoinTimer) {
+    clearTimeout(rejoinTimer)
+    rejoinTimer = null
+  }
+  scheduleRejoin()
+}
+
+function wireWakeListeners() {
+  if (wakeWired || typeof document === 'undefined') return
+  wakeWired = true
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') wake()
+  })
+  window.addEventListener('online', wake)
+  window.addEventListener('offline', () => setLink('reconnecting'))
+}
+
+export async function connectRoom(code: string, me: NetPlayer, handlers: Handlers): Promise<void> {
+  await leaveRoom()
+  wireWakeListeners()
+  roomCode = code
+  liveHandlers = handlers
+  myState = me
+  joinedOnce = false
+  rejoinAttempt = 0
+  await openChannel(true)
 }
 
 export async function pushState(patch: Partial<NetPlayer>): Promise<void> {
@@ -231,6 +375,16 @@ export async function broadcastAttack(payload: AttackPayload): Promise<void> {
 }
 
 export async function leaveRoom(): Promise<void> {
+  // clear the supervisor FIRST, so the CLOSED status from unsubscribing isn't read as a drop
+  roomCode = null
+  liveHandlers = null
+  joinedOnce = false
+  rejoinAttempt = 0
+  if (rejoinTimer) {
+    clearTimeout(rejoinTimer)
+    rejoinTimer = null
+  }
+  setLink('offline')
   if (channel) {
     const ch = channel
     channel = null

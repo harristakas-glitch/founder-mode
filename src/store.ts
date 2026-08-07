@@ -55,6 +55,8 @@ import {
   broadcastEmote,
   broadcastStart,
   connectRoom,
+  onLinkStateChange,
+  type LinkState,
   leaveRoom,
   makeRoomCode,
   myId,
@@ -236,6 +238,8 @@ interface Store {
   online: OnlineSession | null
   onlineResume: OnlineResume | null
   reconnecting: boolean
+  /** Socket health for the online room — drives the reconnect banner. */
+  link: LinkState
   emotes: EmoteToast[]
   chat: ChatMessage[]
   authUser: AuthProfile | null
@@ -409,6 +413,9 @@ export const useStore = create<Store>()(
         if (get().online?.phase === 'playing') maybeNetAdvance()
       }, 1000)
 
+      // The transport reconnects itself; this is only so the UI can say so out loud.
+      onLinkStateChange((link) => set({ link }))
+
       // toast an emote for ~4 seconds
       const showEmote = (p: EmotePayload) => {
         const toast: EmoteToast = { id: uid(), from: p.from, emoji: p.emoji }
@@ -545,6 +552,7 @@ export const useStore = create<Store>()(
         online: null,
         onlineResume: null,
         reconnecting: false,
+        link: 'offline' as LinkState,
         emotes: [],
         chat: [],
         authUser: null,
