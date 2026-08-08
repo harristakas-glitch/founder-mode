@@ -117,7 +117,9 @@ const HALL_KEY = 'founder-mode-hall'
  *   const detailedPMF = useGameCapability('detailedPMF')
  */
 export function useGameCapability(key: CapabilityKey): boolean {
-  return useStore((s) => s.game?.capabilities?.[key] ?? false)
+  // Delegates rather than re-reading `s.game?.capabilities?.[key]`: there must be exactly one
+  // definition of what "capability on" means, and it lives in ./game/modes.
+  return useStore((s) => hasCapability(s.game, key))
 }
 
 export function readHall(): RunRecord[] {

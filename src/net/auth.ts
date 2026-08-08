@@ -21,8 +21,22 @@ function toProfile(user: { user_metadata?: Record<string, unknown>; email?: stri
     (md.name as string) ||
     user.email?.split('@')[0] ||
     'player'
-  const avatar = (md.avatar_url as string) || (md.picture as string) || null
-  return { name: String(name).slice(0, 24), avatar }
+  return { name: String(name).slice(0, 24), avatar: safeAvatar(md.avatar_url) ?? safeAvatar(md.picture) }
+}
+
+/**
+ * The avatar goes straight into an <img src>. It arrives as provider metadata rather than from
+ * our own code, so it is only ever as trustworthy as whatever the OAuth provider chose to echo
+ * back. Allow https: images and nothing else — no data:/blob: payloads, no javascript:, and no
+ * plain http: that would downgrade the connection and leak the request.
+ */
+function safeAvatar(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length > 512) return null
+  try {
+    return new URL(v).protocol === 'https:' ? v : null
+  } catch {
+    return null // not an absolute URL at all
+  }
 }
 
 export async function currentProfile(): Promise<AuthProfile | null> {

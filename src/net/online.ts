@@ -118,18 +118,52 @@ let myState: NetPlayer | null = null
 
 const ID_KEY = 'founder-mode-player-id'
 
+/** Unbiased random ints from the CSPRNG. Math.random is predictable and must not pick secrets. */
+function randomInts(n: number, mod: number): number[] {
+  const bytes = new Uint8Array(n)
+  crypto.getRandomValues(bytes)
+  // rejection-free because 256 % 32 === 0 for our alphabet; kept explicit so a future
+  // alphabet change cannot silently introduce modulo bias
+  const limit = 256 - (256 % mod)
+  const out: number[] = []
+  for (let i = 0; i < bytes.length && out.length < n; i++) {
+    if (bytes[i] < limit) out.push(bytes[i] % mod)
+  }
+  while (out.length < n) out.push(...randomInts(n - out.length, mod))
+  return out
+}
+
 export function myId(): string {
   let id = localStorage.getItem(ID_KEY)
   if (!id) {
-    id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+    // 96 bits from the CSPRNG. The old id was Math.random + Date.now, which is both guessable
+    // and grindable: ids are public on the leaderboard and are the only handle on a room slot.
+    const bytes = new Uint8Array(12)
+    crypto.getRandomValues(bytes)
+    id = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
     localStorage.setItem(ID_KEY, id)
   }
   return id
 }
 
+/**
+ * Mint a brand-new identity for this device and return it. Only for the case where the current
+ * id is unusable — the leaderboard proved it belongs to another device's secret. Never call this
+ * while in a room: the id is also the presence key holding this player's seat.
+ */
+export function resetPlayerId(): string {
+  localStorage.removeItem(ID_KEY)
+  return myId()
+}
+
 export function makeRoomCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I confusion
-  return Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
+  // Math.random let an observer who had seen a few codes predict the next ones and walk into
+  // rooms they were never invited to. 5 chars is still only ~33M codes — see the review's note
+  // on room-code enumeration; this closes prediction, not brute force.
+  return randomInts(5, alphabet.length)
+    .map((i) => alphabet[i])
+    .join('')
 }
 
 export function getClient(): SupabaseClient {
@@ -145,7 +179,31 @@ export function getClient(): SupabaseClient {
 // of the app reads must survive a hostile or buggy client, so it is coerced and bounded here.
 const MAX_USERS = 1e10
 const num = (v: unknown, max: number): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, max) : 0)
-const str = (v: unknown, max: number, fallback = ''): string => (typeof v === 'string' ? v.slice(0, max) : fallback)
+
+/**
+ * Characters a peer has no legitimate reason to send and that wreck the UI when rendered:
+ * C0/C1 controls (newlines that break a one-line label), zero-width padding, and the bidi
+ * override/isolate range — U+202E in a company name reverses every line it lands in.
+ * U+200D (ZWJ) is deliberately NOT stripped: emoji families are built from it.
+ */
+const UNSAFE_CHARS = new RegExp('[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]', 'g')
+
+const str = (v: unknown, max: number, fallback = ''): string =>
+  typeof v === 'string' ? v.replace(UNSAFE_CHARS, '').slice(0, max) : fallback
+
+/** Exactly `len` lowercase hex characters, or null. Used for commitments and nonces. */
+const hex = (v: unknown, len: number): string | null =>
+  typeof v === 'string' && v.length === len && /^[0-9a-f]+$/.test(v) ? v : null
+
+/** A game-generated opaque id (candidate, player, target). Never contains our hash delimiter. */
+const opaqueId = (v: unknown): string | null => {
+  if (typeof v !== 'string') return null
+  const s = v.replace(UNSAFE_CHARS, '')
+  if (!s || s.length > 64 || s.includes('|')) return null
+  return s
+}
+
+const int = (v: unknown, min: number, max: number): number => Math.min(max, Math.max(min, Math.floor(num(v, max))))
 
 export function normalizePlayer(raw: unknown, key: string): NetPlayer | null {
   const p = raw as Record<string, unknown>
@@ -163,10 +221,22 @@ export function normalizePlayer(raw: unknown, key: string): NetPlayer | null {
     val: num(p.val, Number.MAX_SAFE_INTEGER),
     payout: num(p.payout, Number.MAX_SAFE_INTEGER),
     over: p.over === true,
-    overType: typeof p.overType === 'string' ? p.overType.slice(0, 20) : undefined,
+    overType: typeof p.overType === 'string' ? str(p.overType, 20) || undefined : undefined,
     playing: p.playing === true,
+    // Open-book intel. These were declared on NetPlayer and read by the market table but never
+    // copied out of the raw presence blob, so every rival's cash/revenue/PMF column rendered
+    // as "—". Coerced and bounded like everything else a peer sends.
+    cash: typeof p.cash === 'number' && Number.isFinite(p.cash) ? Math.max(-1e12, Math.min(1e12, p.cash)) : undefined,
+    rev: typeof p.rev === 'number' && Number.isFinite(p.rev) ? Math.max(0, Math.min(1e12, p.rev)) : undefined,
+    pmf: typeof p.pmf === 'number' && Number.isFinite(p.pmf) ? Math.max(0, Math.min(100, p.pmf)) : undefined,
   }
 }
+
+/**
+ * A hostile peer can track thousands of presence keys on one socket. The roster feeds React
+ * lists and the market-share denominator, so it needs a hard ceiling — no real room is close.
+ */
+export const MAX_PLAYERS = 32
 
 /**
  * How long a player can stay invisible before the room writes them off. Generous on purpose: a
@@ -190,7 +260,168 @@ function readPlayers(): NetPlayer[] {
     .map(([key, metas]) => normalizePlayer((metas as unknown[])[0], key))
     .filter((p): p is NetPlayer => p !== null)
   // stable order: host first, then by company name
-  return players.sort((a, b) => Number(b.host) - Number(a.host) || a.company.localeCompare(b.company))
+  players.sort((a, b) => Number(b.host) - Number(a.host) || a.company.localeCompare(b.company))
+  // Keep our own slot even if a flood pushed us past the cut, so the store never loses track of us.
+  if (players.length > MAX_PLAYERS) {
+    const me = myState?.id
+    const kept = players.slice(0, MAX_PLAYERS)
+    if (me && !kept.some((p) => p.id === me)) {
+      const mine = players.find((p) => p.id === me)
+      if (mine) kept[kept.length - 1] = mine
+    }
+    return kept
+  }
+  return players
+}
+
+// ---------------------------------------------------------------------------------------------
+// Peer message validation.
+//
+// Presence has one real guarantee: the key a peer tracks under is the identity that key's blob
+// must claim (`normalizePlayer`). Broadcast has NO sender identity at all — Supabase delivers
+// `{type, event, payload}` and nothing else — so `playerId` in a commit/reveal and `fromId` in
+// an attack are simply strings the sender picked. Two rules make that survivable without a
+// server refereeing the room:
+//
+//   1. Nobody may speak as me. Broadcast is configured `self: false`, so a payload claiming my
+//      own id is always forged. This is the one that matters: without it a peer could publish a
+//      commitment under my id, replacing my real one, then "reveal" any premium it liked and my
+//      own client would believe I had bid it.
+//   2. Nobody may speak as an id that is not in the room. That bounds the commit/bid lists to
+//      the roster instead of letting one peer mint unlimited identities.
+//
+// Neither rule authenticates a peer against *another* peer — that needs signatures or Realtime
+// Authorization; see docs/security-review.md. They do close the attacks that damage the
+// receiving player's own game state.
+// ---------------------------------------------------------------------------------------------
+
+export interface PeerContext {
+  /** This device's id. A payload claiming it is forged by definition. */
+  selfId: string
+  /** Ids currently visible in presence. Empty means "not synced yet" and skips the roster gate. */
+  roster: ReadonlySet<string>
+}
+
+function peerId(v: unknown, ctx: PeerContext): string | null {
+  const id = opaqueId(v)
+  if (!id) return null
+  if (id === ctx.selfId) return null // rule 1
+  if (ctx.roster.size > 0 && !ctx.roster.has(id)) return null // rule 2
+  return id
+}
+
+/**
+ * Inbound token buckets. A modified client can send as fast as the socket allows; this bounds
+ * what reaches the store and the DOM. Per-identity buckets stop one peer from monopolising a
+ * channel; the global bucket is the one that actually holds, because `from` on a chat or emote
+ * is just a company name a flooder can vary at will.
+ */
+const LIMITS: Record<string, { perSender: number; global: number; windowMs: number }> = {
+  chat: { perSender: 6, global: 24, windowMs: 10_000 },
+  emote: { perSender: 10, global: 40, windowMs: 10_000 },
+  attack: { perSender: 4, global: 24, windowMs: 60_000 },
+  commit: { perSender: 8, global: 48, windowMs: 60_000 },
+  reveal: { perSender: 8, global: 48, windowMs: 60_000 },
+  start: { perSender: 4, global: 12, windowMs: 60_000 },
+}
+
+const buckets = new Map<string, number[]>()
+
+/** Exported so the rate limiter can be exercised deterministically in tests. */
+export function resetRateLimits(): void {
+  buckets.clear()
+  seenCommitments.clear()
+}
+
+function take(key: string, limit: number, windowMs: number, now: number): boolean {
+  const hits = (buckets.get(key) ?? []).filter((t) => now - t < windowMs)
+  if (hits.length >= limit) {
+    buckets.set(key, hits)
+    return false
+  }
+  hits.push(now)
+  buckets.set(key, hits)
+  // A flooder cycling identities would otherwise grow this map without bound.
+  if (buckets.size > 256) for (const k of [...buckets.keys()].slice(0, 128)) buckets.delete(k)
+  return true
+}
+
+export function allow(event: keyof typeof LIMITS | string, sender: string, now = Date.now()): boolean {
+  const l = LIMITS[event]
+  if (!l) return true
+  if (!take(`g:${event}`, l.global, l.windowMs, now)) return false
+  return take(`s:${event}:${sender}`, l.perSender, l.windowMs, now)
+}
+
+/**
+ * A commitment is a 256-bit value bound to (candidate, premium, nonce, player). It is NOT bound
+ * to a week, so the same string replayed in a later round would still verify. Remembering the
+ * ones we have seen makes that replay a no-op without changing the hash preimage — which would
+ * otherwise have to be rolled out to every client at once to avoid breaking live auctions.
+ */
+const seenCommitments = new Map<string, string>()
+
+function commitmentIsFresh(commitment: string, playerId: string, week: number): boolean {
+  const tag = `${playerId}@${week}`
+  const prev = seenCommitments.get(commitment)
+  if (prev !== undefined && prev !== tag) return false
+  seenCommitments.set(commitment, tag)
+  if (seenCommitments.size > 512) for (const k of [...seenCommitments.keys()].slice(0, 256)) seenCommitments.delete(k)
+  return true
+}
+
+export function validateCommit(raw: unknown, ctx: PeerContext): CommitPayload | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const playerId = peerId(p.playerId, ctx)
+  const candidateId = opaqueId(p.candidateId)
+  const commitment = hex(p.commitment, 64)
+  if (!playerId || !candidateId || !commitment) return null
+  const week = int(p.week, 0, 10_000)
+  if (!commitmentIsFresh(commitment, playerId, week)) return null
+  return { candidateId, playerId, company: str(p.company, 30, 'A rival') || 'A rival', commitment, week }
+}
+
+export function validateReveal(raw: unknown, ctx: PeerContext): RevealPayload | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const playerId = peerId(p.playerId, ctx)
+  const candidateId = opaqueId(p.candidateId)
+  const nonce = hex(p.nonce, 32)
+  if (!playerId || !candidateId || !nonce) return null
+  return {
+    candidateId,
+    playerId,
+    company: str(p.company, 30, 'A rival') || 'A rival',
+    // bounded: an unbounded premium would auto-win every auction
+    premiumPct: int(p.premiumPct, 0, 100),
+    nonce,
+    reputation: int(p.reputation, 0, 100),
+    runwayWeeks: int(p.runwayWeeks, 0, 999),
+    week: int(p.week, 0, 10_000),
+  }
+}
+
+export function validateAttack(raw: unknown, ctx: PeerContext): AttackPayload | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const kind = p.kind
+  if (kind !== 'poach' && kind !== 'smear' && kind !== 'raid') return null
+  const targetId = opaqueId(p.targetId)
+  // fromId is REQUIRED. The store dedupes incoming attacks with `fromId ?? fromCompany`, so a
+  // sender that simply omitted it — or varied it freely — got one extra hit per week per value.
+  const fromId = peerId(p.fromId, ctx)
+  if (!targetId || !fromId) return null
+  return { fromCompany: str(p.fromCompany, 30, 'A rival') || 'A rival', targetId, kind, fromId }
+}
+
+export function validateChat(raw: unknown): ChatPayload | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const text = str(p.text, 200).trim()
+  if (!text) return null
+  return { from: str(p.from, 30, 'Someone') || 'Someone', text }
+}
+
+export function validateEmote(raw: unknown): EmotePayload | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  return { from: str(p.from, 30, 'Someone') || 'Someone', emoji: str(p.emoji, 8, '👀') || '👀' }
 }
 
 /** What the UI should say about the socket. */
@@ -199,7 +430,10 @@ export type LinkState = 'live' | 'reconnecting' | 'offline'
 let roomCode: string | null = null
 let liveHandlers: Handlers | null = null
 let rejoinTimer: ReturnType<typeof setTimeout> | null = null
+let rejoinInFlight = false
 let rejoinAttempt = 0
+let lastWakeReset = 0
+const WAKE_RESET_MS = 10_000
 let joinedOnce = false
 let linkState: LinkState = 'offline'
 let onLink: ((s: LinkState) => void) | null = null
@@ -220,9 +454,15 @@ function setLink(next: LinkState) {
   onLink?.(next)
 }
 
+/** The identity context every inbound broadcast is judged against, rebuilt per message. */
+function peerContext(): PeerContext {
+  const state = channel?.presenceState() ?? {}
+  return { selfId: myState?.id ?? '', roster: new Set(Object.keys(state)) }
+}
+
 /** Attach every listener this room needs. Called fresh on each (re)join — channels aren't reusable. */
 function wire(ch: RealtimeChannel, handlers: Handlers) {
-  // Broadcast payloads are unauthenticated JSON from any peer — coerce before handing them on,
+  // Broadcast payloads are unauthenticated JSON from any peer — validate before handing them on,
   // and never let one malformed message throw inside the socket callback.
   const safe = (fn: () => void) => {
     try {
@@ -231,61 +471,47 @@ function wire(ch: RealtimeChannel, handlers: Handlers) {
       console.warn('dropped a malformed realtime message', e)
     }
   }
+  /** Validate, rate-limit, then dispatch. `sender` names the bucket the message is charged to. */
+  const on = <T>(event: string, validate: (raw: unknown, ctx: PeerContext) => T | null, sender: (p: T) => string, run: (p: T) => void) => {
+    ch.on('broadcast', { event }, ({ payload }) => {
+      safe(() => {
+        const p = validate(payload, peerContext())
+        if (!p) return
+        if (!allow(event, sender(p))) return
+        run(p)
+      })
+    })
+  }
+
   ch.on('presence', { event: 'sync' }, () => safe(() => handlers.onPlayers(readPlayers())))
-  ch.on('broadcast', { event: 'start' }, ({ payload }) => safe(() => handlers.onStart(payload as StartPayload)))
-  ch.on('broadcast', { event: 'emote' }, ({ payload }) => {
-    const p = (payload ?? {}) as Record<string, unknown>
-    safe(() => handlers.onEmote?.({ from: str(p.from, 30, 'Someone'), emoji: str(p.emoji, 8, '👀') }))
-  })
-  ch.on('broadcast', { event: 'chat' }, ({ payload }) => {
-    const p = (payload ?? {}) as Record<string, unknown>
-    const text = str(p.text, 200)
-    if (text) safe(() => handlers.onChat?.({ from: str(p.from, 30, 'Someone'), text }))
-  })
-  ch.on('broadcast', { event: 'commit' }, ({ payload }) => {
-    const p = (payload ?? {}) as Record<string, unknown>
-    if (typeof p.candidateId !== 'string' || typeof p.playerId !== 'string' || typeof p.commitment !== 'string') return
-    safe(() =>
-      handlers.onCommit?.({
-        candidateId: p.candidateId as string,
-        playerId: (p.playerId as string).slice(0, 64),
-        company: str(p.company, 30, 'A rival'),
-        commitment: (p.commitment as string).slice(0, 64),
-        week: Math.floor(num(p.week, 10_000)),
-      }),
-    )
-  })
-  ch.on('broadcast', { event: 'reveal' }, ({ payload }) => {
-    const p = (payload ?? {}) as Record<string, unknown>
-    if (typeof p.candidateId !== 'string' || typeof p.playerId !== 'string' || typeof p.nonce !== 'string') return
-    safe(() =>
-      handlers.onReveal?.({
-        candidateId: p.candidateId as string,
-        playerId: (p.playerId as string).slice(0, 64),
-        company: str(p.company, 30, 'A rival'),
-        // peer-reported and therefore bounded: an unbounded premium would auto-win every auction
-        premiumPct: Math.min(100, Math.max(0, num(p.premiumPct, 100))),
-        nonce: (p.nonce as string).slice(0, 64),
-        reputation: Math.min(100, Math.max(0, num(p.reputation, 100))),
-        runwayWeeks: Math.min(999, num(p.runwayWeeks, 999)),
-        week: Math.floor(num(p.week, 10_000)),
-      }),
-    )
-  })
-  ch.on('broadcast', { event: 'attack' }, ({ payload }) => {
-    const p = (payload ?? {}) as Record<string, unknown>
-    const kind = p.kind
-    if (kind !== 'poach' && kind !== 'smear' && kind !== 'raid') return
-    if (typeof p.targetId !== 'string') return
-    safe(() =>
-      handlers.onAttack?.({
-        fromCompany: str(p.fromCompany, 30, 'A rival'),
-        targetId: p.targetId as string,
-        kind,
-        fromId: typeof p.fromId === 'string' ? p.fromId.slice(0, 64) : undefined,
-      }),
-    )
-  })
+
+  // 'start' carries no peer id of its own; the store checks hostId against the presence roster
+  // (`validStart`). Rate-limited globally so a start-spammer cannot churn the room.
+  ch.on('broadcast', { event: 'start' }, ({ payload }) =>
+    safe(() => {
+      const p = (payload ?? {}) as Record<string, unknown>
+      if (!allow('start', str(p.hostId, 64, '?'))) return
+      handlers.onStart(payload as StartPayload)
+    }),
+  )
+
+  on('emote', (raw) => validateEmote(raw), (p) => p.from, (p) => handlers.onEmote?.(p))
+  on('chat', (raw) => validateChat(raw), (p) => p.from, (p) => handlers.onChat?.(p))
+  on('commit', validateCommit, (p) => p.playerId, (p) => handlers.onCommit?.(p))
+  on('reveal', validateReveal, (p) => p.playerId, (p) => handlers.onReveal?.(p))
+  on('attack', validateAttack, (p) => p.fromId ?? 'anon', (p) => handlers.onAttack?.(p))
+}
+
+/** Tear down whatever channel we currently hold. Safe to call when there isn't one. */
+async function dropChannel(): Promise<void> {
+  const dead = channel
+  channel = null
+  if (!dead) return
+  try {
+    await getClient().removeChannel(dead)
+  } catch {
+    // removing an already-dead channel is fine
+  }
 }
 
 /**
@@ -307,9 +533,14 @@ function openChannel(initial: boolean): Promise<void> {
 
   return new Promise<void>((resolve, reject) => {
     let settled = false
+    // Both failure paths must drop the channel before rejecting. The store's `connect` catches
+    // the error and clears its own state, but the subscription stayed alive and kept retrying
+    // its join in the background — a leaked channel per failed join attempt, and `inRoom()`
+    // answering true for a room the player is not in.
     const timer = initial
       ? setTimeout(() => {
           settled = true
+          void dropChannel()
           reject(new Error('Connection timed out — check your internet and the Supabase config.'))
         }, 12_000)
       : null
@@ -342,6 +573,7 @@ function openChannel(initial: boolean): Promise<void> {
           if (timer) clearTimeout(timer)
           if (!settled) {
             settled = true
+            void dropChannel()
             reject(new Error(`Could not join the room (${status}). Check the Supabase config and try again.`))
           }
           return
@@ -359,26 +591,26 @@ function openChannel(initial: boolean): Promise<void> {
 
 /** Exponential backoff, capped, one attempt in flight at a time. */
 function scheduleRejoin() {
-  if (!roomCode || rejoinTimer) return
+  // `rejoinInFlight` covers the window the timer id does not: once the timer has fired it sets
+  // `rejoinTimer = null` and then awaits, and anything calling scheduleRejoin during that await
+  // used to start a SECOND openChannel. Both created a channel, the second overwrote `channel`,
+  // and the first was never removed — a leaked subscription per flap, still holding the topic
+  // and still tracking presence, so the room saw a ghost copy of the player.
+  if (!roomCode || rejoinTimer || rejoinInFlight) return
   setLink('reconnecting')
   const wait = Math.min(15_000, 800 * 2 ** rejoinAttempt)
   rejoinAttempt++
   rejoinTimer = setTimeout(async () => {
     rejoinTimer = null
     if (!roomCode) return
-    const dead = channel
-    channel = null
-    if (dead) {
-      try {
-        await getClient().removeChannel(dead)
-      } catch {
-        // removing an already-dead channel is fine
-      }
-    }
+    rejoinInFlight = true
     try {
+      await dropChannel()
       await openChannel(false)
     } catch {
       scheduleRejoin()
+    } finally {
+      rejoinInFlight = false
     }
   }, wait)
 }
@@ -394,7 +626,15 @@ function wake() {
     void pushState({}) // re-assert presence in case the server dropped our entry
     return
   }
-  rejoinAttempt = 0
+  if (rejoinInFlight) return // an attempt is already running; let it finish
+  // Resetting the backoff on every wake let a flapping connection (or a user flicking between
+  // tabs) hammer a reconnect every 800ms for as long as the outage lasted. Reset at most once
+  // per WAKE_RESET_MS so the backoff still does its job.
+  const now = Date.now()
+  if (now - lastWakeReset > WAKE_RESET_MS) {
+    lastWakeReset = now
+    rejoinAttempt = 0
+  }
   if (rejoinTimer) {
     clearTimeout(rejoinTimer)
     rejoinTimer = null
@@ -476,6 +716,10 @@ export async function leaveRoom(): Promise<void> {
   liveHandlers = null
   joinedOnce = false
   rejoinAttempt = 0
+  lastWakeReset = 0
+  // Buckets and seen-commitments are per-room state; carrying them into the next room would
+  // let one room's traffic silence the next one's.
+  resetRateLimits()
   if (rejoinTimer) {
     clearTimeout(rejoinTimer)
     rejoinTimer = null

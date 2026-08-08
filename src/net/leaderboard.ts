@@ -5,7 +5,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { SUPABASE_ANON_KEY, SUPABASE_URL, onlineConfigured } from './config'
-import { myId } from './online'
+import { inRoom, myId, resetPlayerId } from './online'
 
 export interface DailyScore {
   player_id: string
@@ -35,15 +35,27 @@ function scoreSecret(): string {
 }
 
 let client: SupabaseClient | null = null
+let clientSecret = ''
 
 function getClient(): SupabaseClient {
-  if (!client) {
+  const secret = scoreSecret()
+  // The secret is baked into a header at construction time, so a memoized client outlives any
+  // change to it — the row would be written under one secret and authenticated with another,
+  // and every later update would be refused as if we were a stranger to our own row.
+  if (!client || clientSecret !== secret) {
+    clientSecret = secret
     client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { 'x-player-secret': scoreSecret() } },
+      global: { headers: { 'x-player-secret': secret } },
     })
   }
   return client
 }
+
+/** The only endings the database accepts. Anything else is a bug, not a score. */
+const ENDINGS = new Set(['bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo'])
+
+/** Mirrors the CHECK constraint in supabase/leaderboard-v5.sql. */
+const SCORE_MAX = 1e12
 
 /**
  * Record a finished daily run. Upserts on (day, player_id) and keeps the
@@ -58,31 +70,65 @@ export async function submitDailyScore(
   if (!onlineConfigured) return
   try {
     const db = getClient()
-    const player_id = myId()
     const row = {
-      day,
-      player_id,
+      day: Math.round(day),
+      player_id: myId(),
       company: entry.company.slice(0, 30),
-      score: Math.min(1e15, Math.max(0, Math.round(entry.score) || 0)),
+      // 1e15 exceeded the database's own ceiling, so any run that somehow scored above 1e12
+      // was silently rejected instead of being clamped to something storable.
+      score: Math.min(SCORE_MAX, Math.max(0, Math.round(entry.score) || 0)),
       weeks: Math.min(520, Math.max(0, Math.round(entry.weeks) || 0)),
-      ending: entry.ending.slice(0, 20),
+      ending: entry.ending,
       display_name: entry.display_name ? entry.display_name.slice(0, 24) : null,
       secret: scoreSecret(),
     }
+    if (!ENDINGS.has(row.ending)) return warn(`refusing to submit an unknown ending "${row.ending}"`)
+    if (!Number.isFinite(row.day) || row.day < 1) return warn(`refusing to submit a nonsense day ${row.day}`)
 
     // Fetch-compare: only overwrite an existing row with an equal-or-better score.
-    const { data: existing } = await db
-      .from(TABLE)
-      .select('score')
-      .eq('day', day)
-      .eq('player_id', player_id)
-      .maybeSingle()
+    const { data: existing } = await db.from(TABLE).select('score').eq('day', day).eq('player_id', row.player_id).maybeSingle()
     if (existing && existing.score > row.score) return
 
-    await db.from(TABLE).upsert(row, { onConflict: 'day,player_id' })
-  } catch {
+    const { error } = await db.from(TABLE).upsert(row, { onConflict: 'day,player_id' })
+    if (!error) return
+
+    // The leaderboard used to swallow every failure without a word. That is how a policy that
+    // rejected 100% of real submissions ran in production unnoticed — the game looked fine and
+    // the table just stayed empty. Failures stay non-fatal, but they are no longer silent.
+    warn(`score submission rejected: ${error.code ?? '?'} ${error.message}`)
+
+    // A player_id is bound to the first device that used it (leaderboard-v5.sql §3). If ours is
+    // bound to someone else's secret — a squatter from before that fix, or a device that lost
+    // its secret but kept its id — we can never post again under it. Mint a fresh identity and
+    // retry once, but never mid-match: the id is also this device's seat in a room.
+    if (isIdentityRejection(error) && !inRoom()) {
+      const fresh = resetPlayerId()
+      warn(`player id was not ours to use; retrying under a fresh identity ${fresh.slice(0, 8)}…`)
+      const retry = await db.from(TABLE).upsert({ ...row, player_id: fresh }, { onConflict: 'day,player_id' })
+      if (retry.error) warn(`retry also rejected: ${retry.error.code ?? '?'} ${retry.error.message}`)
+    }
+  } catch (e) {
     // Network/config errors never surface — the run result screen must not break.
+    warn(`score submission failed: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+function warn(msg: string): void {
+  console.warn(`[leaderboard] ${msg}`)
+}
+
+/**
+ * Only the one unambiguous signal: the v5 trigger's own message, raised when the id we are
+ * writing under is bound to a different device's secret.
+ *
+ * Deliberately NOT any 42501 / "row-level security" failure. Rotating on those was wrong and a
+ * test caught it doing real damage: a plain policy refusal also happens when a player improves
+ * their own score and the request is rejected for an unrelated reason, and the "recovery" then
+ * threw away a legitimate player's identity and their whole leaderboard history. A destructive
+ * repair needs a certain diagnosis, not a plausible one.
+ */
+function isIdentityRejection(error: { code?: string; message?: string }): boolean {
+  return /registered to another device/i.test(error.message ?? '')
 }
 
 /** Top scores for a given daily challenge, best first. Returns [] on any failure. */
