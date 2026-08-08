@@ -16,7 +16,7 @@ import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilit
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
-import { PR_BASE_COST, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
+import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
   Choice,
@@ -1462,6 +1462,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
 
   // --- PvP attack cooldown & shield expiry ---
   if ((s.flags.attackCooldown ?? 0) > 0) s.flags.attackCooldown -= 1
+  if ((s.flags.priceWarCooldown ?? 0) > 0) s.flags.priceWarCooldown -= 1
   if ((s.flags.shield ?? 0) > 0) s.flags.shield -= 1
   if ((s.flags.pivotCooldown ?? 0) > 0) s.flags.pivotCooldown -= 1
 
@@ -2039,8 +2040,10 @@ export function raidMagnitude(victimUsers: number): number {
   return Math.round(Math.max(proportional, Math.min(victimUsers * 0.15, RAID_FLOOR_USERS)))
 }
 
-export function canAttack(s: GameState): { ok: boolean; reason?: string } {
+export function canAttack(s: GameState, kind?: AttackDef['id']): { ok: boolean; reason?: string } {
   if (!can(s, 'pvpActions')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if (kind === 'pricewar' && (s.flags.priceWarCooldown ?? 0) > 0)
+    return { ok: false, reason: `Margins still recovering from the last war — ${s.flags.priceWarCooldown} wk` }
   if ((s.flags.attackCooldown ?? 0) > 0) return { ok: false, reason: `Ops team recovering — ${s.flags.attackCooldown} wk` }
   return { ok: true }
 }
@@ -2055,7 +2058,7 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
   if (!def) return false
   const targetUsers = Number.isFinite(rawTargetUsers) && rawTargetUsers > 0 ? Math.min(rawTargetUsers, 1e10) : 0
   const cost = attackCost(s, kind)
-  if (!canAttack(s).ok || s.cash < cost) return false
+  if (!canAttack(s, kind).ok || s.cash < cost) return false
   s.cash -= cost
   s.flags.attackCooldown = ATTACK_COOLDOWN
   drainEnergy(s, 4)
@@ -2075,6 +2078,7 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
   if (kind === 'pricewar') {
     s.flags.priceWar = PRICE_WAR_WEEKS
     s.flags.priceWarInitiator = 1
+    s.flags.priceWarCooldown = PRICE_WAR_WEEKS + PRICE_WAR_COOLDOWN
   }
   if (kind === 'raid') {
     // Relative, not absolute: raiding the leader pays up to 3x, kicking a straggler pays half.
@@ -2098,6 +2102,31 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
 // The attacker still pays and still goes on cooldown — they just hit a wall.
 // It is priced as a real commitment, because that is the decision: spend big on defence
 // during the window you expect to be hit, or spend it on growth and take the hits.
+/**
+ * Buy your way out of a price war early: you stop undercutting, and the customers you were holding
+ * with the low price walk. Without this a war is pure mutual bleeding with no decision in it — the
+ * concede is what turns it into a negotiation with a clock.
+ *
+ * NOTE: the users leave the market rather than being credited to the initiator. Crediting them
+ * needs a new broadcast event; until then the initiator's benefit is that their own war ends with
+ * a weakened rival, not a direct transfer.
+ */
+export function canConcedePriceWar(s: GameState): { ok: boolean; reason?: string } {
+  if ((s.flags.priceWar ?? 0) <= 0) return { ok: false, reason: 'No price war running' }
+  if ((s.flags.priceWarInitiator ?? 0) === 1) return { ok: false, reason: 'You started this one — you cannot concede it' }
+  return { ok: true }
+}
+
+export function concedePriceWar(s: GameState): boolean {
+  if (!canConcedePriceWar(s).ok) return false
+  const lost = Math.round(s.users * CONCEDE_USER_SHARE)
+  if (lost > 0) applyEffects(s, { users: -lost })
+  delete s.flags.priceWar
+  delete s.flags.priceWarInitiator
+  s.flash = `📉 You raised prices back and stepped out of the war. ${lost.toLocaleString()} customers went with the cheaper option — but your margin is yours again.`
+  return true
+}
+
 export const SHIELD_WEEKS = 8
 export const SHIELD_BASE_COST = 120_000
 

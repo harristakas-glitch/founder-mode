@@ -73,6 +73,13 @@ export function prSourceHidden(s: GameState): boolean {
 
 export const PRICE_WAR_WEEKS = 6
 export const PRICE_WAR_COST = 30_000
+/**
+ * Weeks after a war ENDS before another can be declared. The generic 5-week attack cooldown is
+ * shorter than the 6-week war, so it never bit: bots re-declared the instant one lapsed and spent
+ * 86% of all weeks at war, killing both founders in 3 of 12 duels. A price war has to be an
+ * episode with a beginning and an end, not the weather.
+ */
+export const PRICE_WAR_COOLDOWN = 8
 
 /**
  * Revenue multiplier while a price war runs.
