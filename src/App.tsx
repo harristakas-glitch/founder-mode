@@ -705,9 +705,12 @@ function MatchOver({ onClose }: { onClose: () => void }) {
   const figure = (p: NetPlayer) => (isContesting(p) ? (p.id === myId() && game ? valuation(game) : p.val) : p.payout)
   const label = (p: NetPlayer) =>
     hasForfeited(p) ? 'left the match' : isContesting(p) ? 'last one standing' : (p.overType ?? 'timeup')
-  const ranked = [...online.players].sort(
-    (a, b) => Number(isContesting(b)) - Number(isContesting(a)) || figure(b) - figure(a),
-  )
+  // Rank purely on the figure. There used to be an alive-first tier here, which was both
+  // redundant and wrong: `figure` already values a still-trading founder at their VALUATION rather
+  // than a payout they have not taken, so nobody is stranded at $0 — and the tier meant a
+  // successful exit lost to anyone still breathing. A player acquired for $13.2M was ranked below
+  // a rival trading at $2.12M and told they came second.
+  const ranked = [...online.players].sort((a, b) => figure(b) - figure(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const shareText =
     `Founder Mode — online match result:\n` +
     ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(figure(p))}`).join('\n') +
@@ -720,7 +723,8 @@ function MatchOver({ onClose }: { onClose: () => void }) {
         </button>
         <h2 className="text-3xl font-extrabold">🏆 Match over</h2>
         <p className="mt-2 text-mut">
-          <b className="text-ink">{ranked[0]?.company}</b> takes the market. Final founder payouts:
+          <b className="text-ink">{ranked[0]?.company}</b>{' '}
+          {ranked[0] && isContesting(ranked[0]) ? 'takes the market' : 'wins on the exit'}. Final founder payouts:
         </p>
         <div className="mt-5 space-y-2 text-left">
           {ranked.map((p, i) => (
