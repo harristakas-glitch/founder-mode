@@ -2,15 +2,8 @@
 import type { GameState } from './game/types'
 import { money, num } from './format'
 import { sectorById } from './game/data'
+import { ENDINGS, type EndingType } from './theme'
 
-export const ENDING_META: Record<string, { emoji: string; title: string }> = {
-  unicorn: { emoji: '🦄', title: 'Unicorn' },
-  ipo: { emoji: '🔔', title: 'Rang the bell' },
-  acquired: { emoji: '🤝', title: 'Acquired' },
-  timeup: { emoji: '⏱', title: 'Challenge complete' },
-  fired: { emoji: '🪑', title: 'Fired by the board' },
-  bankrupt: { emoji: '💸', title: 'Out of money' },
-}
 
 export interface RunMarker {
   week: number
@@ -39,7 +32,9 @@ export function runMarkers(g: GameState): RunMarker[] {
     else if (t.includes(`${g.companyName} acquires`)) add(m.week, '🤝', t.replace(`${g.companyName} acquires `, 'Bought '))
   }
   if (g.gameOver) {
-    const e = ENDING_META[g.gameOver.type]
+    // `?? timeup` rather than a bare lookup: this used to dereference the result directly, so an
+    // ending the table did not know about threw while building the share card.
+    const e = ENDINGS[g.gameOver.type] ?? ENDINGS.timeup
     add(g.gameOver.week, e.emoji, e.title)
   }
   return markers.slice(0, 12)
@@ -52,7 +47,7 @@ export function drawResultCard(g: GameState): HTMLCanvasElement {
   canvas.width = W
   canvas.height = H
   const ctx = canvas.getContext('2d')!
-  const ending = ENDING_META[g.gameOver?.type ?? 'timeup']
+  const ending = ENDINGS[(g.gameOver?.type ?? 'timeup') as EndingType] ?? ENDINGS.timeup
   const payout = g.gameOver?.payout ?? 0
   const font = (px: number, weight = 700) => `${weight} ${px}px -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif`
 

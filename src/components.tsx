@@ -6,7 +6,9 @@ import type { TraitId } from './game/types'
 
 const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function useTicker(value: number, ms = 500): number {
+// Local to this module: `Ticker` is the only consumer and the hook is not part of the
+// component library's surface.
+function useTicker(value: number, ms = 500): number {
   const [shown, setShown] = useState(value)
   const fromRef = useRef(value)
   const rafRef = useRef(0)
@@ -90,7 +92,9 @@ export function Td({ children, right, className = '' }: { children?: ReactNode; 
 // One card recipe for the whole game: a lifted surface, a hairline, an ambient
 // shadow, and a 1px inner highlight along the top edge. No glass, no gradients —
 // depth comes from the elevation ramp so dense numbers stay on a flat backdrop.
-export const CARD = 'rounded-2xl border border-line/70 bg-surface/80 shadow-[var(--elev-2)] ring-1 ring-inset ring-white/[0.03]'
+// Local to this module: `Panel` and `StatCard` are the only consumers. A screen that wants this
+// look should use `Panel`, not re-apply the class string.
+const CARD = 'rounded-2xl border border-line/70 bg-surface/80 shadow-[var(--elev-2)] ring-1 ring-inset ring-white/[0.03]'
 
 export function Panel({ title, action, children, className = '' }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -379,7 +383,10 @@ export function TimelineChart({ history, markers }: { history: { week: number; v
   })
   return (
     <svg className="block w-full" viewBox={`0 0 ${W} ${H}`} style={{ height: 150 }}>
-      <polygon points={`2,${H - 6} ${line} ${W - 2},${H - 6}`} fill="rgba(124,154,255,0.15)" />
+      {/* The stroke below reads --color-accent, which App rebinds per sector. This fill used to be a
+          literal rgba() copy of the SaaS blue, so on a fintech, social or ecommerce run the line
+          retinted and the area under it stayed blue. Same token, same retint. */}
+      <polygon points={`2,${H - 6} ${line} ${W - 2},${H - 6}`} fill="var(--color-accent)" fillOpacity="0.15" />
       <polyline points={line} fill="none" stroke="var(--color-accent)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
       {markerPos.map((mk, idx) => (
         <text key={idx} x={x(mk.i)} y={Math.max(6, y(vals[mk.i]) - 3)} fontSize="5.5" textAnchor="middle">

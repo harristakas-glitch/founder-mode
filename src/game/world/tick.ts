@@ -288,7 +288,7 @@ function emit(s: GameState, world: LivingWorldState, seed: number, c: NarrativeC
  * the fixed-cadence placeholder, which picked a person on a timer rather than picking a story.
  */
 function composeWeeklyBeat(s: GameState, world: LivingWorldState, seed: number): void {
-  const depth = s.capabilities?.relationships ? 'deep' : hasCapability(s, 'pvpActions') ? 'competitive' : 'light'
+  const depth = hasCapability(s, 'relationships') ? 'deep' : hasCapability(s, 'pvpActions') ? 'competitive' : 'light'
   const directed = directWeek(weekCandidates(s, world), { week: s.week, depth, lastSeen: world.narrativeLastSeen ?? {} })
   if (!directed.major) return // a quiet week stays quiet
 

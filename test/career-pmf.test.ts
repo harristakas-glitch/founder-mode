@@ -1,5 +1,5 @@
 // Career Phase 1 — PMF Discovery 2.0. Run: npx tsx test/career-pmf.test.ts
-import { advanceWeek, newGame } from '../src/game/engine'
+import { advanceWeek, newGame, weeklyOffice } from '../src/game/engine'
 import { hasCapability, type GameConfig } from '../src/game/modes'
 import { generateAllTruth, generateSegmentTruth, segmentsForSector } from '../src/game/career/segments'
 import {
@@ -173,7 +173,14 @@ function run(seed: number, marketing: number, weeks: number) {
 }
 const blaster = run(808, 250_000, 26)
 const patient = run(808, 15_000, 26)
-ok(blaster.cash < patient.cash, 'spending hard on acquisition burns much more cash')
+// `blaster.cash < patient.cash` was true by subtraction — marketingSpend leaves the account every
+// week regardless of whether it buys anything. The claim of the section is about EFFICIENCY, so
+// assert efficiency: dollars spent per customer still on the books at week 26.
+const costPer = (s: typeof blaster, spend: number) => (spend * 26) / Math.max(1, s.users)
+ok(
+  costPer(blaster, 250_000) > costPer(patient, 15_000) * 3,
+  `scaling before fit costs far more per surviving customer ($${Math.round(costPer(blaster, 250_000)).toLocaleString()} vs $${Math.round(costPer(patient, 15_000)).toLocaleString()})`,
+)
 ok(
   blaster.career!.cohorts.reduce((a, c) => a + (c.startingCustomers - c.activeCustomers), 0) >
     patient.career!.cohorts.reduce((a, c) => a + (c.startingCustomers - c.activeCustomers), 0),
@@ -245,7 +252,11 @@ for (let i = 0; i < suggestions.length; i++) {
   while (i + run < suggestions.length && suggestions[i + run] === suggestions[i]) run++
   longestStreak = Math.max(longestStreak, run)
 }
-ok(longestStreak <= 2, `a player who follows the advice never sees the same suggestion twice running (longest streak ${longestStreak})`)
+// The message and the bound used to disagree: `<= 2` permits the same suggestion twice running,
+// which is exactly what "never twice running" forbids. The bound is the honest one — a suggestion
+// legitimately persists for the week in which its experiment is being started — so the WORDING was
+// what needed fixing, and `<= 3` is now the failure it is meant to catch.
+ok(longestStreak <= 2, `a suggestion never survives more than the week it is acted on (longest streak ${longestStreak}, max allowed 2)`)
 ok(new Set(suggestions).size >= 5, `suggestions vary across experiments and segments (${new Set(suggestions).size} distinct in 24 weeks)`)
 ok(
   new Set(suggestions.map((x) => x.split(':')[1])).size >= 2,
@@ -256,7 +267,11 @@ const inflightRun = newGame('Inflight', 'saas', 'technical', { config: cfg({ see
 const first = suggestedExperiment(inflightRun.career!, inflightRun.sector)!
 startExperiment(inflightRun.career!, 1, first.type, first.segmentId, 'inflight')
 const second = suggestedExperiment(inflightRun.career!, inflightRun.sector)
-ok(!second || `${second.type}:${second.segmentId}` !== `${first.type}:${first.segmentId}`, 'work already running is never suggested again')
+// Split from a single `!second || ...`. That form passed if `suggestedExperiment` regressed to
+// returning null whenever anything was in flight — which would leave the player with no guidance
+// at all, a worse bug than the one being guarded.
+ok(!!second, 'with one study running there is still something else worth doing')
+ok(`${second?.type}:${second?.segmentId}` !== `${first.type}:${first.segmentId}`, 'work already running is never suggested again')
 
 console.log('— Retention is a 4-week snapshot, not lifetime decay —')
 let ret = newGame('Ret', 'saas', 'technical', { config: cfg({ seed: 909 }) })
@@ -304,7 +319,12 @@ ok(br.career!.lastBriefing!.week === br.week, 'the briefing is for the current w
 const revenues = br.history.map((h) => h.revenue).filter((r) => r > 0)
 ok(revenues.length < 2 || br.career!.lastBriefing!.revenueDeltaPct !== 0, `revenueDeltaPct is populated, not permanently 0 (${br.career!.lastBriefing!.revenueDeltaPct}%)`)
 ok(typeof br.career!.lastBriefing!.uncertainty === 'string' && br.career!.lastBriefing!.uncertainty.length > 10, 'the briefing names a biggest uncertainty')
-ok(Object.values(br.career!.retentionBySegment).some((v) => typeof v === 'number'), 'per-segment retention is tracked')
+// `some(typeof v === 'number')` on a Record<SegmentId, number> passed if every segment was 0,
+// i.e. if retention tracking were entirely dead.
+ok(
+  Object.values(br.career!.retentionBySegment).some((v) => v > 0 && v <= 1),
+  `per-segment retention is tracked with real values (${Object.values(br.career!.retentionBySegment).map((v) => v.toFixed(2)).join(', ')})`,
+)
 
 // experiments must cost engineering time, and repositioning must slow the product down
 const idle = newGame('Idle', 'saas', 'technical', { config: cfg({ seed: 707 }) })
@@ -359,8 +379,20 @@ console.log('— A standing study is a programme that finishes, not a subscripti
     rich.career!.activeExperiments.filter((e) => e.type === 'pilot').length === 0,
     'a standing pilot whose question is answered is retired, not renewed',
   )
-  // 20 weeks would be two renewals at $28k had it kept rolling; office+infra alone is a few hundred
-  ok(cashBefore - rich.cash < 28_000, `and it stops charging (spent $${Math.round(cashBefore - rich.cash).toLocaleString()} over 20 weeks)`)
+  // Had the study kept rolling, 20 weeks is two renewals at $28k each. The old bound was `< 28_000`
+  // — which still passes if a bug charges a whole extra renewal minus a dollar. The bound is now
+  // derived from what this company ACTUALLY costs to run with marketing at zero: office overhead
+  // over the 20 weeks, plus generous headroom for per-user infra. A single spurious renewal blows it.
+  const overhead = weeklyOffice(rich) * 20 * 1.5
+  const spent = cashBefore - rich.cash
+  ok(
+    spent < overhead && spent < experimentDef('pilot').cashCost,
+    `and it stops charging: $${Math.round(spent).toLocaleString()} over 20 weeks is running costs, not a $${experimentDef('pilot').cashCost.toLocaleString()} renewal (overhead ceiling $${Math.round(overhead).toLocaleString()})`,
+  )
+  ok(
+    !rich.career!.journal.some((j) => j.week > 1 && /renew/i.test(j.title)),
+    'and no renewal was recorded at all — it retired, it did not quietly roll on',
+  )
 }
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)

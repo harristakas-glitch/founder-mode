@@ -58,11 +58,29 @@ ok(
   'no mode claims a Career/Arena system that does not exist yet',
 )
 
+// A capability must never understate what is running. The Director and the media voice have no
+// switch of their own — they execute whenever proceduralNarrative does — so their flags have to
+// track it, or the capability table lies about the shape of the game.
+for (const [name, caps] of [['Quick', quick], ['Career', career], ['Arena', arena]] as const)
+  ok(
+    caps.narrativeDirector === caps.proceduralNarrative && caps.proceduralMedia === caps.proceduralNarrative,
+    `${name}: narrativeDirector and proceduralMedia track proceduralNarrative — no flag claims a running system is off`,
+  )
+
 console.log('— Override layering —')
 const forced = resolveGameRules(cfg({ mode: 'arena', overrides: { storyArcs: true, pvpActions: false } })).capabilities
 ok(forced.storyArcs && !forced.pvpActions, 'explicit overrides win over mode + format')
 ok(Object.keys(sanitizeCapabilities({ storyArcs: true, nonsense: 1, pvpActions: 'yes' })).length === 1, 'sanitize keeps only known boolean keys')
-ok(ALL_CAPABILITY_KEYS.length > 20, `capability surface is enumerable (${ALL_CAPABILITY_KEYS.length} keys)`)
+// `> 20` on a key count was satisfied by any enum of a reasonable size, including one holding 21
+// duplicates. The property that matters is that the list IS the interface: no duplicates, and every
+// entry actually resolves.
+const quickCaps = defaultCapabilities('quick')
+ok(
+  ALL_CAPABILITY_KEYS.length === new Set(ALL_CAPABILITY_KEYS).size &&
+    ALL_CAPABILITY_KEYS.every((k) => typeof quickCaps[k] === 'boolean') &&
+    Object.keys(quickCaps).length === ALL_CAPABILITY_KEYS.length,
+  `ALL_CAPABILITY_KEYS is exactly the capability surface, no gaps or repeats (${ALL_CAPABILITY_KEYS.length} keys)`,
+)
 
 console.log('— Games build from config —')
 for (const m of MODES) {
@@ -71,7 +89,13 @@ for (const m of MODES) {
   ok(hasCapability(g, m === 'arena' ? 'pvpActions' : 'storyArcs'), `${m} game resolved its capabilities`)
 }
 const careerGame = newGame('C', 'saas', 'technical', { config: cfg({ mode: 'career' }) })
-ok(careerGame.config.mode === 'career' && !!advanceWeek(careerGame), 'a Career run advances a week like any other')
+// `!!advanceWeek(...)` was `!!{}` — advanceWeek always returns a GameState, so the only thing that
+// could fail was the mode check already made above.
+const careerNext = advanceWeek(careerGame)
+ok(
+  careerNext.week === careerGame.week + 1 && !!careerNext.career && careerNext.career.cohorts.length >= 0 && !careerNext.gameOver,
+  'a Career run advances a week like any other, and keeps its PMF subsystem',
+)
 
 console.log('— Determinism: config decides the world —')
 const a1 = newGame('A', 'saas', 'technical', { config: cfg({ seed: 4242 }) })

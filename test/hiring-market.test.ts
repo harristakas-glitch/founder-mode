@@ -2,8 +2,16 @@
 //   1. every client renders the IDENTICAL five candidates, or there is nothing to contest;
 //   2. every client resolves a contested hire to the SAME winner, with no server refereeing it.
 // Both are pure functions of (seed, week), so they are testable without a socket.
-import { pickHiringWinner, recruiterFee, sharedCandidates, type HiringBid } from '../src/game/engine'
-import type { Candidate } from '../src/game/types'
+import {
+  marketSalary,
+  newGame,
+  offerAcceptChance,
+  pickHiringWinner,
+  recruiterFee,
+  sharedCandidates,
+  type HiringBid,
+} from '../src/game/engine'
+import type { Candidate, GameState } from '../src/game/types'
 
 const fails: string[] = []
 const ok = (cond: boolean, msg: string) => {
@@ -106,34 +114,54 @@ ok(
   rate(bid('poor-name', 100, 0), bid('good-name', 100, 100)) === 0,
   'with money equal, reputation decides — there is no bid that always wins',
 )
-// and the premium binds: settleHiring pushes the boosted salary, so the recruiter fee scales too
+// and the premium binds: settleHiring pushes the boosted salary, so the recruiter fee scales too.
+// The boost is reproduced here exactly as `settleHiring` computes it (src/store.ts, `settleHiring`),
+// and asserted against the engine's own fee function rather than against itself.
 const skilled = pool200.find((c) => c.skill >= 8)!
 const boosted = Math.round((skilled.salary * 2) / 1000) * 1000
-ok(boosted > skilled.salary, 'winning at +100% doubles the salary that lands in offersOut')
+ok(recruiterFee({ ...skilled, salary: boosted }) === Math.round(boosted * 0.15), 'the recruiter fee is 15% of whatever salary lands in offersOut')
 ok(
-  recruiterFee({ ...skilled, salary: boosted }) > recruiterFee(skilled),
-  'and the recruiter fee scales with it — a contested hire is never free',
+  recruiterFee({ ...skilled, salary: boosted }) - recruiterFee(skilled) > 15_000,
+  `winning a skill-${skilled.skill} candidate at +100% costs $${(recruiterFee({ ...skilled, salary: boosted }) - recruiterFee(skilled)).toLocaleString()} more in fees alone — a contested hire is never free`,
 )
 
 console.log('\n— Winning the auction has to move the candidate —')
 // Regression: acceptChance ignored the premium entirely, so a founder could commit +100% to win a
 // sealed bid and still be declined a quarter of the time for reasons unrelated to the bid.
-const accept = (rep: number, runway: number, salary: number, c: Candidate, climate = 0) => {
-  const marketRate = ROLE_BASE_TEST[c.role] + c.skill * 13_000
-  const overPay = Math.min(1, Math.max(-0.2, (salary - marketRate) / Math.max(1, marketRate)))
-  return Math.min(0.97, Math.max(0.05, 0.72 + rep / 400 + overPay * 0.18 - (runway < 10 ? 0.25 : 0) + (climate < -0.2 ? 0.08 : 0)))
+//
+// This block used to carry its OWN copy of the acceptance formula and of ROLE_BASE, so every
+// assertion below passed against the test's arithmetic and none of them touched the engine —
+// deleting the `overPay` term from advanceWeek left all of them green. It now calls the exported
+// `offerAcceptChance`, and the market rate comes from the exported `marketSalary`.
+const founder = (reputation: number, climate = 0): GameState => {
+  const g = newGame('AcceptCo', 'saas', 'technical', { seed: 4242, aiRivals: false })
+  g.reputation = reputation
+  g.climate = climate
+  return g
 }
-const ROLE_BASE_TEST: Record<string, number> = { engineer: 62_000, designer: 55_000, marketer: 50_000, sales: 52_000 }
-const atAsking = accept(10, 30, skilled.salary, skilled)
-const atMax = accept(10, 30, boosted, skilled)
+const atMarket: Candidate = { ...skilled, salary: marketSalary(skilled.role, skilled.skill) }
+const atAsking = offerAcceptChance(founder(10), skilled, 30)
+const atMax = offerAcceptChance(founder(10), { ...skilled, salary: boosted }, 30)
 ok(atMax > atAsking + 0.1, `paying over the odds materially improves acceptance (${(atAsking * 100).toFixed(0)}% → ${(atMax * 100).toFixed(0)}%)`)
+ok(atMax >= 0.9, `a +100% offer is close to a sure thing (${(atMax * 100).toFixed(1)}%)`)
+// Exactly 0.72 + 10/400 with no overpay term, no runway penalty and a neutral climate. Pinned to
+// the digit: this is the number Quick Play has always run at, and any change to the base, the
+// reputation slope or the overpay clamp moves it.
 ok(
-  Math.abs(accept(10, 30, ROLE_BASE_TEST[skilled.role] + skilled.skill * 13_000, skilled) - 0.745) < 0.01,
-  'an offer at the market rate is unchanged from before the fix — Quick Play balance is untouched',
+  Math.abs(offerAcceptChance(founder(10), atMarket, 30) - 0.745) < 1e-9,
+  `an offer at the market rate is exactly 74.5% — Quick Play balance is untouched (${(offerAcceptChance(founder(10), atMarket, 30) * 100).toFixed(2)}%)`,
+)
+// The bug: the guard read `runwayNow > 0 && runwayNow < 10`, so a NEGATIVE runway skipped it and a
+// bankrupt company got no penalty at all. Both of these must now be the doomed price.
+const doomedNine = offerAcceptChance(founder(10), atMarket, 9)
+const doomedNegative = offerAcceptChance(founder(10), atMarket, -3)
+ok(
+  Math.abs(doomedNine - 0.495) < 1e-9 && Math.abs(doomedNegative - 0.495) < 1e-9,
+  `nine weeks of runway and already-bankrupt both cost the full 25 points (${(doomedNine * 100).toFixed(1)}% / ${(doomedNegative * 100).toFixed(1)}%)`,
 )
 ok(
-  accept(10, -3, skilled.salary, skilled) < accept(10, 30, skilled.salary, skilled),
-  'a company already out of cash scares candidates off — negative runway is the worst case, not an exempt one',
+  offerAcceptChance(founder(10, -0.5), atMarket, 30) > offerAcceptChance(founder(10, 0), atMarket, 30),
+  'a frozen market makes people cling to the job they can get — a cold climate helps acceptance',
 )
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)

@@ -46,15 +46,7 @@ import { Coach } from './Coach'
 import { PMF_CAUSAL_CHAIN } from './CareerUI'
 import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
-
-// Each market gets its own accent identity — the whole UI subtly rethemes per run.
-const SECTOR_ACCENTS: Record<string, [string, string]> = {
-  saas: ['#7c9aff', '#a78bfa'],
-  social: ['#f472b6', '#fb7185'],
-  fintech: ['#34d399', '#2dd4bf'],
-  devtools: ['#a78bfa', '#818cf8'],
-  ecommerce: ['#fbbf24', '#fb923c'],
-}
+import { GAME_URL, endingEmoji, sectorAccent } from './theme'
 
 const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -70,8 +62,6 @@ const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolea
   { id: 'career', label: 'Career', icon: Trophy },
 ]
 
-const GAME_URL = 'https://harristakas-glitch.github.io/founder-mode/'
-const ENDING_EMOJI: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱', ipo: '🔔' }
 
 function MuteButton() {
   const [muted, setM] = useState(isMuted())
@@ -170,7 +160,7 @@ export default function App() {
 
   // retheme accents by sector
   useEffect(() => {
-    const [a, a2] = SECTOR_ACCENTS[game?.sector ?? 'saas'] ?? SECTOR_ACCENTS.saas
+    const [a, a2] = sectorAccent(game?.sector)
     document.documentElement.style.setProperty('--color-accent', a)
     document.documentElement.style.setProperty('--color-accent2', a2)
   }, [game?.sector])
@@ -735,7 +725,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
   const ranked = [...online.players].sort((a, b) => figure(b) - figure(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const shareText =
     `Founder Mode — online match result:\n` +
-    ranked.map((p, i) => `${i + 1}. ${p.company} ${ENDING_EMOJI[p.overType ?? 'timeup']} ${money(figure(p))}`).join('\n') +
+    ranked.map((p, i) => `${i + 1}. ${p.company} ${endingEmoji(p.overType)} ${money(figure(p))}`).join('\n') +
     `\nPlay: ${GAME_URL}`
   return (
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Match over" className="fixed inset-0 z-[60] flex items-center justify-center overscroll-contain bg-black/75 p-4 backdrop-blur-[2px]">
@@ -762,7 +752,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
                   {p.company}
                 </b>{' '}
                 <span className="text-mut">
-                  {hasForfeited(p) ? '🚪' : isContesting(p) ? '🏁' : ENDING_EMOJI[p.overType ?? 'timeup']} {label(p)}
+                  {hasForfeited(p) ? '🚪' : isContesting(p) ? '🏁' : endingEmoji(p.overType)} {label(p)}
                   {p.id === myId() && ' · you'}
                 </span>
               </span>
@@ -943,10 +933,10 @@ function GameOver({ onClose }: { onClose: () => void }) {
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <ShareImageButton
             game={game}
-            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]}. Play: ${GAME_URL}`}
+            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${endingEmoji(go.type)}. Play: ${GAME_URL}`}
           />
           <ShareButton
-            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''}\n${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay${game.challenge ? ' the same world' : ''}: ${GAME_URL}`}
+            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''}\n${game.companyName}: ${money(go.payout ?? 0)} ${endingEmoji(go.type)} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay${game.challenge ? ' the same world' : ''}: ${GAME_URL}`}
           />
           <button
             className="rounded-xl bg-accent px-6 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98]"
@@ -956,7 +946,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <SocialShareRow
-          text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${ENDING_EMOJI[go.type]} in ${go.week} weeks. Beat that: ${GAME_URL}`}
+          text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${endingEmoji(go.type)} in ${go.week} weeks. Beat that: ${GAME_URL}`}
         />
       </div>
     </div>

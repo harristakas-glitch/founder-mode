@@ -12,7 +12,7 @@ import {
   sectorById,
 } from './data'
 import { ARC_DEFS } from './arcs'
-import { resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
+import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
@@ -85,7 +85,14 @@ export function capabilitiesFromLegacyRules(r: Partial<import('./types').Ruleset
   return out
 }
 
-const can = (s: GameState, k: CapabilityKey): boolean => s.capabilities?.[k] ?? false
+/**
+ * Local shorthand for the one question the engine is allowed to ask. It is an ALIAS, not a second
+ * implementation: it must keep delegating to `hasCapability` so there is exactly one definition of
+ * what "on" means. It used to read `s.capabilities?.[k]` itself, which is the same expression today
+ * and a silent divergence the first time `hasCapability` gains a rule (a default, a legacy fallback,
+ * a dev-mode warning) that this copy does not.
+ */
+const can = (s: GameState, k: CapabilityKey): boolean => hasCapability(s, k)
 
 function drainEnergy(s: GameState, n: number) {
   if (can(s, 'founderEnergy')) s.energy = clamp(s.energy - n, 0, 100)
@@ -217,6 +224,10 @@ export function newGame(companyName: string, sector: SectorId, founderKind: Foun
 
 function buildGame(companyName: string, sector: SectorId, founderKind: FounderKind, opts: NewGameOpts): GameState {
   const sec = sectorById(sector)
+  // Resolved ONCE. Four separate calls used to answer this, which is four chances for a future
+  // caller to pass a different config to one of them and hand out a game whose `capabilities`
+  // disagree with the rivals and the career subsystem built alongside it.
+  const rules = resolveGameRules(opts.config!)
   const state: GameState = {
     companyName,
     sector,
@@ -241,7 +252,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     candidates: [],
     offersOut: [],
     pendingHires: [],
-    rivals: (opts.aiRivals ?? resolveGameRules(opts.config!).capabilities.aiRivals) ? makeRivals(sec.tam) : [],
+    rivals: (opts.aiRivals ?? rules.capabilities.aiRivals) ? makeRivals(sec.tam) : [],
     climate: rand(-0.3, 0.5),
     inbox: [],
     termSheets: [],
@@ -270,10 +281,10 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     vacationCooldown: 0,
     bankedPayout: 0,
     config: opts.config!,
-    capabilities: resolveGameRules(opts.config!).capabilities,
+    capabilities: rules.capabilities,
     // Career only: the deep discovery subsystem. Its market truth is generated once, here,
     // from the run's seed — and never regenerated for the life of the campaign.
-    career: resolveGameRules(opts.config!).capabilities.detailedPMF
+    career: rules.capabilities.detailedPMF
       ? createCareerPMF(opts.config!.seed, sector, opts.config!.scenario)
       : undefined,
     history: [],
@@ -345,6 +356,16 @@ function makeRivals(tam: number): Rival[] {
 
 const ROLE_BASE: Record<Role, number> = { engineer: 62_000, designer: 55_000, marketer: 50_000, sales: 52_000 }
 
+/**
+ * What someone of this role and skill is worth on the open market, before any premium, discount or
+ * noise. Exported because it is the reference point `offerAcceptChance` prices an offer against —
+ * a test that wants to ask "what happens at the asking price?" must get the number from here rather
+ * than transcribing `ROLE_BASE` and the `13_000` slope into itself.
+ */
+export function marketSalary(role: Role, skill: number): number {
+  return ROLE_BASE[role] + skill * 13_000
+}
+
 function rollTrait(skill: number): import('./types').TraitId | null {
   if (skill >= 8 && RNG.next() < 0.2) return 'tenx'
   if (RNG.next() < 0.4) return pick<import('./types').TraitId>(['craftsman', 'mercenary', 'culture', 'drama'])
@@ -405,7 +426,7 @@ export function sharedCandidates(seed: number, week: number): Candidate[] {
       const role = pick<Role>(['engineer', 'engineer', 'engineer', 'designer', 'marketer', 'sales'])
       // no stage/reputation term: the market is the room's, not any one founder's
       const skill = clamp(Math.round(rand(2, 8)), 1, 10)
-      const salary = Math.round((ROLE_BASE[role] + skill * 13_000 + rand(-6000, 6000)) / 1000) * 1000
+      const salary = Math.round((marketSalary(role, skill) + rand(-6000, 6000)) / 1000) * 1000
       return {
         id: `mk-${week}-${i}`, // stable across clients; the id IS the thing being contested
         name: randomName(),
@@ -424,7 +445,7 @@ export function makeCandidate(s: GameState): Candidate {
   const role = pick<Role>(['engineer', 'engineer', 'engineer', 'designer', 'marketer', 'sales'])
   const stageBonus = STAGES.indexOf(s.stage) * 0.7
   const skill = clamp(Math.round(rand(1, 6) + s.reputation / 25 + stageBonus), 1, 10)
-  const salary = Math.round((ROLE_BASE[role] + skill * 13_000 + rand(-6000, 6000)) / 1000) * 1000
+  const salary = Math.round((marketSalary(role, skill) + rand(-6000, 6000)) / 1000) * 1000
   return {
     id: uid(),
     name: randomName(),
@@ -438,6 +459,33 @@ export function makeCandidate(s: GameState): Candidate {
 }
 
 export const recruiterFee = (c: Candidate) => Math.round(c.salary * 0.15)
+
+/**
+ * The odds a candidate says yes to the offer sitting in `offersOut`.
+ *
+ * Exported so it can be TESTED rather than transcribed: the regression suite used to carry its own
+ * copy of this arithmetic, which meant deleting the `overPay` term from the engine left every
+ * assertion about it green. A formula the tests re-implement is a formula with no coverage.
+ *
+ * `runwayNow` is passed in rather than derived because the weekly tick already has the exact
+ * revenue and expenses for the week being simulated; `runwayWeeks(s)` is a *projection* off
+ * `marketingSpend` and would answer a slightly different question.
+ */
+export function offerAcceptChance(s: GameState, c: Candidate, runwayNow: number): number {
+  // A company burning cash it does not have is the WORST case, not an exempt one. The guard used
+  // to read `runwayNow > 0 && runwayNow < 10`, and a negative runway (cash already below zero)
+  // failed the first half — so a founder who was bankrupt next week had the same 74.5% acceptance
+  // as a healthy one, while a founder with nine weeks of cash was punished 25 points.
+  const looksDoomed = runwayNow < 10
+  // Money on the table moves people. Without this the Arena sealed-bid auction was incoherent: you
+  // could win a contested hire by committing +100% — doubling both salary and the recruiter fee —
+  // and the candidate would still decline a quarter of the time for reasons that had nothing to do
+  // with the number you had just bid. Derived from the offer itself rather than from a stored bid,
+  // so it works identically for a Quick Play offer at the asking price.
+  const marketRate = marketSalary(c.role, c.skill)
+  const overPay = clamp((c.salary - marketRate) / Math.max(1, marketRate), -0.2, 1)
+  return clamp(0.72 + s.reputation / 400 + overPay * 0.18 - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0), 0.05, 0.97)
+}
 
 // Every one-off payment the player has already set in motion — no hidden bills.
 export function committedCosts(s: GameState): { due: number; potential: number; recommended: number } {
@@ -635,7 +683,7 @@ export function applyEffects(s: GameState, fx: Effects) {
         name: randomName(),
         role,
         skill,
-        salary: Math.round((ROLE_BASE[role] + skill * 13_000) / 1000) * 1000,
+        salary: Math.round(marketSalary(role, skill) / 1000) * 1000,
         morale: 62, // their startup just died under them
         weeks: 0,
       })
@@ -1095,7 +1143,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // Communication overhead: every head past the first ~8 makes the whole org slightly slower.
   // Without this, headcount has no cost but payroll, and "hire everyone you can afford" is
   // strictly optimal forever — which removes the central question of how big to get.
-  const coordination = clamp(1 - Math.max(0, s.employees.length - COORDINATION_FREE_HEADS) * 0.015, 0.6, 1)
+  const coordination = coordinationDrag(s)
   const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e) * coordination
   // an IPO process eats founder and team attention; a landed pitch lifts everything for a while.
   // The founder's own contribution runs on their energy tank — an exhausted founder is half a founder.
@@ -1279,24 +1327,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const offerNews: string[] = []
   for (const c of [...s.offersOut]) {
     const runwayNow = s.cash / Math.max(1, expenses - revenue)
-    // A company burning cash it does not have is the WORST case, not an exempt one. The guard
-    // used to read `runwayNow > 0 && runwayNow < 10`, and a negative runway (cash already below
-    // zero) failed the first half — so a founder who was bankrupt next week had the same 74.5%
-    // acceptance as a healthy one, while a founder with nine weeks of cash was punished 25 points.
-    const looksDoomed = runwayNow < 10
-    // Money on the table moves people. Without this the Arena sealed-bid auction was incoherent:
-    // you could win a contested hire by committing +100% — doubling both salary and the recruiter
-    // fee — and the candidate would still decline a quarter of the time for reasons that had
-    // nothing to do with the number you had just bid. Derived from the offer itself rather than
-    // from a stored bid, so it works identically for a Quick Play offer at the asking price.
-    const marketRate = ROLE_BASE[c.role] + c.skill * 13_000
-    const overPay = clamp((c.salary - marketRate) / Math.max(1, marketRate), -0.2, 1)
-    const acceptChance = clamp(
-      0.72 + s.reputation / 400 + overPay * 0.18 - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0),
-      0.05,
-      0.97,
-    )
-    if (RNG.next() < acceptChance) {
+    if (RNG.next() < offerAcceptChance(s, c, runwayNow)) {
       s.pendingHires.push({ candidate: c, weeksUntilStart: c.notice })
       offerNews.push(`${c.name} accepted (starts in ${c.notice} wk)`)
       s.inbox.unshift({

@@ -7,15 +7,8 @@ import { Panel, Td, Th } from '../components'
 import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import { fetchDailyTop, type DailyScore } from '../net/leaderboard'
+import { endingEmoji } from '../theme'
 
-const ENDING_EMOJI: Record<string, string> = {
-  unicorn: '🦄',
-  ipo: '🔔',
-  acquired: '🤝',
-  timeup: '⏱',
-  fired: '🪑',
-  bankrupt: '💸',
-}
 
 export function DailyLeaderboard({ day, highlightPlayerId }: { day: number; highlightPlayerId?: string }) {
   const [rows, setRows] = useState<DailyScore[] | null>(null)
@@ -62,7 +55,7 @@ export function DailyLeaderboard({ day, highlightPlayerId }: { day: number; high
                   </Td>
                   <Td right>{money(r.score)}</Td>
                   <Td right>{r.weeks}</Td>
-                  <Td right>{ENDING_EMOJI[r.ending] ?? '🏁'}</Td>
+                  <Td right>{endingEmoji(r.ending)}</Td>
                 </tr>
               )
             })}

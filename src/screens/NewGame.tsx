@@ -19,29 +19,10 @@ import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
 import { MATCH_CAP, dailyInfo, readHall, useStore } from '../store'
 import { DailyLeaderboard } from './DailyLeaderboard'
-
-const ENDING_ICON: Record<string, string> = { unicorn: '🦄', acquired: '🤝', bankrupt: '💸', fired: '🪑', timeup: '⏱', ipo: '🔔' }
+import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
 
-// Each experience gets its own light: Quick is the house electric blue, Career the
-// institutional gold it earns, Arena the heat of a fight.
-const MODE_ACCENTS: Record<GameMode, [string, string]> = {
-  quick: ['#7c9aff', '#a78bfa'],
-  career: ['#fbbf24', '#fb923c'],
-  arena: ['#f472b6', '#fb7185'],
-}
-
-// Mirrors SECTOR_ACCENTS in App.tsx so the market you pick already looks like the game
-// you are about to play. (App.tsx owns the in-game binding; it does not export the table.)
-const SECTOR_ACCENTS: Record<string, [string, string]> = {
-  saas: ['#7c9aff', '#a78bfa'],
-  social: ['#f472b6', '#fb7185'],
-  fintech: ['#34d399', '#2dd4bf'],
-  devtools: ['#a78bfa', '#818cf8'],
-  ecommerce: ['#fbbf24', '#fb923c'],
-}
-const sectorAccent = (id: string) => SECTOR_ACCENTS[id] ?? SECTOR_ACCENTS.saas
 
 // A market's character, read straight off its simulation numbers rather than invented:
 // revenue per user (log — the spread is three orders of magnitude), word of mouth, and
@@ -171,7 +152,7 @@ function HallOfFame() {
         {hall.slice(0, 5).map((r, i) => (
           <div key={i} className="flex items-center justify-between gap-3 border-b border-line/40 py-2 text-[13px] last:border-b-0">
             <span className="min-w-0 truncate">
-              {ENDING_ICON[r.ending] ?? ''} <b>{r.company}</b>{' '}
+              {endingEmoji(r.ending)} <b>{r.company}</b>{' '}
               <span className="text-mut">
                 · {r.sector} · {r.weeks} wks
               </span>

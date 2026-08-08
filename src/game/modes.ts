@@ -37,10 +37,15 @@ export interface GameConfig {
 
 // ENFORCED vs DESCRIPTIVE — read this before assuming a flag does something.
 //
-// ENFORCED (flipping the flag changes behaviour): aiRivals, storyArcs, oneOnOnes,
-//   catastrophes, founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame,
-//   macroShocks, pvpActions, leaderboard, detailedPMF, customerSegments, customerResearch,
-//   hypothesisBoard, decisionJournal.
+// This list is checkable: `grep -rn "'<key>'" src` should find a `hasCapability` call for every
+// ENFORCED key and none for a DESCRIPTIVE one. It had drifted — three keys were listed as enforced
+// with nothing branching on them, and the entire living-world set was missing.
+//
+// ENFORCED (flipping the flag changes behaviour): aiRivals, storyArcs, oneOnOnes, catastrophes,
+//   founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame, macroShocks, pvpActions,
+//   sharedHiringPool, leaderboard, detailedPMF, customerResearch, hypothesisBoard,
+//   persistentCharacters, characterMemory, companyMemory, relationships, proceduralNarrative,
+//   promises.
 //
 // DESCRIPTIVE (true statements about the experience, but nothing branches on them yet):
 //   humanRivals   — Arena's opponents come from the room's presence list, not this flag.
@@ -48,6 +53,14 @@ export interface GameConfig {
 //   causalExplanations — the autopsy/benchmarks always explain; nothing gates them.
 //   singleAttempt — enforced at the data layer (unique (day, player_id), keep-higher-score),
 //                   not in the client. Replaying today is still allowed by design.
+//   customerSegments, decisionJournal — implied by detailedPMF: the segment model and the journal
+//                   are built into the Career subsystem itself, so `game.career` existing IS the
+//                   switch. Turning either off alone does nothing.
+//   narrativeDirector, proceduralMedia — subordinate to proceduralNarrative. The Director scores
+//                   every composed week and media-voiced coverage is how a company-level fact is
+//                   narrated, so both run whenever proceduralNarrative does. They are declared true
+//                   alongside it rather than left false, because a flag that says a running system
+//                   is absent is worse than no flag at all.
 //
 // PLANNED capabilities are all false and must stay false until the feature exists.
 export interface GameCapabilities {
@@ -240,6 +253,11 @@ const QUICK_BASE_RULES: GameRules = {
     // meetings stay off until their own phases land, so a capability is never on before the code
     // that honours it exists. Quick Play gets people and company history, not a relationship sim.
     proceduralNarrative: true,
+    // Built and running (src/game/world/director.ts, src/game/world/content/composer-media.ts).
+    // Nothing branches on either — they run because proceduralNarrative does — so these declare
+    // what is actually happening rather than understating it.
+    narrativeDirector: true,
+    proceduralMedia: true,
     persistentCharacters: true,
     companyMemory: true,
     characterMemory: true,
@@ -302,6 +320,8 @@ const ARENA_BASE_RULES: GameRules = {
     // history yes; no deep character memory and no relationship simulation — humans create the
     // story here, and the narrative layer only has to make it visible.
     proceduralNarrative: true,
+    narrativeDirector: true,
+    proceduralMedia: true,
     persistentCharacters: true,
     companyMemory: true,
     humanRivals: true,

@@ -2,15 +2,8 @@ import { Panel, StatCard, Bar, Th, Td } from '../components'
 import { money } from '../format'
 import { readHall, type RunRecord } from '../store'
 import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
+import { ENDINGS } from '../theme'
 
-const ENDING_META: Record<RunRecord['ending'], { emoji: string; name: string }> = {
-  unicorn: { emoji: '🦄', name: 'Unicorn' },
-  ipo: { emoji: '🔔', name: 'IPO' },
-  acquired: { emoji: '🤝', name: 'Acquired' },
-  timeup: { emoji: '⏱', name: 'Time up' },
-  fired: { emoji: '🪑', name: 'Fired' },
-  bankrupt: { emoji: '💸', name: 'Bankrupt' },
-}
 
 const ENDING_ORDER: RunRecord['ending'][] = ['unicorn', 'ipo', 'acquired', 'timeup', 'fired', 'bankrupt']
 
@@ -69,7 +62,7 @@ export function Career() {
         <Panel title="Endings">
           {ENDING_ORDER.filter((e) => endingCounts.has(e)).map((e) => {
             const count = endingCounts.get(e)!
-            const meta = ENDING_META[e]
+            const meta = ENDINGS[e]
             return (
               <div key={e} className="mb-2.5 flex items-center gap-3 last:mb-0">
                 <span className="w-28 shrink-0 text-[13px]">
@@ -131,7 +124,7 @@ export function Career() {
                     <Td>{r.company}</Td>
                     <Td>{r.sector}</Td>
                     <Td>
-                      {(ENDING_META[r.ending]?.emoji ?? '🏁') + ' ' + (ENDING_META[r.ending]?.name ?? r.ending)}
+                      {(ENDINGS[r.ending]?.emoji ?? '🏁') + ' ' + (ENDINGS[r.ending]?.name ?? r.ending)}
                     </Td>
                     <Td right>{r.weeks}</Td>
                     <Td right>{money(r.score)}</Td>
