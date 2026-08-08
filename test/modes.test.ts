@@ -104,6 +104,46 @@ ok(
   JSON.stringify(a1.rivals.map((r) => [r.name, r.stage, r.users])) === JSON.stringify(a2.rivals.map((r) => [r.name, r.stage, r.users])),
   'same seed + config deals the identical world',
 )
+
+/**
+ * GOLDEN TRACE. The RNG draw order inside advanceWeekInner is the thing most likely to break
+ * silently: reorder or add a single draw and every seeded run changes, while nothing else in the
+ * suite notices. Replays, daily challenges and Arena all depend on it.
+ *
+ * These are RECORDED hashes, not a self-comparison. Asserting `trace() === trace()` — which is what
+ * this test did first — only proves a run is consistent with itself: insert an extra RNG.next() and
+ * BOTH traces shift together and it still passes. That is the same class of assertion this test
+ * file was just rewritten to remove.
+ *
+ * If one of these fails you changed the draw order. That is allowed — but it must be a DECISION.
+ * Re-record the hash in the same commit as the change, never separately.
+ */
+const GOLDEN_TRACES: Record<number, number> = {
+  7: 0x7edba86d,
+  4242: 0x7401e275,
+  31337: 0xe4a66ca2,
+}
+
+for (const [seedKey, expected] of Object.entries(GOLDEN_TRACES)) {
+  const seed = Number(seedKey)
+  let g = newGame('Trace', 'saas', 'technical', { seed, aiRivals: true })
+  const out: string[] = []
+  for (let w = 0; w < 12; w++) {
+    g = advanceWeek(g)
+    out.push(
+      `${g.week}|${g.users}|${Math.round(g.cash)}|${g.pmf.toFixed(4)}|${g.hype.toFixed(4)}|` +
+        `${g.quality.toFixed(4)}|${g.bugs.toFixed(4)}|${g.rivals.map((r) => r.users).join(',')}|${g.candidates.length}`,
+    )
+  }
+  const trace = out.join(';')
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < trace.length; i++) {
+    h ^= trace.charCodeAt(i)
+    h = Math.imul(h, 16777619) >>> 0
+  }
+  ok(h === expected, `seed ${seed}: twelve weeks match the recorded trace (0x${h.toString(16)})`)
+}
+
 const a3 = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9999 }) })
 ok(JSON.stringify(a1.rivals.map((r) => r.name)) !== JSON.stringify(a3.rivals.map((r) => r.name)), 'a different seed deals a different world')
 

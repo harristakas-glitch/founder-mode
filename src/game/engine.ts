@@ -1040,7 +1040,15 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
     'Series B': 15_000_000,
     'Series C': 40_000_000,
   }
-  const investors = [...INVESTORS].sort(() => RNG.next() - 0.5).slice(0, n)
+  // NOT `.sort(() => RNG.next() - 0.5)`. That is not a shuffle: it feeds a random comparator to
+  // Array.prototype.sort, whose output depends on V8's internal sort algorithm, so a Node upgrade
+  // silently changes which investors every seed deals. `makeRivals` above already does it properly.
+  // Fixed now, deliberately: this changes the investors each seed produces, and the leaderboard has
+  // never accepted a score (see BACKLOG 1.3), so there is no historical replay to invalidate. This
+  // is the cheapest moment this fix will ever have.
+  const pool = [...INVESTORS]
+  const investors: string[] = []
+  for (let i = 0; i < n && pool.length > 0; i++) investors.push(pool.splice(Math.floor(RNG.next() * pool.length), 1)[0])
   const growth = growthRate(s)
   const sheets: TermSheet[] = investors.map((investor) => {
     // Each fund prices you differently around your "fair" valuation; a cold market prices everyone down.
