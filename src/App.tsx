@@ -186,8 +186,19 @@ export default function App() {
   // The match is decided once at most one founder is still contesting it — everyone else has either
   // finished or walked away. Requiring `every(p => p.over)` stranded a lone survivor forever when
   // their rival simply closed the tab: nobody left to play, and no ending either.
+  // Finishing and walking away are NOT the same thing. A rival who exited or died leaves a NUMBER
+  // ON THE BOARD, and the right move is to keep playing and try to beat it — ending the match there
+  // took the game away from the survivor at the most interesting moment. A rival who closed the tab
+  // leaves nothing to play against, so that founder wins now.
+  const contesting = online?.players.filter((p) => isContesting(p)) ?? []
+  const finished = online?.players.filter((p) => p.over) ?? []
   const matchOver =
-    !!online && online.phase === 'playing' && online.players.length > 1 && online.players.filter((p) => isContesting(p)).length <= 1
+    !!online &&
+    online.phase === 'playing' &&
+    online.players.length > 1 &&
+    (contesting.length === 0 || (contesting.length === 1 && finished.length === 0))
+  /** The best figure a founder has already banked — what a survivor is now playing against. */
+  const targetToBeat = finished.reduce((best, p) => Math.max(best, p.payout), 0)
 
   // when the round clock runs out, decisions resolve conservatively and the week is forced
   useEffect(() => {
@@ -383,7 +394,9 @@ export default function App() {
                     {p.company}
                   </span>
                   {p.over ? (
-                    <span className="text-mut">out</span>
+                    <span className="text-mut tnum" title="They have finished. This is the figure you are playing against.">
+                      {p.payout > 0 ? money(p.payout) : 'out'}
+                    </span>
                   ) : hasForfeited(p) ? (
                     <span className="text-mut">left</span>
                   ) : p.absent ? (
@@ -611,6 +624,15 @@ export default function App() {
         >
           <span className="mr-2 inline-block animate-pulse">⟳</span>
           Reconnecting to the room… your match is still running
+        </div>
+      )}
+      {online && !matchOver && targetToBeat > 0 && !game.gameOver && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 z-[65] -translate-x-1/2 rounded-full border border-warn/50 bg-bg2/95 px-4 py-2 text-[13px] font-semibold shadow-[var(--elev-2)] backdrop-blur"
+        >
+          <span className="text-mut">Best exit so far</span> <b className="text-warn tnum">{money(targetToBeat)}</b>{' '}
+          <span className="text-mut">— beat it or finish second</span>
         </div>
       )}
       {matchOver && !resultsClosed && <MatchOver onClose={() => setResultsClosed(true)} />}
