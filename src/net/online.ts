@@ -49,7 +49,12 @@ export interface StartPayload {
 export interface AttackPayload {
   fromCompany: string
   targetId: string
-  kind: 'poach' | 'smear' | 'raid'
+  /**
+   * Widened for the hit piece and price war. A client older than those still whitelists only the
+   * original three and drops the rest, so an attack simply does not land on them — the attacker
+   * still pays. Graceful degradation, not a desync.
+   */
+  kind: 'poach' | 'smear' | 'raid' | 'hitpiece' | 'pricewar'
   fromId?: string // sender's player id, for receiver-side rate limiting
 }
 

@@ -16,6 +16,7 @@ import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilit
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
+import { PR_BASE_COST, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
   Choice,
@@ -1304,7 +1305,11 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // Career company structurally unprofitable in all five sectors — revenue ran far under payroll
   // and "surviving" only meant draining the starting $200k more slowly.
   const arpu = careerOn ? sector.careerArpu : sector.arpuWeekly
-  const coreRevenue = s.users * arpu * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult
+  // A running hit piece bleeds hype and reputation weekly; a price war cuts revenue on both sides.
+  const pvp = tickPvpEffects(s)
+  if (pvp.prDamage) applyEffects(s, pvp.prDamage)
+  const coreRevenue =
+    s.users * arpu * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult * pvp.revenueMultiplier
   const ventureRevenue = s.ventures.reduce((acc, v) => {
     if (!v.launched) return acc
     const vs = sectorById(v.sector)
@@ -1996,7 +2001,7 @@ export function coordinationDrag(s: GameState): number {
 export const ATTACK_COOLDOWN = 5
 
 export interface AttackDef {
-  id: 'poach' | 'smear' | 'raid'
+  id: 'poach' | 'smear' | 'raid' | 'hitpiece' | 'pricewar'
   name: string
   emoji: string
   cost: number
@@ -2007,6 +2012,8 @@ export const ATTACKS: AttackDef[] = [
   { id: 'poach', name: 'Poach talent', emoji: '🎣', cost: 50_000, blurb: 'Recruiters target their team. Their best engineer walks — and lands in your hiring pool.' },
   { id: 'smear', name: 'Smear campaign', emoji: '🗞', cost: 40_000, blurb: 'Anonymous briefings to journalists. Their hype and reputation take a hit; a little mud sticks to you too.' },
   { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 80_000, blurb: 'A targeted campaign at their customer base. Punching UP at a bigger rival pays far more than punching down.' },
+  { id: 'hitpiece', name: 'Hit piece', emoji: '📰', cost: PR_BASE_COST, blurb: 'A three-week campaign that keeps running. It might be traced back to you — and the odds get worse every time you try it.' },
+  { id: 'pricewar', name: 'Price war', emoji: '📉', cost: PRICE_WAR_COST, blurb: 'Undercut them for six weeks. It cuts your revenue too — start one because you can outlast them, not because you can afford it.' },
 ]
 
 // Costs scale with your stage: $40k is a real decision at pre-seed and noise at
@@ -2054,6 +2061,21 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
   drainEnergy(s, 4)
   if (kind === 'poach') applyEffects(s, { special: 'talent-influx' })
   if (kind === 'smear') s.reputation = clamp(s.reputation - 2, 0, 100)
+  if (kind === 'hitpiece') {
+    const used = s.flags.hitPiecesRun ?? 0
+    s.flags.hitPiecesRun = used + 1
+    // Verifiable, not rolled: a local roll could be retried until it came up clean.
+    if (prBackfired(s.config?.seed ?? 0, s.week, s.flags.myPlayerHash ? String(s.flags.myPlayerHash) : targetCompany, used)) {
+      s.flags.prTarget = PR_CAMPAIGN_WEEKS // the story is about US
+      s.flags.prSelfInflicted = 1
+      s.flash = `📰 It got traced back. The story is about ${'you'} — planting it, not the thing you planted.`
+      return true
+    }
+  }
+  if (kind === 'pricewar') {
+    s.flags.priceWar = PRICE_WAR_WEEKS
+    s.flags.priceWarInitiator = 1
+  }
   if (kind === 'raid') {
     // Relative, not absolute: raiding the leader pays up to 3x, kicking a straggler pays half.
     // Absolute spoils meant raids only paid at a scale a 52-week match never reaches.
@@ -2117,6 +2139,11 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
   }
   if (kind === 'poach') applyEffects(s, { morale: -6, special: 'lose-best' }) // they take a person, not just a mood
   if (kind === 'smear') applyEffects(s, { hype: -10, reputation: -3 })
+  if (kind === 'hitpiece') s.flags.prTarget = PR_CAMPAIGN_WEEKS
+  if (kind === 'pricewar') {
+    s.flags.priceWar = PRICE_WAR_WEEKS
+    delete s.flags.priceWarInitiator // we did not start it, so we take the deeper cut
+  }
   if (kind === 'raid') {
     const lost = raidMagnitude(s.users)
     if (lost > 0) applyEffects(s, { users: -lost })

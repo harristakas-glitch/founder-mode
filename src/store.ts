@@ -17,6 +17,7 @@ import {
   killVenture,
   newGame,
   pickHiringWinner,
+  type AttackDef,
   pitchInvestors,
   pitchTeam,
   pivot,
@@ -271,7 +272,7 @@ interface Store {
   leaveOnline: () => void
   setMyCompany: (name: string) => void
   beginMatch: (sector: SectorId, caps?: Partial<GameCapabilities>, cap?: number) => void
-  attackPlayer: (targetId: string, kind: 'poach' | 'smear' | 'raid') => void
+  attackPlayer: (targetId: string, kind: AttackDef['id']) => void
   buyShield: () => void
   resumeOnline: () => Promise<void>
   cancelReady: () => void

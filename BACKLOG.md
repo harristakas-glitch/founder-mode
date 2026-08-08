@@ -46,8 +46,13 @@ There is no rate limiting anywhere in the client, and `owns_score_row` was until
 public RPC that burns bcrypt on every call. Anyone with the anon key (it is public by definition,
 in `src/net/config.ts`) can drive cost. Nothing in the client can fix this: it needs the edge.
 
-**Done when:** a spend cap and usage alerts are set on the Supabase project. Highest value-per-
-minute item on this list.
+**Owner could not find the setting.** It is not in project settings — cost control lives at the
+ORGANISATION level (click the org name, then Billing), and on the **free plan it does not exist at
+all**: free projects hard-stop at quota rather than billing, so the protection is already there.
+
+**Done when:** either (a) the project is on a paid plan and a cap + usage alert are set, or (b) it
+is confirmed to be on Free and this item is closed as not-applicable — to be REOPENED on any
+upgrade, because that is the moment the exposure becomes real.
 
 ### 1.3 leaderboard-v5.sql has not been run — OPEN, owner action
 The security review found the shipped policy has been rejecting **100% of real submissions**:
