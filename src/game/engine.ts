@@ -1979,6 +1979,20 @@ export function attackCost(s: GameState, kind: AttackDef['id']): number {
   return Math.round(def.cost * (1 + STAGES.indexOf(s.stage) * 0.5))
 }
 
+/**
+ * Users a raid moves. Costs are absolute and stage-scaled; damage was purely proportional, so a
+ * raid was invisible across the whole range an Arena match actually occupies. Measured on a real
+ * match: a $120k raid against a 120-user rival moved FIVE users. The floor makes an attack always
+ * worth its price, and the 15% cap stops it flattening a small company outright.
+ */
+export const RAID_FLOOR_USERS = 18
+
+export function raidMagnitude(victimUsers: number): number {
+  if (!Number.isFinite(victimUsers) || victimUsers <= 0) return 0
+  const proportional = victimUsers * 0.04
+  return Math.round(Math.max(proportional, Math.min(victimUsers * 0.15, RAID_FLOOR_USERS)))
+}
+
 export function canAttack(s: GameState): { ok: boolean; reason?: string } {
   if (!can(s, 'pvpActions')) return { ok: false, reason: 'PvP is disabled in this match' }
   if ((s.flags.attackCooldown ?? 0) > 0) return { ok: false, reason: `Ops team recovering — ${s.flags.attackCooldown} wk` }
@@ -2005,9 +2019,17 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
     // Relative, not absolute: raiding the leader pays up to 3x, kicking a straggler pays half.
     // Absolute spoils meant raids only paid at a scale a 52-week match never reaches.
     const leverage = clamp(targetUsers / Math.max(1, s.users), 0.5, 3)
-    s.users += Math.round(targetUsers * 0.04 * 0.8 * leverage)
+    const won = Math.round(raidMagnitude(targetUsers) * 0.8 * leverage)
+    s.users += won
+    s.flags.lastRaidWon = won // surfaced in the flash, so the spend has a visible result
   }
-  s.flash = `${def.emoji} ${def.name} launched against ${targetCompany}. ${kind === 'raid' ? 'Their users are getting your ads today.' : kind === 'poach' ? 'Your recruiters are working their team.' : 'The stories run tomorrow.'}`
+  s.flash =
+    `${def.emoji} ${def.name} launched against ${targetCompany}. ` +
+    (kind === 'raid'
+      ? `${(s.flags.lastRaidWon ?? 0).toLocaleString()} of their users are yours by the end of the week.`
+      : kind === 'poach'
+        ? 'Your recruiters are working their team — expect a strong candidate in your pool.'
+        : 'The stories run tomorrow.')
   return true
 }
 
@@ -2056,7 +2078,11 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
   }
   if (kind === 'poach') applyEffects(s, { morale: -6, special: 'lose-best' }) // they take a person, not just a mood
   if (kind === 'smear') applyEffects(s, { hype: -10, reputation: -3 })
-  if (kind === 'raid') applyEffects(s, { users: -0.04 })
+  if (kind === 'raid') {
+    const lost = raidMagnitude(s.users)
+    if (lost > 0) applyEffects(s, { users: -lost })
+    s.flags.lastRaidLost = lost
+  }
   s.inbox.unshift({
     id: uid(),
     week: s.week,

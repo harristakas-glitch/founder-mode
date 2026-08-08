@@ -9,6 +9,7 @@ import {
   applyAttackOutgoing,
   attackCost,
   buyShield,
+  raidMagnitude,
   canAttack,
   newGame,
   shieldCost,
@@ -105,6 +106,21 @@ e.cash = 1_000_000
 buyShield(e)
 for (let i = 0; i < SHIELD_WEEKS; i++) e = advanceWeek(e)
 ok((e.flags.shield ?? 0) === 0, 'shield expires after its term')
+
+console.log('\n— A raid has to be worth its price at Arena scale —')
+{
+  // Player report: "I do not see material effects on these actions in arena". They were right.
+  // Damage was purely proportional while cost is absolute and stage-scaled, so a $120k raid on a
+  // 120-user rival — a completely normal Arena position — moved FIVE users.
+  ok(raidMagnitude(120) >= 15, `a 120-user rival loses something you can see (${raidMagnitude(120)}, was 5)`)
+  ok(raidMagnitude(40) <= 40 * 0.16, `a tiny rival is not flattened (${raidMagnitude(40)} of 40)`)
+  ok(raidMagnitude(10_000) === 400, 'large-scale behaviour is unchanged — this is a floor, not a buff')
+  ok(raidMagnitude(0) === 0 && raidMagnitude(NaN) === 0, 'no users and a hostile NaN both yield zero')
+  ok(
+    raidMagnitude(300) >= raidMagnitude(120) && raidMagnitude(2000) >= raidMagnitude(300),
+    'magnitude never decreases as the target grows',
+  )
+}
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)
