@@ -2107,9 +2107,9 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
  * with the low price walk. Without this a war is pure mutual bleeding with no decision in it — the
  * concede is what turns it into a negotiation with a clock.
  *
- * NOTE: the users leave the market rather than being credited to the initiator. Crediting them
- * needs a new broadcast event; until then the initiator's benefit is that their own war ends with
- * a weakened rival, not a direct transfer.
+ * The customers move to the founder who started the war — the store broadcasts a `concede` event
+ * and their client credits them. In single player (no room) there is nobody to credit and they
+ * simply leave.
  */
 export function canConcedePriceWar(s: GameState): { ok: boolean; reason?: string } {
   if ((s.flags.priceWar ?? 0) <= 0) return { ok: false, reason: 'No price war running' }
@@ -2117,14 +2117,23 @@ export function canConcedePriceWar(s: GameState): { ok: boolean; reason?: string
   return { ok: true }
 }
 
-export function concedePriceWar(s: GameState): boolean {
-  if (!canConcedePriceWar(s).ok) return false
+export function concedePriceWar(s: GameState): number {
+  if (!canConcedePriceWar(s).ok) return 0
   const lost = Math.round(s.users * CONCEDE_USER_SHARE)
   if (lost > 0) applyEffects(s, { users: -lost })
   delete s.flags.priceWar
   delete s.flags.priceWarInitiator
   s.flash = `📉 You raised prices back and stepped out of the war. ${lost.toLocaleString()} customers went with the cheaper option — but your margin is yours again.`
-  return true
+  return lost
+}
+
+/** The other side of a concession: the founder who started the war takes the customers. */
+export function applyConcedeGain(s: GameState, fromCompany: string, users: number): void {
+  const won = Math.max(0, Math.min(Math.floor(users), 1e7))
+  if (won > 0) applyEffects(s, { users: won })
+  delete s.flags.priceWar
+  delete s.flags.priceWarInitiator
+  s.flash = `📈 ${fromCompany} blinked and raised their prices. ${won.toLocaleString()} of their customers came to you.`
 }
 
 export const SHIELD_WEEKS = 8

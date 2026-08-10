@@ -97,6 +97,14 @@ export interface BidPayload {
   week: number
 }
 
+/** A target buying their way out of a price war. The users named here move to the initiator. */
+export interface ConcedePayload {
+  fromCompany: string
+  /** The founder who STARTED the war — the only one who should be credited. */
+  targetId: string
+  users: number
+}
+
 export interface EmotePayload {
   from: string
   emoji: string
@@ -115,6 +123,7 @@ export interface Handlers {
   onAttack?: (p: AttackPayload) => void
   onCommit?: (p: CommitPayload) => void
   onReveal?: (p: RevealPayload) => void
+  onConcede?: (p: ConcedePayload) => void
 }
 
 let client: SupabaseClient | null = null
@@ -676,6 +685,10 @@ export async function pushState(patch: Partial<NetPlayer>): Promise<void> {
 
 export async function broadcastStart(payload: StartPayload): Promise<void> {
   await channel?.send({ type: 'broadcast', event: 'start', payload })
+}
+
+export async function broadcastConcede(payload: ConcedePayload): Promise<void> {
+  await channel?.send({ type: 'broadcast', event: 'concede', payload })
 }
 
 export async function broadcastCommit(payload: CommitPayload): Promise<void> {

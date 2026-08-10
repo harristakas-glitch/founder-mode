@@ -11,10 +11,12 @@ import {
   canBuyShield,
   effectiveTam,
   marketSaturation,
+  canConcedePriceWar,
   rivalValuation,
   shieldCost,
   valuation,
 } from '../game/engine'
+import { CONCEDE_USER_SHARE } from '../game/pvp'
 import { hasCapability } from '../game/modes'
 import { SegmentHealth } from '../CareerUI'
 import { hasForfeited, myId } from '../net/online'
@@ -186,8 +188,41 @@ export function Market() {
         </Panel>
       </div>
 
+      {online && hasCapability(game, 'pvpActions') && <PriceWarBanner />}
       {online && hasCapability(game, 'pvpActions') && <PvpOps />}
       {!online && <Acquisitions />}
+    </div>
+  )
+}
+
+/** Only rendered while a war you did not start is running — otherwise there is nothing to decide. */
+function PriceWarBanner() {
+  const game = useStore((s) => s.game)!
+  const concede = useStore((s) => s.concedePriceWar)
+  const gate = canConcedePriceWar(game)
+  const weeks = game.flags.priceWar ?? 0
+  if (weeks <= 0) return null
+  const mine = (game.flags.priceWarInitiator ?? 0) === 1
+  return (
+    <div className="mt-3.5 rounded-2xl border border-warn/40 bg-warn/[0.06] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13px] leading-snug">
+          <b>📉 Price war — {weeks} wk left.</b>{' '}
+          {mine ? (
+            <span className="text-mut">You started it. Your revenue is cut too, until it runs out.</span>
+          ) : (
+            <span className="text-mut">
+              Your revenue is cut while it runs. Step out and prices go back up — but{' '}
+              {Math.round(CONCEDE_USER_SHARE * 100)}% of your customers follow the cheaper option to them.
+            </span>
+          )}
+        </span>
+        {gate.ok && (
+          <Btn className="shrink-0" onClick={concede}>
+            Concede — raise prices back
+          </Btn>
+        )}
+      </div>
     </div>
   )
 }

@@ -16,6 +16,8 @@ import {
   marketingMax,
   killVenture,
   newGame,
+  applyConcedeGain,
+  concedePriceWar,
   pickHiringWinner,
   type AttackDef,
   pitchInvestors,
@@ -56,6 +58,8 @@ import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
   broadcastAttack,
   broadcastCommit,
+  broadcastConcede,
+  type ConcedePayload,
   broadcastReveal,
   hiringCommitment,
   makeNonce,
@@ -220,6 +224,8 @@ export interface OnlineSession {
   myFounder: FounderKind
   players: NetPlayer[]
   deadline: number | null // ms epoch when the current round auto-readies
+  /** Who declared the running price war on us — the only founder a concession may credit. */
+  priceWarFrom?: string
   /** Phase 1: hashes only. Tells you WHO is bidding on whom, never how much. */
   commits: CommitPayload[]
   /** Phase 2: reveals that hashed back to their commitment. Only these become real bids. */
@@ -291,6 +297,8 @@ interface Store {
   runExperiment: (type: import('./game/career/types').ExperimentType, segmentId: string, standing?: boolean) => void
   /** Turn a running study's auto-renew on or off without cancelling it. */
   setExperimentStanding: (experimentId: string, standing: boolean) => void
+  /** Step out of a price war early: prices go back up and some customers follow the cheaper option. */
+  concedePriceWar: () => void
   setTargetSegment: (segmentId: string) => void
   setPricing: (p: import('./game/career/types').PricingStrategy) => void
   setProductFocus: (f: import('./game/career/types').ProductFocus) => void
@@ -564,6 +572,17 @@ export const useStore = create<Store>()(
             set({ online: { ...cur, bids: [...cur.bids.filter((b) => b.playerId !== p.playerId), bid] } })
           })()
         },
+        onConcede: (p: ConcedePayload) => {
+          const g = get().game
+          if (!g || g.gameOver || p.targetId !== myId()) return
+          if (!hasCapability(g, 'pvpActions')) return
+          const game = structuredClone(g)
+          applyConcedeGain(game, p.fromCompany, p.users)
+          sfx.cash()
+          set({ game })
+          void pushState(myNetSummary(game))
+        },
+
         onEmote: showEmote,
         onChat: (p: ChatPayload) => appendChat(p, false),
         onAttack: (p: AttackPayload) => {
@@ -577,6 +596,8 @@ export const useStore = create<Store>()(
           attacksTakenThisWeek.add(key)
           const game = structuredClone(g)
           applyAttackIncoming(game, p.kind, p.fromCompany)
+          // Remember who started it: a concession must credit the initiator, not whoever is nearest.
+          if (p.kind === 'pricewar' && p.fromId) set({ online: { ...get().online!, priceWarFrom: p.fromId } })
           sfx.ominous()
           set({ game })
           void pushState(myNetSummary(game))
@@ -965,6 +986,22 @@ export const useStore = create<Store>()(
         },
 
         // ---- Career: PMF Discovery 2.0 ----
+        concedePriceWar: () => {
+          const g = get().game
+          if (!g) return
+          const game = structuredClone(g)
+          const lost = concedePriceWar(game)
+          if (lost <= 0) return
+          set({ game })
+          void pushState(myNetSummary(game))
+          // Credit the founder who started it. In single player there is nobody to tell, and the
+          // customers simply leave — the engine has already removed them either way.
+          const online = get().online
+          if (online?.priceWarFrom)
+            void broadcastConcede({ fromCompany: online.myCompany, targetId: online.priceWarFrom, users: lost })
+          if (online) set({ online: { ...get().online!, priceWarFrom: undefined } })
+        },
+
         setExperimentStanding: (experimentId, standing) => {
           const g = get().game
           if (!g?.career) return
