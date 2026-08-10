@@ -101,6 +101,31 @@ there, stop and reconsider before building 4–8.
 
 ---
 
+## Slice -1 — Balance baseline. BLOCKING, before Slice 0
+
+The owner's standing principle: **neither path may dominate — we build a balanced game.** That makes
+the existing imbalances a prerequisite, not a parallel concern.
+
+"Does tokenisation dominate?" is unanswerable against a skewed baseline. A token path that measures
+well might only be beating a broken traditional path; one that measures badly might be losing to an
+exploit. Either way Slice 8 returns a number and teaches nothing.
+
+Three known problems, all from `docs/gameplay-review.md`, all measured:
+
+1. **`low` pricing is dominated** — last on founder net in all five sectors by 2–3x, and buys no
+   survival. A pricing choice that is never correct is not a choice.
+2. **Coasting survives 24/24 while active play survives 5–21/24.** The game currently rewards not
+   playing it. This is the most serious of the three: it inverts the premise.
+3. **The Social / E-commerce gap is not diagnosed.** E-commerce was shown to be the bots
+   overspending; Social was not, and separating "structurally harder" from "bot artifact" needs a
+   margin-denominated bot that does not exist yet.
+
+**Done when:** no pricing strategy is dominated, active play beats coasting on the measure the game
+scores, and the Social verdict is established either way. Then the traditional path is a baseline
+worth comparing against.
+
+---
+
 ## Sequencing against the rest of the backlog
 
 The gameplay review left three open balance problems: `low` pricing is dominated in all five
