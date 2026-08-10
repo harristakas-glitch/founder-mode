@@ -269,6 +269,14 @@ export interface GameState {
    * 'off' — readers must tolerate undefined rather than assume it was built.
    */
   world?: import('./world/types').LivingWorldState
+  /**
+   * Tokenisation / ICO. Absent on every save written before it existed and on every run that
+   * never tokenised — and its ABSENCE is what `capitalPath: 'institutional'` means, which is why
+   * a legacy save needs no migration write at all (ICO brief §74). There is deliberately no
+   * `capitalPath` field beside this one: two ways to say the same thing is one way to desync.
+   * Read it through `capitalPath(s)`; readers must tolerate undefined.
+   */
+  token?: import('./token/types').TokenState
   history: HistoryPoint[]
   gameOver: GameOver | null
 }

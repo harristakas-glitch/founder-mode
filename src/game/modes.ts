@@ -17,6 +17,13 @@
 import type { SectorId } from './types'
 import type { LivingWorldDepth } from './world/types'
 
+/**
+ * How much of the tokenisation path a mode is meant to offer (brief §113, §55, §57, §58).
+ * Declares intent only — the token* capabilities decide what runs, and they are all false.
+ * Same contract as LivingWorldDepth: depth sets the shape, capabilities are the switches.
+ */
+export type TokenDepth = 'off' | 'light' | 'deep'
+
 export type GameMode = 'quick' | 'career' | 'arena'
 
 // Daily Challenge is a FORMAT, not a mode. It is Quick Play with a fixed seed, a fixed
@@ -56,6 +63,11 @@ export interface GameConfig {
 //   customerSegments, decisionJournal — implied by detailedPMF: the segment model and the journal
 //                   are built into the Career subsystem itself, so `game.career` existing IS the
 //                   switch. Turning either off alone does nothing.
+//   tokenDepth (on GameRules, not a capability) — declares how much of the token path a mode is
+//                   MEANT to get (brief §113 wants Quick Play "light" and Career "deep"). Depth is
+//                   not a boolean, so it lives beside pmfDepth/livingWorldDepth. It reserves the
+//                   shape; the seven token* capabilities decide what actually runs, and they are
+//                   all still false. Branch on the capabilities, never on the depth string.
 //   narrativeDirector, proceduralMedia — subordinate to proceduralNarrative. The Director scores
 //                   every composed week and media-voiced coverage is how a company-level fact is
 //                   narrated, so both run whenever proceduralNarrative does. They are declared true
@@ -131,6 +143,19 @@ export interface GameCapabilities {
   rivalNarrative: boolean // rivals get narrated, not just tabulated
   proceduralPostmortem: boolean // the ending is written from what actually happened
 
+  // ---- planned: Tokenisation / ICO (docs/ico-architecture.md) -------------------------
+  // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
+  // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
+  // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
+  // ALL FALSE, in every mode, until the code that honours them exists.
+  tokenisation: boolean // the capital fork itself: eligibility, the decision, financing restrictions (Slice 1)
+  tokenEconomy: boolean // price, supply, treasury, utility, speculation, volatility, community capital (Slice 2)
+  tokenUserComposition: boolean // organic vs incentivised users, split retention, PMF protection (Slice 3)
+  tokenIncentives: boolean // treasury allocation across categories, vesting, unlocks, employee token comp (Slice 4)
+  tokenCommunity: boolean // sentiment, trust, decentralisation, founder influence (Slice 5)
+  tokenGovernance: boolean // proposals resolved from state, never randomly (Slice 6)
+  tokenNarrative: boolean // token Director candidates, media, company memory, postmortem sections (Slice 7)
+
   // ---- planned: Arena ----------------------------------------------------------------
   sharedCustomerMarket: boolean
   sharedTalentMarket: boolean
@@ -161,6 +186,9 @@ export interface GameRules {
   /** Living World §1. How alive the world is meant to feel in this mode. Declares intent only —
    *  the livingWorld* capabilities above decide what actually runs, and they are all still false. */
   livingWorldDepth: LivingWorldDepth
+  /** ICO brief §55/§57/§58. Career deep, Quick Play light, Arena off. Declares intent only —
+   *  the token* capabilities decide what runs, and they are all still false. */
+  tokenDepth: TokenDepth
 }
 
 // Everything off. Base rules switch on only what they actually provide.
@@ -223,6 +251,13 @@ const NO_CAPABILITIES: GameCapabilities = {
   rivalArchetypes: false,
   rivalNarrative: false,
   proceduralPostmortem: false,
+  tokenisation: false,
+  tokenEconomy: false,
+  tokenUserComposition: false,
+  tokenIncentives: false,
+  tokenCommunity: false,
+  tokenGovernance: false,
+  tokenNarrative: false,
   sharedCustomerMarket: false,
   sharedTalentMarket: false,
   sharedInvestorMarket: false,
@@ -247,6 +282,9 @@ const QUICK_BASE_RULES: GameRules = {
   employeeDepth: 'simple',
   fundraisingDepth: 'simple',
   livingWorldDepth: 'light',
+  // ICO brief §55: the bold, understandable version of the fork — no governance screen, no
+  // tokenomics micro-management. Slice 7 builds it; the seven token capabilities stay false here.
+  tokenDepth: 'light',
   capabilities: {
     ...NO_CAPABILITIES,
     // Brief §3. Only the Phase 1–3 systems are wired; advisors, promises, interviews and board
@@ -284,6 +322,10 @@ const CAREER_BASE_RULES: GameRules = {
   simulationDepth: 'deep',
   pmfDepth: 'deep',
   livingWorldDepth: 'deep',
+  // ICO brief §57: Career is where the full fork lives — eligibility, tokenomics, community,
+  // treasury, governance, decentralisation. Slices 1–6 build it; the capabilities stay false
+  // until each one lands.
+  tokenDepth: 'deep',
   capabilities: {
     ...QUICK_BASE_RULES.capabilities,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
@@ -314,6 +356,9 @@ const ARENA_BASE_RULES: GameRules = {
   employeeDepth: 'simple',
   fundraisingDepth: 'simple',
   livingWorldDepth: 'competitive',
+  // ICO brief §58: Arena tokenisation is off for this whole feature. The architecture stays
+  // compatible (see docs/ico-architecture.md, "Arena compatibility") but no token PvP is built.
+  tokenDepth: 'off',
   capabilities: {
     ...NO_CAPABILITIES,
     // Brief §3: Arena dramatises what the players did to each other. Characters and company
