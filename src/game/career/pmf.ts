@@ -415,14 +415,32 @@ export function resolveSegmentAcquisition(args: {
   priceFit: number
   marketingSpend: number
   hype: number
+  /** EVERYONE in the segment. Feeds `room`: the market is full whoever paid to fill it. */
   currentCustomers: number
   ceiling: number
   marketingPenalty: number
   /** sector.acqBase / 5 — keeps a social app's scale different from a B2B tool's. */
   acqScale: number
   rng: () => number
+  /**
+   * ORGANIC customers only, for the referral term. Defaults to `currentCustomers`, so a caller
+   * that does not pass it gets bit-identical behaviour to before this argument existed.
+   *
+   * ICO Slice 3. docs/ico-architecture.md §5.1 asks for two things at once — "the call site changes
+   * one argument's value: `currentCustomers: organicCustomers(...)`" AND "`room`/`ceiling` keep
+   * using the TOTAL: the market is full either way" — and those are not simultaneously
+   * satisfiable, because `currentCustomers` is the single argument feeding BOTH `room` and
+   * `referral`. Substituting it as the contract literally prescribes fixes the referral leak and
+   * opens a worse one: rented users would stop consuming market headroom, so buying users would
+   * make ORGANIC acquisition easier. Measured over 20 tokenised careers, that inflated organic
+   * customers in 8 of them against a zero-spend control.
+   *
+   * Splitting the argument satisfies both halves. It is the minimum change that does.
+   */
+  referralCustomers?: number
 }): number {
   const { truth, productFit, priceFit, marketingSpend, hype, currentCustomers, ceiling, marketingPenalty, acqScale, rng } = args
+  const referralBase = args.referralCustomers ?? currentCustomers
   const room = Math.pow(Math.max(0, 1 - currentCustomers / Math.max(1, ceiling)), 1.3)
   const reach = 0.25 + (truth.acquisitionAccessibility / 100) * 1.5
   // Calibrated against Quick Play: a funded company running real campaigns should reach
@@ -444,7 +462,12 @@ export function resolveSegmentAcquisition(args: {
   // Note this is NOT multiplied by priceFit here: `conversion` below already carries it, and that
   // is the whole trade-off. Underprice a reachable segment and the referral engine converts;
   // charge premium at the same people and it stalls.
-  const referral = currentCustomers * (truth.acquisitionAccessibility / 100) * REFERRAL_RATE * (0.4 + truth.needIntensity / 140)
+  //
+  // ICO Slice 3: this reads ORGANIC customers only (see `referralCustomers`). A customer who was
+  // paid to be here does not evangelise, and if they fed this term bought growth would compound
+  // into growth that LOOKS organic — the §52 violation arriving through the one term nobody was
+  // watching. `referralBase === currentCustomers` for every run with no incentivised cohort.
+  const referral = referralBase * (truth.acquisitionAccessibility / 100) * REFERRAL_RATE * (0.4 + truth.needIntensity / 140)
   // a promise you can't price is a promise nobody buys
   const conversion = clamp01(0.18 + (priceFit / 100) * 0.7) * clamp01(0.35 + (productFit / 100) * 0.75)
   const competition = clamp01(1 - truth.competitiveIntensity / 190)
@@ -577,7 +600,10 @@ export function segmentSnapshots(args: {
     const ceiling = segmentCeiling(truth, sectorTam)
     const pmf = derivePmfForSegment({
       segmentId: def.id,
-      customers: totalCustomers(career, def.id),
+      // ORGANIC ONLY, exactly as the weekly tick scores it (docs/ico-architecture.md §5.4). If this
+      // read the total, the screen would show a PMF the simulation does not believe — and it would
+      // be the bought one.
+      customers: organicCustomers(career, def.id),
       retention4wk: career.retentionBySegment[def.id] ?? 0,
       priceFit,
       productFit,
@@ -716,6 +742,37 @@ export function addJournal(
 
 export function totalCustomers(career: CareerPMFState, segmentId?: SegmentId): number {
   return career.cohorts.reduce((a, c) => (segmentId && c.segmentId !== segmentId ? a : a + c.activeCustomers), 0)
+}
+
+/**
+ * ICO Slice 3, docs/ico-architecture.md §5.2. Absent `origin` IS organic — every cohort written
+ * before the token feature existed, every event-awarded cohort and every referral is one.
+ */
+export function cohortIsOrganic(c: CustomerCohort): boolean {
+  return c.origin !== 'incentivised'
+}
+
+/**
+ * Customers who are here because the product is worth using.
+ *
+ * This is what the referral term and `derivePmfForSegment` are allowed to see. It is EXACTLY
+ * `totalCustomers` whenever no incentivised cohort exists, which is what makes the seam a no-op
+ * for every non-token run rather than a change that has to be measured.
+ */
+export function organicCustomers(career: CareerPMFState, segmentId?: SegmentId): number {
+  return career.cohorts.reduce(
+    (a, c) => (segmentId && c.segmentId !== segmentId ? a : cohortIsOrganic(c) ? a + c.activeCustomers : a),
+    0,
+  )
+}
+
+/** Customers a token incentive bought. Real users with real costs and real revenue — just not
+ *  evidence (docs/ico-architecture.md §5.5). */
+export function incentivisedCustomers(career: CareerPMFState, segmentId?: SegmentId): number {
+  return career.cohorts.reduce(
+    (a, c) => (segmentId && c.segmentId !== segmentId ? a : cohortIsOrganic(c) ? a : a + c.activeCustomers),
+    0,
+  )
 }
 
 /** The one question worth answering next: important, and least well understood. */

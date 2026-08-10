@@ -602,6 +602,66 @@ export const TOKEN_ECONOMY = {
   historyCooldownWeeks: 4,
 } as const
 
+// ---------- user composition (Slice 3) ----------
+
+/**
+ * Organic versus incentivised users. Brief §11, §12, §52, §53; docs/ico-architecture.md §5.
+ *
+ * TOKEN_BOUNDS above owns `incentiveDependence` (0.62), the one number §12's whole story falls out
+ * of. This block owns the shape of the demand and the thresholds the warning fires on, separated
+ * for the same reason TOKEN_ECONOMY is separated from TOKEN_BOUNDS: a later slice can retune the
+ * character without touching a damping term by accident.
+ *
+ * TWO THINGS HERE ARE LOAD-BEARING AND ARE ASSERTED IN test/token-users.test.ts:
+ *
+ *   • `RETENTION IS BLENDED IN FOUR-WEEK SPACE.` docs/ico-architecture.md §5.3 writes
+ *     `keepIncentivised = keepOrganic × (1 − dependence) + strength × dependence` and then reads the
+ *     result off as §12's 81% / 31%. But `resolveCohortRetention` returns a WEEKLY keep rate of
+ *     roughly 0.90, so applied literally the unpaid case is 0.90 × 0.38 = 0.342 PER WEEK — a
+ *     four-week survival of 1.4%, not 31%. An incentivised cohort would evaporate in three weeks
+ *     and the mechanic would be a cliff rather than a decision. The blend is therefore done on the
+ *     four-week figure (0.90⁴ = 63%, which IS §12's organic number) and converted back to a weekly
+ *     rate. See `incentivisedKeepRate`.
+ *
+ *   • `INCENTIVE STRENGTH IS DENOMINATED IN ARPU, NOT DOLLARS.` A Career account in Social earns
+ *     $1.80/wk and one in B2B SaaS earns $24/wk. A flat dollars-per-user constant would make
+ *     incentives free in one sector and unaffordable in another. Strength is spend per incentivised
+ *     user as a share of that sector's weekly revenue per user.
+ */
+export const TOKEN_USERS = {
+  /**
+   * How efficiently a dollar of token reward buys a customer, against a dollar of marketing.
+   * Deliberately ≥ 1: paying people to show up works, and if it did not there would be no
+   * temptation and therefore no lesson. Everything that makes it a bad idea is downstream.
+   */
+  acquisitionEfficiency: 1.25,
+  /**
+   * Conversion for a bought customer. Higher and flatter than the organic term, and it reads
+   * PRODUCT FIT ONLY — never price fit. A customer moved by a reward is by definition not weighing
+   * your price, which is the same fact that disqualifies them as evidence.
+   */
+  conversionBase: 0.5,
+  conversionProductSpan: 0.3,
+  /**
+   * Spend per incentivised user, as a share of that user's weekly revenue, at which
+   * `incentiveStrength` reaches 1. Paying half of what a customer pays you, back to them, every
+   * week, is what "fully rented" costs.
+   */
+  fullStrengthArpuShare: 0.5,
+
+  // --- the §53 warning ---
+  /** Incentivised share of the target segment at or above which growth is mostly rented. */
+  warnIncentivisedShare: 0.35,
+  /** Organic four-week retention below which the base underneath that growth is leaking. Matches
+   *  `pmfBlocker`'s existing 62% line, so the game tells one story in two places. */
+  warnOrganicRetention: 0.62,
+  /** Customer growth over the window that counts as "growth is strong". */
+  warnGrowthPct: 0.08,
+  warnWindowWeeks: 8,
+  /** The warning is a lesson, not a nag. */
+  warnCooldownWeeks: 12,
+} as const
+
 // ---------- scoring (decision 1) ----------
 
 /**

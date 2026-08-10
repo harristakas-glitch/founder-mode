@@ -52,6 +52,7 @@ import {
   type PriceStep,
   type TreasuryCommitment,
 } from './market'
+import { incentivisedUsers } from './users'
 import { TOKEN_BOUNDS, TOKEN_ECONOMY, TOKEN_LIMITS, type TokenState } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -245,8 +246,12 @@ export function tickToken(s: GameState): TokenTickReport {
 
   // ---- 5. the user mirror, so §4.6's `organic + incentivised === s.users` holds ----
   // Authoritative only when detailedPMF is off; kept honest in both, because the invariant is.
+  //
+  // Slice 3: in Career the COHORTS are the truth, so the mirror is written FROM them rather than
+  // left to drift. `incentivisedUsers(s)` reads the cohort list in Career and this same field in
+  // Quick Play, which is why writing it back here is a fixed point rather than a feedback loop.
   const users = Math.max(0, Math.round(s.users))
-  t.users.incentivised = Math.min(t.users.incentivised, users)
+  t.users.incentivised = Math.min(users, incentivisedUsers(s))
   t.users.organic = users - t.users.incentivised
 
   // ---- 6. the record ----

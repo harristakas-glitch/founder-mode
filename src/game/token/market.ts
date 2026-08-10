@@ -55,6 +55,12 @@
 
 import { sectorById } from '../data'
 import type { GameState } from '../types'
+// Slice 3. This is a genuine cycle — users.ts imports `treasuryCommitment` from here — and it is
+// safe for the same reason engine.ts ↔ token/scoring.ts already is: both directions are referenced
+// only from inside function bodies, never at module top level, so the live bindings are resolved at
+// call time. The alternative was to re-derive the treasury's weekly cap in a second place, which is
+// the desync the contract spends §7.3 warning about.
+import { incentivisedUsers, organicUsers } from './users'
 import { TOKEN_BOUNDS, TOKEN_ECONOMY, TOKEN_LIMITS, type TokenState } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -84,14 +90,18 @@ export function priceFloor(t: TokenState): number {
 /**
  * Organic users — the ones the fair-value anchor is allowed to see.
  *
- * Slice 3 replaces this with `organicUsers(s)` from token/users.ts, which reads the cohorts. Until
- * the split exists, `t.users.incentivised` is 0 and this is exactly `s.users`, so the substitution
- * is a no-op for everything Slice 2 measures.
+ * SLICE 3 MADE THIS REAL. It now delegates to `organicUsers(s)`, which reads the Career COHORTS
+ * (where the truth lives) and falls back to `TokenState.users` only in Quick Play, which has no
+ * cohorts. Before the split existed `t.users.incentivised` was always 0 and this was exactly
+ * `s.users`, so nothing Slice 2 measured moves.
+ *
+ * Why it matters here specifically: `fairValue` is the anchor gravity pulls the price toward, and
+ * decision 4 loop B.3 requires that the anchor CANNOT BE BOUGHT. A treasury that could spend its
+ * way into more "organic" users would be inflating the very thing its price is supposed to be
+ * pulled back to.
  */
 export function organicUserCount(s: GameState): number {
-  const t = s.token
-  if (!t) return Math.max(0, s.users)
-  return Math.max(0, s.users - t.users.incentivised)
+  return organicUsers(s)
 }
 
 // ---------- fair value ----------
@@ -313,7 +323,12 @@ export function tokenInvariants(s: GameState): string[] {
     out.push('supply counts are not integers')
   if (sup.circulating < 0 || sup.treasury < 0 || sup.locked < 0) out.push('a supply bucket went negative')
   if (t.users.organic + t.users.incentivised !== Math.max(0, Math.round(s.users)))
-    out.push(`user split broken: ${t.users.organic}+${t.users.incentivised} !== ${Math.round(s.users)}`)
+    out.push(`user split broken (mirror): ${t.users.organic}+${t.users.incentivised} !== ${Math.round(s.users)}`)
+  // §4.6's `organicUsers + incentivisedUsers === s.users`, on the AUTHORITATIVE counts rather than
+  // on the mirror — in Career those come from the cohorts, and a mirror that agreed with itself
+  // while disagreeing with the cohort list is exactly the desync this invariant exists to catch.
+  if (organicUsers(s) + incentivisedUsers(s) !== Math.max(0, Math.round(s.users)))
+    out.push(`user split broken (cohorts): ${organicUsers(s)}+${incentivisedUsers(s)} !== ${Math.round(s.users)}`)
   const floor = priceFloor(t)
   if (!(t.market.price >= floor)) out.push(`price ${t.market.price} below the floor ${floor}`)
   if (!(floor > 0)) out.push('price floor is not positive — zero is absorbing')

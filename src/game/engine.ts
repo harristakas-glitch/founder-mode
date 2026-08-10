@@ -26,6 +26,8 @@ import { TOKEN_ACQUISITION, acquisitionDiscounted, institutionalRoundsClosed, ip
 import { founderStanding, realisableTokenValue } from './token/scoring'
 import { isTokenised, tokenActive } from './token/state'
 import { tickToken } from './token/tick'
+import { incentivisedUsers } from './token/users'
+import { TOKEN_SCORING } from './token/types'
 import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, prSourceHidden, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
@@ -518,7 +520,22 @@ export function valuation(s: GameState): number {
   // Investors pay up for growth: a fast-growing user base is worth a multiple of a stagnant one.
   const growthMania = 1 + clamp(growth * 12, 0, 4)
   const ventureUserVal = s.ventures.reduce((a, v) => (v.launched ? a + v.users * sectorById(v.sector).perUserVal : a), 0)
-  const userPart = (s.users * sector.perUserVal + ventureUserVal) * 0.5 * growthMania
+  // ICO Slice 3, docs/ico-architecture.md §1.5 — THE ONLY TOKEN-AWARE TERM `valuation()` EVER GETS,
+  // and it is a DISCOUNT, never an addition. Enterprise value stays enterprise value: no token
+  // market cap ever reaches this function, because the moment it did a founder with a speculative
+  // float would buy rivals with inflated paper and price secondaries against a bubble.
+  //
+  // Incentivised users are still users — they sit in `s.users`, they pay, they cost servers — so a
+  // mercenary-growth company would otherwise show exactly the inflated valuation §53 exists to
+  // expose. An acquirer discounts a rented user, so this counts them at 0.35× per-user value.
+  //
+  // `incentivisedUsers(s)` is 0 for every run with no token slice, which makes this term
+  // `s.users - 0` — the identical expression, bit for bit, so the golden traces and every existing
+  // payout are untouched. The factor is exactly 1 when tokens are off, by subtraction of zero
+  // rather than by multiplication by one.
+  const rentedUsers = incentivisedUsers(s)
+  const effectiveUsers = s.users - rentedUsers * (1 - TOKEN_SCORING.incentivisedUserValuationDiscount)
+  const userPart = (effectiveUsers * sector.perUserVal + ventureUserVal) * 0.5 * growthMania
   const vibePart = (s.hype * 12_000 + s.reputation * 10_000 + productScore(s) * 8_000) * (1 + 0.3 * s.climate)
   return Math.max(400_000, Math.round(revPart + userPart + vibePart))
 }

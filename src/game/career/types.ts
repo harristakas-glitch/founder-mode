@@ -90,6 +90,22 @@ export interface CustomerCohort {
   exactCustomers?: number
   /** Share of this cohort still active when it turned four weeks old. Snapshotted once. */
   retentionAt4wk?: number
+  /**
+   * Why these customers arrived. ICO Slice 3, docs/ico-architecture.md §5.2.
+   *
+   * ABSENT MEANS 'organic', which is what every cohort written before this existed is — so no save
+   * needs a migration write, the same trick `capitalPath` uses. Event-awarded, viral and
+   * referral-driven customers stay organic: an arc did not pay them.
+   *
+   * ONE LIST, NOT TWO. A parallel `incentivisedCohorts` array would desync against the
+   * reconciliation block at the top of `tickCareerPMF`, which round-trips `s.users` against
+   * `totalCustomers(career)` every week and absorbs stray users into a cohort. One list, one
+   * invariant.
+   *
+   * This field is the whole of brief §52's enforcement: `derivePmfForSegment` sees organic cohorts
+   * ONLY — exclusion, not a weighting.
+   */
+  origin?: import('../token/types').CohortOrigin
 }
 
 export interface RepositioningState {
@@ -144,8 +160,23 @@ export interface CareerPMFState {
   journal: DecisionJournalEntry[]
   pricing: PricingStrategy
   focus: ProductFocus
-  /** Rolling per-segment behaviour, recomputed each week from the cohorts. */
+  /**
+   * Rolling per-segment 4-week retention, recomputed each week from the ORGANIC cohorts.
+   *
+   * Existing key, existing meaning, and it is what feeds `derivePmfForSegment`. Keeping this name
+   * pointed at the PMF-feeding number means every existing reader stays correct without being
+   * visited — and, because a run with no incentivised cohorts has no other kind, it is
+   * bit-identical to what it always was.
+   */
   retentionBySegment: Record<SegmentId, number>
+  /**
+   * The same measure over INCENTIVISED cohorts. ICO Slice 3, docs/ico-architecture.md §5.4.
+   *
+   * Optional and token-only: it is created the first week an incentivised cohort snapshots a
+   * four-week number and never before, so a traditional save never grows the key. Display, the §53
+   * warning and the postmortem read it. IT NEVER FEEDS PMF.
+   */
+  retentionBySegmentIncentivised?: Record<SegmentId, number>
   lastExplanations: CausalExplanation[]
   /** Week-over-week deltas for the founder briefing. */
   lastBriefing?: {

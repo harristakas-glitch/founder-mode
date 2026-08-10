@@ -79,16 +79,17 @@ console.log('— Capabilities: exactly one switch flipped —')
 const CAREER = defaultCapabilities('career')
 const QUICK = defaultCapabilities('quick')
 const ARENA = defaultCapabilities('arena')
-// Slice 2 shipped `tokenEconomy`, so it moved off this list — the same ratchet `detailedPMF` went
-// through. The remaining five still have no code that honours them.
-const LATER_SLICES = ['tokenUserComposition', 'tokenIncentives', 'tokenCommunity', 'tokenGovernance', 'tokenNarrative'] as const
+// Slices 2 and 3 shipped `tokenEconomy` and `tokenUserComposition`, so they moved off this list —
+// the same ratchet `detailedPMF` went through. The remaining four still have no code that honours
+// them.
+const LATER_SLICES = ['tokenIncentives', 'tokenCommunity', 'tokenGovernance', 'tokenNarrative'] as const
 
 ok(CAREER.tokenisation === true, 'Career has `tokenisation` on — Slice 1 built the fork it gates')
 ok(QUICK.tokenisation === false, 'Quick Play stays off: its simplified fork is Slice 7')
 ok(ARENA.tokenisation === false, 'Arena stays off for the whole feature (§58)')
 ok(
   LATER_SLICES.every((k) => !CAREER[k] && !QUICK[k] && !ARENA[k]),
-  'the six later-slice token capabilities are false in every mode — no flag claims a system that does not exist',
+  'the four later-slice token capabilities are false in every mode — no flag claims a system that does not exist',
 )
 
 // ---------------------------------------------------------------------------------------------

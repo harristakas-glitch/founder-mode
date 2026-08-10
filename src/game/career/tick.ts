@@ -9,11 +9,14 @@ import type { CareerPMFState, CausalExplanation, SegmentId } from './types'
 import {
   addJournal,
   biggestUncertainty,
+  cohortIsOrganic,
   derivePmfForSegment,
   experimentDef,
   experimentAnswered,
   EXPERIMENT_ANSWERS,
+  incentivisedCustomers,
   METRIC_LABEL,
+  organicCustomers,
   resolveCohortRetention,
   resolveExperiment,
   resolveSegmentAcquisition,
@@ -30,6 +33,15 @@ import {
   type SegmentPmf,
 } from './pmf'
 import { PMF_LABEL } from './pmf'
+// ICO Slice 3. Career owns the cohort list; the token module owns the token maths. Nothing
+// imported here draws from the RNG stream — see the header of token/users.ts.
+import {
+  incentiveContext,
+  incentivisedKeepRate,
+  mercenaryGrowthWarning,
+  resolveIncentivisedAcquisition,
+} from '../token/users'
+import { TOKEN_USERS } from '../token/types'
 
 export interface CareerTickResult {
   customers: number
@@ -93,16 +105,45 @@ export function tickCareerPMF(
       productQualityAtAcquisition: s.quality,
     })
   } else if (s.users < tracked && tracked > 0) {
-    // something removed users (a churn event, an outage) — take it off the newest cohorts
-    let toRemove = tracked - s.users
-    for (let i = career.cohorts.length - 1; i >= 0 && toRemove > 0; i--) {
-      const c = career.cohorts[i]
-      const take = Math.min(c.activeCustomers, toRemove)
-      c.activeCustomers -= take
-      // keep the unrounded count in step, or decay would resurrect the people we just removed
-      c.exactCustomers = Math.max(0, (c.exactCustomers ?? c.activeCustomers + take) - take)
-      toRemove -= take
+    // Something removed users (a churn event, an outage, a rival's price war) — take it off the
+    // newest cohorts.
+    //
+    // ICO SLICE 3, AND THIS WAS A REAL §52 LEAK, FOUND BY MEASUREMENT RATHER THAN BY READING.
+    //
+    // Incentivised cohorts are pushed AFTER the organic one each week, so they sit at the end of
+    // the array — and this loop walks from the end. Left alone, every company-wide user loss was
+    // absorbed ENTIRELY by the rented population, and the damage to `exactCustomers` never reached
+    // an organic cohort's four-week snapshot. Buying users therefore acted as a shock absorber for
+    // the one number §52 protects. Measured on devtools/20260810 over 80 weeks: organic four-week
+    // retention read 72.6% with maximum incentive spend against 53.8% for the identical zero-spend
+    // control, and company PMF 64 against 47. The organic cohorts were the same cohorts, acquired
+    // in the same weeks, at the same sizes — only the shocks had been redirected.
+    //
+    // The fix is to split the loss between the two populations in PROPORTION TO THEIR SIZE, then
+    // walk newest-first within each exactly as before. With no incentivised cohort the rented share
+    // is 0, the organic pass sees every cohort, and the arithmetic is character-for-character what
+    // it was — which is why `npm run bots` is byte-identical.
+    const rented = incentivisedCustomers(career)
+    const drain = (n: number, pick: (c: (typeof career.cohorts)[number]) => boolean): number => {
+      let left = n
+      for (let i = career.cohorts.length - 1; i >= 0 && left > 0; i--) {
+        const c = career.cohorts[i]
+        if (!pick(c)) continue
+        const take = Math.min(c.activeCustomers, left)
+        c.activeCustomers -= take
+        // keep the unrounded count in step, or decay would resurrect the people we just removed
+        c.exactCustomers = Math.max(0, (c.exactCustomers ?? c.activeCustomers + take) - take)
+        left -= take
+      }
+      return n - left
     }
+    let toRemove = tracked - s.users
+    const rentedQuota = Math.min(toRemove, Math.round(toRemove * (rented / tracked)))
+    toRemove -= drain(toRemove - rentedQuota, cohortIsOrganic)
+    // Whatever the organic side could not absorb spills to the rented side, and vice versa: the
+    // total removed is unchanged, only its attribution is fair.
+    toRemove -= drain(toRemove, (c) => !cohortIsOrganic(c))
+    drain(toRemove, cohortIsOrganic)
   }
 
   const before = totalCustomers(career)
@@ -228,7 +269,13 @@ export function tickCareerPMF(
     priceFit: targetPrice,
     marketingSpend,
     hype: s.hype,
+    // ICO Slice 3, docs/ico-architecture.md §5.1, with the contract's one unbuildable instruction
+    // resolved — see `referralCustomers` in pmf.ts. The TOTAL feeds `room`, because the market is
+    // full whoever paid to fill it; ORGANIC feeds the referral term, because a customer who was
+    // paid to be here does not evangelise. `organicCustomers === totalCustomers` whenever no
+    // incentivised cohort exists, so this is a no-op for every non-token run BY CONSTRUCTION.
     currentCustomers: totalCustomers(career, target),
+    referralCustomers: organicCustomers(career, target),
     ceiling,
     marketingPenalty,
     acqScale: Math.max(0.4, sectorAcqBase / 5),
@@ -249,6 +296,46 @@ export function tickCareerPMF(
     })
   }
 
+  // --- incentivised acquisition (ICO Slice 3) -----------------------------------------------
+  // A SEPARATE ADDITIVE TERM, in a separate function, with no shared coefficients: two functions,
+  // two populations. Pure and noiseless, so a Career week draws the same number of times whether or
+  // not the token capability is on — see the determinism note in token/users.ts.
+  const incentives = incentiveContext(s, incentivisedCustomers(career))
+  if (incentives.active && incentives.dollars > 0) {
+    const bought = resolveIncentivisedAcquisition({
+      truth: targetTruth,
+      productFit: targetFit,
+      incentiveDollars: incentives.dollars,
+      currentCustomers: totalCustomers(career, target),
+      ceiling,
+      marketingPenalty,
+      acqScale: Math.max(0.4, sectorAcqBase / 5),
+    })
+    if (bought > 0) {
+      career.cohorts.push({
+        id: uid(),
+        acquiredWeek: s.week,
+        segmentId: target,
+        startingCustomers: bought,
+        activeCustomers: bought,
+        exactCustomers: bought,
+        // The cost is denominated in tokens and paid out of the treasury, not out of `marketingSpend`.
+        acquisitionCost: incentives.dollars,
+        priceAtAcquisition: career.pricing === 'low' ? 26 : career.pricing === 'premium' ? 82 : 52,
+        productQualityAtAcquisition: s.quality,
+        origin: 'incentivised',
+      })
+    }
+  }
+
+  // How hard the rewards are running THIS week, per incentivised head AFTER this week's buying —
+  // so the same budget spread over a bigger rented base buys each of them less. That is loop A's
+  // third restoring force where a player can feel it: sustaining a large incentivised population
+  // needs accelerating spend against a treasury that is draining.
+  const incentiveStrengthNow = incentives.active
+    ? incentiveContext(s, incentivisedCustomers(career)).strength
+    : 0
+
   // --- retention, per cohort ---------------------------------------------------------------
   // Aggregate growth can hide a rotting base — that is exactly what cohorts are for.
   let churnedTotal = 0
@@ -257,7 +344,12 @@ export function tickCareerPMF(
     if (!truth) continue
     const fit = segmentProductFit(truth, s.quality, career.focus, sector, c.segmentId)
     const price = segmentPriceFit(truth, career.pricing)
-    const keep = resolveCohortRetention({ truth, productFit: fit, priceFit: price, bugs: s.bugs, weeksSinceAcquired: s.week - c.acquiredWeek })
+    const keepOrganic = resolveCohortRetention({ truth, productFit: fit, priceFit: price, bugs: s.bugs, weeksSinceAcquired: s.week - c.acquiredWeek })
+    // `resolveCohortRetention` gains NO argument (docs/ico-architecture.md §5.3): it answers "what
+    // would the product hold?" for this cohort's segment, exactly as it always did, and the token
+    // module bends the answer. While the rewards run, an incentivised cohort retains BETTER than an
+    // organic one; the week the spend stops it falls to 0.38× the organic four-week rate.
+    const keep = cohortIsOrganic(c) ? keepOrganic : incentivisedKeepRate(keepOrganic, incentiveStrengthNow)
     const before = c.activeCustomers
     // Decay the unrounded count, then round only for display. Rounding first let a cohort of a
     // handful of people survive intact week after week and report perfect retention.
@@ -276,23 +368,58 @@ export function tickCareerPMF(
   career.cohorts = career.cohorts.filter((c) => c.activeCustomers > 0).slice(-60)
 
   // --- 4-week retention, measured per segment ----------------------------------------------
+  // SPLIT, from ICO Slice 3. `retentionBySegment` keeps its name and its meaning and is now
+  // measured over ORGANIC cohorts only — which is bit-identical for any run that has none, because
+  // absent `origin` IS organic. It is the number that feeds PMF. The incentivised measure is a
+  // second, optional record that never does.
   for (const seg of segs) {
     // Average the most recent cohorts' four-week snapshots, weighted by size. This tracks
     // whether the company is getting BETTER at keeping people, and rises when fit improves.
-    const measured = career.cohorts.filter((c) => c.segmentId === seg.id && c.retentionAt4wk !== undefined).slice(-10)
+    const measured = career.cohorts.filter((c) => c.segmentId === seg.id && c.retentionAt4wk !== undefined && cohortIsOrganic(c)).slice(-10)
     const weight = measured.reduce((a, c) => a + c.startingCustomers, 0)
     career.retentionBySegment[seg.id] =
       weight > 0
         ? clamp01(measured.reduce((a, c) => a + c.retentionAt4wk! * c.startingCustomers, 0) / weight)
         : (career.retentionBySegment[seg.id] ?? 0)
+
+    // The key is CREATED only once an incentivised cohort has actually produced a four-week
+    // number, so a traditional save never grows it (docs/ico-architecture.md §2: no reader creates
+    // a sub-slice it does not own).
+    const bought = career.cohorts.filter((c) => c.segmentId === seg.id && c.retentionAt4wk !== undefined && !cohortIsOrganic(c)).slice(-10)
+    const boughtWeight = bought.reduce((a, c) => a + c.startingCustomers, 0)
+    if (boughtWeight > 0 && incentiveStrengthNow > 0) {
+      const split = (career.retentionBySegmentIncentivised ??= {})
+      split[seg.id] = clamp01(bought.reduce((a, c) => a + c.retentionAt4wk! * c.startingCustomers, 0) / boughtWeight)
+    } else if (career.retentionBySegmentIncentivised) {
+      // AND IT IS DROPPED the week the rewards stop, or the week the last rented customer leaves.
+      //
+      // `retentionBySegment` legitimately holds its last value when a segment goes quiet — organic
+      // retention is a property of the product, and the product did not stop existing. An
+      // incentivised measurement is not: `retentionAt4wk` is frozen at four weeks old by design, so
+      // a cohort snapshotted WHILE IT WAS BEING PAID keeps reporting its paid number long after the
+      // payments end. Measured, that made the screen read 62–67% incentivised retention for twenty
+      // weeks after the rewards were cut and the population had evaporated — while the forecast
+      // beside it correctly said 23%. Two numbers about the same vanished people, disagreeing.
+      //
+      // "Incentivised retention" only means anything while incentives are running. When they are
+      // not, the honest number is the counterfactual, and dropping the key is what makes
+      // `retentionSplit` fall back to it.
+      delete career.retentionBySegmentIncentivised[seg.id]
+    }
   }
+  if (career.retentionBySegmentIncentivised && Object.keys(career.retentionBySegmentIncentivised).length === 0)
+    career.retentionBySegmentIncentivised = undefined
 
   // --- derived PMF, per segment ------------------------------------------------------------
   const segmentPmf = segs.map((seg) => {
     const truth = career.segmentTruth[seg.id]
     return derivePmfForSegment({
       segmentId: seg.id,
-      customers: totalCustomers(career, seg.id),
+      // §52, and the reason this whole slice exists. ORGANIC CUSTOMERS AND ORGANIC RETENTION ONLY —
+      // EXCLUSION, NOT WEIGHTING. Any weight, however small, means enough incentive spend still
+      // buys Strong PMF; exclusion makes the guarantee structural, and testable as a bit-identity:
+      // with the organic cohorts held fixed, this call returns the same result for ANY spend.
+      customers: organicCustomers(career, seg.id),
       retention4wk: career.retentionBySegment[seg.id] ?? 0,
       priceFit: segmentPriceFit(truth, career.pricing),
       productFit: segmentProductFit(truth, s.quality, career.focus, sector, seg.id),
@@ -340,6 +467,56 @@ export function tickCareerPMF(
       secondaryCauses: [],
     })
   }
+
+  // --- brief §53: token-driven growth (ICO Slice 3) -----------------------------------------
+  // "User growth is strong. However, organic retention remains weak. Most recent growth appears
+  // incentive-driven." The predicate is pure and lives in the token module; this decides when to
+  // SAY it. It goes at the FRONT of the explanations because when it is true it is the only thing
+  // about the week that matters.
+  const mercenary = mercenaryGrowthWarning(s)
+  if (mercenary) {
+    const pct = (v: number) => `${Math.round(v * 100)}%`
+    explanations.unshift({
+      metric: 'pmf',
+      direction: 'flat',
+      primaryCause:
+        `User growth is strong — up ${pct(mercenary.growth)} over ${TOKEN_USERS.warnWindowWeeks} weeks — but ` +
+        `${pct(mercenary.incentivisedShare)} of ${targetName} are here for the rewards, and organic ` +
+        `retention is only ${pct(mercenary.organicRetention)}. Most recent growth is incentive-driven.`,
+      secondaryCauses: [
+        `Incentivised retention reads ${pct(mercenary.incentivisedRetention)} while the rewards run.`,
+        `If they stopped, expect ${pct(mercenary.expectedWithoutIncentives)}.`,
+      ],
+    })
+    // Said once, then not again for a while: it is a lesson, not a nag.
+    const lastWarned = career.journal.find((j) => j.title.startsWith('Token-driven growth'))
+    if (!lastWarned || s.week - lastWarned.week >= TOKEN_USERS.warnCooldownWeeks) {
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'system',
+        title: 'Token-driven growth',
+        body:
+          `User growth is strong: ${targetName} are up ${pct(mercenary.growth)} over the last ${TOKEN_USERS.warnWindowWeeks} weeks.\n\n` +
+          `However, organic retention remains weak — ${pct(mercenary.organicRetention)} at four weeks. ` +
+          `${mercenary.incentivisedUsers.toLocaleString()} of them (${pct(mercenary.incentivisedShare)}) are being paid to be here, ` +
+          `and while the rewards run they retain at ${pct(mercenary.incentivisedRetention)}.\n\n` +
+          `If the rewards stopped, expect ${pct(mercenary.expectedWithoutIncentives)}.\n\n` +
+          `Most recent growth appears incentive-driven. None of it counts toward product-market fit, ` +
+          `because a customer who stays to collect a reward is not evidence that the product is worth staying for.`,
+      })
+      addJournal(career, {
+        week: s.week,
+        category: 'milestone',
+        title: `Token-driven growth — ${targetName}`,
+        description:
+          `${pct(mercenary.incentivisedShare)} of the segment is incentivised. Organic retention ${pct(mercenary.organicRetention)}; ` +
+          `expected retention without incentives ${pct(mercenary.expectedWithoutIncentives)}.`,
+        relatedSegmentId: mercenary.segmentId,
+      })
+    }
+  }
+
   career.lastExplanations = explanations.slice(0, 3)
 
   // --- founder briefing --------------------------------------------------------------------

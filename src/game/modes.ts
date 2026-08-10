@@ -147,11 +147,11 @@ export interface GameCapabilities {
   // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
   // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
   // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
-  // Slices 1 and 2 shipped, so `tokenisation` and `tokenEconomy` are true in CAREER ONLY. The other
-  // five stay false in every mode until the code that honours them exists.
+  // Slices 1–3 shipped, so `tokenisation`, `tokenEconomy` and `tokenUserComposition` are true in
+  // CAREER ONLY. The other four stay false in every mode until the code that honours them exists.
   tokenisation: boolean // BUILT (Slice 1). The capital fork: eligibility, the decision, VC/IPO restrictions
   tokenEconomy: boolean // BUILT (Slice 2). Price, supply, treasury, utility, community, speculation, volatility
-  tokenUserComposition: boolean // organic vs incentivised users, split retention, PMF protection (Slice 3)
+  tokenUserComposition: boolean // BUILT (Slice 3). Organic vs incentivised users, split retention, PMF protection, the §53 warning
   tokenIncentives: boolean // treasury allocation across categories, vesting, unlocks, employee token comp (Slice 4)
   tokenCommunity: boolean // sentiment, trust, decentralisation, founder influence (Slice 5)
   tokenGovernance: boolean // proposals resolved from state, never randomly (Slice 6)
@@ -339,6 +339,13 @@ const CAREER_BASE_RULES: GameRules = {
     // volatility, all ticking weekly. On HERE only, for the same reason `tokenisation` is: Quick
     // Play's simplified economy is Slice 7 and Arena is off for the whole feature (§58).
     tokenEconomy: true,
+    // ICO Slice 3 — user composition, and the slice the whole feature exists for. Organic vs
+    // incentivised users riding on the existing cohort list, retention tracked separately for each
+    // plus the counterfactual (§12), `derivePmfForSegment` seeing ORGANIC ONLY so incentive spend
+    // can never manufacture Strong PMF (§52), the token-driven-growth warning (§53), and the 0.35×
+    // valuation discount on rented users. On HERE only: Quick Play's split is Slice 7 and Arena is
+    // off for the whole feature (§58).
+    tokenUserComposition: true,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.

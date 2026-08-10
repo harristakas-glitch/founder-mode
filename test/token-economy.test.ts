@@ -635,11 +635,27 @@ console.log('— fairValue reads fundamentals only: the anchor cannot be bought 
   s3.token!.market.utility = Math.min(100, s3.token!.market.utility + 40)
   ok(fairValue(s3) > fairValue(s), 'and utility moves it')
 
-  // Incentivised users are NOT organic users. Slice 3 fills this cohort; the anchor must already
-  // refuse to see it, or the §52 protection arrives after the number it protects.
+  // Incentivised users are NOT organic users. The anchor must refuse to see them, or the §52
+  // protection arrives after the number it protects.
+  //
+  // SLICE 3 MOVED THE TRUTH. This wrote `TokenState.users` when Slice 2 shipped, because nothing
+  // filled the cohorts yet. In Career the COHORTS are now authoritative and the mirror is derived
+  // from them (docs/ico-architecture.md §7.2), so the test writes the cohort — and the fact that
+  // writing the old mirror no longer moves the anchor is the desync this arrangement prevents.
   const s4 = structuredClone(s)
-  s4.token!.users.incentivised = Math.round(s4.users * 0.5)
-  s4.token!.users.organic = s4.users - s4.token!.users.incentivised
+  const rented = Math.round(s4.users * 0.5)
+  s4.career!.cohorts.push({
+    id: 'rented-cohort',
+    acquiredWeek: s4.week,
+    segmentId: s4.career!.primaryTargetSegmentId,
+    startingCustomers: rented,
+    activeCustomers: rented,
+    exactCustomers: rented,
+    acquisitionCost: 0,
+    priceAtAcquisition: 52,
+    productQualityAtAcquisition: 50,
+    origin: 'incentivised',
+  })
   ok(fairValue(s4) < fairValue(s), 'and half the user base turning incentivised LOWERS it — a rented user is not a fundamental')
 }
 
