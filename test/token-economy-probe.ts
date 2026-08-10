@@ -110,7 +110,7 @@ function launched(sector: SectorId, seed: number): GameState | null {
 function setSpend(s: GameState, on: boolean): void {
   const t = s.token!
   t.incentives = on
-    ? [{ category: 'community_treasury', tokensPerWeek: t.supply.treasury, startedWeek: s.week, cumulativeTokens: 0, effectiveness: 1 }]
+    ? [{ category: 'community_treasury', share: 0, tokensPerWeek: t.supply.treasury, startedWeek: s.week, cumulativeTokens: 0, effectiveness: 1 }]
     : []
 }
 

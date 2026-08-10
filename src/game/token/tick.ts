@@ -33,15 +33,31 @@
 // ---------------------------------------------------------------------------------------------
 // WHAT THIS SLICE DOES NOT DO
 //
-// No incentivised users (Slice 3), no vesting unlocks or programme creation (Slice 4), no trust,
-// decentralisation or founder influence dynamics (Slice 5), no proposals (Slice 6), no narrative
-// (Slice 7). `trust` is READ as an input to sentiment's baseline and never written, which is the
-// seam Slice 5 takes over. The only supply movement here is treasury → circulating, which preserves
-// the §4.6 identity exactly because it is one subtraction and one addition of the same integer.
+// No founder token sales (§42 — still unbuilt, so `bankedPayout` remains unreachable on the token
+// path), no sentiment/founder-influence dynamics beyond what Slice 4 needed (Slice 5), no proposals
+// (Slice 6), no narrative (Slice 7).
+//
+// SLICE 4 ADDED, and each is marked at its line: the six incentive categories' effects, vesting
+// unlocks as pure supply pressure, and the one write into `trust` that the community-treasury
+// category needs. `trust` was previously read-only here and Slice 5 still owns everything else
+// about it — conduct, delivery, revolt — which is the seam that slice takes over.
+//
+// Supply moves in exactly two places, treasury → circulating and locked → circulating, each one
+// subtraction and one addition of the same integer, so the §4.6 identity cannot break here.
 
 import { RNG } from '../data'
 import { hasCapability } from '../modes'
 import type { GameState } from '../types'
+import {
+  advanceIncentiveStocks,
+  incentiveEffects,
+  weeklyIncentiveSpend,
+  NO_EFFECTS,
+  NO_SPEND,
+  type IncentiveEffects,
+  type WeeklyIncentiveSpend,
+} from './incentives'
+import { pendingUnlock, utilityModelMultiplier } from './state'
 import {
   fairValue,
   momentum,
@@ -86,6 +102,11 @@ export interface TokenTickReport {
   step: PriceStep
   /** Consecutive weeks including this one in which the floor was the binding constraint. */
   flooredThisWeek: boolean
+  /** Slice 4: tokens released from `locked` by the vesting schedule this week (brief §41). */
+  unlocked: number
+  /** Slice 4: the six categories' spend, and what the stocks bought. */
+  spend: WeeklyIncentiveSpend
+  effects: IncentiveEffects
 }
 
 const IDLE: TokenTickReport = {
@@ -98,6 +119,9 @@ const IDLE: TokenTickReport = {
     price: 0, floored: false,
   },
   flooredThisWeek: false,
+  unlocked: 0,
+  spend: NO_SPEND,
+  effects: NO_EFFECTS,
 }
 
 /** The product the network ships. Local copy for the same reason market.ts keeps one. */
@@ -137,22 +161,40 @@ export function tickToken(s: GameState): TokenTickReport {
   }
 
   // ---- 1. the treasury releases tokens into the float (loop A) ----
+  // Slice 4: the six categories' split of the week's release, read BEFORE anything moves, and the
+  // effect stocks as they stood at the start of the week. Every effect below reads these — never a
+  // stock this tick produced. `advanceIncentiveStocks` at the bottom is what closes the lag.
+  const spend = weeklyIncentiveSpend(s)
+  const effects = incentiveEffects(s)
   const commitment = treasuryCommitment(s)
   const released = Math.min(t.supply.treasury, Math.round(commitment.tokens))
   if (released > 0) {
     // One subtraction, one addition, same integer: the §4.6 identity cannot break here.
     t.supply.treasury -= released
     t.supply.circulating += released
-    for (const p of t.incentives) p.cumulativeTokens += p.tokensPerWeek > 0 ? p.tokensPerWeek : 0
   }
-  const floatFraction = released / Math.max(1, t.supply.circulating)
+
+  // ---- 1b. vesting unlocks (brief §41) ----
+  // Team, founder and partner tokens leave `locked` on the schedule chosen at launch. Same exact
+  // integer move, so the identity holds; and this is PURE SUPPLY PRESSURE — see `priceStep`'s
+  // `unlockFraction`. It is also the cost of `short` vesting, which the tokenomics screen sells as
+  // flexibility: the whole team allocation reaches the float inside 26 weeks.
+  const unlocked = Math.min(t.supply.locked, pendingUnlock(t, s.week))
+  if (unlocked > 0) {
+    t.supply.locked -= unlocked
+    t.supply.circulating += unlocked
+  }
+
+  const circulatingNow = Math.max(1, t.supply.circulating)
+  const floatFraction = released / circulatingNow
+  const unlockFraction = unlocked / circulatingNow
 
   // ---- 2. the fundamental anchor, after dilution ----
   const fair = fairValue(s)
 
   // ---- 3. the price. One draw, always. ----
   const noise = RNG.next() * 2 - 1
-  const step = priceStep(t, fair, floatFraction, spendEffectiveness(t), noise)
+  const step = priceStep(t, fair, floatFraction, spendEffectiveness(t), noise, unlockFraction)
   t.market.price = step.price
   t.market.fairValue = fair
   t.market.lastDemand = step.demand
@@ -165,10 +207,15 @@ export function tickToken(s: GameState): TokenTickReport {
 
   // Speculation mean-reverts to the UTILITY anchor and is shocked by momentum. The shock saturates
   // at the boundaries, so 0 and 100 are never where speculation is held.
+  //
+  // Slice 4: a liquidity-incentive programme raises the ANCHOR speculation reverts to, which is why
+  // §17 calls the category dangerous. TOKEN_ECONOMY's stability derivation says the market tracks
+  // fundamentals below speculation ~50 and oscillates above it, so this term is literally the dial
+  // between the two regimes — bought, and not cheaply.
   const specShock = TOKEN_ECONOMY.speculationMomentumGain * Math.tanh(prev.momentum / TOKEN_ECONOMY.momentumScale)
   t.market.speculation = clamp(
     saturatingAdd(
-      approach(prev.speculation, prev.utility, TOKEN_BOUNDS.speculationReversion),
+      approach(prev.speculation, clamp(prev.utility + effects.speculation, 0, 100), TOKEN_BOUNDS.speculationReversion),
       specShock,
     ),
     0,
@@ -182,10 +229,24 @@ export function tickToken(s: GameState): TokenTickReport {
   // fast variables are pulled toward rather than another fast variable.
   const revenueSignal = clamp01(Math.log10(1 + Math.max(0, s.lastRevenue) * 52 / 1e5) / 2)
   const userSignal = clamp01(Math.log10(1 + organicUserCount(s)) / 4)
+  //
+  // Slice 4 adds exactly ONE bought term to this target — developer grants — and it is the single
+  // most carefully bounded number in the slice, because `fairValue` reads utility and decision 4's
+  // loop B.3 requires that the anchor cannot be inflated by the price it anchors. The reflexive edge
+  // is severed by DENOMINATION rather than by size: grant intensity is `tokens / circulating`, so a
+  // doubling price buys exactly as much ecosystem as before. See TOKEN_INCENTIVES' header. The term
+  // is also lagged twice (a 5%/wk stock feeding a 6%/wk reversion), capped at ~14 points, and
+  // haircut by `grantSuccessRate` — §15's "some projects may fail", deterministically.
+  //
+  // The EARNED part is multiplied by how well the chosen utility model fits this sector (§24) —
+  // permanently, not just at launch. A multiplier on an earned quantity, fixed at launch and
+  // unbuyable, so the anchor stays an anchor.
   const utilityTarget = clamp(
-    productQuality(s) * TOKEN_ECONOMY.utilityProductWeight +
+    (productQuality(s) * TOKEN_ECONOMY.utilityProductWeight +
       revenueSignal * TOKEN_ECONOMY.utilityRevenueWeight +
-      userSignal * TOKEN_ECONOMY.utilityUserWeight,
+      userSignal * TOKEN_ECONOMY.utilityUserWeight) *
+      utilityModelMultiplier(s.sector, t.plan.utilityModel) +
+      effects.utility,
     0,
     100,
   )
@@ -239,10 +300,43 @@ export function tickToken(s: GameState): TokenTickReport {
   )
 
   // Depth is what the founder's exit discount reads (scoring.ts). It is earned the same way.
+  // Slice 4: liquidity incentives are the useful half of §17, and the only category that pays the
+  // founder directly — depth is 45% of `liquidityDiscount`'s market-quality term.
   const depthTarget = clamp01(
-    0.08 + 0.5 * clamp01(prev.engagement / 100) + 0.25 * clamp01(prev.utility / 100) + 0.15 * clamp01(prev.holders / 5000),
+    0.08 +
+      0.5 * clamp01(prev.engagement / 100) +
+      0.25 * clamp01(prev.utility / 100) +
+      0.15 * clamp01(prev.holders / 5000) +
+      effects.depth,
   )
   t.market.depth = clamp01(approach(prev.depth, depthTarget, TOKEN_ECONOMY.depthReversion))
+
+  // ---- 4b. what the community treasury bought (§19, Slice 4) ----
+  // Decentralisation is MONOTONE NON-DECREASING (§35): unlike every other effect in this slice it
+  // does not reverse when the stock decays, and that asymmetry is the category's whole cost.
+  if (effects.decentralisation > 0) {
+    t.community.decentralisation = clamp(saturatingAdd(t.community.decentralisation, effects.decentralisation), 0, 100)
+    // Handing over control is what the loudest holders were asking for, so the demand subsides.
+    t.community.decentralisationDemand = clamp(
+      saturatingAdd(t.community.decentralisationDemand, -effects.decentralisation * 1.5),
+      0,
+      100,
+    )
+  }
+  // Trust, through the ONE channel this slice owns: decision 4 loop E's concave
+  // `decentralisationTrustGain × sqrt(d)`. Slice 5 owns everything else about trust — founder
+  // conduct, delivery, revolt — and this is the seam it takes over. Written as an approach to a
+  // target rather than as an accumulation, so nothing ratchets and Slice 5 can extend the target
+  // without unpicking a running total.
+  if (effects.trustTarget !== null)
+    t.community.trust = clamp(approach(prev.trust, effects.trustTarget, TOKEN_BOUNDS.sentimentReversion), 0, 100)
+
+  // Partnerships buy DISTRIBUTION, and distribution is the engine's own `hype` — which feeds the
+  // ORGANIC acquisition terms in both modes. This is the one category whose users are evidence:
+  // they still have to choose the product at its price, so they reach `derivePmfForSegment` and
+  // count toward PMF, where a customer-rewards user never can. Applied with headroom, and hype
+  // already decays 8%/wk in `advanceWeek`, so it settles instead of accumulating.
+  if (effects.hype > 0) s.hype = clamp(saturatingAdd(s.hype, effects.hype), 0, 100)
 
   // ---- 5. the user mirror, so §4.6's `organic + incentivised === s.users` holds ----
   // Authoritative only when detailedPMF is off; kept honest in both, because the invariant is.
@@ -268,20 +362,36 @@ export function tickToken(s: GameState): TokenTickReport {
   })
   if (t.series.length > TOKEN_LIMITS.series) t.series.splice(0, t.series.length - TOKEN_LIMITS.series)
 
-  recordMarketHistory(t, s.week, step, released)
+  recordMarketHistory(t, s.week, step, released, unlocked)
   if (t.history.length > TOKEN_LIMITS.history) t.history.splice(0, t.history.length - TOKEN_LIMITS.history)
+
+  // ---- 7. the stocks, LAST ----
+  // Every effect above read the stocks as they were at the top of the week. Folding this week's
+  // spend in here is what makes that a one-week lag rather than a same-tick reflexive edge, and it
+  // is the same discipline as the `prev` snapshot: the rule is absolute even where a particular
+  // chain could not blow up on its own.
+  advanceIncentiveStocks(s, spend)
 
   t.lastTickedWeek = s.week
 
-  return { ran: true, commitment, fair, step, flooredThisWeek: step.floored }
+  return { ran: true, commitment, fair, step, flooredThisWeek: step.floored, unlocked, spend, effects }
 }
 
 /** Facts only, and rate-limited: history is a 120-entry budget the postmortem quotes from. */
-function recordMarketHistory(t: TokenState, week: number, step: PriceStep, released: number): void {
+function recordMarketHistory(t: TokenState, week: number, step: PriceStep, released: number, unlocked = 0): void {
   const move = step.factor - 1
   const last = t.history[t.history.length - 1]
   const quiet = !last || week - last.week >= TOKEN_ECONOMY.historyCooldownWeeks
-  if (move >= TOKEN_ECONOMY.rallyThreshold && quiet) {
+  // An unlock that meaningfully moves the float is the kind of week the postmortem should be able
+  // to point at — §41's supply pressure, arriving on a schedule the founder chose at launch.
+  if (unlocked > 0 && unlocked / Math.max(1, t.supply.circulating) >= 0.01 && quiet) {
+    t.history.push({
+      week,
+      type: 'unlock',
+      importance: 40,
+      metadata: { tokens: unlocked, lockedLeft: t.supply.locked, price: t.market.price },
+    })
+  } else if (move >= TOKEN_ECONOMY.rallyThreshold && quiet) {
     t.history.push({ week, type: 'price_rally', importance: Math.min(100, Math.round(40 + move * 100)), metadata: { move: Math.round(move * 1000) / 1000, price: t.market.price } })
   } else if (move <= TOKEN_ECONOMY.crashThreshold && quiet) {
     t.history.push({ week, type: 'price_crash', importance: Math.min(100, Math.round(45 - move * 120)), metadata: { move: Math.round(move * 1000) / 1000, price: t.market.price } })

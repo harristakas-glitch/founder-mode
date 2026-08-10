@@ -21,6 +21,8 @@ import { livingWorldActive, tickLivingWorld } from './world/tick'
 // always took. `founderStanding` is the one that touches every ending: with no token slice its
 // token leg is 0 and it is character-for-character the payout expression it replaced.
 import { tokenisationEligibility } from './token/eligibility'
+import { employeeTokenComp, setIncentiveShares, tokenCompMoraleDelta, type IncentiveShares } from './token/incentives'
+import { sellTreasuryTokens, type TreasurySaleResult } from './token/treasury'
 import { launchToken, type LaunchDraft, type LaunchResult } from './token/launch'
 import { TOKEN_ACQUISITION, acquisitionDiscounted, institutionalRoundsClosed, ipoClosed } from './token/restrictions'
 import { founderStanding, realisableTokenValue } from './token/scoring'
@@ -1170,6 +1172,32 @@ export function tokeniseCompany(s: GameState, draft: LaunchDraft = {}): LaunchRe
   return seeded(s, () => launchToken(s, draft))
 }
 
+/**
+ * ICO Slice 4, brief §13. Point the treasury at the six categories.
+ *
+ * NOT wrapped in `seeded()`, deliberately, and this is the opposite call from `tokeniseCompany`
+ * above: setting an allocation draws nothing and never will — it is a standing order, resolved by
+ * the weekly tick inside the `tokenActive` gate. Bumping `s.flags.rngTick` for a slider move would
+ * mean the RNG stream depended on how many times a player dragged it, which is the one thing the
+ * determinism contract cannot survive.
+ */
+export function setTokenIncentives(s: GameState, shares: Partial<IncentiveShares>): IncentiveShares {
+  return setIncentiveShares(s, shares)
+}
+
+/**
+ * ICO Slice 4, brief §6 and §30. Sell treasury tokens for company cash — the token path's
+ * fundraising, and the only recurring capital decision it has.
+ *
+ * Unseeded for the same reason as `setTokenIncentives`: the sale is a pure function of state and the
+ * size chosen, so the quote the player was shown is exactly what they get, and opening the panel
+ * cannot shift the RNG stream.
+ */
+export function sellTokenTreasury(s: GameState, tokens: number): TreasurySaleResult {
+  if (!can(s, 'tokenIncentives')) return { ok: false, reason: 'Treasury sales are not part of this mode.' }
+  return sellTreasuryTokens(s, tokens)
+}
+
 // ---------- weekly tick ----------
 
 // externalUsers: other human players' users in the same market (multiplayer).
@@ -1378,7 +1406,13 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     return acc + v.users * vs.arpuWeekly * salesBoost * (0.25 + (0.75 * v.pmf) / 100) * vScale * (0.6 + pScore / 150)
   }, 0)
   const revenue = Math.round(coreRevenue + ventureRevenue)
-  const payroll = weeklyPayroll(s)
+  // ICO Slice 4, brief §16. Token compensation SUBSTITUTES for cash pay — it does not add a second
+  // compensation system. `employeeTokenComp` is a pure read of the token state and returns 0 for
+  // every run without the capability, so this line is `weeklyPayroll(s)` exactly for a traditional
+  // company. It is read here, before `tickToken`, and the treasury and price it reads do not move
+  // between this line and the release: one release of tokens, one week of payroll saved.
+  const tokenComp = employeeTokenComp(s)
+  const payroll = Math.max(0, weeklyPayroll(s) - tokenComp.offset)
   const office = weeklyOffice(s)
   const infra = weeklyInfra(s)
   const interest = weeklyInterest(s)
@@ -1450,9 +1484,13 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const runway = s.cash / Math.max(1, expenses - revenue)
   const cultureCarriers = s.employees.filter((e) => e.trait === 'culture').length
   const dramaMagnets = s.employees.filter((e) => e.trait === 'drama').length
+  // ICO Slice 4, decision 4's loop D. A team paid partly in tokens watches the chart: the delta is
+  // scaled by how much of the package is in tokens and clamped to ±3/wk, so it biases morale and
+  // never dominates runway, bugs or shipping. Exactly 0 without the capability.
+  const tokenMorale = tokenCompMoraleDelta(s)
   for (const e of s.employees) {
     e.weeks += 1
-    let d = (70 - e.morale) * 0.06 // drift toward 70
+    let d = (70 - e.morale) * 0.06 + tokenMorale // drift toward 70
     if (expenses > revenue && runway < 8) d -= 5
     if (s.bugs > 55) d -= 2
     if (featureGain > 2.5) d += 1.5

@@ -105,7 +105,7 @@ function tokenised(sector: SectorId = 'devtools', seed = 4242, weeks = 20, overr
 /** Point the treasury at customer rewards hard enough that the 2%/wk token cap always binds. */
 function fundRewards(s: GameState): void {
   s.token!.incentives = [
-    { category: 'customer_rewards', tokensPerWeek: s.token!.supply.treasury, startedWeek: s.week, cumulativeTokens: 0, effectiveness: 0 },
+    { category: 'customer_rewards', share: 0, tokensPerWeek: s.token!.supply.treasury, startedWeek: s.week, cumulativeTokens: 0, effectiveness: 0 },
   ]
 }
 
@@ -747,10 +747,10 @@ console.log('\n— Incentive strength: ARPU-denominated, and a pure read of THIS
   // disprove.
   const g = structuredClone(saas)
   g.token!.incentives = [
-    { category: 'developer_grants', tokensPerWeek: g.token!.supply.treasury, startedWeek: g.week, cumulativeTokens: 0, effectiveness: 0 },
+    { category: 'developer_grants', share: 0, tokensPerWeek: g.token!.supply.treasury, startedWeek: g.week, cumulativeTokens: 0, effectiveness: 0 },
   ]
   ok(userIncentiveTokens(g) === 0, 'developer grants buy no customers — only `customer_rewards` reaches users')
-  g.token!.incentives.push({ category: 'customer_rewards', tokensPerWeek: g.token!.supply.treasury, startedWeek: g.week, cumulativeTokens: 0, effectiveness: 0 })
+  g.token!.incentives.push({ category: 'customer_rewards', share: 0, tokensPerWeek: g.token!.supply.treasury, startedWeek: g.week, cumulativeTokens: 0, effectiveness: 0 })
   const half = userIncentiveTokens(g)
   g.token!.incentives = [g.token!.incentives[1]]
   const all = userIncentiveTokens(g)

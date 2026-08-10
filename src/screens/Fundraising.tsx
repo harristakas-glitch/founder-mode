@@ -15,7 +15,25 @@ import {
   valuation,
 } from '../game/engine'
 import { SUITABILITY_LABEL, runSectorSuitability, tokenisationEligibility } from '../game/token/eligibility'
-import { resolveLaunchTerms } from '../game/token/launch'
+import {
+  INCENTIVE_CATEGORIES,
+  INCENTIVE_LABELS,
+  incentivePanel,
+  incentivesActive,
+} from '../game/token/incentives'
+import {
+  allocationBounds,
+  allocationFrom,
+  defaultAllocation,
+  defaultUtilityModel,
+  resolveLaunchTerms,
+  utilityModelFit,
+  type LaunchDraft,
+} from '../game/token/launch'
+import { treasuryValue } from '../game/token/market'
+import { maxTreasurySale, treasurySaleQuote, treasurySalesActive } from '../game/token/treasury'
+import type { TokenUtilityModel, VestingPolicy } from '../game/token/types'
+import type { GameState } from '../game/types'
 import { FORK_WARNINGS, institutionalRoundsClosed, ipoClosed } from '../game/token/restrictions'
 import { isTokenised, tokenisationOffered } from '../game/token/state'
 import { networkValue } from '../game/token/scoring'
@@ -56,6 +74,304 @@ function SecondaryPanel() {
 
 const tokenPrice = (p: number) => (p >= 0.01 ? `$${p.toFixed(4)}` : `$${p.toExponential(2)}`)
 
+const VESTING_LABEL: Record<VestingPolicy, string> = { short: 'Short · 4wk cliff, 26wk', standard: 'Standard · 12wk cliff, 52wk', long: 'Long · 26wk cliff, 104wk' }
+const UTILITY_LABEL: Record<TokenUtilityModel, string> = {
+  product_access: 'Product access',
+  rewards: 'Rewards',
+  governance: 'Governance',
+  marketplace_currency: 'Marketplace currency',
+  ecosystem_incentive: 'Ecosystem incentive',
+}
+const UTILITY_MODELS: TokenUtilityModel[] = ['product_access', 'rewards', 'governance', 'marketplace_currency', 'ecosystem_incentive']
+
+/** ICO brief §20–§24. The whole tokenomics screen, and deliberately one screen's worth: five
+ *  decisions, two of them sliders inside a band the community sets. §20 says keep it simple and
+ *  warns twice against crypto-financial engineering, so there is no emission curve, no bonding
+ *  curve and no per-round unlock table — the vesting policy is three buttons. */
+function TokenomicsSetup({
+  game,
+  draft,
+  setDraft,
+}: {
+  game: GameState
+  draft: LaunchDraft
+  setDraft: (d: LaunchDraft) => void
+}) {
+  const bounds = allocationBounds(game)
+  const alloc = draft.allocation ?? defaultAllocation(game)
+  const terms = resolveLaunchTerms(game, draft)
+  const excess = terms.reaction.founderExcess
+  const setAlloc = (founder: number, community: number) => setDraft({ ...draft, allocation: allocationFrom(game, founder, community) })
+
+  return (
+    <div className="mt-3 rounded-xl border border-line bg-surface2 p-3.5">
+      <div className="text-[13px] font-bold">Tokenomics — five decisions, and you make them once.</div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <div className="flex items-baseline justify-between text-[13px]">
+            <span>Your allocation</span>
+            <b className="tnum">{pct(alloc.founder, 1)}</b>
+          </div>
+          <input
+            type="range"
+            min={Math.round(bounds.founderMin * 1000)}
+            max={Math.round(bounds.founderMax * 1000)}
+            step={5}
+            value={Math.round(alloc.founder * 1000)}
+            style={{ ['--fill' as string]: `${((alloc.founder - bounds.founderMin) / Math.max(0.001, bounds.founderMax - bounds.founderMin)) * 100}%` }}
+            onChange={(e) => setAlloc(Number(e.target.value) / 1000, alloc.community)}
+          />
+          <div className="text-[11px] text-mut">
+            This community expects about {pct(bounds.expectedFounder, 0)} from a company at your stage.{' '}
+            {excess > 0.005
+              ? `You are asking for ${(excess * 100).toFixed(1)} points more — trust down, sell-pressure fears up.`
+              : excess < -0.005
+                ? `You are leaving ${(-excess * 100).toFixed(1)} points on the table — credibility bought with upside.`
+                : 'Exactly what they expect.'}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-baseline justify-between text-[13px]">
+            <span>Community allocation</span>
+            <b className="tnum">{pct(alloc.community, 1)}</b>
+          </div>
+          <input
+            type="range"
+            min={Math.round(bounds.communityMin * 1000)}
+            max={Math.round(bounds.communityMax * 1000)}
+            step={5}
+            value={Math.round(alloc.community * 1000)}
+            style={{ ['--fill' as string]: `${((alloc.community - bounds.communityMin) / Math.max(0.001, bounds.communityMax - bounds.communityMin)) * 100}%` }}
+            onChange={(e) => setAlloc(alloc.founder, Number(e.target.value) / 1000)}
+          />
+          <div className="text-[11px] text-mut">
+            Sold and distributed into the float on day one. Whatever is left after team ({pct(bounds.team, 0)}) and partners (
+            {pct(bounds.partners, 0)}) is your <b className="text-ink">treasury: {pct(alloc.treasury, 1)}</b> — the only budget every
+            incentive programme you ever run is paid from.
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <div className="text-[13px]">Vesting — yours, the team's and the partners'</div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {(['short', 'standard', 'long'] as VestingPolicy[]).map((v) => (
+              <Btn key={v} variant={(draft.vesting ?? 'standard') === v ? 'primary' : undefined} onClick={() => setDraft({ ...draft, vesting: v })}>
+                {VESTING_LABEL[v]}
+              </Btn>
+            ))}
+          </div>
+          <div className="mt-1 text-[11px] text-mut">
+            Short is flexibility the community reads as an exit plan; long is credibility you cannot spend. Every unlocked token lands in
+            the float and pushes the price down, so a short schedule dilutes your own position on the way out.
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[13px]">Primary token utility</div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {UTILITY_MODELS.map((m) => (
+              <Btn
+                key={m}
+                variant={(draft.utilityModel ?? defaultUtilityModel(game)) === m ? 'primary' : undefined}
+                onClick={() => setDraft({ ...draft, utilityModel: m })}
+              >
+                {UTILITY_LABEL[m]}
+                {utilityModelFit(game, m) >= 1 ? ' ✓' : ''}
+              </Btn>
+            ))}
+          </div>
+          <div className="mt-1 text-[11px] text-mut">
+            One model, chosen now and never again. It multiplies how much of your product's real activity the token is actually in — a
+            marketplace currency in a company with no marketplace never becomes useful, however good the product gets. ✓ marks the model
+            your sector supports best ({(terms.utilityFit * 100).toFixed(0)}% fit on your current choice).
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 border-t border-line pt-3 sm:grid-cols-4">
+        <div>
+          <div className="text-[11px] text-mut">Your tokens</div>
+          <b className="tnum">{terms.founderTokens.toLocaleString()}</b>
+        </div>
+        <div>
+          <div className="text-[11px] text-mut">Treasury</div>
+          <b className="tnum">{pct(alloc.treasury, 0)} of supply</b>
+        </div>
+        <div>
+          <div className="text-[11px] text-mut">Launch-day trust</div>
+          <b className="tnum">{terms.reaction.trust.toFixed(0)}/100</b>
+        </div>
+        <div>
+          <div className="text-[11px] text-mut">Launch-day speculation</div>
+          <b className="tnum">{terms.speculation.toFixed(0)}/100</b>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** ICO brief §6 and §30. The token path's fundraising: sell treasury tokens for company cash.
+ *  Without this the fork closes every route to capital and opens none. */
+function TreasurySalePanel() {
+  const game = useStore((s) => s.game)!
+  const sellTreasury = useStore((s) => s.sellTreasury)
+  const [size, setSize] = useState(0.5)
+  if (!treasurySalesActive(game)) return null
+  const max = maxTreasurySale(game)
+  const quote = treasurySaleQuote(game, Math.round(max * size))
+  const t = game.token!
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Treasury sale — the round you can still raise">
+        {max <= 0 ? (
+          <div className="text-[13px] text-mut">
+            {quote.reason ?? 'Nothing to sell.'} A market this thin cannot absorb size at any price — deepen it with liquidity
+            incentives, or wait for the community to grow.
+          </div>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between text-[13px]">
+              <span>Sell {Math.round(quote.tokens).toLocaleString()} tokens</span>
+              <b className="tnum">{pct(quote.tokens / Math.max(1, t.supply.circulating), 1)} of the float</b>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round(size * 100)}
+              style={{ ['--fill' as string]: `${size * 100}%` }}
+              onChange={(e) => setSize(Number(e.target.value) / 100)}
+            />
+            <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
+              <div>
+                <div className="text-[11px] text-mut">You receive</div>
+                <b className="tnum text-good">{money(quote.proceeds)}</b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">At the screen price</div>
+                <b className="tnum text-mut">{money(quote.grossDollars)}</b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">Price impact</div>
+                <b className="tnum text-warn">−{pct(quote.priceImpact, 0)}</b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">Trust cost</div>
+                <b className="tnum text-warn">−{quote.trustCost.toFixed(0)} pts</b>
+              </div>
+            </div>
+            <div className="mt-2.5 text-xs leading-relaxed text-mut">
+              You do not sell at the screen price — you walk the book down and realise the average. A deeper market costs you less,
+              which is the second thing liquidity incentives buy. The tokens stay in the float afterwards, so every remaining token is
+              worth slightly less of the same network, and your weekly incentive budget falls by{' '}
+              <b className="text-ink tnum">{Math.round(quote.weeklyBudgetLost).toLocaleString()}</b> tokens permanently. Selling again
+              soon costs roughly double the trust.
+              {t.treasurySales.tokensSold > 0 && (
+                <span className="text-ink">
+                  {' '}
+                  Raised so far: {money(t.treasurySales.proceeds)} across {t.treasurySales.tokensSold.toLocaleString()} tokens.
+                </span>
+              )}
+            </div>
+            <Btn variant="primary" className="mt-3" disabled={!quote.ok} onClick={() => sellTreasury(quote.tokens)}>
+              Sell for {money(quote.proceeds)}
+            </Btn>
+          </>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
+/** ICO brief §13–§19. Six categories, one weekly budget, shares of it. §13: "Do not create
+ *  micro-management. Use broad allocations." */
+function IncentivePanel() {
+  const game = useStore((s) => s.game)!
+  const setIncentives = useStore((s) => s.setIncentives)
+  if (!incentivesActive(game)) return null
+  const panel = incentivePanel(game)
+  const t = game.token!
+  const committed = INCENTIVE_CATEGORIES.reduce((a, c) => a + panel.shares[c], 0)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Treasury programmes — what the tokens are for">
+        <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 text-[13px]">
+          <span>
+            <span className="text-mut">Treasury:</span> <b className="tnum">{panel.treasuryTokens.toLocaleString()}</b>{' '}
+            <span className="text-mut">tokens ({money(treasuryValue(game))})</span>
+          </span>
+          <span>
+            <span className="text-mut">Weekly budget (2% cap):</span>{' '}
+            <b className="tnum">{Math.round(panel.weeklyCapTokens).toLocaleString()}</b>{' '}
+            <span className="text-mut">tokens · {money(panel.weeklyCapTokens * t.market.price)}</span>
+          </span>
+          <span>
+            <span className="text-mut">Committed:</span> <b className="tnum">{pct(committed, 0)}</b>
+          </span>
+          {panel.weeksLeft < 400 && (
+            <span>
+              <span className="text-mut">At this rate the treasury is spent in</span> <b className="tnum">~{panel.weeksLeft} weeks</b>
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 grid gap-3">
+          {INCENTIVE_CATEGORIES.map((c) => {
+            const share = panel.shares[c]
+            const spend = panel.spend.byCategory[c]
+            const label = INCENTIVE_LABELS[c]
+            return (
+              <div key={c} className="grid gap-1">
+                <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                  <span className="font-bold">{label.name}</span>
+                  <span className="tnum text-mut">
+                    {pct(share, 0)}
+                    {spend.tokens > 0 && <> · {money(spend.dollars)}/wk</>}
+                    {spend.stock > 0 && <> · running at {pct(spend.stock, 0)}</>}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(share * 100)}
+                  style={{ ['--fill' as string]: `${share * 100}%` }}
+                  onChange={(e) => setIncentives({ [c]: Number(e.target.value) / 100 })}
+                />
+                <div className="text-[11px] leading-relaxed text-mut">
+                  {label.effect} <span className="text-warn">{label.risk}</span>
+                  {c === 'employee_compensation' && panel.comp.payroll > 0 && (
+                    <>
+                      {' '}
+                      Currently covering <b className="text-ink">{pct(panel.comp.coverage, 0)}</b> of a {money(panel.comp.payroll)}/wk
+                      payroll{panel.comp.wasted > 0 && <span className="text-bad"> · {money(panel.comp.wasted)}/wk over the 40% cap and buying nothing</span>}.
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="mt-3 text-xs leading-relaxed text-mut">
+          Everything here is a standing order against one weekly budget, and the budget is 2% of the treasury — in <b>tokens</b>, so a
+          rising price buys more with the same allocation but never lets you spend more of it. Effects build over weeks and decay when
+          you stop paying, so these are policies rather than purchases. Every token committed also reaches the float, which pushes the
+          price down by slightly more than the demand it creates: spending is never free.
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
 /**
  * ICO brief §1/§2/§3. The fork, and everything the player needs to judge it.
  *
@@ -69,6 +385,9 @@ function TokenisationPanel() {
   const game = useStore((s) => s.game)!
   const tokenise = useStore((s) => s.tokenise)
   const [confirming, setConfirming] = useState(false)
+  // The tokenomics draft is REACT-LOCAL until the player confirms (architecture §2: "pre-launch
+  // state does not exist"). There is no half-tokenised GameState to reason about.
+  const [draft, setDraft] = useState<LaunchDraft>({})
 
   if (!tokenisationOffered(game)) return null
 
@@ -103,13 +422,15 @@ function TokenisationPanel() {
             token position could actually be sold for.
           </div>
         </Panel>
+        <TreasurySalePanel />
+        <IncentivePanel />
       </div>
     )
   }
 
   // --- not yet forked: readiness, then the decision ---
   const elig = tokenisationEligibility(game)
-  const terms = resolveLaunchTerms(game)
+  const terms = resolveLaunchTerms(game, draft)
   // §2: the suitability the player is actually facing, after seed and strategy — not the sector's
   // base disposition, which would be the "one correct answer" the brief tells us not to hardcode.
   const suitability = SUITABILITY_LABEL[runSectorSuitability(game)]
@@ -182,6 +503,7 @@ function TokenisationPanel() {
               Launch early and you mint a small float, keep a larger share of it and vest it all before the run ends; launch late and you
               raise more against stronger fundamentals but may never get past your own cliff.
             </div>
+            <TokenomicsSetup game={game} draft={draft} setDraft={setDraft} />
             <div className="mt-3 rounded-xl border border-line bg-surface2 p-3.5">
               <div className="text-[13px] font-bold">This is a major strategic fork.</div>
               <div className="mt-1 text-[13px] leading-relaxed text-mut">
@@ -200,7 +522,7 @@ function TokenisationPanel() {
                   <Btn
                     variant="danger"
                     onClick={() => {
-                      tokenise()
+                      tokenise(draft)
                       setConfirming(false)
                     }}
                   >

@@ -58,6 +58,7 @@ import { sectorById } from '../data'
 import { hasCapability } from '../modes'
 import type { CareerPMFState, SegmentId, SegmentTruth } from '../career/types'
 import type { GameState } from '../types'
+import { programmeRequest } from './incentives'
 import { treasuryCommitment } from './market'
 import { TOKEN_BOUNDS, TOKEN_USERS, type RetentionSplit, type TokenState } from './types'
 
@@ -153,9 +154,10 @@ export function userIncentiveTokens(s: GameState | null | undefined): number {
   const commitment = treasuryCommitment(s)
   if (!(commitment.tokens > 0) || !(commitment.requested > 0)) return 0
   let rewards = 0
-  for (const p of t.incentives)
-    if (p.category === 'customer_rewards' && Number.isFinite(p.tokensPerWeek) && p.tokensPerWeek > 0)
-      rewards += p.tokensPerWeek
+  // Slice 4: the standing order is a share of the weekly cap, so the request has to be re-derived
+  // against the CURRENT cap — the same expression `treasuryCommitment` totals — or the pro rata
+  // below would divide this week's numerator by last week's denominator.
+  for (const p of t.incentives) if (p.category === 'customer_rewards') rewards += programmeRequest(p, commitment.cap)
   if (rewards <= 0) return 0
   return commitment.tokens * clamp01(rewards / commitment.requested)
 }

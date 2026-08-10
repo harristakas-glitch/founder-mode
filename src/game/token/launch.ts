@@ -62,9 +62,9 @@ import {
   tokenisationBars,
   tokenMarketAppetite,
 } from './eligibility'
-import { createTokenState, splitSupply, VESTING_TERMS } from './state'
+import { createTokenState, splitSupply, utilityModelFitFor, VESTING_TERMS } from './state'
 import type { TokenAllocationPlan, TokenLaunchPlan, TokenState, TokenUtilityModel, VestingPolicy } from './types'
-import { TOKEN_BOUNDS } from './types'
+import { TOKEN_BOUNDS, TOKEN_INCENTIVES } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => clamp(v, 0, 1)
@@ -153,6 +153,126 @@ export function defaultAllocation(s: GameState): TokenAllocationPlan {
 
 const round4 = (n: number) => Math.round(n * 10_000) / 10_000
 
+// ---------- the tokenomics screen (brief §20–§23, Slice 4) ----------
+
+/**
+ * The band the player may move the allocation inside, centred on what the community would have
+ * offered (`defaultAllocation`).
+ *
+ * A BAND, NOT A FREE FIELD, and that is the §22 decision made structural. If the founder could
+ * simply type 90%, the interesting question — "how much can I take before the people I am asking
+ * to fund me stop believing in it?" — would be replaced by an arithmetic one. The band is ±12
+ * points of supply around an expectation that is itself set by how late the launch is, so an early
+ * founder negotiating with fifty believers can reach 34% and a late one negotiating with fifty
+ * thousand cannot get past 22%.
+ *
+ * `team` and `partners` are FIXED. Brief §20 asks for community / team+founder / treasury and warns
+ * against complex crypto-financial engineering; three moving numbers where two are independent is
+ * the whole decision, and a fourth slider would be micro-management the brief explicitly rejects.
+ */
+export interface AllocationBounds {
+  expectedFounder: number
+  expectedCommunity: number
+  founderMin: number
+  founderMax: number
+  communityMin: number
+  communityMax: number
+  team: number
+  partners: number
+}
+
+export function allocationBounds(s: GameState): AllocationBounds {
+  const base = defaultAllocation(s)
+  const fixed = LAUNCH_TERMS.teamShare + LAUNCH_TERMS.partnerShare
+  const band = TOKEN_INCENTIVES.founderShareBand
+  const founderMin = Math.max(TOKEN_INCENTIVES.minFounderShare, round4(base.founder - band))
+  const founderMax = round4(base.founder + band)
+  // Whatever the founder does not take, the community and the treasury share — so the community's
+  // ceiling moves with the founder's floor. Every combination inside these bounds leaves the
+  // treasury at least `minTreasuryShare`, which is what keeps a launch from minting a company with
+  // no ability to run a single incentive programme.
+  const communityMin = TOKEN_INCENTIVES.minCommunityShare
+  const communityMax = round4(1 - fixed - founderMin - TOKEN_INCENTIVES.minTreasuryShare)
+  return {
+    expectedFounder: base.founder,
+    expectedCommunity: base.community,
+    founderMin,
+    founderMax,
+    communityMin,
+    communityMax,
+    team: LAUNCH_TERMS.teamShare,
+    partners: LAUNCH_TERMS.partnerShare,
+  }
+}
+
+/**
+ * Two numbers the player set → a valid allocation. The treasury is the remainder, which is the only
+ * assignment that makes the sum exactly 1 without a rounding epsilon, and it is also the honest
+ * model: the treasury is what is left after everyone with a claim has been paid.
+ */
+export function allocationFrom(s: GameState, founderShare: number, communityShare: number): TokenAllocationPlan {
+  const b = allocationBounds(s)
+  const founder = round4(clamp(founderShare, b.founderMin, b.founderMax))
+  const maxCommunity = round4(1 - b.team - b.partners - founder - TOKEN_INCENTIVES.minTreasuryShare)
+  const community = round4(clamp(communityShare, b.communityMin, Math.max(b.communityMin, maxCommunity)))
+  return {
+    community,
+    treasury: round4(1 - community - b.team - founder - b.partners),
+    team: b.team,
+    founder,
+    partners: b.partners,
+  }
+}
+
+/**
+ * Brief §21, §22 and §23: what the tokenomics say about the founder, in the only currency a
+ * community has — belief.
+ *
+ * Every term is a DEVIATION from what this community expected, never an absolute. That matters:
+ * 22% is generous from a crowd of fifty early believers and greedy from fifty thousand late ones,
+ * and a model built on absolutes would make the launch-timing decision (§76) and the allocation
+ * decision the same decision.
+ *
+ * Pure, and applied ONCE at launch. Slice 5 owns how trust moves afterwards; this sets where it
+ * starts, which is the only place tokenomics can honestly bite — you do not get to re-cut the
+ * allocation in week 40.
+ */
+export interface CommunityReaction {
+  /** Supply the founder took above what was expected. Negative means they left some on the table. */
+  founderExcess: number
+  communityExcess: number
+  trust: number
+  sentiment: number
+  /** Points ADDED to launch-day speculation: a big founder bag is a sell-pressure story. */
+  speculationDelta: number
+  /** Applied to `s.reputation` at launch, on top of the flat −3 every launch costs. */
+  reputationDelta: number
+}
+
+export function communityReaction(s: GameState, plan: TokenLaunchPlan, strength: number): CommunityReaction {
+  const base = defaultAllocation(s)
+  const founderExcess = plan.allocation.founder - base.founder
+  const communityExcess = plan.allocation.community - base.community
+  const vestTrust = TOKEN_INCENTIVES.vestingTrust[plan.vesting] ?? 0
+  const vestSpec = TOKEN_INCENTIVES.vestingSpeculation[plan.vesting] ?? 0
+  return {
+    founderExcess,
+    communityExcess,
+    // The Slice-1 baselines, unchanged, plus the deviation terms. A default plan has both
+    // deviations at zero and both vesting terms at zero, so it produces Slice 1's exact numbers.
+    trust: clamp(40 + strength * 0.3 + founderExcess * TOKEN_INCENTIVES.founderExcessTrust + communityExcess * 40 + vestTrust, 0, 100),
+    sentiment: clamp(52 + strength * 0.25 + founderExcess * TOKEN_INCENTIVES.founderExcessSentiment + communityExcess * 20, 0, 100),
+    speculationDelta: founderExcess * TOKEN_INCENTIVES.founderExcessSpeculation + vestSpec,
+    reputationDelta: founderExcess * TOKEN_INCENTIVES.founderExcessReputation,
+  }
+}
+
+/** Brief §24: how well a utility model suits this sector. 0.5–1, and the sector's default is 1.
+ *  The table and the multiplier it feeds live in state.ts, which the weekly tick can import. */
+export function utilityModelFit(s: GameState, model: TokenUtilityModel): number {
+  return utilityModelFitFor(s.sector, model)
+}
+
 /** Every field of the plan a player could set, before the derived terms are resolved. */
 export interface LaunchDraft {
   allocation?: TokenAllocationPlan
@@ -197,6 +317,10 @@ export interface LaunchTerms {
   founderTokens: number
   cliffWeeks: number
   durationWeeks: number
+  /** Slice 4. What the tokenomics bought or cost in launch-day belief (§21–§23). */
+  reaction: CommunityReaction
+  /** 0.5–1, brief §24. Shown so the screen can say why a model is a worse fit than the default. */
+  utilityFit: number
 }
 
 /**
@@ -207,7 +331,11 @@ export function resolveLaunchTerms(s: GameState, draft: LaunchDraft = {}): Launc
   const allocation = draft.allocation ?? defaultAllocation(s)
   const vesting = draft.vesting ?? 'standard'
   const utilityModel = draft.utilityModel ?? defaultUtilityModel(s)
-  const initialDecentralisation = clamp(draft.initialDecentralisation ?? 25, 0, 100)
+  // A larger community allocation IS a more decentralised network on day one (§21). Derived rather
+  // than offered as a sixth dial: §20 lists five decisions and warns twice against building
+  // financial engineering, and a decentralisation slider next to a community-allocation slider is
+  // two names for the same act.
+  const initialDecentralisation = clamp(draft.initialDecentralisation ?? 25 + (allocation.community - defaultAllocation(s).community) * 60, 0, 100)
 
   const members = launchCommunityMembers(s)
   const strength = communityStrength(s)
@@ -246,9 +374,19 @@ export function resolveLaunchTerms(s: GameState, draft: LaunchDraft = {}): Launc
   // (4) Launch-day market character. Brief §76: early is hype with thin utility, late is
   //     fundamentals with less room to run.
   const product = clamp(s.features * 0.5 + s.quality * 0.5 - s.bugs * 0.6, 0, 100)
-  const utility = clamp(5 + product * 0.2 + Math.min(s.week, 104) * 0.1, 0, 45)
-  const speculation = clamp(78 - utility * 0.8 + tokenMarketAppetite(s) * 8, 0, 100)
-  const depth = clamp(0.1 + 0.45 * (strength / 100) + 0.15 * lateness, 0, 1)
+  // §24: the utility model is a real choice, and the cheapest way to make it one is to let it set
+  // how much of the network's launch-day activity the token is actually IN. The sector's natural
+  // model scores 1 and is the default, so taking the default changes nothing; anything else opens
+  // the network with less utility, and because launch speculation is `78 − 0.8 × utility`, a
+  // mismatched model launches a token that is more story than product — which is precisely the
+  // shape of the trade §76 wants early launches to face.
+  const modelFit = utilityModelFit(s, utilityModel)
+  const utility = clamp(
+    (5 + product * 0.2 + Math.min(s.week, 104) * 0.1) *
+      lerp(TOKEN_INCENTIVES.utilityFitMin, TOKEN_INCENTIVES.utilityFitMax, (modelFit - 0.5) / 0.5),
+    0,
+    45,
+  )
 
   const plan: TokenLaunchPlan = {
     allocation,
@@ -258,6 +396,9 @@ export function resolveLaunchTerms(s: GameState, draft: LaunchDraft = {}): Launc
     totalSupply,
     launchPrice,
   }
+  const reaction = communityReaction(s, plan, strength)
+  const speculation = clamp(78 - utility * 0.8 + tokenMarketAppetite(s) * 8 + reaction.speculationDelta, 0, 100)
+  const depth = clamp(0.1 + 0.45 * (strength / 100) + 0.15 * lateness, 0, 1)
   const terms = VESTING_TERMS[vesting]
 
   return {
@@ -276,6 +417,8 @@ export function resolveLaunchTerms(s: GameState, draft: LaunchDraft = {}): Launc
     founderTokens: Math.round(totalSupply * allocation.founder),
     cliffWeeks: terms.cliffWeeks,
     durationWeeks: terms.durationWeeks,
+    reaction,
+    utilityFit: modelFit,
   }
 }
 
@@ -325,6 +468,8 @@ export function launchToken(s: GameState, draft: LaunchDraft = {}): LaunchResult
       founderTokens: terms.founderTokens,
       saleProceeds: terms.saleProceeds,
       saleTokens: terms.saleTokens,
+      trust: terms.reaction.trust,
+      sentiment: terms.reaction.sentiment,
     },
   )
 
@@ -333,7 +478,9 @@ export function launchToken(s: GameState, draft: LaunchDraft = {}): LaunchResult
   // A token launch is the loudest week the company has had, and the institutional world reads it
   // as a founder who stopped taking their calls.
   s.hype = clamp(s.hype + 12, 0, 100)
-  s.reputation = clamp(s.reputation - 3, 0, 100)
+  // §22: taking more than the community expected is a reputation event in the outside world too,
+  // and leaving some on the table is credibility. Zero for a default plan.
+  s.reputation = clamp(s.reputation - 3 + terms.reaction.reputationDelta, 0, 100)
   s.energy = clamp(s.energy - 12, 0, 100)
   const abandoned = s.termSheets.length
   s.termSheets = []
@@ -355,6 +502,11 @@ export function launchToken(s: GameState, draft: LaunchDraft = {}): LaunchResult
       `${terms.boundBy === 'float_depth' ? 'the community absorbed everything it could, and that was the limit' : terms.boundBy === 'valuation_ceiling' ? 'capped at what an equity round of this size would have raised' : 'the book filled at the asking price'}. ` +
       `You hold ${(terms.plan.allocation.founder * 100).toFixed(0)}% of supply, vesting over ${terms.durationWeeks} weeks after a ` +
       `${terms.cliffWeeks}-week cliff. ` +
+      (terms.reaction.founderExcess > 0.015
+        ? `The forums did the arithmetic within the hour: ${(terms.reaction.founderExcess * 100).toFixed(0)} points more of supply than a company at this stage usually keeps, and they are already counting the weeks to your cliff. `
+        : terms.reaction.founderExcess < -0.015
+          ? `You left ${(-terms.reaction.founderExcess * 100).toFixed(0)} points of supply on the table, and the community noticed that too. `
+          : '') +
       (abandoned > 0 ? `${abandoned} term sheet${abandoned === 1 ? '' : 's'} came off the table within the hour. ` : '') +
       `There is no way back to the institutional path.`,
   })

@@ -60,6 +60,7 @@ import type { GameState } from '../types'
 // only from inside function bodies, never at module top level, so the live bindings are resolved at
 // call time. The alternative was to re-derive the treasury's weekly cap in a second place, which is
 // the desync the contract spends §7.3 warning about.
+import { programmeRequest } from './incentives'
 import { incentivisedUsers, organicUsers } from './users'
 import { TOKEN_BOUNDS, TOKEN_ECONOMY, TOKEN_LIMITS, type TokenState } from './types'
 
@@ -185,8 +186,12 @@ export function treasuryCommitment(s: GameState | null | undefined): TreasuryCom
   if (!t) return empty
   const treasury = Math.max(0, t.supply.treasury)
   const cap = treasury * TOKEN_BOUNDS.treasurySpendCapPerWeek
+  // Slice 4. A programme's standing order is a SHARE of this cap, re-derived here every week so it
+  // tracks a draining treasury; `programmeRequest` falls back to the absolute `tokensPerWeek` for a
+  // v1 save and for the probes that write programmes directly. Function-body import, like the
+  // users.ts cycle above.
   let requested = 0
-  for (const p of t.incentives) if (Number.isFinite(p.tokensPerWeek) && p.tokensPerWeek > 0) requested += p.tokensPerWeek
+  for (const p of t.incentives) requested += programmeRequest(p, cap)
   const tokens = Math.min(requested, cap, treasury)
   const circulating = Math.max(1, t.supply.circulating)
   return { requested, tokens, cap, capped: tokens < requested - 1e-9, floatFraction: tokens / circulating }
@@ -241,6 +246,17 @@ export function priceStep(
   floatFraction: number,
   effectiveness: number,
   noise: number,
+  /**
+   * Slice 4, brief §41. Tokens that came out of `locked` this week, as a share of circulating
+   * supply — vesting unlocks for the team, the founder and the partners.
+   *
+   * SEPARATE FROM `floatFraction` AND IT MUST STAY SEPARATE. Treasury spend creates supply pressure
+   * AND ecosystem demand, because someone was paid to do something with those tokens. An unlock
+   * creates supply pressure and NOTHING ELSE: nobody bought anything, a cliff simply passed. Folding
+   * the two together would make every vesting schedule mildly bullish, which is exactly backwards
+   * and would delete the cost of choosing `short`.
+   */
+  unlockFraction = 0,
 ): PriceStep {
   const m = momentum(t)
   const spec = clamp01(t.market.speculation / 100)
@@ -266,8 +282,9 @@ export function priceStep(
     TOKEN_ECONOMY.demandCap,
   )
 
-  // Strictly larger coefficient than ecosystemDemand's, by construction.
-  const supplyPressure = TOKEN_BOUNDS.supplyPressurePerFloatPct * floatFraction
+  // Strictly larger coefficient than ecosystemDemand's, by construction — and the unlock leg gets
+  // the same coefficient with no demand term at all behind it.
+  const supplyPressure = TOKEN_BOUNDS.supplyPressurePerFloatPct * (floatFraction + Math.max(0, unlockFraction))
 
   const safeFair = Math.max(priceFloor(t) * TOKEN_ECONOMY.fairValueFloorMultiple, fair)
   const d = clamp(Math.log(t.market.price / safeFair), -TOKEN_ECONOMY.logDeviationCap, TOKEN_ECONOMY.logDeviationCap)

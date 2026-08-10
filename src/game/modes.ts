@@ -147,12 +147,12 @@ export interface GameCapabilities {
   // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
   // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
   // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
-  // Slices 1–3 shipped, so `tokenisation`, `tokenEconomy` and `tokenUserComposition` are true in
-  // CAREER ONLY. The other four stay false in every mode until the code that honours them exists.
+  // Slices 1–4 shipped, so the first four are true in CAREER ONLY. The other three stay false in
+  // every mode until the code that honours them exists.
   tokenisation: boolean // BUILT (Slice 1). The capital fork: eligibility, the decision, VC/IPO restrictions
   tokenEconomy: boolean // BUILT (Slice 2). Price, supply, treasury, utility, community, speculation, volatility
   tokenUserComposition: boolean // BUILT (Slice 3). Organic vs incentivised users, split retention, PMF protection, the §53 warning
-  tokenIncentives: boolean // treasury allocation across categories, vesting, unlocks, employee token comp (Slice 4)
+  tokenIncentives: boolean // BUILT (Slice 4). Tokenomics at launch, the six categories, vesting unlocks, employee token comp
   tokenCommunity: boolean // sentiment, trust, decentralisation, founder influence (Slice 5)
   tokenGovernance: boolean // proposals resolved from state, never randomly (Slice 6)
   tokenNarrative: boolean // token Director candidates, media, company memory, postmortem sections (Slice 7)
@@ -346,6 +346,13 @@ const CAREER_BASE_RULES: GameRules = {
     // valuation discount on rented users. On HERE only: Quick Play's split is Slice 7 and Arena is
     // off for the whole feature (§58).
     tokenUserComposition: true,
+    // ICO Slice 4 — tokenomics and incentives, and the slice that makes Slice 3 reachable by a
+    // player. The launch screen's allocation band, vesting policy and primary utility model; the
+    // six incentive categories as shares of one weekly treasury budget; vesting unlocks as supply
+    // pressure; token compensation substituting for cash payroll. Until this, `t.incentives` was
+    // empty in every played game and the entire user-composition mechanic could only be reached by
+    // a probe writing state directly. On HERE only, for the same reason as the three above.
+    tokenIncentives: true,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.

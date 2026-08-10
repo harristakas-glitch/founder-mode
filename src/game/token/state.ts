@@ -15,10 +15,12 @@
 import { hasCapability, type CapabilityKey } from '../modes'
 import type { GameState } from '../types'
 import {
+  TOKEN_INCENTIVES,
   TOKEN_STATE_VERSION,
   type CapitalPath,
   type TokenLaunchPlan,
   type TokenState,
+  type TokenUtilityModel,
 } from './types'
 
 /** Every switch that means "some part of the token subsystem is live for this run". */
@@ -84,6 +86,80 @@ export const VESTING_TERMS = {
   long: { cliffWeeks: 26, durationWeeks: 104 },
 } as const
 
+// ---------- the primary utility model (brief §24, Slice 4) ----------
+
+/**
+ * 0.5–1. How well a utility model suits a sector. The sector's natural model scores 1.
+ *
+ * Lives here rather than in launch.ts because the weekly tick needs it and launch.ts imports
+ * `valuation` from the engine — a module the tick must not pull in.
+ */
+export function utilityModelFitFor(sector: string, model: TokenUtilityModel): number {
+  return TOKEN_INCENTIVES.utilityModelFit[sector]?.[model] ?? 0.7
+}
+
+/**
+ * The multiplier the chosen model puts on EARNED utility, forever.
+ *
+ * The first cut of this slice applied the fit only to launch-day utility, and the probe caught it:
+ * five models produced launch utilities of 12.7 down to 8.9 in devtools and then IDENTICAL utility
+ * (36.4) and identical founder standing by week 60. Utility reverts at 6%/wk, so a launch-day
+ * difference has a half-life of eleven weeks and §24's "each sector may have different
+ * compatibility" was decoration for eighty of the run's hundred weeks.
+ *
+ * A permanent multiplier on the TARGET is the honest reading of §25 as well: utility "emerges from
+ * actual product behaviour", and the model is precisely the question of how much of that behaviour
+ * the token is in. A marketplace currency in a company with no marketplace is not a token anyone
+ * needs, however good the product gets. It cannot be bought, cannot be changed after launch, and is
+ * a multiplier on an earned quantity rather than an addition to it — so `fairValue` stays an anchor.
+ */
+export function utilityModelMultiplier(sector: string, model: TokenUtilityModel): number {
+  const fit = utilityModelFitFor(sector, model)
+  return (
+    TOKEN_INCENTIVES.utilityFitMin +
+    (TOKEN_INCENTIVES.utilityFitMax - TOKEN_INCENTIVES.utilityFitMin) * Math.min(1, Math.max(0, (fit - 0.5) / 0.5))
+  )
+}
+
+// ---------- unlocks (brief §41, Slice 4) ----------
+
+/**
+ * Team, founder and partner tokens are `locked` at launch and released on the vesting schedule.
+ * `splitSupply` below computes the same number the same way; this reads it back off the plan so an
+ * unlock never has to trust a field the player's localStorage could have edited.
+ */
+export function lockedAtLaunch(t: TokenState): number {
+  const a = t.plan.allocation
+  return Math.round(t.plan.totalSupply * (a.team + a.founder + a.partners))
+}
+
+/** 0–1 of the locked allocation that the schedule says should be free by `week`. */
+export function unlockedFraction(t: TokenState, week: number): number {
+  const terms = VESTING_TERMS[t.plan.vesting] ?? VESTING_TERMS.standard
+  const elapsed = week - t.launchWeek
+  if (elapsed < terms.cliffWeeks) return 0
+  return Math.min(1, Math.max(0, elapsed / terms.durationWeeks))
+}
+
+/**
+ * Tokens that come out of `locked` this week — brief §41, and the vesting policy's price.
+ *
+ * This is AGGREGATE SUPPLY PRESSURE, never simulated wallets. It is also the reason vesting is a
+ * real decision rather than a flavour text: `short` dumps the whole team allocation into the float
+ * inside half a year, which dilutes `fairValue` (a per-token number) and pushes the price down
+ * exactly when the founder's own cliff passes; `long` spreads the same tokens over two years and
+ * most of them never reach the float inside a 104-week run at all.
+ *
+ * Derived from (week, plan, current locked) with no stored counter, so it cannot desync from the
+ * clock and a reloaded save unlocks exactly what it should.
+ */
+export function pendingUnlock(t: TokenState, week: number): number {
+  const atLaunch = lockedAtLaunch(t)
+  const due = Math.round(atLaunch * unlockedFraction(t, week))
+  const alreadyReleased = atLaunch - t.supply.locked
+  return Math.max(0, Math.min(t.supply.locked, due - alreadyReleased))
+}
+
 // ---------- creation ----------
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -140,11 +216,21 @@ export function createTokenState(
     /** Dollars the initial sale cleared. Recorded for the postmortem; the engine banks the cash. */
     saleProceeds: number
     saleTokens: number
+    /**
+     * Slice 4, brief §21–§23. What the community made of the tokenomics — the founder's share
+     * against the share they expected, and the vesting policy. Absent means "exactly what was
+     * expected", which is what the default plan is, so a launch that takes the defaults produces
+     * the identical state Slice 1 produced.
+     */
+    trust?: number
+    sentiment?: number
   },
   _rng?: () => number,
 ): TokenState {
   const supply = { total: plan.totalSupply, ...splitSupply(plan.totalSupply, plan) }
   const vesting = VESTING_TERMS[plan.vesting]
+  const sentiment = clamp(opts.sentiment ?? 52 + opts.communityStrength * 0.25, 0, 100)
+  const trust = clamp(opts.trust ?? 40 + opts.communityStrength * 0.3, 0, 100)
 
   return {
     version: TOKEN_STATE_VERSION,
@@ -170,8 +256,8 @@ export function createTokenState(
     community: {
       members: Math.max(0, Math.round(opts.communityMembers)),
       holders: Math.max(0, Math.round(opts.communityMembers * 0.6)),
-      sentiment: clamp(52 + opts.communityStrength * 0.25, 0, 100),
-      trust: clamp(40 + opts.communityStrength * 0.3, 0, 100),
+      sentiment,
+      trust,
       engagement: clamp(opts.communityStrength, 0, 100),
       decentralisationDemand: clamp(20 + (100 - plan.initialDecentralisation) * 0.2, 0, 100),
       decentralisation: clamp(plan.initialDecentralisation, 0, 100),
@@ -185,8 +271,9 @@ export function createTokenState(
       sold: 0,
       realisedProceeds: 0,
     },
-    // Owned by Slice 4 and Slice 6: present, empty, and no reader here creates them.
+    // Owned by Slice 6: present, empty, and no reader here creates it.
     incentives: [],
+    treasurySales: { tokensSold: 0, proceeds: 0, lastSaleWeek: 0 },
     governance: { proposals: [], lastProposalWeek: s.week },
     // Authoritative only when detailedPMF is off (Career reads the cohorts). Every user at launch
     // is organic — nothing has been paid for yet.
@@ -217,7 +304,7 @@ export function createTokenState(
         treasuryTokens: supply.treasury,
         utility: clamp(opts.utility, 0, 100),
         speculation: clamp(opts.speculation, 0, 100),
-        sentiment: clamp(52 + opts.communityStrength * 0.25, 0, 100),
+        sentiment,
         organicUsers: Math.max(0, Math.round(s.users)),
         incentivisedUsers: 0,
       },

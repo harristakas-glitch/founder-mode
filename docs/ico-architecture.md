@@ -396,6 +396,17 @@ Three restoring forces, because one is not enough:
    users leave at ~9%/wk. Sustaining the loop therefore needs *accelerating* spend against a
    *shrinking* token balance — superlinear demand against a finite, depleting resource.
 
+   > **Slice 4 amendment — this constant no longer exists under this name, and the claim above was
+   > never true.** Slice 3 built this restoring force out of `incentiveDependence` instead, and
+   > built it stronger: with the rewards off, an incentivised cohort's four-week survival collapses
+   > to `organic4 × 0.38` (24% against 63%), which is ~12%/wk against an organic base that is itself
+   > churning. Two decay terms on the same population would have double-counted the collapse, so
+   > nothing ever read `incentiveDecayPerWeek` and it sat here asserting a mechanism that did not
+   > exist. Slice 4 kept the number and moved it to `TOKEN_INCENTIVES.stockDecayPerWeek`, where it
+   > decays the incentive *stocks* the five non-customer categories build — which genuinely had no
+   > restoring force before, and without one every category would ratchet. The paragraph above still
+   > describes the loop correctly; only the constant's name and the population it acts on changed.
+
 **Bounds:** `treasury ∈ [0, total]`. `treasuryValue` is **derived, never stored** — see §7.4.
 
 ### Loop B — Price ↔ speculation (§26, §27). The dangerous one.
@@ -679,6 +690,17 @@ these jobs:
 | 3 | `token/users.ts` | `organicUsers(s)`, `incentivisedUsers(s)`, `organicShare(s)`, `resolveIncentivisedAcquisition(...)`, `expectedRetentionWithoutIncentives(...)` |
 | 3 | `career/pmf.ts` | `organicCustomers(career, segmentId?)` |
 | 3 | `career/types.ts` | `CustomerCohort.origin?`, `CareerPMFState.retentionBySegmentIncentivised?` |
+| 4 | `token/incentives.ts` | `setIncentiveShares(s, shares)`, `incentiveShares(s)`, `weeklyIncentiveSpend(s)`, `incentiveEffects(s)`, `employeeTokenComp(s)`, `tokenCompMoraleDelta(s)` |
+| 4 | `token/treasury.ts` | `treasurySaleQuote(s, tokens)`, `sellTreasuryTokens(s, tokens)`, `maxTreasurySale(s)` |
+| 4 | `token/state.ts` | `pendingUnlock(t, week)`, `utilityModelMultiplier(sector, model)` |
+| 4 | `token/launch.ts` | `allocationBounds(s)`, `allocationFrom(s, founder, community)`, `communityReaction(s, plan, strength)` |
+
+> **Slice 4 note on this section.** It listed no names for Slice 4 at all, while §4 loop F assigned
+> that slice a job (`FounderTokenPosition.realisedProceeds`, founder sales crediting `bankedPayout`)
+> and §7.5 assigned it another. The table is a rollout contract, so the names Slice 4 actually
+> created are recorded above. **Founder token sales (§42) remain UNBUILT**, which means
+> `bankedPayout` is still unreachable on the token path — the hole loop F names is still open, and
+> whoever picks it up owns the salami-slicing question that `exitImpact` raises.
 
 `modes.ts`, `types.ts`, `engine.ts` and `store.ts` belong to the **integrator only**. Build agents
 report the change they need; they do not make it.

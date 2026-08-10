@@ -40,7 +40,7 @@ import {
 } from '../src/game/token/scoring'
 import { capitalPath, isTokenised, tokenActive } from '../src/game/token/state'
 import { communityMultiplier, launchCommunityMembers } from '../src/game/token/eligibility'
-import { TOKEN_BOUNDS, TOKEN_LIMITS } from '../src/game/token/types'
+import { TOKEN_BOUNDS, TOKEN_LIMITS, TOKEN_STATE_VERSION } from '../src/game/token/types'
 import type { GameState, SectorId } from '../src/game/types'
 
 const fails: string[] = []
@@ -79,17 +79,17 @@ console.log('— Capabilities: exactly one switch flipped —')
 const CAREER = defaultCapabilities('career')
 const QUICK = defaultCapabilities('quick')
 const ARENA = defaultCapabilities('arena')
-// Slices 2 and 3 shipped `tokenEconomy` and `tokenUserComposition`, so they moved off this list —
-// the same ratchet `detailedPMF` went through. The remaining four still have no code that honours
-// them.
-const LATER_SLICES = ['tokenIncentives', 'tokenCommunity', 'tokenGovernance', 'tokenNarrative'] as const
+// Slices 2, 3 and 4 shipped `tokenEconomy`, `tokenUserComposition` and `tokenIncentives`, so they
+// moved off this list — the same ratchet `detailedPMF` went through. The remaining three still have
+// no code that honours them.
+const LATER_SLICES = ['tokenCommunity', 'tokenGovernance', 'tokenNarrative'] as const
 
 ok(CAREER.tokenisation === true, 'Career has `tokenisation` on — Slice 1 built the fork it gates')
 ok(QUICK.tokenisation === false, 'Quick Play stays off: its simplified fork is Slice 7')
 ok(ARENA.tokenisation === false, 'Arena stays off for the whole feature (§58)')
 ok(
   LATER_SLICES.every((k) => !CAREER[k] && !QUICK[k] && !ARENA[k]),
-  'the four later-slice token capabilities are false in every mode — no flag claims a system that does not exist',
+  'the three later-slice token capabilities are false in every mode — no flag claims a system that does not exist',
 )
 
 // ---------------------------------------------------------------------------------------------
@@ -441,7 +441,7 @@ ok(migrateTokenSlice({ ...structuredClone(t), launchWeek: 'soon' }) === undefine
 
 const round = migrateTokenSlice(JSON.parse(JSON.stringify(t)))
 ok(!!round, 'a well-formed slice survives a JSON round trip')
-ok(round!.version === 1 && round!.capitalPath === 'community', 'and is back-filled to the current in-slice version')
+ok(round!.version === TOKEN_STATE_VERSION && round!.capitalPath === 'community', 'and is back-filled to the current in-slice version')
 ok(round!.supply.circulating + round!.supply.treasury + round!.supply.locked === round!.supply.total, 'the supply identity survives too')
 
 // tampering: the identity is RE-ASSERTED, not trusted

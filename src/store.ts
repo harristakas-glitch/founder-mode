@@ -28,6 +28,8 @@ import {
   resolveChoiceOnState,
   sellSecondary,
   startIPO,
+  sellTokenTreasury,
+  setTokenIncentives,
   tokeniseCompany,
   takeVacation,
   startVenture,
@@ -56,6 +58,7 @@ import { repositionTo } from './game/career/tick'
 import { migrateLivingWorldSlice } from './game/world/persistence'
 import { migrateTokenSlice } from './game/token/persistence'
 import type { LaunchDraft } from './game/token/launch'
+import type { IncentiveShares } from './game/token/incentives'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
@@ -322,6 +325,10 @@ interface Store {
   decline: (sheetId: string) => void
   /** ICO Slice 1. Returns false if the fork was refused (capability off, or a blocker remains). */
   tokenise: (draft?: LaunchDraft) => boolean
+  /** ICO Slice 4. Point the treasury's weekly budget at the six incentive categories. */
+  setIncentives: (shares: Partial<IncentiveShares>) => void
+  /** ICO Slice 4. Sell treasury tokens for company cash — the token path's fundraising. */
+  sellTreasury: (tokens: number) => boolean
 }
 
 export const useStore = create<Store>()(
@@ -1241,6 +1248,30 @@ export const useStore = create<Store>()(
           const result = tokeniseCompany(game, draft)
           if (!result.ok) return false
           sfx.fanfare()
+          set({ game })
+          return true
+        },
+
+        // ICO Slice 4, brief §13. A standing order, not a transaction: nothing is spent here, the
+        // weekly tick resolves the shares against the treasury's token-denominated cap. No sound
+        // and no seeding — see `setTokenIncentives` in engine.ts for why a slider must not touch
+        // the RNG stream.
+        setIncentives: (shares) => {
+          const g = get().game
+          if (!g) return
+          const game = structuredClone(g)
+          setTokenIncentives(game, shares)
+          set({ game })
+        },
+
+        // ICO Slice 4, brief §6. The token path's fundraising. Re-checks the capability itself
+        // rather than trusting the caller — it moves cash and it moves the price.
+        sellTreasury: (tokens) => {
+          const g = get().game
+          if (!g) return false
+          const game = structuredClone(g)
+          if (!sellTokenTreasury(game, tokens).ok) return false
+          sfx.cash()
           set({ game })
           return true
         },

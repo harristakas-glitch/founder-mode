@@ -81,7 +81,7 @@ function withDrawCount<T>(fn: () => T): { value: T; draws: number } {
 }
 
 const spend = (t: TokenState, tokensPerWeek: number, week = 0) => {
-  t.incentives = [{ category: 'community_treasury', tokensPerWeek, startedWeek: week, cumulativeTokens: 0, effectiveness: 1 }]
+  t.incentives = [{ category: 'community_treasury', share: 0, tokensPerWeek, startedWeek: week, cumulativeTokens: 0, effectiveness: 1 }]
 }
 
 // ---------------------------------------------------------------------------------------------

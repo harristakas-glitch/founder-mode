@@ -28,8 +28,13 @@
 import type { SegmentId } from '../career/types'
 
 /** Bumped when this slice's shape changes, so in-slice migration never needs a global persist
- *  bump. Same contract as LIVING_WORLD_STATE_VERSION. */
-export const TOKEN_STATE_VERSION = 1
+ *  bump. Same contract as LIVING_WORLD_STATE_VERSION.
+ *
+ *  2 — Slice 4 added `TokenIncentiveProgramme.share`, the standing order the player actually sets,
+ *      and `TokenState.treasurySales`. A v1 save has programmes with no `share`; the migration
+ *      re-derives one from `tokensPerWeek` against the treasury's weekly cap, so a mid-run save
+ *      keeps spending what it was spending, and back-fills a zeroed sales record. */
+export const TOKEN_STATE_VERSION = 2
 
 // ---------- the fork ----------
 
@@ -215,10 +220,29 @@ export type TokenIncentiveCategory =
  */
 export interface TokenIncentiveProgramme {
   category: TokenIncentiveCategory
+  /**
+   * SLICE 4, AND THE THING THE PLAYER ACTUALLY SETS. 0–1 of the treasury's weekly token cap
+   * (`TOKEN_BOUNDS.treasurySpendCapPerWeek × supply.treasury`). Shares across programmes sum to at
+   * most 1, so the cap is the budget by construction and "how much of my treasury do I burn each
+   * week" is one dial rather than six absolute numbers that go stale as the treasury drains.
+   */
+  share: number
+  /** Derived from `share` every tick: `share × cap`. Kept because it is what the price model and
+   *  `treasuryCommitment` read, and because a v1 save has only this. */
   tokensPerWeek: number
   startedWeek: number
   cumulativeTokens: number
-  /** 0–1 rolling read on whether this programme is producing anything. Slice 4 defines it. */
+  /**
+   * 0–1, AND IT IS A STOCK, not a rating (Slice 4).
+   *
+   * Each week it moves toward this week's spend intensity at the category's own build rate and
+   * decays toward zero at `TOKEN_INCENTIVES.stockDecayPerWeek` — which is where the old
+   * `TOKEN_BOUNDS.incentiveDecayPerWeek` went, see the note there. Effects read the STOCK, never
+   * the week's spend, so every category is lagged (nothing a player commits lands the same week),
+   * capped (the stock cannot exceed 1) and reversible (stop paying and it decays away). A one-week
+   * blitz therefore buys almost nothing and a sustained programme compounds slowly, which is the
+   * difference between a purchase and a policy.
+   */
   effectiveness: number
 }
 
@@ -340,6 +364,15 @@ export interface TokenState {
   community: TokenCommunityState
   founder: FounderTokenPosition
   incentives: TokenIncentiveProgramme[]
+  /**
+   * Slice 4. What the treasury has raised by selling its own tokens (brief §6, §30) — the token
+   * path's replacement for the rounds tokenising closed.
+   *
+   * Stored rather than derived because `lastSaleWeek` is the memory the CONFIDENCE cost is built
+   * from: a second raise inside a quarter costs far more belief than the first, and there is no way
+   * to recover "when did they last sell" from any other field.
+   */
+  treasurySales: { tokensSold: number; proceeds: number; lastSaleWeek: number }
   governance: TokenGovernanceState
   /** See TokenUserSplit — authoritative only when `detailedPMF` is off. */
   users: TokenUserSplit
@@ -441,9 +474,21 @@ export const TOKEN_BOUNDS = {
    *  cost at least the demand that 1% of float buys, or the loop's gain exceeds 1. Slice 2 asserts
    *  this against measured runs. */
   supplyPressurePerFloatPct: 1.1,
-  /** Incentivised users decay this fast with no fresh spend, so sustaining the loop needs
-   *  ACCELERATING spend against a SHRINKING token balance. */
-  incentiveDecayPerWeek: 0.09,
+  //
+  // `incentiveDecayPerWeek: 0.09` USED TO LIVE HERE AND IT WAS A LIE. It claimed incentivised users
+  // leave at ~9%/wk absent fresh spend — decision 4's loop A, item 3 — but Slice 3 built that
+  // restoring force out of `incentiveDependence` instead, and built it STRONGER: with the rewards
+  // off, an incentivised cohort's four-week survival collapses to `organic4 × 0.38` (24% against
+  // 63%), which is ~12%/wk of decay against an organic base that is itself churning. Two decay
+  // terms on the same population would have double-counted the collapse, so nothing ever read this
+  // constant and it sat in the contract asserting a mechanism that did not exist.
+  //
+  // Slice 4 did not delete the NUMBER, only the claim. 0.09 is now
+  // `TOKEN_INCENTIVES.stockDecayPerWeek`, where it governs the decay of the incentive STOCKS the
+  // five non-customer categories build — ecosystem, liquidity, distribution, community standing.
+  // Those genuinely had no restoring force before this slice, and without one every category would
+  // ratchet: buy the effect once, keep it forever. See TOKEN_INCENTIVES.
+  //
   /** How much of an incentivised cohort's retention is bought rather than earned. The §12 gap
    *  (81% while paid, 31% when the rewards stop) falls out of this one number. */
   incentiveDependence: 0.62,
@@ -660,6 +705,153 @@ export const TOKEN_USERS = {
   warnWindowWeeks: 8,
   /** The warning is a lesson, not a nag. */
   warnCooldownWeeks: 12,
+} as const
+
+// ---------- incentives (Slice 4) ----------
+
+/**
+ * The six allocation categories, and what a dollar — or a token — of each actually buys.
+ * Brief §13–§19; the tokenomics screen is §20–§24.
+ *
+ * THE RULE THIS BLOCK IS ORGANISED AROUND, WHICH THE CONTRACT DOES NOT STATE AND SHOULD:
+ *
+ *     ANYTHING THAT FEEDS `fairValue` IS TOKEN-DENOMINATED. ANYTHING THAT DOES NOT MAY BE
+ *     DOLLAR-DENOMINATED.
+ *
+ * docs/ico-architecture.md §4 loop B.3 requires that the fundamental anchor cannot be bought, and
+ * Slice 2 already had to delete a term (engagement → utility) that violated it one hop removed. A
+ * dollar-denominated effect on a fairValue input would reopen exactly that hole through a new door:
+ * spend is capped in TOKENS, so a rising price cannot raise the token budget — but it CAN raise
+ * what those tokens are worth to whoever receives them, and if that bought more utility then
+ * `price ↑ → grant dollars ↑ → utility ↑ → fairValue ↑ → price ↑` would be a live reflexive loop
+ * with the loop-A cap doing nothing about it.
+ *
+ * So the three categories whose effects reach the anchor — developer grants (utility), partnerships
+ * (hype, hence ORGANIC users) and community treasury (trust → sentiment → engagement) — measure
+ * intensity as a share of the FLOAT, `tokens / circulating`, and the price is not in their
+ * arithmetic at all. Liquidity incentives are nominally dollar-denominated against market cap, but
+ * `dollars / (price × circulating) === tokens / circulating`: the price cancels, so they use the
+ * same expression. Only two categories are genuinely priced in dollars, and both are dollars by
+ * nature rather than by choice:
+ *
+ *   • customer rewards — a reward is worth what it is worth to the customer, denominated in that
+ *     sector's ARPU (Slice 3's `incentiveStrength`). It reaches `s.users`, which fairValue does not
+ *     read: fairValue counts ORGANIC users only, which is the same exclusion §52 turns on.
+ *   • employee compensation — a salary is a dollar amount. It reaches payroll and morale, neither
+ *     of which is in fairValue. This is decision 4's loop D, which already has its own clamp.
+ */
+export const TOKEN_INCENTIVES = {
+  /**
+   * 0.09, AND IT IS THE NUMBER THAT USED TO BE `TOKEN_BOUNDS.incentiveDecayPerWeek`.
+   *
+   * There it claimed incentivised USERS decay at 9%/wk absent spend, which Slice 3 superseded with a
+   * stronger, better-founded force on the same population (see the note where it used to live). Here
+   * it decays the incentive STOCKS, which had no restoring force at all before this slice and
+   * needed one badly: without it every category would be a RATCHET — pay once, keep the ecosystem,
+   * the liquidity and the distribution forever — and the treasury's weekly cap would stop being a
+   * budget and start being a queue.
+   *
+   * A stock at rest under a constant intensity `i` settles at `i` itself: the build term and this
+   * decay term are the same `approach`, which is why an effect is a POLICY rather than a purchase.
+   */
+  stockDecayPerWeek: 0.09,
+  /**
+   * Float share per week at which a category's spend intensity reaches 1. Calibrated against the
+   * treasury cap: 2% of a treasury holding ~25% of supply, against a float of ~40%, is ~1.25% of
+   * the float per week for the WHOLE budget. So one category taking the entire budget saturates,
+   * half the budget runs at ~0.8, and a sixth runs at ~0.26 — focus beats spread, but not by so
+   * much that spreading is never right.
+   */
+  fullIntensityFloatPct: 0.008,
+
+  // --- developer grants (§15): the only thing that moves the ANCHOR ---
+  grantBuildRate: 0.05, // §15's "slow payoff", as a rate rather than as a sentence
+  /** Points added to the UTILITY TARGET at full stock, before the sector multiplier. Utility still
+   *  reverts at `utilityReversion` (0.06/wk), so this takes ~20 weeks to land and ~20 to leave. */
+  grantUtilityGain: 14,
+  /** §15: "especially strong for Developer Tools, protocol-like companies, platform businesses".
+   *  A grants programme in a consumer social app funds people nobody asked for. */
+  grantSectorMultiplier: { devtools: 1.35, saas: 1.15, fintech: 1, ecommerce: 0.85, social: 0.7 } as Record<string, number>,
+  /** §15's "some projects may fail", as a deterministic haircut rather than a roll. The tick draws
+   *  exactly one number a week and a conditional draw is how draw-order bugs are born. */
+  grantSuccessRate: 0.72,
+
+  // --- liquidity incentives (§17): useful and dangerous, in that order ---
+  liquidityBuildRate: 0.18, // liquidity shows up when you pay for it and leaves the week you stop
+  /** Added to the DEPTH target at full stock. Depth is what the founder's liquidity discount reads,
+   *  so this is the one category that pays the founder directly. */
+  liquidityDepthGain: 0.22,
+  /** Points added to the SPECULATION target at full stock. This is the danger, and it is not
+   *  decorative: TOKEN_ECONOMY's stability condition says the market is locally stable below
+   *  speculation ~50 and cyclical above it, so a large liquidity programme literally moves the
+   *  economy from tracking fundamentals to oscillating around them. */
+  liquiditySpeculationGain: 18,
+
+  // --- partnerships (§18): distribution, and the users it brings are EVIDENCE ---
+  partnershipBuildRate: 0.09,
+  /** Points of `s.hype` per week at full stock, added with headroom so 100 is repelling. Hype
+   *  already decays 8%/wk in the engine, so this settles rather than accumulating — and it buys
+   *  ORGANIC customers through the acquisition machinery that already exists, which is the whole
+   *  point of the category: it is the one way a token can buy growth that counts toward PMF,
+   *  because the people it reaches still have to choose the product at its price. */
+  partnershipHypeGain: 2,
+
+  // --- community treasury (§19): the only category that buys nothing ---
+  communityBuildRate: 0.08,
+  /** Points of `decentralisation` per week at full stock. MONOTONE NON-DECREASING (§35): control
+   *  given away is not taken back, so unlike every other category this one does not reverse when
+   *  the stock decays. That asymmetry IS the cost. */
+  communityDecentralisationGain: 1.6,
+  /** Trust's floor and its sentiment coupling. The decentralisation term itself is
+   *  `TOKEN_BOUNDS.decentralisationTrustGain × sqrt(d/100)` — the contract's own concave-benefit
+   *  formula from loop E, used here because community treasury is the only Slice-4 lever that
+   *  touches it. Slice 5 owns the rest of the trust model (conduct, delivery, revolt). */
+  trustBase: 24,
+  trustSentimentWeight: 0.25,
+  /** Points of trust bought directly by a running community-treasury programme, on top of what the
+   *  decentralisation it causes is worth. Handing tokens to a community fund is itself the signal;
+   *  the concave decentralisation term is the slower, permanent half. Measured: without this the
+   *  category moved trust by 0.4 points over thirty weeks — decentralisation is concave and trust
+   *  reverts at 6%/wk, so the sqrt term alone is real but nearly invisible inside a run. */
+  communityTrustGain: 12,
+
+  // --- employee compensation (§16): the one whose primary effect is cash, not a stock ---
+  /** Morale moves with the token's MOMENTUM, scaled by how much of the package is in tokens and
+   *  clamped by `TOKEN_BOUNDS.tokenCompMoraleClamp`. Loop D, and the clamp is the contract's. */
+  tokenCompMomentumGain: 6,
+
+  // --- the tokenomics screen (§20–§23) ---
+  /** How far above or below the community's expected founder share the player may go. The band is
+   *  centred on `defaultAllocation`, which is itself set by how late the launch is. */
+  founderShareBand: 0.12,
+  /** Floors, so no bucket can be zeroed into meaninglessness. */
+  minCommunityShare: 0.2,
+  minTreasuryShare: 0.05,
+  minFounderShare: 0.02,
+  /** Points of launch-day trust per point of supply taken above (or left below) the expected
+   *  founder share. §22: higher founder allocation, community trust ↓, sell-pressure fears ↑. */
+  founderExcessTrust: -90,
+  founderExcessSentiment: -45,
+  founderExcessSpeculation: 55,
+  founderExcessReputation: -18,
+  /** §23. Short vesting reads as a founder planning an exit; long vesting buys credibility. */
+  vestingTrust: { short: -7, standard: 0, long: 7 } as Record<string, number>,
+  vestingSpeculation: { short: 6, standard: 0, long: -5 } as Record<string, number>,
+  /** §24. How well the chosen utility model suits the sector — it seeds launch-day utility, and it
+   *  is a nudge, never a gate: any model may be chosen in any sector. */
+  utilityModelFit: {
+    devtools: { ecosystem_incentive: 1, product_access: 0.85, governance: 0.7, marketplace_currency: 0.55, rewards: 0.5 },
+    saas: { product_access: 1, governance: 0.8, ecosystem_incentive: 0.7, rewards: 0.6, marketplace_currency: 0.5 },
+    fintech: { marketplace_currency: 1, product_access: 0.8, governance: 0.7, rewards: 0.6, ecosystem_incentive: 0.55 },
+    ecommerce: { rewards: 1, marketplace_currency: 0.9, product_access: 0.7, ecosystem_incentive: 0.55, governance: 0.5 },
+    social: { rewards: 1, governance: 0.8, ecosystem_incentive: 0.65, product_access: 0.6, marketplace_currency: 0.55 },
+  } as Record<string, Record<string, number>>,
+  /** Launch-day utility multiplier across the fit range. The best-matched model for a sector scores
+   *  1 and is the DEFAULT, so it multiplies by 1 and changes nothing; every other choice starts the
+   *  network with less real utility and — because launch speculation is `78 − 0.8 × utility` — more
+   *  speculation. A mismatched model launches a story rather than a product. */
+  utilityFitMin: 0.7,
+  utilityFitMax: 1,
 } as const
 
 // ---------- scoring (decision 1) ----------

@@ -22,12 +22,14 @@
 //
 // Nothing here draws randomness, and nothing reads the clock.
 
+import { isIncentiveCategory, shareFromTokens } from './incentives'
 import {
   TOKEN_LIMITS,
   TOKEN_STATE_VERSION,
   type GovernanceProposal,
   type TokenAllocationPlan,
   type TokenHistoryEntry,
+  type TokenIncentiveProgramme,
   type TokenSeriesPoint,
   type TokenState,
   type TokenUtilityModel,
@@ -134,6 +136,42 @@ function readProposals(raw: unknown): GovernanceProposal[] {
 }
 
 /**
+ * Slice 4. Programmes are re-bounded, de-duplicated and RE-NORMALISED, because `share` is a claim on
+ * a single weekly budget and a file claiming 400% of it would hand the treasury cap to whoever
+ * edited localStorage.
+ *
+ * A v1 save has `tokensPerWeek` and no `share`. Rather than dropping the programme (which would
+ * silently stop a running campaign on reload) the share is re-derived from the standing order
+ * against the current weekly cap, so the player keeps spending what they were spending.
+ */
+function readIncentives(raw: unknown, supply: TokenState['supply'], launchWeek: number): TokenIncentiveProgramme[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: TokenIncentiveProgramme[] = []
+  for (const p of raw) {
+    if (!isObj(p) || !isIncentiveCategory(p.category) || seen.has(p.category)) continue
+    seen.add(p.category)
+    const tokensPerWeek = Math.max(0, num(p.tokensPerWeek, 0))
+    const share =
+      typeof p.share === 'number' && Number.isFinite(p.share)
+        ? clamp(p.share, 0, 1)
+        : shareFromTokens({ supply }, tokensPerWeek)
+    out.push({
+      category: p.category,
+      share,
+      tokensPerWeek,
+      startedWeek: num(p.startedWeek, launchWeek),
+      cumulativeTokens: Math.max(0, num(p.cumulativeTokens, 0)),
+      effectiveness: clamp(num(p.effectiveness, 0), 0, 1),
+    })
+  }
+  const kept = out.slice(0, TOKEN_LIMITS.incentives)
+  const total = kept.reduce((a, p) => a + p.share, 0)
+  if (total > 1) for (const p of kept) p.share = p.share / total
+  return kept
+}
+
+/**
  * In-slice version migration, run on every load beside `migrateLivingWorldSlice`.
  *
  * Returns `undefined` for absent AND for unreadable — the caller assigns the result straight back,
@@ -226,19 +264,12 @@ export function migrateTokenSlice(raw: unknown): TokenState | undefined {
       sold,
       realisedProceeds: Math.max(0, num(founderRaw.realisedProceeds, 0)),
     },
-    incentives: Array.isArray(raw.incentives)
-      ? raw.incentives
-          .filter(isObj)
-          .filter((p) => typeof p.category === 'string')
-          .map((p) => ({
-            category: p.category as TokenState['incentives'][number]['category'],
-            tokensPerWeek: Math.max(0, num(p.tokensPerWeek, 0)),
-            startedWeek: num(p.startedWeek, launchWeek),
-            cumulativeTokens: Math.max(0, num(p.cumulativeTokens, 0)),
-            effectiveness: clamp(num(p.effectiveness, 0), 0, 1),
-          }))
-          .slice(-TOKEN_LIMITS.incentives)
-      : [],
+    incentives: readIncentives(raw.incentives, { total, circulating, treasury: Math.max(0, treasury), locked }, launchWeek),
+    treasurySales: {
+      tokensSold: count((isObj(raw.treasurySales) ? raw.treasurySales : {}).tokensSold),
+      proceeds: Math.max(0, num((isObj(raw.treasurySales) ? raw.treasurySales : {}).proceeds, 0)),
+      lastSaleWeek: Math.max(0, num((isObj(raw.treasurySales) ? raw.treasurySales : {}).lastSaleWeek, 0)),
+    },
     governance: {
       proposals: readProposals(governanceRaw.proposals),
       lastProposalWeek: num(governanceRaw.lastProposalWeek, launchWeek),

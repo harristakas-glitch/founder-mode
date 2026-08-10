@@ -61,7 +61,7 @@ function tokenised(sector: SectorId, seed: number, weeks = 24): GameState | null
 function fundRewards(s: GameState, startWeek: number): void {
   s.token!.incentives = [
     {
-      category: 'customer_rewards',
+      category: 'customer_rewards', share: 0,
       // Far above the cap, so `treasuryCommitment` is always the binding constraint and the spend
       // is the maximum the contract permits. This is the strongest possible attempt.
       tokensPerWeek: s.token!.supply.treasury,
