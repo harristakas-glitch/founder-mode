@@ -19,7 +19,7 @@ import {
   totalCustomers,
 } from '../game/career/pmf'
 import type { ExperimentType, SegmentId } from '../game/career/types'
-import { PMF_CAUSAL_CHAIN, SegmentHealth } from '../CareerUI'
+import { PMF_CAUSAL_CHAIN, PmfBreakdown, SegmentHealth } from '../CareerUI'
 import { useStore } from '../store'
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -121,6 +121,13 @@ export function Discovery() {
       {/* the scoreboard: what customers are doing, before anything you believe about them */}
       <div className="mb-3.5">
         <SegmentHealth />
+      </div>
+
+      {/* …and immediately underneath it, why that score is that score. The scoreboard alone tells a
+          stuck player what the number is; this tells them which of the five terms is holding it,
+          which levers are already spent, and when the segment simply has nothing left to give. */}
+      <div className="mb-3.5">
+        <PmfBreakdown />
       </div>
 
       <div className="mb-3.5 rounded-2xl border border-line/70 bg-surface/60 px-4 py-3 text-[13px] leading-relaxed">
