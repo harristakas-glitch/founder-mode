@@ -52,7 +52,7 @@ export interface GameConfig {
 //   founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame, macroShocks, pvpActions,
 //   sharedHiringPool, leaderboard, detailedPMF, customerResearch, hypothesisBoard,
 //   persistentCharacters, characterMemory, companyMemory, relationships, proceduralNarrative,
-//   promises.
+//   promises, tokenisation.
 //
 // DESCRIPTIVE (true statements about the experience, but nothing branches on them yet):
 //   humanRivals   — Arena's opponents come from the room's presence list, not this flag.
@@ -143,12 +143,13 @@ export interface GameCapabilities {
   rivalNarrative: boolean // rivals get narrated, not just tabulated
   proceduralPostmortem: boolean // the ending is written from what actually happened
 
-  // ---- planned: Tokenisation / ICO (docs/ico-architecture.md) -------------------------
+  // ---- Tokenisation / ICO (docs/ico-architecture.md) ----------------------------------
   // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
   // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
   // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
-  // ALL FALSE, in every mode, until the code that honours them exists.
-  tokenisation: boolean // the capital fork itself: eligibility, the decision, financing restrictions (Slice 1)
+  // Slice 1 shipped, so `tokenisation` is true in CAREER ONLY. The other six stay false in every
+  // mode until the code that honours them exists.
+  tokenisation: boolean // BUILT (Slice 1). The capital fork: eligibility, the decision, VC/IPO restrictions
   tokenEconomy: boolean // price, supply, treasury, utility, speculation, volatility, community capital (Slice 2)
   tokenUserComposition: boolean // organic vs incentivised users, split retention, PMF protection (Slice 3)
   tokenIncentives: boolean // treasury allocation across categories, vesting, unlocks, employee token comp (Slice 4)
@@ -323,11 +324,16 @@ const CAREER_BASE_RULES: GameRules = {
   pmfDepth: 'deep',
   livingWorldDepth: 'deep',
   // ICO brief §57: Career is where the full fork lives — eligibility, tokenomics, community,
-  // treasury, governance, decentralisation. Slices 1–6 build it; the capabilities stay false
-  // until each one lands.
+  // treasury, governance, decentralisation. Slices 1–6 build it; each capability turns on with
+  // the slice that honours it, and no earlier.
   tokenDepth: 'deep',
   capabilities: {
     ...QUICK_BASE_RULES.capabilities,
+    // ICO Slice 1 — the capital fork. Eligibility with readable blockers, sector suitability that
+    // moves with seed and strategy, the irreversible launch decision, and institutional rounds +
+    // IPO closing with an explanation attached. Quick Play's simplified fork is Slice 7 and Arena
+    // is off for the whole feature (§58), so this is true HERE and nowhere else.
+    tokenisation: true,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.

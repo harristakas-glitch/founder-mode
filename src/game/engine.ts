@@ -16,6 +16,15 @@ import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilit
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
+// Tokenisation / ICO — Slice 1, the capital fork. Every one of these reads `capitalPath(s)`, which
+// is `institutional` unless a token slice exists, so a run that never tokenised takes the branch it
+// always took. `founderStanding` is the one that touches every ending: with no token slice its
+// token leg is 0 and it is character-for-character the payout expression it replaced.
+import { tokenisationEligibility } from './token/eligibility'
+import { launchToken, type LaunchDraft, type LaunchResult } from './token/launch'
+import { TOKEN_ACQUISITION, acquisitionDiscounted, institutionalRoundsClosed, ipoClosed } from './token/restrictions'
+import { founderStanding, realisableTokenValue } from './token/scoring'
+import { isTokenised } from './token/state'
 import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, prSourceHidden, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
@@ -995,6 +1004,21 @@ export function pitchInvestors(s: GameState): { sheets: TermSheet[]; message: Me
   return seeded(s, () => pitchInvestorsInner(s))
 }
 function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Message } {
+  // Brief §5/§47. The fork closed this door. It is EXPLAINED rather than hidden: the Fundraising
+  // screen shows a disabled button carrying this reason, and a player who gets here anyway is told
+  // why instead of watching nothing happen. No RNG is drawn on this path.
+  const rounds = institutionalRoundsClosed(s)
+  if (rounds.closed) {
+    const message: Message = {
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: 'The institutional path is closed',
+      body: rounds.reason!,
+    }
+    s.flash = rounds.reason!
+    return { sheets: [], message }
+  }
   if (s.ipo) {
     const message: Message = {
       id: uid(),
@@ -1073,6 +1097,7 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
 }
 
 export function acceptTermSheet(s: GameState, sheetId: string) {
+  if (isTokenised(s)) return // brief §5: the community path does not sign equity term sheets
   if (s.ipo) return // quiet period: the S-1 is out, private rounds are off the table
   const sheet = s.termSheets.find((t) => t.id === sheetId)
   if (!sheet) return
@@ -1107,6 +1132,24 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
       : `The wire hit the account. ${sheet.investor} takes ${(sheet.equity * 100).toFixed(1)}% of the company. ` +
         `You now own ${(s.founderEquity * 100).toFixed(1)}%. The press writes you up; candidates take notice.`,
   })
+}
+
+// ---------- the capital fork (ICO brief §3, §4) ----------
+
+/**
+ * Take the token path. Irreversible.
+ *
+ * Seeded like every other player action, for the reason recorded above `seeded()`: the launch
+ * draws nothing today, but wrapping it now means a later slice that wants a roll does not have to
+ * come back and change the RNG contract. This is unreachable without the `tokenisation` capability
+ * and without passing eligibility, so no traditional run bumps `rngTick` here.
+ */
+export function tokeniseCompany(s: GameState, draft: LaunchDraft = {}): LaunchResult {
+  if (!can(s, 'tokenisation')) return { ok: false, reason: 'Tokenisation is not part of this mode.' }
+  if (s.gameOver) return { ok: false, reason: 'The run is over.' }
+  const eligibility = tokenisationEligibility(s)
+  if (!eligibility.eligible) return { ok: false, reason: eligibility.blockers[0]?.label ?? 'Not ready to tokenise.' }
+  return seeded(s, () => launchToken(s, draft))
 }
 
 // ---------- weekly tick ----------
@@ -1480,10 +1523,21 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
 
   // --- acquisition offers: only credible companies get bought ---
   const val = valuation(s)
-  if (val > 8_000_000 && s.pmf > 50 && RNG.next() < 0.03 && !s.inbox.some((m) => !m.resolved && m.kind === 'choice')) {
+  // docs/ico-architecture.md §7.5. Acquisition stays POSSIBLE on the token path but is materially
+  // worse: offers arrive less often and from a lower premium band, because an acquirer buying a
+  // company whose users can be rented and whose community co-owns the roadmap pays less. Only the
+  // COEFFICIENTS change — the draw and its order are identical, so no institutional run moves.
+  const maDiscounted = acquisitionDiscounted(s)
+  if (
+    val > 8_000_000 &&
+    s.pmf > 50 &&
+    RNG.next() < (maDiscounted ? TOKEN_ACQUISITION.offerChance : 0.03) &&
+    !s.inbox.some((m) => !m.resolved && m.kind === 'choice')
+  ) {
     // Premium tracks momentum: a hot company gets bid up ~2x, a stalling one gets a lowball.
     // Flat noise made every offer strictly worse than holding, so the button was pure bait.
-    const premium = 1.1 + 0.9 * clamp(growthRate(s) * 20, 0, 1)
+    const premium =
+      (maDiscounted ? TOKEN_ACQUISITION.premiumBase : 1.1) + (maDiscounted ? TOKEN_ACQUISITION.premiumSpan : 0.9) * clamp(growthRate(s) * 20, 0, 1)
     const amount = Math.round((val * premium * rand(0.92, 1.12)) / 1e6) * 1e6
     s.inbox.unshift({
       id: uid(),
@@ -1549,10 +1603,14 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     } else {
       const oneOffs = Math.round(cashAfterOperations - s.cash)
       const fmt = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString()}`
+      // Secondaries survive the wreck — and so does the token leg, because the two legs are
+      // disjoint: the equity is worthless, the position in the network is a separate asset.
+      // `realisableTokenValue` is 0 without a token slice, so this is `s.bankedPayout` exactly.
+      const wreckage = s.bankedPayout + realisableTokenValue(s)
       s.gameOver = {
         type: 'bankrupt',
         week: s.week,
-        payout: s.bankedPayout > 0 ? s.bankedPayout : undefined, // secondaries survive the wreck
+        payout: wreckage > 0 ? wreckage : undefined,
         detail:
           `The final week: you went in with ${fmt(cashAtStart)}, earned ${fmt(revenue)} in revenue, paid ${fmt(expenses)} in running costs` +
           (oneOffs > 0 ? `, and took ${fmt(oneOffs)} in one-off hits (recruiter fees, event costs, severance)` : '') +
@@ -1561,9 +1619,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     }
   } else if (val >= 1_000_000_000 && !s.ipo) {
     // mid-IPO, the run continues — ringing the bell at a $1B+ price beats the plain unicorn ending
-    s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(val * s.founderEquity + s.bankedPayout) }
+    s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(founderStanding(s, { exitValue: val })) }
   } else if (s.challenge && s.week >= s.challenge.cap) {
-    s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(val * s.founderEquity + s.bankedPayout) }
+    s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(founderStanding(s, { exitValue: val })) }
   }
 
   // The living world runs LAST, once every fact for the week exists — including the ending, so a
@@ -1599,11 +1657,16 @@ export function ipoChecklist(s: GameState): { label: string; met: boolean }[] {
 // When the IPO path should appear on screen: close enough to start planning for it.
 export function ipoVisible(s: GameState): boolean {
   if (!can(s, 'ipoEndgame')) return false
+  // Brief §48: "Do not silently hide it without explanation." A tokenised company ALWAYS sees this
+  // panel, precisely so the panel can say the path is closed and why. Hiding it would let a player
+  // reach the end of a run without ever learning what the fork cost them.
+  if (ipoClosed(s).closed) return true
   return valuation(s) >= IPO_MIN_VAL / 2 || s.stage === 'Series B' || s.stage === 'Series C'
 }
 
 export function ipoEligible(s: GameState): boolean {
   if (!can(s, 'ipoEndgame')) return false
+  if (ipoClosed(s).closed) return false // brief §48: ipoEligible = false once tokenised
   return !s.ipo && !s.gameOver && ipoChecklist(s).every((c) => c.met)
 }
 
@@ -1667,7 +1730,10 @@ function priceIPO(s: GameState) {
   s.ipo = null
   if (mult >= 0.95) {
     const pop = mult >= 1.15
-    const payout = Math.round(val * mult * s.founderEquity + s.bankedPayout)
+    // The IPO multiplier applies to the EQUITY LEG ONLY — a pop prices shares, not tokens. Passing
+    // the priced valuation as `exitValue` keeps the arithmetic in the order it was written in, so
+    // every existing IPO pays out to the last bit.
+    const payout = Math.round(founderStanding(s, { exitValue: val * mult }))
     s.gameOver = { type: 'ipo', week: s.week, payout }
     s.inbox.unshift({
       id: uid(),
@@ -2446,7 +2512,8 @@ function boardReview(s: GameState) {
 
   // A real miss.
   if (s.board.defied) {
-    s.gameOver = { type: 'fired', week: s.week, payout: Math.round(valuation(s) * s.founderEquity * 0.5 + s.bankedPayout) }
+    // Being removed halves what your EQUITY is worth. It does not halve your token position.
+    s.gameOver = { type: 'fired', week: s.week, payout: Math.round(founderStanding(s, { equityMultiplier: 0.5 })) }
     return
   }
   s.board.strikes += 1
@@ -2637,7 +2704,12 @@ function resolveChoiceOnStateInner(s: GameState, messageId: string, choiceIndex:
   msg.resolved = true
   msg.resultText = choice.resultText
   if (choice.effects.special === 'acquired' && msg.meta?.acquisitionAmount) {
-    s.gameOver = { type: 'acquired', week: s.week, payout: Math.round(msg.meta.acquisitionAmount * s.founderEquity + s.bankedPayout) }
+    // The offer prices the COMPANY. The token leg rides along untouched — disjoint legs.
+    s.gameOver = {
+      type: 'acquired',
+      week: s.week,
+      payout: Math.round(founderStanding(s, { exitValue: msg.meta.acquisitionAmount })),
+    }
   } else {
     applyEffects(s, choice.effects)
   }

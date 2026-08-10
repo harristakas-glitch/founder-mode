@@ -28,6 +28,7 @@ import {
   resolveChoiceOnState,
   sellSecondary,
   startIPO,
+  tokeniseCompany,
   takeVacation,
   startVenture,
   totalUsers,
@@ -53,6 +54,8 @@ import { SECTORS, sectorById } from './game/data'
 import { addJournal, canRunExperiment, experimentDef, segmentDef, startExperiment } from './game/career/pmf'
 import { repositionTo } from './game/career/tick'
 import { migrateLivingWorldSlice } from './game/world/persistence'
+import { migrateTokenSlice } from './game/token/persistence'
+import type { LaunchDraft } from './game/token/launch'
 import type { FounderKind, GameState, SectorId } from './game/types'
 import { ROUND_SECONDS, onlineConfigured } from './net/config'
 import {
@@ -317,6 +320,8 @@ interface Store {
   pitch: () => void
   accept: (sheetId: string) => void
   decline: (sheetId: string) => void
+  /** ICO Slice 1. Returns false if the fork was refused (capability off, or a blocker remains). */
+  tokenise: (draft?: LaunchDraft) => boolean
 }
 
 export const useStore = create<Store>()(
@@ -1225,6 +1230,20 @@ export const useStore = create<Store>()(
           if (!g) return
           set({ game: { ...g, termSheets: g.termSheets.filter((t) => t.id !== sheetId) } })
         },
+
+        // ICO brief §3/§4. The fork. The UI has already required an explicit confirmation; this
+        // re-checks the capability and eligibility itself rather than trusting the caller, because
+        // it is irreversible and there is no undo to fall back on.
+        tokenise: (draft) => {
+          const g = get().game
+          if (!g) return false
+          const game = structuredClone(g)
+          const result = tokeniseCompany(game, draft)
+          if (!result.ok) return false
+          sfx.fanfare()
+          set({ game })
+          return true
+        },
       }
     },
     {
@@ -1273,6 +1292,12 @@ export const useStore = create<Store>()(
           // reach the composer. An unreadable slice is dropped, not repaired; characters are
           // deterministic from the seed, so the cost of rebuilding is one week of drift.
           g.world = migrateLivingWorldSlice(g.world)
+          // Tokenisation (ICO brief §74). `undefined` in, `undefined` out — the function REFUSES
+          // to construct, which is how "existing saves default to institutional" is guaranteed
+          // rather than hoped for: absence of the slice IS the institutional path, so a legacy
+          // save needs no write at all. A malformed slice is dropped rather than repaired, exactly
+          // as the living world's is, because a half-valid economy must never reach the price model.
+          g.token = migrateTokenSlice(g.token)
         }
         return { ...current, ...p }
       },
