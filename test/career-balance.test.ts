@@ -152,8 +152,26 @@ const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
 const netFor = (sector: SectorId, pricing: PricingStrategy, target: 'cheapest' | 'richest') =>
   median(run(sector, { pricing, target }).map(founderNet))
 
+// THE PRICE-SENSITIVE COMPARISON IS RUN AT 48 SEEDS, NOT 12, AND THE FILE'S OWN HISTORY IS WHY.
+//
+// The comment below already established that the SIZE of `low`'s margin over `market` "does not
+// survive resampling" at twelve seeds. Correcting `retentionAt4wk` to measure four weeks of churn
+// instead of five (docs/pmf-why-it-is-stuck.md §7) raised every retention reading by ~4.3pp, which
+// lifts `market`'s LTV/CAC on a price-sensitive segment more than `low`'s — and at twelve seeds
+// that was enough to flip the ORDERING in two sectors by about one and a half percent:
+//
+//   12 seeds, after the correction:  saas 0.99x · devtools 0.97x · ecommerce 1.77x · fintech 1.66x · social 1.90x
+//   48 seeds, after the correction:  saas 1.52x · devtools 1.17x · ecommerce 2.02x · fintech 1.14x · social 3.34x
+//
+// 5/5 at 48 seeds against 3/5 at 12, and devtools stays under 1.0 at 24 AND 32 seeds before
+// resolving to 1.17x at 48 — so this is a thin draw, not a real inversion. Widening the sample is
+// the correction the earlier note argued for and stopped one step short of. It costs ~29s.
+const PRICING_SEEDS = Array.from({ length: 48 }, (_, i) => 11 * (i + 1))
+const netForWide = (sector: SectorId, pricing: PricingStrategy) =>
+  median(PRICING_SEEDS.map((s) => founderNet(play(s, sector, { pricing, target: 'cheapest' }, WEEKS).state)))
+
 for (const sector of ALL) {
-  const lo = { low: netFor(sector, 'low', 'cheapest'), market: netFor(sector, 'market', 'cheapest'), premium: netFor(sector, 'premium', 'cheapest') }
+  const lo = { low: netForWide(sector, 'low'), market: netForWide(sector, 'market'), premium: netForWide(sector, 'premium') }
   // THE MARGIN OVER `market` CARRIES NO MULTIPLIER, AND THAT IS A MEASUREMENT RATHER THAN A CLIMBDOWN.
   //
   // This asserted `low > market * 1.35` against margins recorded as 2.4x saas · 1.6x devtools · 2.1x
@@ -163,8 +181,8 @@ for (const sector of ALL) {
   // 1.35x was a property of one twelve-seed draw, not of the game, and any change that reshuffles
   // which seed does what — the cohort-drain correction did — moves a sector across it. Measured
   // after that correction: 1.66x · 1.40x · 1.64x · 1.23x · 2.12x at 48 seeds, and 1.55x · 1.06x ·
-  // 2.46x · 2.33x · 2.79x at the twelve used here. `low` beats `market` in all twenty of those
-  // cells; by how much is noise at this sample size.
+  // 2.46x · 2.33x · 2.79x at the twelve then used here. `low` beats `market` in all twenty of those
+  // cells; by how much is noise at that sample size — which is why the sample is now 48.
   //
   // So the ORDERING is asserted against `market` — that is the property, and it is what "no pricing
   // option is dominated" means — and the real headroom is asserted where it is real. Against
@@ -214,6 +232,39 @@ ok(
   socialMargin.filter(failed).length <= 3,
   `a margin-denominated hiring rule does not change the picture either (${socialMargin.filter(failed).length}/12 failed, net ${M(median(socialMargin.map(founderNet)))})`,
 )
+
+// ---------------------------------------------------------------------------------------------
+console.log('— Raising the marketing cap did not make burning faster a winning strategy —')
+//
+// `marketingMax` now reads what the company can FUND (operating profit plus a treasury slice, both
+// gated on being profitable) rather than what it raised, so a self-sustaining company can scale
+// spend without a round. The whole risk of that change is this: `balance-baseline.md` §1 measured
+// LTV/CAC by retention band — SaaS 0.28 → 0.33 → 0.68 → 6.28, crossing 1.0 in all five sectors —
+// and marketing is correctly net-negative until retention is real. A bigger ceiling must not turn
+// "spend everything you are allowed to" into the right answer.
+//
+// `spendScale` runs the same reference bot with its budget multiplied, and every budget in
+// balance-probe goes through `spend()`, which clamps to `marketingMax` and the cash balance. At
+// 1000x the clamp is the only thing binding, so this bot IS "push the slider to the cap, always".
+//
+// Measured on the exploit probe at 24 seeds × 90 weeks, this policy fails 15–22/24 in every sector
+// and returns 2.3–6.2x less than the reference policy — and it is BIT-IDENTICAL with and without
+// the new cap, because a company running that policy is never profitable and so never earns a
+// dollar of headroom over the ladder.
+for (const sector of ['saas', 'fintech'] as SectorId[]) {
+  const ref = reference[sector] ?? run(sector)
+  const maxed = run(sector, { spendScale: 1000 })
+  const refNet = median(ref.map(founderNet))
+  const maxNet = median(maxed.map(founderNet))
+  ok(
+    refNet > maxNet * 1.5,
+    `${sector}: spending to the cap every week still loses badly — ${M(maxNet)} against the reference policy's ${M(refNet)}`,
+  )
+  ok(
+    maxed.filter(failed).length > ref.filter(failed).length,
+    `${sector}: and it goes bankrupt more often (${maxed.filter(failed).length}/12 vs ${ref.filter(failed).length}/12) — the cap is a ceiling, not a recommendation`,
+  )
+}
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

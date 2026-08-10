@@ -631,11 +631,30 @@ console.log('\n— The §53 warning still discriminates —')
     `it fires more often on maximum spend than on a 10% programme (${heavy.firedRuns}/${heavy.runs} runs and ${heavy.weeks} weeks ` +
       `vs ${light.firedRuns}/${light.runs} and ${light.weeks})`,
   )
-  // measured 7/20 runs and 164 weeks; a third of the runs is the floor, because a warning that
-  // catches its own pathological policy one run in ten is not a warning.
+  // A SECOND de-biasing landed on the same number, and the same decision was taken for the same
+  // reason. `retentionAt4wk` was freezing after FIVE weekly decays and calling it four-week
+  // retention (docs/pmf-why-it-is-stuck.md §7); correcting it to four raised every retention
+  // reading in the game by ~4.3pp. On this exact arm, measured before and after:
+  //
+  //   rewards 100%   7/20 runs, 164 warned weeks   →   3/20 runs, 94 warned weeks
+  //   rewards 10%    2/20 runs,  40 warned weeks   →   1/20 runs, 36 warned weeks
+  //
+  // and across the arm's 800 week-samples the blocking condition is retention in 531 of them:
+  // organic retention on the target segment is now p10 61.1% / median 68.6% / p90 74.3%, so only
+  // 16.9% of week-samples sit under the bar at all.
+  //
+  // The bar was left where it is, AGAIN, and this is the load-bearing part: 62% is the same line
+  // as `pmfBlocker`'s and as `derivePmfForSegment`'s `emerging` gate. Raising it by 4.3pp to hold
+  // this test's numbers constant would cancel exactly the correction that was just made — the
+  // whole point of fixing the metric is that companies which read 58% were really at 62%, and a
+  // company that is not leaking must not be told it is. The warning firing on fewer runs IS the
+  // corrected behaviour.
+  //
+  // So the floor moves with the measurement, and the weeks count carries the real weight: 94 is a
+  // far tighter bound than 3, and it is the number that collapses if the predicate stops working.
   ok(
-    heavy.firedRuns >= 5 && heavy.inboxed >= 5,
-    `and it still fires on the policy it exists to catch (${heavy.firedRuns}/${heavy.runs} runs; ${heavy.inboxed} reached the inbox)`,
+    heavy.firedRuns >= 3 && heavy.inboxed >= 3 && heavy.weeks >= 60,
+    `and it still fires on the policy it exists to catch (${heavy.firedRuns}/${heavy.runs} runs, ${heavy.weeks} warned weeks; ${heavy.inboxed} reached the inbox)`,
   )
 }
 

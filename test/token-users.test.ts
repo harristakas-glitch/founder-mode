@@ -622,7 +622,20 @@ console.log('\n— The reconciliation split: a churn shock hits both populations
 console.log('\n— §53: the token-driven-growth warning —')
 
 {
-  const s = play(structuredClone(tokenised('social', 555)), 45, { fund: true })
+  // The leak is now DELIBERATE. This fixture used to get its weak organic retention incidentally
+  // — social/555 happened to settle a hair under the 0.62 bar — so the moment `retentionAt4wk`
+  // was corrected to measure four weeks of churn instead of five, every reading in the game rose
+  // ~4.3pp, this run landed at 63.2%, and a test about a leaky product was quietly running on a
+  // product that no longer leaked. Premium pricing into Social's price-sensitive casual users is
+  // an explicit leak: price fit is a retention factor by design, and it does not depend on where
+  // the retention baseline happens to sit.
+  const leaky = structuredClone(tokenised('social', 555))
+  leaky.career!.pricing = 'premium'
+  const s = play(leaky, 45, { fund: true })
+  ok(
+    (s.career!.retentionBySegment[s.career!.primaryTargetSegmentId] ?? 1) < TOKEN_USERS.warnOrganicRetention,
+    `the fixture really is leaky (organic retention ${((s.career!.retentionBySegment[s.career!.primaryTargetSegmentId] ?? 0) * 100).toFixed(0)}% against a ${(TOKEN_USERS.warnOrganicRetention * 100).toFixed(0)}% bar)`,
+  )
   const w = mercenaryGrowthWarning(s)
   ok(!!w, 'a rewards campaign into a leaky product produces the §53 warning')
   if (w) {

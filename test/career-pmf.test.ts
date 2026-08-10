@@ -3,6 +3,7 @@ import { advanceWeek, newGame, weeklyOffice } from '../src/game/engine'
 import { hasCapability, type GameConfig } from '../src/game/modes'
 import { generateAllTruth, generateSegmentTruth, segmentsForSector } from '../src/game/career/segments'
 import {
+  ANSWER_EVIDENCE_FLOOR,
   EXPERIMENTS,
   EXPERIMENT_ANSWERS,
   TRUTH_METRICS,
@@ -13,6 +14,8 @@ import {
   experimentDef,
   migrateCareerSave,
   resolveCohortRetention,
+  RETENTION_WINDOW_WEEKS,
+  settledCohortRetention,
   resolveExperiment,
   segmentPriceFit,
   segmentProductFit,
@@ -293,6 +296,82 @@ ok(
   'cohorts snapshot their four-week retention once and keep it',
 )
 
+// …and it is FOUR weeks of churn, not five.
+//
+// The tick pushes a cohort and decays it in the same week, so calendar age and decays-applied
+// differ by one. The snapshot used to fire at `s.week - acquiredWeek >= 4` — five decays, four of
+// them inside the `weeksSinceAcquired < 4` honeymoon and one outside it — and froze that as
+// "four-week retention". Measured, that understated every reading by ~4.3pp and PMF by 4 points.
+//
+// This does not restate the snapshot condition (a test that mirrors the code cannot catch an
+// off-by-one in it). It pins product and price so the weekly keep rate is a known constant, then
+// asserts the frozen number IS that constant to the fourth power — and is not the fifth power,
+// which is what the bug produced. Both directions of the off-by-one die.
+{
+  console.log('— …and four-week retention is four weeks of churn, not five —')
+  let w4 = newGame('W4', 'saas', 'technical', { config: cfg({ seed: 909 }) })
+  const seg4 = w4.career!.primaryTargetSegmentId
+  const truth4 = w4.career!.segmentTruth[seg4]
+  // Pin everything the keep rate reads. Quality and bugs drift with the allocation every week, so
+  // they are re-pinned after each tick; truth, focus and pricing never move on their own.
+  const QUALITY = 60
+  const BUGS = 10
+  const pin = (g: typeof w4) => { g.quality = QUALITY; g.bugs = BUGS; g.cash = 20_000_000; g.marketingSpend = 4_000 }
+  pin(w4)
+  for (let w = 0; w < 14; w++) { w4 = advanceWeek(w4); pin(w4) }
+
+  const fit4 = segmentProductFit(truth4, QUALITY, w4.career!.focus, 'saas', seg4)
+  const price4 = segmentPriceFit(truth4, w4.career!.pricing)
+  const keepHoneymoon = resolveCohortRetention({ truth: truth4, productFit: fit4, priceFit: price4, bugs: BUGS, weeksSinceAcquired: 0 })
+  const keepAfter = resolveCohortRetention({ truth: truth4, productFit: fit4, priceFit: price4, bugs: BUGS, weeksSinceAcquired: RETENTION_WINDOW_WEEKS })
+  const fourWeeks = keepHoneymoon ** 4
+  const fiveWeeks = fourWeeks * keepAfter
+
+  ok(
+    Math.abs(settledCohortRetention({ truth: truth4, productFit: fit4, priceFit: price4, bugs: BUGS }) - fourWeeks) < 1e-12,
+    `settledCohortRetention — the number the UI forecasts with — is exactly ${RETENTION_WINDOW_WEEKS} weekly keep rates`,
+  )
+
+  // The honeymoon boundary and the measurement window are ONE constant, and this is what that
+  // buys: every decay inside the window is a honeymoon decay, and the very next one is not. If
+  // the two ever drift, `retentionAt4wk` straddles the boundary again — four honeymoon weeks plus
+  // a fifth post-honeymoon one — which is precisely the shape of the bug. Nothing else in this
+  // file notices, because a wider honeymoon leaves the four-week product itself unchanged.
+  {
+    const keep = (age: number) => resolveCohortRetention({ truth: truth4, productFit: fit4, priceFit: price4, bugs: BUGS, weeksSinceAcquired: age })
+    let allSame = true
+    for (let age = 1; age < RETENTION_WINDOW_WEEKS; age++) if (Math.abs(keep(age) - keep(0)) > 1e-12) allSame = false
+    ok(allSame, `all ${RETENTION_WINDOW_WEEKS} decays inside the window share one keep rate — the honeymoon covers the whole measurement`)
+    ok(
+      Math.abs(keep(RETENTION_WINDOW_WEEKS) - keep(RETENTION_WINDOW_WEEKS - 1)) > 1e-6,
+      'and the rate changes on the very next week — the honeymoon ends exactly where the window does, neither early nor late',
+    )
+  }
+
+  // The cohorts on the books under this pinned policy. Take the frozen ones and compare.
+  // No size filter: the snapshot is taken off the UNROUNDED count, so a fourteen-person cohort is
+  // as exact as a fourteen-thousand-person one. `Math.max`/`Math.min` of an empty list are
+  // ∓Infinity and would make both comparisons below pass vacuously, so the count is asserted first
+  // and asserted generously.
+  const frozen = w4.career!.cohorts.filter((c) => c.retentionAt4wk !== undefined && c.segmentId === seg4)
+  ok(frozen.length >= 8, `there are frozen cohorts to check (${frozen.length})`)
+  const worstToFour = frozen.length ? Math.max(...frozen.map((c) => Math.abs(c.retentionAt4wk! - fourWeeks))) : NaN
+  const bestToFive = frozen.length ? Math.min(...frozen.map((c) => Math.abs(c.retentionAt4wk! - fiveWeeks))) : NaN
+  ok(
+    worstToFour < 0.005,
+    `every frozen cohort reports ${(fourWeeks * 100).toFixed(2)}% — four decays (worst gap ${(worstToFour * 100).toFixed(3)}pp)`,
+  )
+  ok(
+    bestToFive > worstToFour,
+    `and none of them reports the five-decay number ${(fiveWeeks * 100).toFixed(2)}% (closest gap ${(bestToFive * 100).toFixed(3)}pp vs ${(worstToFour * 100).toFixed(3)}pp)`,
+  )
+  // The gap the bug was worth, stated so a regression reads as a number rather than a boolean.
+  ok(
+    fourWeeks - fiveWeeks > 0.03,
+    `the two readings really are far apart — ${((fourWeeks - fiveWeeks) * 100).toFixed(2)}pp, which is what the bug cost every retention number in the game`,
+  )
+}
+
 // neglecting bugs must cost retention, and therefore PMF — this is the lesson the owner hit
 function allocRun(alloc: { features: number; quality: number; bugs: number; research: number; bet: number }) {
   let g2 = newGame('A', 'saas', 'technical', { config: cfg({ seed: 4242 }) })
@@ -346,10 +425,50 @@ console.log('— A standing study is a programme that finishes, not a subscripti
   const b = sat.career!.segmentBeliefs[seg]
   for (const t of EXPERIMENTS) {
     const { metric, bar } = EXPERIMENT_ANSWERS[t.type]
-    b[metric] = { ...b[metric], confidence: bar + 0.01 }
+    b[metric] = { ...b[metric], confidence: bar + 0.01, evidenceCount: ANSWER_EVIDENCE_FLOOR }
     ok(experimentAnswered(sat.career!, t.type, seg), `${t.name} counts as answered once ${metric} passes ${bar}`)
-    b[metric] = { ...b[metric], confidence: bar - 0.05 }
+    b[metric] = { ...b[metric], confidence: bar - 0.05, evidenceCount: ANSWER_EVIDENCE_FLOOR }
     ok(!experimentAnswered(sat.career!, t.type, seg), `${t.name} is still open just below the bar`)
+    // The bug this floor exists for: `initialBeliefs` seeds one metric per segment at confidence
+    // 0.42 with ZERO evidence — the assumption worth killing — and 0.42 clears the interview and
+    // landing-page bars outright. Confidence alone therefore retired a standing study on its first
+    // cycle. A conviction is not a finding, at any confidence.
+    b[metric] = { ...b[metric], confidence: 0.99, evidenceCount: ANSWER_EVIDENCE_FLOOR - 1 }
+    ok(
+      !experimentAnswered(sat.career!, t.type, seg),
+      `${t.name} is NOT answered by conviction alone — 99% confidence on ${ANSWER_EVIDENCE_FLOOR - 1} reading(s) is still open`,
+    )
+    b[metric] = { ...b[metric], confidence: 0.99, evidenceCount: ANSWER_EVIDENCE_FLOOR }
+    ok(experimentAnswered(sat.career!, t.type, seg), `${t.name} is answered once that confidence is corroborated`)
+  }
+
+  // The assertions above are written in terms of the constant, so they survive a change TO the
+  // constant. Pin it with literals as well: one reading is a result, two is corroboration, and
+  // "prove the belief three times" would be a different (and more expensive) game.
+  {
+    const pin = newGame('Pin', 'saas', 'technical', { config: cfg({ seed: 4242 }) })
+    const pb = pin.career!.segmentBeliefs[seg]
+    const set = (n: number) => { pb.needIntensity = { ...pb.needIntensity, confidence: 0.99, evidenceCount: n } }
+    set(0); ok(!experimentAnswered(pin.career!, 'interview', seg), 'floor is exactly 2: an untested conviction is never an answer')
+    set(1); ok(!experimentAnswered(pin.career!, 'interview', seg), 'floor is exactly 2: one reading is a result, not an answer')
+    set(2); ok(experimentAnswered(pin.career!, 'interview', seg), 'floor is exactly 2: two corroborating readings close the question')
+  }
+
+  // The seeded prior really does clear those bars — if `initialBeliefs` ever stops planting an
+  // overconfident metric, this guard should be revisited rather than silently kept.
+  {
+    let overconfidentAboveABar = 0
+    for (let seed = 1; seed <= 60; seed++) {
+      const fresh = newGame('Prior', 'saas', 'technical', { config: cfg({ seed: 101 * seed }) })
+      for (const sg of segmentsForSector('saas')) {
+        const bb = fresh.career!.segmentBeliefs[sg.id]
+        for (const t of EXPERIMENTS) {
+          const { metric, bar } = EXPERIMENT_ANSWERS[t.type]
+          if (bb[metric].evidenceCount === 0 && bb[metric].confidence >= bar) overconfidentAboveABar++
+        }
+      }
+    }
+    ok(overconfidentAboveABar > 0, `a fresh game really does plant unearned confidence above a bar (${overconfidentAboveABar} cases in 60 seeds)`)
   }
 
   // The recommendation ladder and the renewal must agree, or the game bills for a study it has
@@ -357,7 +476,7 @@ console.log('— A standing study is a programme that finishes, not a subscripti
   const done = newGame('Done', 'saas', 'technical', { config: cfg({ seed: 4243 }) })
   for (const sg of segmentsForSector('saas')) {
     const bb = done.career!.segmentBeliefs[sg.id]
-    for (const m of TRUTH_METRICS) bb[m] = { ...bb[m], confidence: 0.95 }
+    for (const m of TRUTH_METRICS) bb[m] = { ...bb[m], confidence: 0.95, evidenceCount: ANSWER_EVIDENCE_FLOOR }
   }
   ok(suggestedExperiment(done.career!, 'saas') === null, 'nothing left to recommend once every belief is confident')
   ok(
@@ -365,11 +484,24 @@ console.log('— A standing study is a programme that finishes, not a subscripti
     'and nothing left to renew either — the two thresholds cannot drift apart',
   )
 
+  // …and they must agree in the OTHER direction too. Confidence without evidence keeps the
+  // renewal alive, so it must keep the recommendation alive as well — otherwise the game is
+  // paying for a study it refuses to suggest, which is the exact drift the shared table prevents.
+  const unearned = newGame('Unearned', 'saas', 'technical', { config: cfg({ seed: 4243 }) })
+  for (const sg of segmentsForSector('saas')) {
+    const bb = unearned.career!.segmentBeliefs[sg.id]
+    for (const m of TRUTH_METRICS) bb[m] = { ...bb[m], confidence: 0.95, evidenceCount: 0 }
+  }
+  ok(
+    suggestedExperiment(unearned.career!, 'saas') !== null,
+    'a board of confident, never-tested beliefs still has something worth recommending',
+  )
+
   // End to end: a standing pilot on a saturated belief must stop taking money.
   let rich = newGame('Rich', 'saas', 'technical', { config: cfg({ seed: 4244 }) })
   const tgt = rich.career!.primaryTargetSegmentId
   const rb = rich.career!.segmentBeliefs[tgt]
-  rb.retentionPotential = { ...rb.retentionPotential, confidence: 0.9 }
+  rb.retentionPotential = { ...rb.retentionPotential, confidence: 0.9, evidenceCount: ANSWER_EVIDENCE_FLOOR }
   startExperiment(rich.career!, rich.week, 'pilot', tgt, 'standing-1', true)
   rich.cash = 5_000_000
   rich.marketingSpend = 0
@@ -392,6 +524,38 @@ console.log('— A standing study is a programme that finishes, not a subscripti
   ok(
     !rich.career!.journal.some((j) => j.week > 1 && /renew/i.test(j.title)),
     'and no renewal was recorded at all — it retired, it did not quietly roll on',
+  )
+
+  // …and the reported bug, end to end through `advanceWeek`: the SAME setup, but the confidence
+  // is unearned. This drives the tick, not `experimentAnswered`, because the bug was never that
+  // the predicate was unreachable — it was that the renewal loop believed it.
+  //
+  // `interview` is the case a player actually hits: bar 0.40 against a seeded prior of 0.42, on
+  // the cheapest study and the one the ladder opens with. Two weeks a cycle, so 20 weeks is room
+  // for many renewals; before the evidence floor this ran exactly once and retired.
+  let convinced = newGame('Convinced', 'saas', 'technical', { config: cfg({ seed: 4244 }) })
+  const ctgt = convinced.career!.primaryTargetSegmentId
+  const cb = convinced.career!.segmentBeliefs[ctgt]
+  cb.needIntensity = { ...cb.needIntensity, confidence: 0.9, evidenceCount: 0 }
+  startExperiment(convinced.career!, convinced.week, 'interview', ctgt, 'standing-2', true)
+  convinced.cash = 5_000_000
+  convinced.marketingSpend = 0
+  let cycles = 1
+  const seenIds = new Set(convinced.career!.activeExperiments.map((e) => e.id))
+  let retiredAtCycle = 0
+  for (let w = 0; w < 20; w++) {
+    convinced = advanceWeek(convinced)
+    for (const e of convinced.career!.activeExperiments) if (!seenIds.has(e.id)) { seenIds.add(e.id); cycles++ }
+    if (!retiredAtCycle && convinced.inbox.some((m) => /Standing study concluded/.test(m.title))) retiredAtCycle = cycles
+  }
+  ok(cycles > 1, `a standing study is NOT retired by conviction it never tested — it ran ${cycles} cycles over 20 weeks, not once`)
+  ok(
+    retiredAtCycle === 0 || retiredAtCycle >= ANSWER_EVIDENCE_FLOOR,
+    `and when it does conclude it is on evidence: ${retiredAtCycle === 0 ? 'still running' : `cycle ${retiredAtCycle}`}, never before cycle ${ANSWER_EVIDENCE_FLOOR}`,
+  )
+  ok(
+    convinced.career!.segmentBeliefs[ctgt].needIntensity.evidenceCount >= ANSWER_EVIDENCE_FLOOR,
+    'and the programme actually bought the evidence it was renewed for',
   )
 }
 

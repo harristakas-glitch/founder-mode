@@ -21,7 +21,7 @@
 // the cells between them were observed.
 import { useMemo, useState } from 'react'
 import { EmptyState, Panel } from '../components'
-import { segmentDef, segmentsForSector } from '../game/career/pmf'
+import { cohortDecaysApplied, RETENTION_WINDOW_WEEKS, segmentDef, segmentsForSector } from '../game/career/pmf'
 import type { CustomerCohort, SegmentId } from '../game/career/types'
 import { useStore } from '../store'
 
@@ -43,13 +43,26 @@ const survivors = (c: CustomerCohort) => c.exactCustomers ?? c.activeCustomers
 
 export interface Row {
   cohort: CustomerCohort
+  /**
+   * WEEKS OF CHURN, not calendar offset — `cohortDecaysApplied`, i.e. `week - acquiredWeek + 1`.
+   *
+   * `tick.ts` churns a cohort in the very week it arrives, so its acquisition week IS its first
+   * week of churn. Indexing the triangle by calendar offset put the frozen four-week snapshot in
+   * the column labelled 3 and made column 4 a fifth week of decay — the display half of the bug
+   * `RETENTION_WINDOW_WEEKS` fixed. Indexed this way, column `n` means "after n weeks of churn",
+   * column 0 is the join, and column 4 really is the four-week number.
+   */
   age: number
-  /** frozen at four weeks old by tick.ts — undefined until then */
+  /** frozen after `RETENTION_WINDOW_WEEKS` weeks of churn by tick.ts — undefined until then */
   atFour?: number
   /** survivors / starting size, right now */
   now: number
   incentivised: boolean
 }
+
+/** The week a cohort acquired in `acquiredWeek` freezes its four-week snapshot. It is charged
+ *  churn on arrival, so that is `RETENTION_WINDOW_WEEKS - 1` weeks later, not four. */
+export const snapshotWeek = (acquiredWeek: number) => acquiredWeek + RETENTION_WINDOW_WEEKS - 1
 
 /**
  * The window `tick.ts` averages, rebuilt for an arbitrary past week.
@@ -60,7 +73,9 @@ export interface Row {
  * so the deep past thins out — the chart says as much beneath it.
  */
 export function windowAt(cohorts: CustomerCohort[], week: number): CustomerCohort[] {
-  return cohorts.filter((c) => isOrganic(c) && c.retentionAt4wk !== undefined && c.acquiredWeek + 4 <= week).slice(-WINDOW)
+  return cohorts
+    .filter((c) => isOrganic(c) && c.retentionAt4wk !== undefined && cohortDecaysApplied(week, c.acquiredWeek) >= RETENTION_WINDOW_WEEKS)
+    .slice(-WINDOW)
 }
 
 export interface Point {
@@ -227,9 +242,9 @@ export function survivalAt(row: Row, age: number): { value: number; measured: bo
   if (age > row.age) return null
   if (age === row.age) return { value: row.now, measured: true }
   if (age === 0) return { value: 1, measured: false }
-  if (row.atFour !== undefined && age === 4) return { value: row.atFour, measured: true }
+  if (row.atFour !== undefined && age === RETENTION_WINDOW_WEEKS) return { value: row.atFour, measured: true }
   const anchors: [number, number][] = [[0, 1]]
-  if (row.atFour !== undefined) anchors.push([4, Math.max(1e-4, row.atFour)])
+  if (row.atFour !== undefined) anchors.push([RETENTION_WINDOW_WEEKS, Math.max(1e-4, row.atFour)])
   anchors.push([row.age, Math.max(1e-4, row.now)])
   let a = anchors[0]
   let b = anchors[anchors.length - 1]
@@ -333,7 +348,7 @@ export function CohortAnalytics() {
       .filter((c) => c.segmentId === segment)
       .map((c) => ({
         cohort: c,
-        age: Math.max(0, game.week - c.acquiredWeek),
+        age: Math.max(0, cohortDecaysApplied(game.week, c.acquiredWeek)),
         atFour: c.retentionAt4wk,
         now: c.startingCustomers > 0 ? Math.max(0, Math.min(1, survivors(c) / c.startingCustomers)) : 0,
         incentivised: !isOrganic(c),
@@ -344,7 +359,7 @@ export function CohortAnalytics() {
   const trend = useMemo<Point[]>(() => {
     if (!career || !game || !segment) return []
     const mine = career.cohorts.filter((c) => c.segmentId === segment)
-    const first = mine.reduce((a, c) => (c.retentionAt4wk !== undefined ? Math.min(a, c.acquiredWeek + 4) : a), Infinity)
+    const first = mine.reduce((a, c) => (c.retentionAt4wk !== undefined ? Math.min(a, snapshotWeek(c.acquiredWeek)) : a), Infinity)
     if (!Number.isFinite(first)) return []
     const out: Point[] = []
     for (let w = first; w <= game.week; w++) {
@@ -372,7 +387,7 @@ export function CohortAnalytics() {
   const insideNoise = latest ? Math.abs(move) <= latest.spread : true
   const dots = rows
     .filter((r) => r.atFour !== undefined)
-    .map((r) => ({ week: r.cohort.acquiredWeek + 4, value: r.atFour!, size: r.cohort.startingCustomers, incentivised: r.incentivised }))
+    .map((r) => ({ week: snapshotWeek(r.cohort.acquiredWeek), value: r.atFour!, size: r.cohort.startingCustomers, incentivised: r.incentivised }))
 
   const def = segment ? segmentDef(game.sector, segment) : null
 

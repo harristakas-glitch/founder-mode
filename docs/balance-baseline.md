@@ -282,7 +282,18 @@ adds no RNG draw: `resolveSegmentAcquisition` still draws exactly once, at the e
   punishing idling rather than by paying.
 * **The marketing payback curve.** LTV/CAC below 1 at low retention is the intended rule, priced.
 * **`salesCycleWeeks`** — still dead data; wiring it in is a feature (unchanged from the review).
-* **The marketing slider maximum** — unchanged; `MaxSpend` still dies, and the burn is displayed.
+* **The marketing slider maximum** — `MaxSpend` still dies, and the burn is displayed.
+
+  **Superseded.** `marketingMax` read `s.stage` and nothing else, and `s.stage` moves only in
+  `acceptTermSheet`, so a company that never raised was frozen at $30k/wk however profitable. It is
+  now `max(stage ladder, operating profit + 2% of cash)`, with both self-funded terms gated on being
+  profitable — ability to fund, never appetite, so the LTV/CAC rule above survives intact. Measured:
+  the reported bootstrapped case goes $30k → $358k/wk, every loss-making company keeps exactly the
+  stage floor at any bank balance, and on `test/exploit-probe.ts` the `MaxSpend` policy is
+  **bit-identical** with and without the change in all five sectors — it still fails 15–22/24 and
+  returns 2.3–6.2× less than the reference policy, because a company running it is never profitable
+  and so never earns a dollar of headroom. `npm run bots` does not move at all: those bots set
+  `s.marketingSpend` from their own revenue/cash rules and never clamp to the cap.
 
 ---
 

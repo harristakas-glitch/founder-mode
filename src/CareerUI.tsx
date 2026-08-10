@@ -12,7 +12,7 @@ import {
   PMF_LABEL,
   explanationText,
   pmfBlocker,
-  resolveCohortRetention,
+  settledCohortRetention,
   segmentDef,
   segmentPriceFit,
   segmentProductFit,
@@ -54,16 +54,19 @@ const retentionTone = (r: number) => (r >= 0.72 ? 'text-good' : r >= 0.55 ? 'tex
 // game could not answer it: `derivePmfForSegment` returns one rounded score and nothing else, so
 // a player at 100/100 product with 34k customers and a plateaued number had nowhere to look.
 //
-// Everything below is DERIVED IN THE UI from what `src/game/career` already exports. Two things
-// are restated here rather than imported, because the simulation exposes no way to ask:
+// Everything below is DERIVED IN THE UI from what `src/game/career` already exports. Exactly ONE
+// thing is restated here rather than imported, because the simulation exposes no way to ask:
 //
 //   1. PMF_WEIGHTS — the five terms of `derivePmfForSegment` and their maximums.
-//   2. COHORT_DECAYS — the shape of a cohort's life before its four-week number is frozen.
 //
-// Both are guarded. `pmfDiagnosis` recomputes the total from the weights and refuses to render if
-// it does not round to the score the weekly tick actually produced, and the retention forecast is
-// shown beside the measured number so a drift between the two is visible rather than hidden. If
-// someone reweights the formula, this panel disappears instead of lying about it.
+// The cohort lifecycle used to be a second restatement, and it was restated WRONG on purpose —
+// five decays, to agree with a tick that snapshotted a week late. Both halves are fixed: the
+// lifecycle is one exported fact (`settledCohortRetention`) and this file forwards to it.
+//
+// What remains is guarded. `pmfDiagnosis` recomputes the total from the weights and refuses to
+// render if it does not round to the score the weekly tick actually produced, and the retention
+// forecast is shown beside the measured number so a drift between the two is visible rather than
+// hidden. If someone reweights the formula, this panel disappears instead of lying about it.
 // ---------------------------------------------------------------------------------------
 
 /** The five terms of `derivePmfForSegment`, in the order they are summed, with their maximums. */
@@ -90,17 +93,15 @@ const PMF_BANDS = [
 ]
 
 /**
- * How many times a cohort is decayed before its four-week retention is frozen.
+ * The four-week retention a cohort acquired today will report.
  *
- * FIVE, not four. `tickCareerPMF` pushes a new cohort and then decays every cohort in the same
- * week (`weeksSinceAcquired = 0`), and the snapshot fires on the tick where the cohort turns four
- * weeks old — so four decays carry the `weeksSinceAcquired < 4` honeymoon and a fifth does not.
- * Only the shape is restated; `resolveCohortRetention` does the arithmetic.
+ * This used to restate the cohort lifecycle here — five decays, because the tick pushed a cohort,
+ * decayed it in the same week, and then snapshotted a week too late. The lifecycle is now a single
+ * exported fact (`settledCohortRetention` / `RETENTION_WINDOW_WEEKS` in career/pmf.ts) and this
+ * forwards to it, so the forecast cannot drift from the measurement again.
  */
 function settledRetention(truth: SegmentTruth, productFit: number, priceFit: number, bugs: number): number {
-  const early = resolveCohortRetention({ truth, productFit, priceFit, bugs, weeksSinceAcquired: 0 })
-  const late = resolveCohortRetention({ truth, productFit, priceFit, bugs, weeksSinceAcquired: 4 })
-  return early ** 4 * late
+  return settledCohortRetention({ truth, productFit, priceFit, bugs })
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))

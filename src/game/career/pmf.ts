@@ -150,13 +150,33 @@ export const EXPERIMENT_ANSWERS: Record<ExperimentType, { metric: TruthMetric; b
 }
 
 /**
+ * How much evidence a belief must actually rest on before its confidence counts as an ANSWER.
+ *
+ * This is not a tuning knob, it is a correctness guard. `initialBeliefs` deliberately seeds one
+ * metric per segment at confidence 0.42 with `evidenceCount: 0` — "a strong prior pointing the
+ * wrong way, the assumption worth killing". That unearned 0.42 sits ABOVE the interview (0.40)
+ * and landing-page (0.40) bars, so a rule that reads confidence alone retired a standing study
+ * the week its first cycle completed, on precisely the belief the game exists to have you
+ * disprove. Measured over 24 seeds × 5 sectors × every segment: 60/360 standing interviews and
+ * 55/360 standing landing-page tests ran exactly once, and 100% of those were killed by a prior
+ * with no evidence behind it at all.
+ *
+ * A conviction you arrived with is not a finding. One reading is not corroboration either —
+ * `updateBelief`'s own comment is "confidence rises with corroboration" — so the programme
+ * concludes on the second, which is the first cycle that could have disagreed with the first.
+ */
+export const ANSWER_EVIDENCE_FLOOR = 2
+
+/**
  * Has this study answered what it was for? A standing study that has cleared its bar is retired
  * rather than renewed — it is a programme that finishes, not a subscription.
+ *
+ * "Cleared its bar" means evidence put it there. See `ANSWER_EVIDENCE_FLOOR`.
  */
 export function experimentAnswered(career: CareerPMFState, type: ExperimentType, segmentId: SegmentId): boolean {
   const { metric, bar } = EXPERIMENT_ANSWERS[type]
   const b = career.segmentBeliefs[segmentId]?.[metric]
-  return !!b && b.confidence >= bar
+  return !!b && b.evidenceCount >= ANSWER_EVIDENCE_FLOOR && b.confidence >= bar
 }
 
 // ---------- beliefs ----------
@@ -476,6 +496,40 @@ export function resolveSegmentAcquisition(args: {
 }
 
 /** Weekly probability a customer in this cohort stays. Slow-burning, not instant. */
+/**
+ * The retention window, in weeks — the thing `retentionAt4wk` is named after.
+ *
+ * ONE constant with two jobs, and they are the same job: it is the length of the honeymoon in
+ * `resolveCohortRetention`, and it is the number of weekly keep rates `retentionAt4wk` is the
+ * product of. Those two MUST be the same number or the metric straddles the boundary — which is
+ * exactly the bug this constant replaced. `tickCareerPMF` charges a cohort churn on the week it
+ * arrives, so a cohort has been decayed `s.week - acquiredWeek + 1` times; the snapshot used to
+ * fire at `s.week - acquiredWeek >= 4`, i.e. after FIVE decays — four honeymoon weeks plus one
+ * post-honeymoon week. Measured on the reconstruction in docs/pmf-why-it-is-stuck.md §7, that
+ * understated every retention reading in the game by ~4.7pp and PMF by ~4 points.
+ */
+export const RETENTION_WINDOW_WEEKS = 4
+
+/**
+ * How many times a cohort acquired in week `acquiredWeek` has been decayed by the end of week
+ * `week`. It is charged churn on arrival, so its first week of churn is its acquisition week.
+ */
+export function cohortDecaysApplied(week: number, acquiredWeek: number): number {
+  return week - acquiredWeek + 1
+}
+
+/**
+ * The four-week retention a cohort settles at under a steady policy — the product of exactly
+ * `RETENTION_WINDOW_WEEKS` weekly keep rates, all of them inside the honeymoon.
+ *
+ * Exported so the UI reads the lifecycle instead of restating it (docs/pmf-why-it-is-stuck.md §6).
+ */
+export function settledCohortRetention(args: { truth: SegmentTruth; productFit: number; priceFit: number; bugs: number }): number {
+  let r = 1
+  for (let age = 0; age < RETENTION_WINDOW_WEEKS; age++) r *= resolveCohortRetention({ ...args, weeksSinceAcquired: age })
+  return r
+}
+
 export function resolveCohortRetention(args: {
   truth: SegmentTruth
   productFit: number
@@ -494,7 +548,7 @@ export function resolveCohortRetention(args: {
   const price = 0.95 + (priceFit / 100) * 0.058
   const reliability = 1 - bugs / 900
   // the first weeks are the dangerous ones; survivors settle
-  const honeymoon = weeksSinceAcquired < 4 ? 0.985 : 1.004
+  const honeymoon = weeksSinceAcquired < RETENTION_WINDOW_WEEKS ? 0.985 : 1.004
   return clamp01(Math.min(0.995, base * fit * price * reliability * honeymoon))
 }
 
@@ -846,8 +900,17 @@ export function suggestedExperiment(
     const customers = totalCustomers(career, seg.id)
     for (const rung of LADDER) {
       if (running.has(`${seg.id}:${rung.type}`)) continue
-      const gap = rung.bar - b[rung.metric].confidence
-      if (gap <= 0) continue
+      // Openness goes through `experimentAnswered` rather than re-deriving it from the bar, so
+      // the recommendation and the standing-study renewal cannot drift apart — the drift is what
+      // bills a player for a study the game has stopped recommending, and (since the evidence
+      // floor landed) what would otherwise stop recommending a study the renewal keeps alive.
+      if (experimentAnswered(career, rung.type, seg.id)) continue
+      const raw = rung.bar - b[rung.metric].confidence
+      // Normally the score is how far the belief is from its bar. A belief sitting ABOVE its bar
+      // on fewer than `ANSWER_EVIDENCE_FLOOR` readings is not nearly-answered — it is untested
+      // conviction, which is the thing `initialBeliefs` plants on purpose. It stays on the board
+      // as a small-but-real open question instead of scoring negative and being skipped.
+      const gap = raw > 0 ? raw : 0.05
       // The segment you are betting on matters most; an unexamined segment is worth more than
       // one you have already studied, because that is where a wrong assumption still hides.
       const weight = isTarget ? 1 : 0.55 + (1 - b.needIntensity.confidence) * 0.35

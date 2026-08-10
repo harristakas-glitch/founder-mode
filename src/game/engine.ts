@@ -606,16 +606,72 @@ export function totalUsers(s: GameState): number {
   return s.users + s.ventures.reduce((a, v) => a + v.users, 0)
 }
 
-// Marketing budgets grow with the company: a Series C war chest can actually be spent.
-export function marketingMax(s: GameState): number {
-  const byStage: Record<Stage, number> = {
+/**
+ * What the marketing budget can be raised to — the larger of the fundraising ladder and what the
+ * company can actually fund out of its own business.
+ *
+ * IT USED TO BE THE LADDER ALONE, and `s.stage` moves in exactly one place: `acceptTermSheet`. So
+ * a company that never raised was frozen at $30k/wk forever, however profitable — a bootstrapped
+ * founder on $7.9M of cash, +$171k/wk of net income and infinite runway had the same budget as a
+ * company in its first week. That ties spending power to *fundraising stage* rather than to
+ * *ability to fund*, and those two come apart exactly when a company becomes self-sustaining,
+ * which is the moment the game most wants to reward.
+ *
+ * THE LADDER IS KEPT AS A FLOOR, because institutional muscle is real: a Series C war chest can be
+ * spent at a rate a profitable seed-stage company cannot match, and that is worth something. It is
+ * now a floor rather than the whole answer.
+ *
+ * WHY THIS CANNOT BECOME "BURN FASTER TO WIN". docs/balance-baseline.md §1 measured LTV/CAC by
+ * retention band (SaaS 0.28 → 0.33 → 0.68 → 6.28, crossing 1.0 in all five sectors): marketing is
+ * correctly net-negative until retention is real. A cap keyed to *appetite* would let a leaky
+ * company reach the losing strategy faster. Both terms here are keyed to ABILITY instead, and
+ * neither can be manufactured by a company that is losing money:
+ *
+ *   * `earned` is operating profit BEFORE marketing, floored at zero. A company can spend what it
+ *     makes — at a multiple of exactly 1, so pushing the slider to the cap takes net income to
+ *     zero and never below it. A company that loses money earns no headroom at all.
+ *   * `treasury` is a bounded weekly slice of the bank, AND IT IS GATED ON BEING PROFITABLE. A
+ *     profitable company has infinite runway, so committing 2%/wk of the bank is money operations
+ *     will refill. For a company that is losing money the bank is life support, not a war chest,
+ *     and ungating it measurably handed a burning company with $8M in the bank a 5.3x budget for
+ *     nothing. It is a cliff at break-even and the cliff is the point: the week the business
+ *     starts paying for itself, the treasury becomes deployable.
+ *
+ * So the division of labour is clean. The ladder governs the funded-but-not-yet-profitable
+ * company, which is exactly the company it was designed for and which still cannot exceed it.
+ * Ability-to-fund governs the self-sustaining one, which the ladder had no way to see at all.
+ *
+ * Marketing is excluded from the operating figure deliberately. Reading `weeklyBurn` — which
+ * includes `s.marketingSpend` — would make the cap fall as the player approached it, so the slider
+ * would shrink under their hand.
+ */
+export const MARKETING_CAP = {
+  /** The fundraising ladder, kept as a floor. */
+  byStage: {
     'Pre-seed': 30_000,
     Seed: 50_000,
     'Series A': 150_000,
     'Series B': 500_000,
     'Series C': 1_500_000,
-  }
-  return byStage[s.stage]
+  } as Record<Stage, number>,
+  /** Share of weekly operating profit (before marketing) that can be redirected into growth. */
+  earnedShare: 1,
+  /** Share of the bank committable per week — only while operations are refilling it. */
+  treasuryShare: 0.02,
+} as const
+
+/** Weekly operating profit BEFORE marketing — what the business itself throws off. */
+export function operatingProfit(s: GameState): number {
+  return s.lastRevenue - (weeklyPayroll(s) + weeklyOffice(s) + weeklyInfra(s) + weeklyInterest(s))
+}
+
+export function marketingMax(s: GameState): number {
+  const floor = MARKETING_CAP.byStage[s.stage]
+  const profit = operatingProfit(s)
+  if (profit <= 0) return floor
+  const earned = profit * MARKETING_CAP.earnedShare
+  const treasury = Math.max(0, s.cash) * MARKETING_CAP.treasuryShare
+  return Math.round(Math.max(floor, earned + treasury))
 }
 
 // Paid acquisition price per user: rises as the market saturates and falls with PMF.

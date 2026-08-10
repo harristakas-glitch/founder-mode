@@ -161,6 +161,19 @@ Measured on the reconstruction: four decays give 69.9%, five give **65.2%**, and
 It is not obviously wrong to charge a cohort a week of churn on arrival, but the metric is named,
 displayed and reasoned about as *four-week retention*, and it feeds 46 of the 100 PMF points. The
 practical effect is a systematic ~4.7pp understatement of every retention reading in the game, which
-in turn understates PMF by ~4 points across the board. Left alone as instructed — `src/game/career/**`
-belongs to another slice. The UI mirrors the current behaviour so the forecast agrees with the
-measurement; if the lifecycle is fixed, `settledRetention` in `CareerUI.tsx` must be updated with it.
+in turn understates PMF by ~4 points across the board.
+
+**FIXED.** The window is now one exported constant, `RETENTION_WINDOW_WEEKS`, which is simultaneously
+the length of the honeymoon in `resolveCohortRetention` and the number of weekly keep rates
+`retentionAt4wk` is the product of — they cannot drift apart again, and a test asserts the keep rate
+changes on exactly the week the window closes. The snapshot now fires on `cohortDecaysApplied` rather
+than on calendar age, the two differing by one precisely because of the decay-on-arrival above.
+
+Measured over 60 runs of 70 weeks across five sectors: median four-week retention on the target
+segment **62.81% → 67.12%** (+4.31pp) and median PMF **50 → 54**, matching the prediction here.
+
+The two restatements in §6 are down to one. `settledRetention` in `CareerUI.tsx` now forwards to an
+exported `settledCohortRetention`, so the forecast reads the lifecycle instead of mirroring it, and
+`src/screens/CohortAnalytics.tsx` reindexed its triangle from calendar offset to weeks-of-churn —
+without which the frozen four-week number sat in the column labelled 3 and column 4 showed a fifth
+week of decay. Only `PMF_WEIGHTS` is still restated in the UI.

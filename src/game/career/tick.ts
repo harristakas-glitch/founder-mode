@@ -9,6 +9,7 @@ import type { CareerPMFState, CausalExplanation, SegmentId } from './types'
 import {
   addJournal,
   biggestUncertainty,
+  cohortDecaysApplied,
   cohortIsOrganic,
   derivePmfForSegment,
   experimentDef,
@@ -18,6 +19,7 @@ import {
   METRIC_LABEL,
   organicCustomers,
   resolveCohortRetention,
+  RETENTION_WINDOW_WEEKS,
   resolveExperiment,
   resolveSegmentAcquisition,
   expansionMultiplier,
@@ -389,10 +391,21 @@ export function tickCareerPMF(
     c.exactCustomers = exact
     c.activeCustomers = Math.max(0, Math.round(exact))
     churnedTotal += before - c.activeCustomers
-    // Freeze this cohort's four-week number the week it turns four weeks old. Measuring
-    // "everything older than 4 weeks" instead made the metric lifetime survival, which decays
-    // forever — so retention (and therefore PMF) could only ever fall.
-    if (c.retentionAt4wk === undefined && s.week - c.acquiredWeek >= 4 && c.startingCustomers > 0) {
+    // Freeze this cohort's four-week number once it has been charged exactly four weeks of churn.
+    // Measuring "everything older than 4 weeks" instead made the metric lifetime survival, which
+    // decays forever — so retention (and therefore PMF) could only ever fall.
+    //
+    // The count is DECAYS APPLIED, not calendar age, and the two differ by one: a cohort is pushed
+    // and then decayed in this same loop on the week it arrives, so its acquisition week is its
+    // first week of churn. The old condition (`s.week - c.acquiredWeek >= 4`) waited for a fifth
+    // decay — four inside the `weeksSinceAcquired < RETENTION_WINDOW_WEEKS` honeymoon and one
+    // outside it — and froze that as "four-week retention". It understated every reading in the
+    // game by ~4.7pp and PMF by ~4 points (docs/pmf-why-it-is-stuck.md §7).
+    if (
+      c.retentionAt4wk === undefined &&
+      cohortDecaysApplied(s.week, c.acquiredWeek) >= RETENTION_WINDOW_WEEKS &&
+      c.startingCustomers > 0
+    ) {
       // off the exact count: `3/3 = 100%` on a rounded cohort is a rounding artifact, not evidence
       c.retentionAt4wk = clamp01(exact / c.startingCustomers)
     }

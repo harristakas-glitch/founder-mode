@@ -1,7 +1,7 @@
 import { BarRow, LineChart, Panel, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
-import { estimatedCac, growthRate, marketingMax, paidUsersPerWeek, productScore } from '../game/engine'
+import { estimatedCac, growthRate, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek, productScore } from '../game/engine'
 import { useStore } from '../store'
 
 export function Growth() {
@@ -33,7 +33,7 @@ export function Growth() {
       </div>
 
       <div className="mt-3.5">
-        <Panel title={`Marketing budget: ${money(game.marketingSpend)}/week (cap ${money(marketingMax(game))} at ${game.stage})`}>
+        <Panel title={`Marketing budget: ${money(game.marketingSpend)}/week (cap ${money(marketingMax(game))})`}>
           <input
             type="range"
             min={0}
@@ -55,8 +55,15 @@ export function Growth() {
           </div>
           <div className="mt-3 text-xs leading-relaxed text-mut">
             Spend does two things: builds hype (diminishing returns, amplified by marketers) and buys users directly at the CAC above —
-            which climbs as the market saturates and falls with PMF. The budget cap grows with your funding stage. Word of mouth
-            ({pct(sector.viral, 1)}/wk max for {sector.name}) only kicks in once PMF is real.
+            which climbs as the market saturates and falls with PMF. Word of mouth ({pct(sector.viral, 1)}/wk max for {sector.name}) only
+            kicks in once PMF is real.
+          </div>
+          <div className="mt-2 text-xs leading-relaxed text-mut">
+            <b className="text-ink">The cap is what you can fund, not what you raised.</b> It is the larger of your funding stage's ceiling
+            ({money(MARKETING_CAP.byStage[game.stage])} at {game.stage}) and what the business itself throws off — this week that is{' '}
+            <b className="tnum text-ink">{money(Math.max(0, operatingProfit(game)))}</b> of operating profit before marketing plus{' '}
+            <b className="tnum text-ink">{money(Math.max(0, game.cash) * MARKETING_CAP.treasuryShare)}</b> from the bank. Profit raises it
+            without a round; losing money does not raise it at all.
           </div>
         </Panel>
       </div>
