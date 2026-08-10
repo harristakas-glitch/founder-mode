@@ -1,6 +1,7 @@
 # Founder Mode 🦄
 
-**Run a startup like a football manager.** You have $200,000, an empty office, and a dream — find product-market fit, outgrow your rivals, survive your own board, and build a unicorn. Or die trying.
+**Run a startup like a football manager.** You have $200,000, an empty office, and a dream — find
+product-market fit, outgrow your rivals, survive your own board, and build a unicorn. Or die trying.
 
 **Play now:** https://harristakas-glitch.github.io/founder-mode/
 
@@ -8,9 +9,17 @@
 
 ## The game
 
-Founder Mode is a turn-based management sim. Each turn is one week: set your team's focus, hire and fire, spend on marketing, answer the events in your inbox, then hit **Advance Week** and watch the simulation respond. Runs end in bankruptcy, acquisition, getting fired by your board, an IPO — or a $1,000,000,000 valuation.
+Founder Mode is a turn-based management sim. Each turn is one week: set your team's focus, hire and
+fire, spend on marketing, answer the events in your inbox, then hit **Advance Week** and watch the
+simulation respond. Runs end in bankruptcy, acquisition, getting fired by your board, an IPO — or a
+$1,000,000,000 valuation.
 
-## Three experiences, one simulation
+It is a fully client-side single-page app. There is no game server, and that fact shapes most of the
+honest caveats at the bottom of this file.
+
+---
+
+## Three modes, one simulation
 
 ```
 PLAY
@@ -19,49 +28,101 @@ PLAY
 └── ARENA        ⚔️  multiplayer PvP, 2–4 players
 ```
 
-| Experience | Promise | What it is |
+| Mode | Promise | What it is |
 |---|---|---|
-| **Quick Play** — 30–60 min · Solo | *Build a unicorn tonight.* | Fast startup management. Start a company, make the big decisions and see how far you can take it. |
-| **Career** — Deep Simulation · Solo · Multi-session | *Build the company. Become the CEO.* | A deeper founder simulation about product, people, strategy and capital. Runs its own product-market-fit simulation. |
-| **Arena** — 2–4 Players · Online | *Outbuild your friends.* | Compete against other founders in the same market. |
+| **Quick Play** — 30–60 min · Solo | *Build a unicorn tonight.* | Fast startup management. Every shipped system is on. |
+| **Career** — Deep Simulation · Solo | *Build the company. Become the CEO.* | Quick Play plus a real product-market-fit simulation: segments, beliefs, experiments, cohorts. |
+| **Arena** — 2–4 Players · Online | *Outbuild your friends.* | Same engine, lean ruleset, five direct attacks between founders. |
 
-Quick Play has three **formats**:
+Quick Play has three **formats** (`src/game/engine.ts:174` for the scenario list):
 
-- **Standard Run** — *Start from zero.* Build the company and chase the best possible outcome. Five markets (B2B SaaS, Social, Fintech, Dev Tools, E-commerce), open-ended.
-- **Daily Challenge** — *Same world. Same seed. One shot.* Everyone gets the same company today: 104 weeks, market locked, global leaderboard.
-- **Scenarios** — *Different starts. Different problems.* Five alternate hands: Standard, Funding Winter, Rich Kid, Second-Time Founder, Late Entrant.
+- **Standard Run** — open-ended, five sectors (B2B SaaS, Social App, Fintech, Dev Tools, E-commerce).
+- **Daily Challenge** — 104 weeks, fixed seed, global leaderboard. "One attempt" is enforced at the
+  data layer — unique `(day, player_id)`, keep-the-higher-score — not in the client. Replaying today
+  is still allowed, by design.
+- **Scenarios** — five alternate starts: Standard, Funding Winter, Rich Kid, Second-Time Founder,
+  Late Entrant. Scenarios change the **starting state**, never the ruleset (`src/game/modes.ts:365`).
 
-**Career is Early Access and says so in the UI.** It is no longer a reskin of Quick Play: Phase 1 shipped, and Career now replaces the single hidden PMF number with [a full discovery simulation](#career-you-do-not-know-your-market-yet) — segments, beliefs, experiments and cohorts. The rest of the roadmap (founder attention, executives, board politics) is still to come.
+### Capabilities are the single source of truth
 
-Everything that differs between the three lives in `src/game/modes.ts` as **capabilities**, resolved once per run (`MODE base → FORMAT → SCENARIO → lobby overrides`). The engine never asks "which mode is this?", only "is this capability on?" — so moving a system between experiences is a one-table edit. Capabilities that aren't built yet are listed and left `false`; the game never claims functionality it doesn't have. Career's five extra capabilities (`detailedPMF`, `customerSegments`, `customerResearch`, `hypothesisBoard`, `decisionJournal`) are what switch the discovery simulation on, and they are `false` everywhere else.
+Everything that differs between modes lives in `src/game/modes.ts` as **capabilities**, resolved once
+per run: `MODE base → FORMAT overrides → SCENARIO overrides → lobby overrides`. The engine and the UI
+ask `hasCapability(state, key)` — never `mode === '…'`. Three competing re-implementations of that
+one predicate (in `engine.ts`, `store.ts` and `world/tick.ts`) were consolidated; the four remaining
+`mode ===` checks are cross-promotion copy and the resolver itself.
 
-### Core systems
+Two rules hold in both directions, and `test/modes.test.ts` pins them:
+
+- A capability is **never `true` before the code that honours it exists.** 29 of the 61 keys are pure
+  roadmap surface — declared so the shape is stable, `false` everywhere, referenced by nothing.
+- A capability is **never `false` while its system runs.** `narrativeDirector` and `proceduralMedia`
+  used to claim absence for code that executes in every mode; they are now declared true where they
+  run.
+
+The header comment in `modes.ts` splits the keys into **ENFORCED** (flipping the flag changes
+behaviour) and **DESCRIPTIVE** (a true statement about the mode that nothing branches on) and tells
+you how to re-check it: `grep -rn "'<key>'" src` should find a `hasCapability` call for every
+enforced key and none for a descriptive one. That block was audited key by key and had drifted in
+three directions, so re-run the grep rather than trusting the list.
+
+What is actually on, resolved from the code:
+
+| | Quick Play | Career | Arena |
+|---|---|---|---|
+| AI rivals | ✅ | ✅ | — (`humanRivals`) |
+| Story arcs · 1:1s · catastrophes · founder energy · board reviews | ✅ | ✅ | ❌ off by default |
+| Bank debt · verticals · IPO · macro shocks | ✅ | ✅ | ✅ |
+| PvP attacks · shared hiring pool · seeded shared world | — | — | ✅ |
+| Detailed PMF · customer research · hypothesis board | — | ✅ | — |
+| Relationships (living world) | — | ✅ | — |
+| Procedural narrative · media · Narrative Director · persistent characters · company memory | ✅ | ✅ | ✅ |
+| Character memory | ✅ | ✅ | — |
+| Leaderboard · single attempt | Daily only | — | — |
+
+Career adds **six** capabilities over Quick Play. Four are enforced — `detailedPMF`,
+`customerResearch`, `hypothesisBoard`, `relationships`. The other two, `customerSegments` and
+`decisionJournal`, are descriptive: the segment model and the journal live inside the Career
+subsystem, so `game.career` existing *is* the switch, and turning either flag off alone does nothing.
+
+---
+
+## Core systems
+
+Shared by Quick Play and Career unless noted. Arena switches most of the narrative half off.
 
 | System | What it does |
 |---|---|
-| **Product-market fit** | Every idea has a hidden market resonance. Research reveals it; pivoting rerolls it (your accumulated research improves the odds). Without PMF, users churn as fast as they arrive. *Career replaces this whole row — see below.* |
-| **Rivals** | Three AI competitors per market with their own funding rounds, launches, and failures. They steal your users when their product is better — or you can **acquire them** (cash or stock, with rebuff risk). |
-| **Fundraising** | Pre-seed → Series C. Term sheets price off your valuation and the funding climate; round sizes chase growth. Down rounds hurt. A one-time emergency bridge exists for companies worth saving — 15% of the company, and there is no second one. |
-| **The board** | Investor money brings growth targets, reviewed every ten weeks. Pass by user growth, revenue growth, or real profitability. Three strikes = ultimatum; keep failing = you're fired. |
-| **Macro economy** | A market index, central-bank rate, and inflation tick weekly — driving the funding climate, pricing your debt, and inflating salaries. Oil shocks, rate cuts, rallies, crashes. |
-| **Bank debt** | Borrow up to half your ARR (capped at $10M) at rate + spread, no dilution — but a revenue covenant, stated up front, bites hard if you slip. |
-| **Team** | Employees have skill, morale, salaries, and traits: **10x** (+70% output), **Mercenary** (+15%, bails early when things wobble), **Craftsman** (+10% and quietly kills bugs), **Culture carrier** (lifts everyone's morale weekly), **Drama magnet** (drains it). Offers can be declined, notice periods apply, recruiters take 15%. |
-| **Coordination overhead** | Past 8 people, every extra head costs the whole org 1.5% effectiveness, down to a 60% floor. Headcount is a decision, not a scoreboard. |
-| **All-hands pitch** | Rally the company with a speech — three styles (Vision, Numbers, War), each with live success odds computed from the state of the business. The team can smell a speech that isn't earned. |
-| **New verticals** | Escape a saturated market: send a tiger team into a second sector with its own PMF journey and TAM. Multi-product companies stack S-curves. |
+| **Product-market fit (Quick Play)** | Every idea has a hidden market resonance. Research reveals it; pivoting rerolls it, with accumulated research improving the odds. **Career replaces this entirely — see below, and note that in Career a pivot has nothing to reroll.** |
+| **Rivals** | Three AI competitors per market, seeded, with their own funding, launches and failures. They take your users when their product is better — or you can acquire them, cash or stock, with rebuff risk. |
+| **Fundraising** | Pre-seed → Series C. Term sheets price off valuation and the funding climate; round sizes chase growth. Down rounds hurt. One emergency bridge exists for a company worth saving — it costs 15% of your remaining stake, and there is no second one. |
+| **The board** | Investor money brings a growth target. First review 12 weeks after the round, then every 10. Pass on user growth, revenue growth, or (from Series B, at a >15% net margin) real profitability. A near miss is a warning; a real miss is a strike. **The ultimatum fires on the second strike** — submit to layoffs or defy the board and bet your job on the next review. |
+| **Macro economy** | A market index, central-bank rate and inflation tick weekly, driving the funding climate, pricing your debt and inflating salaries. Oil shocks, rate cuts, rallies, crashes. |
+| **Bank debt** | Borrow up to half your ARR, capped at $10M, at rate + spread, no dilution — against a revenue covenant stated up front. |
+| **Team** | Employees have skill, morale, salary and a trait: **10x** (×1.7 output, only rolls on skill ≥ 8), **Mercenary** (×1.15, and walks at morale 55 rather than 32), **Craftsman** (×1.1 and quietly kills bugs), **Culture carrier** (lifts morale weekly), **Drama magnet** (drains it). Offers can be declined, notice periods apply, recruiters take 15% of first-year salary. |
+| **Coordination overhead** | Past 8 people, every extra head costs the whole org 1.5% effectiveness, down to a 60% floor. |
+| **All-hands pitch** | Three styles — Vision, Numbers, War — each with live success odds computed from the state of the business. 8-week cooldown. |
+| **New verticals** | Send a tiger team into a second sector with its own PMF journey and TAM. Multi-product companies stack S-curves. |
 | **IPO** | $500M valuation + $10M ARR + $2M for bankers unlocks the S-1: four weeks of scrutiny, four of roadshow, then pricing day — pop, modest debut, or a pulled offering. |
-| **Story arcs** | Six multi-week narratives with memory: the MegaCorp pilot, a regulator inquiry, the influencer who turns, the acquired team that gels (or doesn't), the whale that wobbles, the open-source clone. |
-| **Founder energy** | Your own tank, 0–100. Pitches, pivots, IPOs, and board fights drain it; low energy weakens everything you touch; hitting empty forces a burnout. Recharge weeks cost roadmap time. |
-| **One-on-ones** | Employees bring their asks to your door — promotions, remote work, side projects, sabbaticals — with targeted consequences for that person's morale and salary. |
-| **Catastrophes** | Late-game, sector-flavored nightmares: the fintech breach, the social-app algorithm change, the e-commerce logistics meltdown, the dev-tools CVE. |
-| **Secondary sales** | From Series B, take real money off the table — 2% of the company at a 30% discount, banked into your final payout no matter how the run ends. Once per stage. |
-| **Events & achievements** | A 66-card event deck (every option shows its price — no hidden bills) and 26 cross-run achievement badges. |
+| **Story arcs** | Six multi-week narratives with memory: the MegaCorp pilot, a regulator inquiry, the influencer who turns, the acquired team that gels, the whale that wobbles, the open-source clone. |
+| **Founder energy** | A 0–100 tank. Founder *actions* drain it — pivot −12, investor pitch −10, filing the S-1 −10, all-hands −8, M&A −8, board ultimatum −5, PvP attack −4 — and low energy weakens everything you touch. Dropping to 5 forces a burnout week. (See Known limitations: cash stress does **not** erode it, despite the comment above the formula.) |
+| **One-on-ones** | Employees bring asks to your door — promotions, remote work, side projects, sabbaticals — with consequences targeted at that person. |
+| **Catastrophes** | Late-game, sector-flavoured: the fintech breach, the social algorithm change, the e-commerce logistics meltdown, the dev-tools CVE. |
+| **Secondary sales** | From Series B: 2% of the company at a 30% discount, banked into your final payout however the run ends. Once per stage. |
+| **Events & achievements** | A 66-card event deck — every option shows its price — and 26 cross-run achievement badges. |
 
-### Career: you do not know your market yet
+---
 
-Career Phase 1 — **PMF Discovery 2.0** — is shipped. Quick Play asks whether your idea resonates. Career asks *with whom*, and makes you pay to find out. Full spec and status: [docs/career-phase-1-pmf-discovery.md](docs/career-phase-1-pmf-discovery.md). Code: `src/game/career/`.
+## Career: you do not know your market yet
 
-**Three customer segments per sector**, fifteen in all, with genuinely different economics rather than three names for the same market.
+Career Phase 1 — **PMF Discovery 2.0** — is shipped. Quick Play asks whether your idea resonates.
+Career asks *with whom*, and makes you pay to find out. Code: `src/game/career/`.
+
+> **Read [`docs/career-guide.md`](docs/career-guide.md) before anything else.** It is the measured
+> account of the model — every number in it was produced by running the code, not by reading the
+> formula — and it explicitly lists where `docs/career-phase-1-pmf-discovery.md` (the original spec)
+> has gone stale. Where the spec and the guide disagree, the guide is the one that was checked.
+
+**Three customer segments per sector**, fifteen in all, with genuinely different economics:
 
 | Sector | Cheap to reach, quick to leave | Harder to win, but they stay | Slow, demanding, pays like it |
 |---|---|---|---|
@@ -71,11 +132,19 @@ Career Phase 1 — **PMF Discovery 2.0** — is shipped. Quick Play asks whether
 | **Fintech** | Everyday Consumers | SMB Finance Teams | Regulated Institutions |
 | **Social** | Casual Users | Creators | Brand Advertisers |
 
-Each segment holds nine hidden numbers — problem intensity, willingness to pay, retention potential, reachability, product bar, market size, competitive intensity, sales cycle, expansion potential. They are generated once from `(seed, sector, scenario, segmentId)` and **never rerolled**: not by research, not by a pivot, not by reloading the save. Variance around each archetype is wide enough that a campaign can hand you an unusually rich freelancer market, or an enterprise segment that simply is not there. Which segment is best is a fact about your seed, and you have to go and find it.
+Each segment holds nine hidden numbers — problem intensity, willingness to pay, retention potential,
+reachability, product bar, market size, competitive intensity, sales cycle, expansion potential.
+They are generated once from `(seed, sector, scenario, segmentId)` and **never rerolled**: not by
+research, not by a pivot, not by reloading. Variance around each archetype is wide (`need ±24`,
+`willingnessToPay ±18`, `productRequirement ±14`) — wide enough that the archetype ranking is often
+wrong for your seed. Which segment is best is a fact about your seed, and you have to go and find it.
 
-**You never see those numbers.** You see beliefs: an estimate, a band that narrows as confidence rises, and a confidence label. Every segment starts with one metric given a *confident and badly wrong* prior — the assumption worth killing. Evidence updates belief in proportion to how much it deserves to be trusted, and confidence saturates: you cannot become certain from a chair.
+**You never see those numbers.** You see beliefs: an estimate, a band that narrows as confidence
+rises, and a confidence label. Every segment starts with one metric given a *confident and badly
+wrong* prior. Confidence saturates — you cannot become certain from a chair.
 
-**Five experiments, on a reliability hierarchy.** Stated intent is cheap and weak; behaviour is slow and strong.
+**Five experiments, on a reliability hierarchy.** Stated intent is cheap and weak; behaviour is slow
+and strong. Three can run at once (`src/game/career/pmf.ts:233`).
 
 | Experiment | Time | Cash | Also costs | Base reliability | Measures |
 |---|---|---|---|---|---|
@@ -85,135 +154,452 @@ Each segment holds nine hidden numbers — problem intensity, willingness to pay
 | Pricing test | 3 wks | $9,000 | 10% eng, $2k/wk marketing | 0.70 | willingness to pay, reachability |
 | Paid pilot | 7 wks | $28,000 | 45% of engineering | 0.88 | retention potential, willingness to pay, product bar, expansion |
 
-Three can run at once. They take real weeks, eat real roadmap, and the results arrive in your inbox when they finish — not when you click.
+The capacity costs are real and they compound: measured product velocity is ×0.55 with a pilot
+running, ×0.30 with a pilot and a prototype together — the floor. Marketing drain is subtracted from
+your ad budget *before* acquisition sees it, so a landing-page test on a $3k/wk budget buys zero
+customers. A **standing study** renews itself, but retires automatically once the belief it exists to
+move passes its confidence bar, so it can no longer bill forever for information that stopped
+arriving.
 
-**Evidence has quality, and cheap evidence lies in a predictable direction.** Effective reliability falls further with a small sample, a weak team, and a hard-to-reach segment (your sample is whoever answered). Interviews and landing pages *systematically overstate* willingness to pay and problem intensity. The test suite measures the bias: interviews overstate willingness to pay by **21.1 points** on average, a pricing test by **2.9**. That is the nine-of-twelve-said-they'd-pay-and-two-actually-did lesson, encoded. The reverse trap exists too — run a prototype test with a weak product and you get a false negative on a market that was fine.
+**Cheap evidence lies in a predictable direction.** Effective reliability falls further with a small
+sample, a weak team, and a hard-to-reach segment. Interviews and landing pages systematically
+*overstate* willingness to pay. The test suite measures it: interviews overstate WTP by **21.1
+points** on average, a pricing test by **2.9** — the nine-said-they'd-pay-and-two-actually-did lesson,
+encoded. The reverse trap exists too: a prototype test run with a weak product returns a false
+negative on a market that was fine.
 
-**Customers arrive in cohorts.** Each week's intake keeps its own acquisition price and product quality, and retention is resolved per cohort, per week — roughly 1% weekly churn where everything fits, 15–20% where it doesn't. Four-week retention is measured per segment. Aggregate growth can hide a rotting base, which is the entire reason cohorts exist.
+**Customers arrive in cohorts.** Each week's intake keeps its own acquisition price and product
+quality, and retention is resolved per cohort, per week. Four-week retention is frozen once per
+cohort, off the unrounded survivor count. Aggregate growth can hide a rotting base, which is the
+entire reason cohorts exist.
 
-**PMF is an output, never an input.** It is read off customers who stayed and paid, with only a small contribution from confidence. Below 15 customers, perfect research caps out at *Problem validated* — research alone can never manufacture PMF. High acquisition with low retention scores as *Showing value*, not fit. Both are asserted in `test/career-pmf.test.ts`. The ladder runs Unproven → No clear demand → Early signal → Problem validated → Showing value → Emerging PMF → Strong PMF → Scalable PMF.
+**PMF is an output, never an input.** Company PMF is the single best-scoring segment (not an average,
+not the target). Above the customer floor the 100 points are: retention 46, price fit 20, product fit
+14, scale 12, market headroom 8 — and retention is close to all of the variance in practice.
+Below 15 retained customers the score is capped at 40 and comes *entirely* from belief confidence;
+above the floor, confidence contributes *exactly zero*. High acquisition with low retention scores as
+*Showing value*, not fit. Both are asserted in `test/career-pmf.test.ts`.
 
-**Changing your mind costs something.** A segment pivot triggers 2–6 weeks of repositioning — sized by how far apart the two segments' product bars and price tolerances are — at 0.7× product output and 0.55× acquisition. Existing customers are not deleted; nobody is optimising for them any more. It goes in the journal, as does every experiment, price change and focus change.
+Two properties worth knowing before you play:
 
-Alongside the numbers, each week produces **causal explanations** ("customer count is rising, but retention is 41% — this growth is rented, not owned"), the **biggest open uncertainty**, and a **suggested next experiment** with its reasoning. The Career-only **Discovery** screen holds the Hypothesis Board, the experiment catalogue, your bet (target segment, pricing, product focus) and the decision journal. It is gated on the `hypothesisBoard` capability, so it never appears in Quick Play or Arena.
+- **Features do not drive Career PMF. Quality does.** Features generate bugs, bugs cut retention, and
+  retention is 46 of the 100 points. Measured at 40 weeks: 70% features → PMF 47; 70% quality → PMF
+  60. Pointing 100% of engineering at *research* beats pointing 70% at features.
+- **Research and the demand gauge move belief, not PMF.** The `pmfGain` line still executes and is
+  then overwritten by `tickCareerPMF` in the same tick. The Product screen's STRONG/WEAK demand
+  readout is `s.resonance`, which in Career influences nothing. See Known limitations.
 
-**Quick Play, Daily Challenge and Arena are unchanged.** They keep the simple PMF model and carry no Career state at all — `career` is absent from those saves, and the test suite asserts it for all three.
+**Changing your mind costs something.** A segment reposition triggers 2–6 weeks at ×0.7 product
+output and ×0.55 acquisition, sized by how far apart the two segments' bars and price tolerances are.
+Existing customers are not deleted. Everything goes in the decision journal.
 
-### Arena: lean, fast, mean
+Each week also produces causal explanations, the biggest open uncertainty, and a suggested next
+experiment with its reasoning. The Career-only **Discovery** screen holds the Hypothesis Board, the
+experiment catalogue, your bet and the journal; it is gated on `hypothesisBoard`, so it never appears
+in Quick Play or Arena.
 
-Arena runs the same engine with a different capability set. The slow narrative systems (arcs, one-on-ones, catastrophes, founder energy, board reviews) are off so turns stay fast; the economic weapons (debt, verticals, IPO, macro) stay on — and **PvP attacks** come alive.
+**Quick Play, Daily Challenge and Arena carry no Career state at all** — `career` is absent from those
+saves, and the test suite asserts it for all three.
 
-2–4 founders on different devices share one seeded market. Rooms have 5-letter codes; rounds advance when everyone is ready or the 2½-minute clock expires. Live standings, chat, emotes, refresh-proof reconnection. The host picks the market, the match length (⚡ Sprint 52 weeks / 🏁 Classic 104) and can toggle **any** of the ten rule systems in the lobby — from a pure-PvP knife fight to a full-depth marathon.
+---
+
+## Living World
+
+`src/game/world/` — persistent people who are generated once, remembered, and narrated.
+The design brief is [`docs/procedural-living-world-system.md`](docs/procedural-living-world-system.md),
+which lays out **sixteen phases**.
+
+**Built — the brief's phases 1–5**, plus the persistence and regression work that goes with them
+(phases 14–16): shared foundation (persistent characters, company memory), character memory,
+relationships, the procedural composer, the Career dynamic inbox, and the Narrative Director — which
+scores every candidate story each week and decides what deserves to be told, with a wider budget in
+Career than in Quick Play. Media-voiced coverage of company-level facts runs alongside it. Quick Play
+and Arena get the narrative layer (phases 10–11) but not the relationship simulation.
+
+**Not built**, with every corresponding capability `false` in every mode — this is the honest list,
+by system rather than by phase number:
+
+`advisorOpinions` (named advisors who argue) · `promises` (see below) · `structuredInterviews` ·
+`structuredEmployeeConversations` · `proceduralBoardMeetings` · `longTermCallbacks` ·
+`rivalArchetypes` · `rivalNarrative` · `proceduralPostmortem` · `livingWorld` (the umbrella flag).
+Story arcs are still the hand-written six, not state machines.
+
+Two things to know before you work in here — both from `docs/architecture-review.md`:
+
+- **`promises` is honoured by real code and is `false` in every mode.** `recordPromise`,
+  `resolvePromise`, `expireDuePromises` and friends in `world/memory.ts` are built, correct and
+  completely unreachable. That is phase 7 waiting, not a bug — but do not assume it runs.
+- **There are two memory-selection engines and only one is live.** `memory.ts` has a scored recall
+  system (`resolveCue`, `scoreMemoryRelevance`, `recallMemories`, ~200 lines) that nothing calls;
+  `composer.ts`'s simpler `selectMemoryCallback` is the one on the live path. When you next tune
+  memory recall you will find the wrong one first, because it is the bigger of the two.
+
+More broadly: `world/**` is ~6,800 lines with 41 exports that occur exactly once (their own
+declaration). Roughly a third of it is reachable today.
+
+---
+
+## Arena: lean, fast, mean
+
+2–4 founders on different devices share one seeded market. Rooms have 5-letter codes; rounds advance
+when everyone is ready or the 150-second clock expires, at which point pending choices resolve
+conservatively and the week is forced. Live standings, chat, emotes.
+
+The host picks the sector, the match length (⚡ Sprint 52 weeks / 🏁 Classic 104) and can toggle any of
+the **ten** rule systems in the lobby (`src/screens/Lobby.tsx:10`) — from a pure-PvP knife fight to a
+full-depth marathon. By default the slow narrative systems (arcs, 1:1s, catastrophes, founder energy,
+board reviews) are off so turns stay fast, and the economic weapons (debt, verticals, IPO, macro)
+stay on.
+
+### Five attacks
+
+Base costs, before stage scaling. Every attack costs `base × (1 + stageIndex × 0.5)`, puts your ops
+team on a 5-week cooldown, and tells the victim exactly who did it. Each also calls `drainEnergy(s, 4)`
+— which is a **no-op in a default Arena match**, because `founderEnergy` is off unless the host turns
+it on in the lobby.
 
 | Attack | Base cost | Effect |
 |---|---|---|
 | 🎣 **Poach talent** | $50k | They lose their best person and 6 morale; two above-average candidates land in your hiring pool |
 | 🗞 **Smear campaign** | $40k | Their hype −10 and reputation −3 — and 2 points of mud sticks to you |
-| ⚔️ **User raid** | $80k | You convert ~3.2% of their users, scaled 0.5×–3× by how much bigger they are than you; they lose 4% |
+| ⚔️ **User raid** | $80k | They lose `max(4% of users, min(15%, 18 users))`; you gain 0.8× that, scaled 0.5×–3× by how much bigger they are than you |
+| 📰 **Hit piece** | $55k | A three-week campaign, front-loaded (−9/−6/−4 hype). Escalating chance it is traced back to you: 18%, 37%, 56%, capped at 75% |
+| 📉 **Price war** | $30k | Six weeks of undercutting that cuts **both** sides' revenue. 8-week cooldown after it ends |
 
-Costs scale with your stage (`base × (1 + stage × 0.5)`), so dirty tricks stay a real decision at Series C. Every operation drains 4 founder energy, puts your ops team on a 5-week cooldown — and the victim is told exactly who did it.
+The last two are the ones that cost the attacker.
 
-The counterplay is the **Crisis Retainer**: $120k at pre-seed, rising a further $120k per stage, buys 8 weeks in which *every* incoming attack fizzles before it touches morale, press, or users. The attacker still pays and still burns their cooldown. Your rivals don't know you have it.
+- The **raid floor** exists because damage used to be purely proportional: measured on a real match,
+  a $120k raid against a 120-user rival moved *five users*. The floor makes an attack worth its price;
+  the 15% cap stops it flattening a small company.
+- **Hit-piece backfire is derived, not rolled** — a pure function of `(seed, week, attackerId,
+  timesUsed)`. Arena has no referee, so an attacker rolling locally could simply retry until the dice
+  came up clean.
+- A **price war** is the only attack that bills you too. The initiator takes the smaller cut (×0.88
+  vs ×0.74 at the extremes), and the gap closes as their own margin worsens. The defender can
+  **concede**: prices go back up, and 6% of their customers transfer to whoever started it. The
+  8-week post-war cooldown exists because the generic 5-week attack cooldown was shorter than the
+  6-week war, so bots re-declared the instant it lapsed and spent 86% of all weeks at war.
+
+The counterplay is the **Crisis Retainer**: `$120k × stageIndex+1`, buying 8 weeks in which *every*
+incoming attack fizzles before it touches morale, press or users. The attacker still pays and still
+burns their cooldown. Your rivals don't know you have it.
+
+### Match rules
+
+- **One hiring market for the room**, settled by **sealed bid with commit-reveal** rather than
+  first-click. You commit a hash of `(candidate, premium%, nonce, playerId)`, then reveal. The
+  candidate weighs money against reputation and runway, weighted so that money matters *less* the
+  better the candidate is. A maxed bid beats an indifferent rival every time and loses 100% of the
+  time to a strong rival on high-skill candidates. There is no free hire: the winning premium binds
+  into the salary and the 15% recruiter fee.
+- **Sticky roster.** Presence is ephemeral, so once the match is under way a peer who blips off the
+  socket is flagged absent rather than deleted. Deleting them erased a rival from the standings *and*
+  from the market-share denominator, which then read as 100%.
+- **Forfeit at 75 seconds absent** (`FORFEIT_MS`). Someone who closed the tab leaves nothing to play
+  against.
+- **Ranking is on money, not on breathing.** A founder still trading is valued at their valuation, a
+  founder who exited at their payout, and they are sorted together. There used to be an alive-first
+  tier, which told a player acquired for $13.2M that they came second to a rival trading at $2.12M.
+- **A rival's exit is a number to beat, not the end of your game.** If rivals finish and you are still
+  going, the match continues and their best banked figure becomes your target. It ends only when
+  nobody is contesting, or when one founder is left and everyone else *walked away* rather than
+  finished.
+- **Automatic reconnect.** A supervisor rejoins with backoff instead of making you refresh; it holds a
+  `rejoinInFlight` flag and a shared teardown so a flapping network cannot leak channels or spawn a
+  ghost copy of you in the room.
+
+---
 
 ## Tech
 
-Fully client-side single-page app — no game server.
-
-- **Vite 7 + React 19 + TypeScript (strict) + Tailwind CSS v4 + Zustand** (persisted to localStorage) + lucide-react
+- **Vite 7 + React 19 + TypeScript (strict) + Tailwind CSS v4 + Zustand** (persisted to
+  localStorage) + lucide-react
 - **Simulation**: pure functions in `src/game/engine.ts`, bot-testable headlessly
-- **Deterministic**: the same seed + mode + format + scenario + decisions reproduce exactly. Every draw comes from the run's seed via `withSeed`/`mixSeed` (mulberry32), reseeded per (seed, week, tick) — never from `Math.random()`
-- **Multiplayer**: Supabase Realtime channels only (presence + broadcast) — each client simulates its own company; no database rows involved
-- **Leaderboard**: one Supabase table (`supabase/leaderboard-secure.sql`) with row-level security
-- **Auth (optional)**: Supabase Auth with Google / X OAuth — anonymous play is always available
-- **PWA**: installable, offline-capable (service worker, production only)
+- **Multiplayer**: Supabase Realtime channels only — presence + broadcast, no tables, no SQL. Each
+  client simulates its own company.
+- **Leaderboard**: one Supabase table. Run **`supabase/leaderboard-v5.sql`** — it supersedes
+  `leaderboard.sql`, `leaderboard-hardening.sql` *and* `leaderboard-secure.sql`.
+- **Auth (optional)**: Supabase Auth with Google / X OAuth. Anonymous play is always available.
+  The providers are written but **not enabled** on the live project — the buttons error if pressed.
+- **PWA**: installable, offline-capable (service worker, production build only), with an
+  update banner when a new build is available.
+
+### Determinism
+
+The contract: same seed + mode + format + scenario + decisions reproduce the same **numbers**.
+
+Every simulation draw goes through `RNG.next()` inside a `withSeed`/`mixSeed` (mulberry32) scope;
+`advanceWeek` reseeds from `(seed, week, 0)`, and eight other mutating entry points (pivot, pitch,
+attack, acquire, venture, all-hands, inbox choice, living-world tick) are wrapped in `seeded()`.
+`career/**` takes its RNG by injection; `world/**` derives every stream from `(seed, id)`. Investor
+selection is a real seeded shuffle — splice-based selection, the same pattern as `makeRivals`. It
+used to be `sort(() => RNG.next() - 0.5)`, which is not a shuffle and whose output depends on V8's
+sort implementation.
+
+`test/modes.test.ts` guards the draw order with **golden traces on three seeds** — recorded FNV-1a
+hashes of twelve weeks of state, not a self-comparison. Reorder or insert a single draw and they go
+red. Changing them is allowed; re-record in the same commit as the change.
+
+Two holes, both real and both documented in the code:
+
+- `uid()` uses `Date.now()` and `Math.random()`. It does not perturb the seeded stream (`withSeed`
+  swaps `RNG.next`, not `Math.random`), so the numbers replay — but **ids do not**, which is why
+  `world/tick.ts` needed `stableCastId()` and the shared hiring pool uses `mk-{week}-{i}`. Replay-based
+  score verification is impossible until this changes.
+- `RNG` is a mutable global whose unseeded default *is* `Math.random()`. Any future entry point that
+  forgets `seeded()` silently gets true randomness and nothing complains.
 
 ### Layout
 
 ```
 src/
-  game/            # the simulation: modes (the capability model), engine, data, arcs, achievements, types
-    career/        # Career-only PMF discovery: types, segments, pmf, tick
-  screens/         # one file per screen (Dashboard, Product, Market, Discovery, Finance, Lobby, NewGame, …)
+  game/            # the simulation
+    modes.ts       #   the capability model — read the header comment first
+    engine.ts      #   2,670 lines; advanceWeekInner is the RNG-order-critical core
+    data.ts        #   sectors, investors, the 66-card event deck, the RNG global
+    arcs.ts        #   six story arcs
+    achievements.ts
+    pvp.ts         #   hit piece + price war (the two attacks that cost the attacker)
+    career/        #   Career-only PMF discovery: types, segments, pmf, tick
+    world/         #   Living World phases 1–5: characters, memory, relationships,
+                   #   composer, director, persistence, content/
+  screens/         # one file per screen (Dashboard, Product, Market, Discovery,
+                   # Finance, Hiring, Team, Growth, Inbox, Fundraising, Lobby,
+                   # NewGame, Career, DailyLeaderboard)
   net/             # Supabase: config, realtime rooms, leaderboard, auth
   components.tsx   # shared UI primitives (charts, cards, avatars)
+  theme.ts         # sector accents, ending emoji/labels, GAME_URL — React-free on purpose
   store.ts         # Zustand store: game actions + online match protocol
   App.tsx          # shell: nav, topbar, overlays, result screens
-test/              # modes, career-pmf, rules and regression suites (plain tsx scripts)
-docs/              # design specs for the bigger systems
+test/              # seven test suites + four probe harnesses (plain tsx scripts)
+docs/              # design specs and the three review documents
 supabase/          # SQL to run in the Supabase SQL editor
 scripts/           # singlefile.mjs — bundles the game into one HTML file
 ```
+
+---
 
 ## Develop
 
 ```bash
 npm install
 npm run dev        # dev server on :5173
-npm test           # four suites: modes, career-pmf, rules, regressions
-npm run build      # type-check + production build to dist/
-node scripts/singlefile.mjs   # optional: self-contained "Founder Mode.html"
+npm test           # seven suites, headless, against the real engine
+npm run build      # tsc -b + production build to dist/
+npm run bots       # Career bot sweep: 24 seeds × 90 weeks × SaaS and Fintech
+
+npm run build && node scripts/singlefile.mjs   # optional: self-contained "Founder Mode.html"
 ```
 
-`npm test` runs headless against the real engine: `test/modes.test.ts` checks the three-mode
-capability model (resolution order, sanitisation, legacy-save migration), `test/career-pmf.test.ts`
-checks the discovery simulation (truth never rerolls, instrument bias is measured in points,
-PMF cannot be researched into existence, and Quick Play/Daily/Arena carry no Career state),
-`test/rules.test.ts` checks that Arena's ruleset actually suppresses the systems it claims to
-and that attacks, costs, cooldowns and the shield behave, and `test/regressions.test.ts` pins
-determinism and past bug fixes.
+`npm test`, `npm run build`, `npm run bots` and `scripts/singlefile.mjs` were each run against this
+tree while writing this file, and all pass. (`Founder Mode.html` and `dist/` are gitignored build
+artifacts.)
 
-Deploys automatically to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`).
+`npm test` runs, in order:
 
-Known-but-unfixed work lives in [BACKLOG.md](BACKLOG.md).
+| Suite | What it pins |
+|---|---|
+| `modes.test.ts` | capability resolution order, sanitisation, legacy-save migration, and the **golden traces** |
+| `career-pmf.test.ts` | truth never rerolls, instrument bias measured in points, PMF cannot be researched into existence, Quick/Daily/Arena carry no Career state |
+| `rules.test.ts` | Arena's ruleset really does suppress what it claims, and attacks/costs/cooldowns/shield behave — with a Quick Play positive control proving arcs and 1:1s actually fire |
+| `regressions.test.ts` | determinism and past bug fixes |
+| `hiring-market.test.ts` | the shared auction and offer acceptance, driving the real engine functions |
+| `world-foundation.test.ts` | living-world persistence and migration |
+| `world-director.test.ts` | story scoring, novelty decay, per-week budget |
+
+Not in `npm test`, run by hand:
+
+```bash
+npx tsx test/exploit-probe.ts all       # 12 degenerate policies × 5 sectors (~10 min)
+npx tsx test/arena-auction-probe.ts     # 1,000 head-to-head auction contests
+npx tsx test/pricewar-probe.ts
+npx tsx docs/security-tests/net-security.test.mts       # 34 assertions, offline
+npx tsx docs/security-tests/leaderboard-live.test.mts   # 16 assertions — WRITES TO PRODUCTION
+```
+
+**Several suites were rewritten because they passed while the game was visibly broken.** The worst
+case was a test file that had transcribed `acceptChance` out of `engine.ts` into itself and asserted
+against its own copy: five green ✓ lines, zero engine code executed. Another asserted
+`victim.users < 50_000` — a raid that moved five users satisfied it for the entire life of the defect
+players reported. The habit that prevents this: **when a test needs a number from the source, import
+the number.** If it cannot be imported, that is the finding.
+
+Deploys to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`). Note the workflow
+runs `npm ci && npm run build` — it does **not** run `npm test`. A red suite will still ship.
 
 ### Versions and rolling back
 
-Tagged versions live under [Releases](https://github.com/harristakas-glitch/founder-mode/releases).
-Each release marks a state where the tests, the type-check and the build all passed, and has a
-self-contained `.html` build attached — double-click it to play that exact version offline, which
-is the fastest way to check whether a bug is new.
-
-To put the site back on a previous version:
+Tagged versions live under
+[Releases](https://github.com/harristakas-glitch/founder-mode/releases). Each marks a state where the
+tests, the type-check and the build all passed, with a self-contained `.html` build attached —
+double-click it to play that exact version offline, which is the fastest way to check whether a bug
+is new.
 
 ```bash
+# put the site back on a previous version (nothing is erased; you can roll forward again)
 git revert --no-commit v1.0.0..HEAD && git commit -m "Roll back to v1.0.0" && git push
-```
 
-That undoes everything after the tag while keeping the history intact (nothing is erased, so you
-can roll forward again). Then run the **Deploy to GitHub Pages** workflow from the Actions tab.
-
-To cut a new version once `npm test` and `npm run build` pass:
-
-```bash
+# cut a new version once npm test and npm run build pass
 git tag -a v1.1.0 -m "what changed" && git push origin v1.1.0
 ```
 
-### Online features setup
+### Online setup on a fork
 
-The game runs fully offline/anonymous without any of this. To enable online play on a fork:
+The game runs fully offline and anonymous without any of this.
 
-1. Create a free [Supabase](https://supabase.com) project; paste its URL and publishable key into `src/net/config.ts`. Arena works immediately (realtime channels need no schema).
-2. Run `supabase/leaderboard-secure.sql` in the SQL Editor — and only that one. It supersedes `leaderboard.sql` and `leaderboard-hardening.sql`, and is idempotent. Ownership of a leaderboard row is proved by a per-device secret that the database stores only as a **bcrypt hash**, so reading the column gains an attacker nothing. A trigger makes `player_id`, `day` and the secret immutable and scores monotonic: even a leaked secret can only ever raise that one row's score, never blank it, steal it, or remove it.
-3. Optional social login: set the Site URL / redirect allowlist under Authentication → URL Configuration, and enable the Google (and/or X) provider with OAuth credentials from their consoles.
-4. Set a spending cap and usage alerts in the Supabase dashboard — the publishable key is public, and nothing else rate-limits it.
+1. Create a free [Supabase](https://supabase.com) project; paste its URL and publishable key into
+   `src/net/config.ts`. **Arena works immediately** — realtime channels need no schema.
+2. Run `supabase/leaderboard-v5.sql` in the SQL Editor, and only that one. It is idempotent and
+   self-testing: its last section runs the whole attack matrix against the policies it just created
+   and raises with a list of failures if any case comes out wrong. A successful run prints
+   `leaderboard v5 self-test passed`. Ownership of a row is proved by a per-device secret the
+   database stores only as a **bcrypt hash**; each `player_id` is bound to the first device that used
+   it; and a trigger makes `player_id`, `day` and the secret immutable and scores monotonic, so even
+   a leaked secret can only ever raise that one row's score.
+   **`§1` of that file carries a KEEP IN SYNC warning:** the day-window constant mirrors
+   `DAILY_EPOCH` in `src/store.ts`. Changing one without the other is exactly how the leaderboard
+   silently rejected every real submission for two versions running.
+3. Optional social login: set Site URL and the redirect allowlist under Authentication → URL
+   Configuration, then enable the Google and/or X provider with OAuth credentials from their
+   consoles.
+4. Set a spending cap and usage alerts. The publishable key is public by design and nothing else
+   rate-limits it. (On the Supabase **free** plan this setting does not exist — free projects
+   hard-stop at quota. It becomes real the moment you upgrade.)
 
-Nothing simulates the game server-side, so a determined player can still submit a cheated score for **themselves**. Closing that needs an authoritative server, not row-level security.
+---
 
-## Balance philosophy
+## Balance
 
-Every mechanic ships with headless bot validation: careless play should die by week ~45, disciplined SaaS play reaches a unicorn around week 130–180, Social is a winnable lottery, and no cost is ever hidden — the game may surprise you with situations, never with invoices.
+Every mechanic ships with headless bot validation. `npm run bots` runs three Career strategies over
+24 seeds × 90 weeks in B2B SaaS and Fintech. Measured on this tree, B2B SaaS:
 
-Career's discovery layer was validated the same way — three bot strategies over 8 seeds and 90 weeks, checking that the three produce genuinely different companies rather than converging on one plateau:
+| Strategy | Alive at wk 90 | Customers (median) | 4wk retention | Revenue/wk | Valuation |
+|---|---|---|---|---|---|
+| **Careless Growth** — spend, never research | 19 / 24 | 363 | 53% | $2,665 | $3.1M |
+| **Disciplined Discovery** — experiment first, scale late | 16 / 24 | 357 | 67% | $8,699 | $12.1M |
+| **Enterprise Bet** — pivot high, price premium, build to the bar | 18 / 24 | 196 | 66% | $5,020 | $6.5M |
 
-| Strategy | Survived | Customers | Retention | Best PMF reached |
-|---|---|---|---|---|
-| **Careless Growth** — spend, never research | 6 / 8 | ~474 | 28% | never past *Showing value* |
-| **Disciplined Discovery** — experiment first, scale late | 7 / 8 | ~238 | 72% | mostly *Emerging PMF* |
-| **Enterprise Bet** — pivot high, price premium, build to the bar | 7 / 8 | ~527 | 87% | *Strong* or *Scalable* in 7 / 8 |
+Careless growth survives well *because it barely spends*, keeps the fewest of its customers, and
+never crosses into fit — 22 of its 24 runs top out at *Showing value*. Disciplined discovery reaches
+$2k/wk revenue fastest (median week 18, vs 23 careless and 30 enterprise) and ends ~4× more valuable,
+while surviving the least often: it spends, and spending is what kills companies here.
 
-Careless growth buys customers fastest and keeps almost none of them — at 28% retention the base is rented, not owned, and it never crosses into fit. Disciplined discovery ends with the smallest company and the cleanest one. The enterprise bet finishes ahead on this sample, but it is the slowest and most expensive line to run, and it only pays when the seed actually put a strong high-end segment there. Finding out whether it did is what the experiments are for.
+Re-run the numbers rather than trusting this table if the economy has been touched — an earlier
+version of it in this file was inflated by a rounding bug in cohort decay that made small cohorts
+report 100% retention forever.
+
+---
+
+## Known limitations
+
+All of these are verified. None is a plan; they are the state of the thing.
+
+**Arena and multiplayer**
+
+1. **There is no server referee, and no peer authentication.** Supabase Realtime broadcast carries no
+   sender identity and presence keys are self-chosen. The rules that exist — *nobody may speak as me*
+   (broadcast is `self: false`), *a claimed id must be in the presence roster*, inbound token buckets
+   per sender and globally — are **self-defence, not mutual auth**. A hostile client can still take a
+   seat under another id and cause the room's clients to disagree. Closing it needs self-certifying
+   (signed) player ids, mandatory login with Realtime Authorization, or an authoritative server.
+2. **Peers are trusted for their own numbers.** `users`, `val`, `payout` and the open-book intel
+   columns are self-reported. The receive path is hardened against crashes, NaN and hangs — not
+   against a peer lying about how well it is doing.
+3. **Two security patches from `docs/security-review.md` are still unapplied.** Both are one-liners in
+   `src/store.ts` and both are live today:
+   - `src/store.ts:594` — the incoming-attack rate limit keys on `` `${p.fromId ?? p.fromCompany}` ``.
+     Company names are attacker-chosen, so the fallback is an unlimited-free-hits path.
+   - `src/store.ts:399` — `if (host && p.hostId && p.hostId !== host.id) return null` fails **open**:
+     omit `hostId` and the check is skipped entirely, so any peer in a lobby can start the match with
+     settings of their choosing. (The transport rate-limits `start`, so this is griefing, not
+     mid-match hijacking.)
+4. **There is no two-client Arena test harness.** Everything realtime — presence merge, commit/reveal
+   across clients, attack delivery, catch-up, reconnect, forfeit — is verified only by unit tests over
+   the validators and by playing. The realtime paths are **not** verified end to end.
+5. **Room codes are enumerable.** 5 characters from a 32-symbol alphabet ≈ 33.5M codes. Prediction is
+   closed (CSPRNG), scanning is not.
+6. **The hit piece's designed anonymity does not exist.** `PR_DECOY_WEEKS` and `prSourceHidden()` are
+   written in `src/game/pvp.ts` and referenced by nothing; `applyAttackIncoming` names the attacker
+   immediately, like every other attack.
+
+**Leaderboard**
+
+7. **Scores cannot be verified.** Nothing simulates the game server-side, so a modified client can
+   submit a plausible but fabricated score **for itself**. Row-level security cannot fix this at any
+   level of cleverness, and replay validation is blocked by the non-deterministic `uid()` above.
+8. **`display_name` is self-asserted** for signed-out players — on their own row only.
+9. **There is no rate limiting.** The client's inbound token buckets protect the honest player being
+   flooded; they do nothing about anyone hitting PostgREST directly with the public key. That needs
+   the edge.
+10. **The production table holds ~14 synthetic rows** written during the security review
+    (`SECTEST-*`, "Honest Inc" / "Victim Inc", at days 10000/10001/39901/39902). Removal is a manual
+    dashboard action — see `BACKLOG.md` 1.4.
+
+**Balance — measured, and deliberately left alone**
+
+11. **`low` pricing is dominated in all five sectors.** Last on founder net by 2–3×, and it does not
+    buy survival to compensate. `revenueMultiplier` is 0.55 / 1.00 / 1.75 while the offsetting price-fit
+    terms are far weaker. Fixing it re-tunes the whole Career economy, so it is an owner decision, not
+    a bug.
+12. **Coasting survives more often than playing.** A bot that sets marketing to $0, hires nobody, runs
+    no experiments and never raises survived **24/24 seeds in every sector**. Activity carries 4–12×
+    the expected founder net, so the risk is paid for — but "the safest line is not to play" is a
+    design call that has not been made.
+13. **The Social / E-commerce survival gap is not established as sector character.** E-commerce is the
+    bots overspending (cutting the budget 3× more than doubles survival). Social is *not* — it is
+    payroll, via a bot hiring rule denominated in revenue on a sector with an ARPU of 1.8 vs SaaS's 22.
+    Whether Social is survivable for a good human player on a correct rule is **unanswered**: every
+    strategy in both harnesses shares the same wrong heuristic.
+14. **The marketing slider's maximum is fatal in one drag** — $30k/wk at pre-seed against $200k is 6.7
+    weeks of runway. 0–1 of 24 seeds survive. The burn is displayed and the player is choosing it, so
+    the cap is a stage gate rather than an affordability gate.
+
+**Career model**
+
+15. **`expansionPotential` and `salesCycleWeeks` are inert.** Both are generated with per-sector
+    variance, both have beliefs, and `expansionPotential` is one of four metrics a $28k / 7-week paid
+    pilot measures — but **no formula reads either**. Players pay real money to learn numbers that do
+    nothing.
+16. **A pivot in Career is pure loss.** It rerolls `s.resonance` (which Career never reads), zeroes
+    `researchSignal`, and destroys quality, features, users, hype, morale and $15k — while never
+    touching `segmentTruth`, the sector or the target segment. There is nothing to reroll. Use
+    *reposition* instead. The Product screen still teaches Quick Play's model here.
+17. **`repositionTo` does not change `career.focus`.** Switch target segment and you keep optimising
+    for the old segment's first value: a silent swing from +18 to −8 product fit, permanently.
+18. **PMF is flat for the first five weeks by construction** — the first four-week cohort snapshot
+    lands in week 6, in 10 of 10 measured runs across all five sectors. Everything you do in weeks 1–5
+    appears at once in week 6.
+19. **The 15-customer floor is a cliff, not a ramp** — 14 retained customers scored 40, 15 scored 82.
+20. **The scale term is effectively unreachable** (7,091 retained customers for full marks in SaaS
+    Small Teams; 1.3M in Social Creators), so the practical PMF ceiling is ~88, not 100.
+21. **The shipped default allocation is `research: 20`**, which in Career points a fifth of
+    engineering at a stat that cannot move PMF.
+
+**Engine and codebase**
+
+22. **`advanceWeekInner` is 456 lines and its correctness *is* the statement order.** The golden traces
+    are the guard; there is nothing else. Do not extract `tickHype`/`tickMorale` into another file for
+    tidiness — the failure mode is silent.
+23. **Founder energy cannot be eroded by cash stress**, despite the comment above the formula saying
+    "faster erosion under stress". `+3 - (stressed ? 3 : 0)` exactly cancels the weekly recharge;
+    measured flat at 80.00 over 12 weeks with runway pinned under 8. Only founder *actions* reduce it.
+24. **The board's ultimatum fires on the second strike, while the in-game copy says three.**
+    `engine.ts:2446` is `strikes >= 2`; `engine.ts:2476` renders "strike N of 3". One of them is wrong.
+25. **Five copies of mulberry32, three of FNV-1a, ten of `clamp` in two incompatible signatures**
+    (`clamp(v, lo, hi)` vs `clamp(v, lo = 0, hi = 100)`). The PRNG copies are bit-identical today by
+    luck, not by test.
+26. **UI screens re-derive simulation numbers and have drifted.** Six different runway-danger
+    thresholds, three answers to "is the cash position dangerous?", two growth rates that disagree in
+    weeks 1–4, and a market-share figure that excludes a second product line's users. Catalogued in
+    `docs/architecture-review.md` §N; none reaches a test, because nothing covers presentation.
+27. **The `e.modes` / `e.formats` fields on event cards and achievements are a second gating axis
+    alongside capabilities, and zero cards use them.** Prefer a capability.
+
+Full detail: [`docs/architecture-review.md`](docs/architecture-review.md),
+[`docs/security-review.md`](docs/security-review.md),
+[`docs/gameplay-review.md`](docs/gameplay-review.md), and
+[`BACKLOG.md`](BACKLOG.md) for everything known-but-unfixed with what "done" looks like.
 
 ---
 
 Built with [Claude Code](https://claude.com/claude-code).
-</content>

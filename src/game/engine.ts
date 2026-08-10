@@ -16,7 +16,7 @@ import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilit
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
-import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
+import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, prSourceHidden, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
   Choice,
@@ -2193,7 +2193,14 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
     kind: 'news',
     title: `${def.emoji} ${fromCompany} hit you: ${def.name.toLowerCase()}`,
     body:
-      kind === 'poach'
+      kind === 'hitpiece'
+        ? // The decoy: while the source is still hidden the target sees the STORY, not the hand
+          // behind it. Naming the attacker immediately made a three-week campaign read like every
+          // other instant hit, and made prSourceHidden dead code.
+          prSourceHidden(s)
+          ? `A story about you is running, and it is not going away. Nobody will say who briefed it.`
+          : `${fromCompany} briefed the story about you. It has been running for weeks.`
+        : kind === 'poach'
         ? `${fromCompany}'s recruiters are calling your team, one by one. Nothing personal — this is the game you're all playing.`
         : kind === 'smear'
           ? `Unflattering stories about your company are circulating, and the fingerprints belong to ${fromCompany}. The market notices.`

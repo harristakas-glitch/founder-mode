@@ -395,8 +395,11 @@ export const useStore = create<Store>()(
         p: StartPayload,
         players: NetPlayer[],
       ): { seed: number; sector: SectorId; cap: number; caps: Partial<GameCapabilities> } | null => {
+        // Fail CLOSED. This read `host && p.hostId && p.hostId !== host.id`, so omitting hostId
+        // skipped the check entirely and any peer in the lobby could start the match on everyone's
+        // behalf. An unsigned start is now refused outright.
         const host = players.find((x) => x.host)
-        if (host && p.hostId && p.hostId !== host.id) return null
+        if (!host || !p.hostId || p.hostId !== host.id) return null
         if (!SECTORS.some((s) => s.id === p.sector)) return null
         if (!Number.isFinite(p.seed)) return null
         if (!Number.isInteger(p.cap) || p.cap < 1 || p.cap > 520) return null
@@ -590,8 +593,12 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g || g.gameOver) return
           if (!hasCapability(g, 'pvpActions')) return // attacks don't exist in a match where PvP is off
-          // one hit per attacker per week, however many packets they send
-          const key = `${p.fromId ?? p.fromCompany}@${g.week}`
+          // One hit per attacker per week, however many packets they send. Keyed on fromId ONLY:
+          // falling back to fromCompany let an attacker vary the name they sent and land unlimited
+          // free hits, since the company string is theirs to choose. A payload with no id is not
+          // rate-limitable at all, so it is dropped rather than trusted.
+          if (!p.fromId) return
+          const key = `${p.fromId}@${g.week}`
           if (attacksTakenThisWeek.has(key)) return
           attacksTakenThisWeek.add(key)
           const game = structuredClone(g)
