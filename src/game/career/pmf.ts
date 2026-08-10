@@ -397,6 +397,17 @@ export interface WeeklySegmentResult {
   revenue: number
 }
 
+/**
+ * How many new customers each existing customer refers per week, at perfect reachability.
+ *
+ * Deliberately below every segment's weekly churn rate: referrals amplify growth, they never
+ * sustain it on their own, so there is no configuration in which a company grows by standing
+ * still. The worked case is SaaS Freelancers, the most referral-friendly segment in the game —
+ * reachability 84, so ~2.0%/wk of the base refers, against ~6%/wk churning out. `room` caps it
+ * again at the segment ceiling.
+ */
+export const REFERRAL_RATE = 0.05
+
 /** New customers from the targeted segment this week. */
 export function resolveSegmentAcquisition(args: {
   truth: SegmentTruth
@@ -418,10 +429,26 @@ export function resolveSegmentAcquisition(args: {
   // thousands of customers, not hundreds, or revenue can never cover payroll.
   const spendEffect = Math.sqrt(Math.max(0, marketingSpend) / 6) * reach * acqScale
   const organic = (hype / 2.2) * reach * (0.4 + truth.needIntensity / 140) * acqScale
+  // Referrals: the customers you already have bring more, and how many depends on how reachable
+  // their peers are — not on your budget. This is the ONE advantage a high-reach, low-paying
+  // segment collects every week.
+  //
+  // It exists because the compensating advantage those segments were designed with — market-size
+  // headroom — is never actually collected inside a campaign. Measured over 24 seeds × 5 sectors,
+  // a low-end run reaches ~2% of its ceiling by week 90 (SaaS Freelancers: ~2,000 customers
+  // against a median ceiling of 88,636), so `room` sits at 0.97–0.99 all game at BOTH ends of the
+  // market. The low end was paying its retention, price and expansion penalties every single week
+  // for a benefit worth about one percentage point of acquisition. That is why `low` pricing —
+  // which is only ever correct on those segments — came last on founder net in all five sectors.
+  //
+  // Note this is NOT multiplied by priceFit here: `conversion` below already carries it, and that
+  // is the whole trade-off. Underprice a reachable segment and the referral engine converts;
+  // charge premium at the same people and it stalls.
+  const referral = currentCustomers * (truth.acquisitionAccessibility / 100) * REFERRAL_RATE * (0.4 + truth.needIntensity / 140)
   // a promise you can't price is a promise nobody buys
   const conversion = clamp01(0.18 + (priceFit / 100) * 0.7) * clamp01(0.35 + (productFit / 100) * 0.75)
   const competition = clamp01(1 - truth.competitiveIntensity / 190)
-  const raw = (spendEffect + organic) * conversion * competition * room * marketingPenalty
+  const raw = (spendEffect + organic + referral) * conversion * competition * room * marketingPenalty
   return Math.max(0, Math.round(raw * (0.85 + rng() * 0.3)))
 }
 

@@ -12,6 +12,17 @@
 //    the levers that actually move Career outcomes. What differs is *how each one decides*:
 //    Careless guesses, Enterprise bets a fixed hand, Disciplined reads its own beliefs. Giving
 //    only one bot the levers measures the levers, not the strategy.
+//  * **`gameOver` is not failure.** It also covers `acquired`, `unicorn` and `ipo`. This harness
+//    used to report `alive = !gameOver`, which counted a premium acquisition as a death — and
+//    since `common()` answers every choice with option 0, and option 0 on an acquisition offer is
+//    *Sell the company*, every bot successful enough to be bought was scored as having died. That
+//    single line produced the headline "coasting survives 24/24 while active play survives 5–21/24"
+//    in `docs/gameplay-review.md`: `Coast` is only ever offered an exit above a $8M valuation,
+//    which it never reaches, so it scored a perfect record by being worthless. Report `failed`
+//    (bankrupt + fired) and `exits` separately, and never re-collapse them into one number.
+//  * **Score off `gameOver.payout`.** For an acquisition that number carries the 1.1–2.0x premium
+//    over `valuation()`; re-deriving `valuation(s) * founderEquity` throws the premium away and
+//    understates exactly the runs that did best.
 
 import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState, valuation } from '../src/game/engine'
 import {
@@ -200,8 +211,16 @@ function bestPmfLabel(r: GameState): string {
   return PMF_LABEL[best.status]
 }
 
+/** Bankruptcy and being fired are the only failures. An acquisition or an IPO is a win. */
+export const failed = (s: GameState) => s.gameOver?.type === 'bankrupt' || s.gameOver?.type === 'fired'
+
+/** What the founder walks away with — the ending's own number when there is one. */
+export const founderNet = (s: GameState) => s.gameOver?.payout ?? valuation(s) * s.founderEquity + s.bankedPayout
+
 function report(name: string, runs: GameState[]) {
-  const alive = runs.filter((r) => !r.gameOver).length
+  const bad = runs.filter(failed).length
+  const exits = runs.filter((r) => r.gameOver && !failed(r)).length
+  const net = runs.map(founderNet)
   const cust = runs.map((r) => r.users)
   const retention = runs.map((r) => (r.career ? (r.career.retentionBySegment[r.career.primaryTargetSegmentId] ?? 0) : 0))
   const rev = runs.map((r) => r.lastRevenue)
@@ -215,10 +234,13 @@ function report(name: string, runs: GameState[]) {
   }
   const spread = (xs: number[], fmt: (n: number) => string) => `${fmt(q(xs, 0.5))} [${fmt(Math.min(...xs))}…${fmt(Math.max(...xs))}]`
   console.log(
-    `  ${name.padEnd(22)} alive ${String(alive).padStart(2)}/${runs.length} · customers ${spread(cust, (n) => Math.round(n).toLocaleString()).padEnd(24)} · 4wk retention ${spread(retention, (n) => `${Math.round(n * 100)}%`).padEnd(20)}`,
+    `  ${name.padEnd(22)} failed ${String(bad).padStart(2)}/${runs.length} · exits ${String(exits).padStart(2)} · customers ${spread(cust, (n) => Math.round(n).toLocaleString()).padEnd(24)} · 4wk retention ${spread(retention, (n) => `${Math.round(n * 100)}%`).padEnd(20)}`,
   )
   console.log(
     `  ${' '.repeat(22)} rev/wk ${spread(rev, money).padEnd(28)} · valuation ${spread(val, (n) => `$${(n / 1e6).toFixed(1)}M`).padEnd(26)} · reached $2k/wk ${reached}/${runs.length}${reached ? ` (median wk ${q(firstRev.filter((w) => w < 999), 0.5)})` : ''}`,
+  )
+  console.log(
+    `  ${' '.repeat(22)} founder net ${spread(net, (n) => `$${(n / 1e6).toFixed(1)}M`)}`,
   )
   console.log(`  ${' '.repeat(22)} best-segment PMF: ${Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}×${v}`).join(', ')}`)
 }
