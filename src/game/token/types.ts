@@ -463,6 +463,145 @@ export const TOKEN_BOUNDS = {
   founderInfluenceReversion: 0.1,
 } as const
 
+// ---------- the economy's shape (Slice 2) ----------
+
+/**
+ * The weekly economy's coefficients. TOKEN_BOUNDS above holds the DAMPING TERMS the contract names
+ * and Slice 2 must not delete; this block holds the shape of the demand, supply and level updates
+ * that those terms damp. They are separated so a later slice can retune the economy's character
+ * without ever touching a restoring force by accident.
+ *
+ * Three of these are load-bearing and are asserted in test/token-economy.test.ts:
+ *
+ *   • `ecosystemDemandPerFloatPct` (1.0) is STRICTLY BELOW `TOKEN_BOUNDS.supplyPressurePerFloatPct`
+ *     (1.1). Releasing 1% of the float must cost more price than the demand that 1% of float buys,
+ *     or the treasury loop's per-cycle gain reaches 1 and the economy bootstraps itself.
+ *
+ *   • `demandCap` (0.30) bounds the whole demand side, and gravity is superlinear, so
+ *     `gravityPull × |d|^gravityExponent` overtakes it at a FINITE dislocation:
+ *         |d| = (demandCap + maxNoise) / gravityPull) ^ (1/gravityExponent) ≈ 2.3  ⇒  ~10× fair value.
+ *     That is the ceiling on any bubble, by algebra rather than by hope.
+ *
+ *   • `fairValueFloorMultiple` (3) keeps the fundamental anchor STRICTLY ABOVE the price floor. At
+ *     the floor, `ln(price/fairValue) ≤ ln(1/3) < 0`, so gravity always points UP out of it. The
+ *     floor is therefore a REPELLING boundary. Without this, a network whose fundamentals decayed
+ *     to nothing would sit at the floor forever — the absorbing state this slice exists to avoid.
+ */
+export const TOKEN_ECONOMY = {
+  // --- fair value: fundamentals only, so the anchor cannot be bought (decision 4, loop B.3) ---
+  /** Share of the company's revenue a token network captures, at zero and at full utility. */
+  fairRevenueCaptureBase: 0.3,
+  fairRevenueCaptureUtility: 0.7,
+  /** Multiple applied to captured annual revenue, at zero and at full utility. */
+  fairRevenueMultipleBase: 5,
+  fairRevenueMultipleUtility: 10,
+  /** Share of the sector's per-user value the NETWORK carries, at zero and at full utility. */
+  fairUserShareBase: 0.25,
+  fairUserShareUtility: 0.75,
+  /** Engagement scales the user term: an inert community is worth less than a live one. */
+  fairUserEngagementBase: 0.6,
+  fairUserEngagementSpan: 0.8,
+  /**
+   * Global calibration so a launch does not immediately gap against its own anchor.
+   *
+   * Set from measurement, not taste. At 1.0 the stress sweep put the median token at 0.62× its
+   * launch price after 104 quiet weeks and only 9.8% of runs above 1.2× — a token economy whose
+   * median outcome is "you lost 40%" is not a fork anybody would take twice, and it collapses the
+   * outcome distribution onto one side. 1.6 centres the quiet-policy median on the launch price and
+   * leaves both tails populated. Retune it against the probe, never by eye.
+   */
+  fairValueScale: 1.6,
+  /** fairValue ≥ this × the price floor. Makes the floor repelling rather than absorbing. */
+  fairValueFloorMultiple: 3,
+
+  // --- demand (brief §27) ---
+  /**
+   * Speculative demand is a MOMENTUM term: f(price/emaPrice − 1), never the price level.
+   *
+   * THE STABILITY CONDITION, which cost a rewrite to find. Linearise (ln price, ln emaPrice) about
+   * an equilibrium, with `k` the momentum slope `coef / momentumScale × (base + span × spec)` and
+   * `γ` gravity's local slope `gravityPull × gravityExponent × |d|^0.5`:
+   *
+   *     M = [[1 + k − γ, −k], [priceEmaAlpha, 1 − priceEmaAlpha]]   ⇒   stable iff k < α + γ(1−α)
+   *
+   * and γ → 0 AT the anchor, because gravity is superlinear. So near fair value the whole thing
+   * turns on `k` against `priceEmaAlpha` alone. The first draft used coef 0.22, giving k ≈ 1.4 at
+   * high speculation against α = 0.18: every equilibrium was locally unstable and every run pinned
+   * itself against the saturation ceiling. Bounded, but only ever one shape.
+   *
+   * Tuned so `coef / momentumScale = 0.2`, i.e. k runs 0.08 → 0.32 across the speculation range:
+   *
+   *   • low speculation  (k < 0.18) — the market is LOCALLY STABLE and tracks fundamentals;
+   *   • high speculation (k > 0.18) — locally unstable, so it oscillates out until gravity's
+   *     superlinear term catches it, at |d| = ((k − α)/(gravityPull × gravityExponent))² ≈ 0.44,
+   *     which is ±55% around fair value.
+   *
+   * SPECULATION IS THEREFORE LITERALLY THE PARAMETER THAT DECIDES WHETHER THE MARKET IS STABLE OR
+   * CYCLICAL, which is what brief §26 and §28 describe in prose. Changing either number without
+   * re-deriving that inequality will produce either a dead market or a permanent bubble.
+   */
+  speculativeDemandCoef: 0.05,
+  /** Momentum is squashed through tanh(momentum / this), so demand saturates. */
+  momentumScale: 0.25,
+  /** How much the speculation level scales the momentum term, at 0 and at 100. */
+  speculationDemandBase: 0.4,
+  speculationDemandSpan: 1.2,
+  /** Utility demand is a DIFFERENCE from neutral utility: below it, utility is negative demand. */
+  utilityDemandCoef: 0.05,
+  utilityNeutral: 0.35,
+  /** Community demand, likewise a difference from a neutral blend of sentiment and engagement. */
+  communityDemandCoef: 0.04,
+  /** Demand bought by tokens released into the float. MUST stay < supplyPressurePerFloatPct. */
+  ecosystemDemandPerFloatPct: 1,
+  /** Total demand is bounded so superlinear gravity provably overtakes it. */
+  demandCap: 0.3,
+
+  // --- the week's noise (brief §28) ---
+  priceNoiseScale: 0.1,
+  priceNoiseVolBase: 0.3,
+  /** Bound on `price/emaPrice − 1`, so one absurd week cannot poison every level that reads it. */
+  momentumMin: -0.95,
+  momentumMax: 4,
+  /** Bound on ln(price/fairValue) before the exponent, purely so |d|^1.5 stays finite. */
+  logDeviationCap: 6,
+
+  // --- how the 0–100 levels move ---
+  /** Speculation's momentum shock, before the saturating boundary term. */
+  speculationMomentumGain: 22,
+  volatilityReversion: 0.25,
+  /**
+   * Utility is EARNED: it moves slowly, and NOTHING a player spends appears in its target.
+   *
+   * Brief §25 says utility emerges from real network activity and cannot be bought. The first draft
+   * of the tick put `engagement` in this target, which looked harmless — until the test that spends
+   * the treasury's cap for thirty weeks measured utility drifting up against a zero-spend control.
+   * Spend raises engagement, engagement raised utility: §25 violated one hop removed, and with it
+   * the guarantee that `fairValue` is an anchor a founder cannot inflate. The term is gone, so the
+   * utility ↔ engagement edge is now strictly one-way (utility → engagement) and this target reads
+   * only product, protocol revenue and organic users.
+   */
+  utilityReversion: 0.06,
+  utilityProductWeight: 0.35,
+  utilityRevenueWeight: 33,
+  utilityUserWeight: 26,
+  engagementReversion: 0.1,
+  /** Ecosystem spend buys ENGAGEMENT, never utility — the loop's lagged, capped positive leg. */
+  engagementSpendGain: 400,
+  engagementSpendCap: 18,
+  membersReversion: 0.08,
+  membersPerUserBase: 0.6,
+  membersPerUserEngagement: 1.1,
+  holderShareBase: 0.35,
+  holderShareEngagement: 0.4,
+  depthReversion: 0.1,
+  sentimentMomentumGain: 25,
+
+  // --- what gets written to history ---
+  rallyThreshold: 0.25,
+  crashThreshold: -0.2,
+  historyCooldownWeeks: 4,
+} as const
+
 // ---------- scoring (decision 1) ----------
 
 /**

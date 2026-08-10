@@ -79,7 +79,9 @@ console.log('— Capabilities: exactly one switch flipped —')
 const CAREER = defaultCapabilities('career')
 const QUICK = defaultCapabilities('quick')
 const ARENA = defaultCapabilities('arena')
-const LATER_SLICES = ['tokenEconomy', 'tokenUserComposition', 'tokenIncentives', 'tokenCommunity', 'tokenGovernance', 'tokenNarrative'] as const
+// Slice 2 shipped `tokenEconomy`, so it moved off this list — the same ratchet `detailedPMF` went
+// through. The remaining five still have no code that honours them.
+const LATER_SLICES = ['tokenUserComposition', 'tokenIncentives', 'tokenCommunity', 'tokenGovernance', 'tokenNarrative'] as const
 
 ok(CAREER.tokenisation === true, 'Career has `tokenisation` on — Slice 1 built the fork it gates')
 ok(QUICK.tokenisation === false, 'Quick Play stays off: its simplified fork is Slice 7')
@@ -275,7 +277,12 @@ ok(isTokenised(forked) && !isTokenised(before), 'isTokenised agrees with capital
 ok(tokenActive(forked) === true, 'tokenActive is true once a slice exists and a token capability is on')
 ok(tokenActive(before) === false, 'tokenActive is false with no slice — the gate a weekly tick must sit behind')
 ok(
-  tokenActive({ ...forked, capabilities: { ...forked.capabilities, tokenisation: false } }) === false,
+  tokenActive({
+    ...forked,
+    capabilities: Object.fromEntries(
+      Object.entries(forked.capabilities).map(([k, v]) => [k, k.startsWith('token') ? false : v]),
+    ) as typeof forked.capabilities,
+  }) === false,
   'tokenActive is false when the capabilities are off even though a slice exists',
 )
 

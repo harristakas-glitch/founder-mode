@@ -24,7 +24,8 @@ import { tokenisationEligibility } from './token/eligibility'
 import { launchToken, type LaunchDraft, type LaunchResult } from './token/launch'
 import { TOKEN_ACQUISITION, acquisitionDiscounted, institutionalRoundsClosed, ipoClosed } from './token/restrictions'
 import { founderStanding, realisableTokenValue } from './token/scoring'
-import { isTokenised } from './token/state'
+import { isTokenised, tokenActive } from './token/state'
+import { tickToken } from './token/tick'
 import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, prSourceHidden, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
@@ -1579,6 +1580,17 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
 
   // --- milestones ---
   checkMilestones(s)
+
+  // --- the token economy (ICO Slice 2) ---
+  // Runs after the week's fundamentals exist — revenue, users, product — because `fairValue` is
+  // built from them, and BEFORE the endings, because `realisableTokenValue` prices the founder's
+  // position at this week's close.
+  // Guarded rather than called unconditionally, for the reason recorded above the living-world
+  // line below and in docs/ico-architecture.md §3.2: `seeded` bumps s.flags.rngTick, so an
+  // unconditional call would shift the RNG stream for every daily challenge, Arena match, replay
+  // and golden trace — even for a run that never tokenised. `tokenActive` is false when there is
+  // no token slice or when no token capability is on, so those runs draw exactly zero times.
+  if (tokenActive(s)) seeded(s, () => tickToken(s))
 
   // --- endings (skip if the IPO already decided this week) ---
   if (s.gameOver) return s

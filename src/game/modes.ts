@@ -147,10 +147,10 @@ export interface GameCapabilities {
   // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
   // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
   // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
-  // Slice 1 shipped, so `tokenisation` is true in CAREER ONLY. The other six stay false in every
-  // mode until the code that honours them exists.
+  // Slices 1 and 2 shipped, so `tokenisation` and `tokenEconomy` are true in CAREER ONLY. The other
+  // five stay false in every mode until the code that honours them exists.
   tokenisation: boolean // BUILT (Slice 1). The capital fork: eligibility, the decision, VC/IPO restrictions
-  tokenEconomy: boolean // price, supply, treasury, utility, speculation, volatility, community capital (Slice 2)
+  tokenEconomy: boolean // BUILT (Slice 2). Price, supply, treasury, utility, community, speculation, volatility
   tokenUserComposition: boolean // organic vs incentivised users, split retention, PMF protection (Slice 3)
   tokenIncentives: boolean // treasury allocation across categories, vesting, unlocks, employee token comp (Slice 4)
   tokenCommunity: boolean // sentiment, trust, decentralisation, founder influence (Slice 5)
@@ -334,6 +334,11 @@ const CAREER_BASE_RULES: GameRules = {
     // IPO closing with an explanation attached. Quick Play's simplified fork is Slice 7 and Arena
     // is off for the whole feature (§58), so this is true HERE and nowhere else.
     tokenisation: true,
+    // ICO Slice 2 — the token economy core. Price against a fundamental anchor, supply, the
+    // treasury's token-denominated spend cap, utility, community strength, speculation and
+    // volatility, all ticking weekly. On HERE only, for the same reason `tokenisation` is: Quick
+    // Play's simplified economy is Slice 7 and Arena is off for the whole feature (§58).
+    tokenEconomy: true,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.
