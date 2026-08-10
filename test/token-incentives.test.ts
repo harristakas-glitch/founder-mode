@@ -42,7 +42,7 @@ import { tickToken } from '../src/game/token/tick'
 import { migrateTokenSlice } from '../src/game/token/persistence'
 import { lockedAtLaunch, pendingUnlock, utilityModelMultiplier, VESTING_TERMS } from '../src/game/token/state'
 import { maxTreasurySale, treasurySaleQuote, treasurySalesActive } from '../src/game/token/treasury'
-import { incentivisedUsers, mercenaryGrowthWarning, organicUsers } from '../src/game/token/users'
+import { incentivisedUsers, organicUsers } from '../src/game/token/users'
 import { TOKEN_BOUNDS, TOKEN_INCENTIVES, TOKEN_STATE_VERSION } from '../src/game/token/types'
 import type { GameConfig } from '../src/game/modes'
 import type { GameState, SectorId } from '../src/game/types'
@@ -527,35 +527,116 @@ console.log('\n— Treasury sales: the round a tokenised company can still raise
 console.log('\n— The §53 warning still discriminates —')
 
 {
-  // Slice 3 measured 28/30 under sustained MAXIMUM spend. That policy SHOULD warn. The question this
-  // slice has to answer is whether a modest policy does too, because a warning that is always on is
-  // a warning nobody reads.
-  let heavy = 0
-  let light = 0
-  let none = 0
-  const seeds = [7, 42, 4242]
-  for (const seed of seeds) {
-    for (const [shares, bump] of [
-      [{ customer_rewards: 1 }, (n: number) => (heavy = heavy + n)],
-      [{ customer_rewards: 0.1 }, (n: number) => (light = light + n)],
-      [{}, (n: number) => (none = none + n)],
-    ] as const) {
-      let g = tokenised('saas', seed)
-      setIncentiveShares(g, shares)
-      let fired = 0
-      for (let i = 0; i < 40 && !g.gameOver; i++) {
-        g.marketingSpend = 12_000
-        if (g.cash < 3_000_000) g.cash = 30_000_000
-        g = advanceWeek(g)
-        if (!g.gameOver) setIncentiveShares(g, shares)
-        if (mercenaryGrowthWarning(g)) fired++
+  // WHAT THIS BLOCK MEASURES, AND WHY IT WAS RESAMPLED RATHER THAN RETUNED.
+  //
+  // The property is DISCRIMINATION, not firing: zero on any policy that rents nobody, and clearly
+  // more often on rented growth than on a token programme. The rates it discriminates between
+  // moved when `tickCareerPMF`'s reconciliation drain was corrected to remove customers in
+  // proportion to cohort size (docs/cohort-retention-noise.md, Option A), and the reason is worth
+  // stating because it looks like a regression and is not:
+  //
+  //   The old drain charged every company-wide loss to the NEWEST cohort — the one about to freeze
+  //   its permanent four-week snapshot — so measured organic retention carried a downward bias.
+  //   Across 240 tokenised runs of 60 weeks the median read 59.3% before the fix and 62.4% after.
+  //   §53's third condition is `organic < 62%`. A bar the population sat BELOW is a bar that is
+  //   almost always satisfied, so the shipped predicate was effectively a two-condition test.
+  //
+  // Measured on the probe sweep (test/token-incentives-probe.ts §3, 5 sectors × 6 seeds × 60 weeks,
+  // share of runs warning at least once):
+  //
+  //   policy            before fix   after fix   after fix, condition 3 deleted
+  //   nothing               0/30        0/30                0/30
+  //   no rewards at all     0/30        0/30                0/30
+  //   rewards 10%            27%         10%                 30%
+  //   balanced sixths        33%         13%                 37%
+  //   rewards 25%            67%         23%                 67%
+  //   growth mix             67%         30%                 73%
+  //   rewards 50%            77%         37%                 77%
+  //   rewards 100%           80%         40%                 80%
+  //
+  // The third column is the second: with honest retention, DELETING the weak-retention condition
+  // reproduces the pre-fix numbers. That is the proof that the condition was carrying no weight
+  // before — the bug was doing its job for it. It carries weight now, and the weight it carries is
+  // exactly its purpose: withholding the warning from a company whose base is not actually leaking.
+  //
+  // So the bar was left where it is. 62% is not arbitrary — `pmfBlocker` uses the same line for the
+  // same reason ("below roughly 62% a cohort drains faster than marketing can refill it"), and
+  // measured against `npm run bots`, corrected four-week retention is 75-76% for the disciplined
+  // strategies and 55-60% for the careless one, so the line separates play rather than sectors.
+  // Moving it to 72% absolute, or to 80% of the segment's own achievable ceiling, was measured: both
+  // reproduce the third column EXACTLY, because both are above the whole distribution. That is not a
+  // recalibration, it is deleting the condition and leaving the corpse in the predicate.
+  //
+  // WHAT WAS ACTUALLY WRONG WAS THIS TEST. It sampled ONE sector and THREE seeds for an event with a
+  // ~35% per-run rate, and saas is the sector that fires least (0/4 even at maximum spend). It
+  // passed on a draw. It now runs 20 runs an arm across five sectors, and — the Slice-1/3 lesson —
+  // it counts what the WEEK SAID, not what the predicate returns, so a tick that stops calling
+  // `mercenaryGrowthWarning` fails it.
+  const SECTORS: SectorId[] = ['saas', 'devtools', 'social', 'fintech', 'ecommerce']
+  const SEEDS = [7, 42, 101, 4242]
+
+  /** Did the WEEK say it? Reading `lastExplanations[0]` proves the tick called the predicate AND
+   *  put it first, which is the §53 requirement. Calling the predicate here would prove neither. */
+  const saidIt = (g: GameState) => !!g.career?.lastExplanations[0]?.primaryCause.includes('incentive-driven')
+
+  const arm = (shares: Partial<IncentiveShares>) => {
+    let runs = 0
+    let firedRuns = 0
+    let weeks = 0
+    let inboxed = 0
+    for (const sector of SECTORS) {
+      for (const seed of SEEDS) {
+        let g = tokenised(sector, seed)
+        setIncentiveShares(g, shares)
+        let said = 0
+        for (let i = 0; i < 40 && !g.gameOver; i++) {
+          g.marketingSpend = 12_000
+          if (g.cash < 3_000_000) g.cash = 30_000_000
+          g = advanceWeek(g)
+          if (!g.gameOver) setIncentiveShares(g, shares)
+          if (saidIt(g)) said++
+        }
+        runs++
+        if (said > 0) firedRuns++
+        weeks += said
+        if (g.inbox.some((m) => m.title === 'Token-driven growth')) inboxed++
       }
-      bump(fired > 0 ? 1 : 0)
     }
+    return { runs, firedRuns, weeks, inboxed }
   }
-  ok(none === 0, `it never fires on a company that rents nobody (0/${seeds.length})`)
-  ok(heavy > light, `it fires more often on maximum spend than on a 10% programme (${heavy}/${seeds.length} vs ${light}/${seeds.length})`)
-  ok(heavy > 0, 'and it still fires on the policy it exists to catch')
+
+  const heavy = arm({ customer_rewards: 1 })
+  const light = arm({ customer_rewards: 0.1 })
+  const none = arm({})
+  const other = arm({ developer_grants: 0.5, partnerships: 0.5 })
+
+  // Structural, not statistical: with no customer-rewards programme no cohort is ever marked
+  // incentivised, so the rented share of the target segment is 0 and condition 2 cannot hold.
+  ok(
+    none.firedRuns === 0 && none.weeks === 0,
+    `it never fires on a company that rents nobody (0/${none.runs} runs, 0 weeks)`,
+  )
+  ok(
+    other.firedRuns === 0 && other.weeks === 0,
+    `nor on one that spends the whole treasury on grants and partnerships (0/${other.runs} runs) — it is about rented USERS, not about spending`,
+  )
+  // measured: 7/20 against 2/20, and 164 warned weeks against 40. The bar is the ordering plus real
+  // headroom on both, so this fails on a regression rather than on a reshuffled seed.
+  //
+  // `Math.max` rather than a bare ratio, and it is not decoration: `0 >= 0 * 2` is true, so a
+  // predicate that returned null unconditionally passed the ratio form. The first mutation run
+  // found exactly that, and it is the same class of hole as a test that computes the value itself.
+  ok(
+    heavy.firedRuns >= Math.max(2, light.firedRuns * 2) && heavy.weeks >= Math.max(1, light.weeks * 2),
+    `it fires more often on maximum spend than on a 10% programme (${heavy.firedRuns}/${heavy.runs} runs and ${heavy.weeks} weeks ` +
+      `vs ${light.firedRuns}/${light.runs} and ${light.weeks})`,
+  )
+  // measured 7/20 runs and 164 weeks; a third of the runs is the floor, because a warning that
+  // catches its own pathological policy one run in ten is not a warning.
+  ok(
+    heavy.firedRuns >= 5 && heavy.inboxed >= 5,
+    `and it still fires on the policy it exists to catch (${heavy.firedRuns}/${heavy.runs} runs; ${heavy.inboxed} reached the inbox)`,
+  )
 }
 
 // =================================================================================================

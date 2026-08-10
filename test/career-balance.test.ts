@@ -154,11 +154,25 @@ const netFor = (sector: SectorId, pricing: PricingStrategy, target: 'cheapest' |
 
 for (const sector of ALL) {
   const lo = { low: netFor(sector, 'low', 'cheapest'), market: netFor(sector, 'market', 'cheapest'), premium: netFor(sector, 'premium', 'cheapest') }
-  // measured margins over `market` on the cheapest segment: 2.4x saas · 1.6x devtools · 2.1x
-  // ecommerce · 1.6x fintech · 2.9x social. The bar sits at 1.35x: comfortably under the measured
-  // minimum, and above the 1.0-1.2x those same sectors show with the referral term disabled.
+  // THE MARGIN OVER `market` CARRIES NO MULTIPLIER, AND THAT IS A MEASUREMENT RATHER THAN A CLIMBDOWN.
+  //
+  // This asserted `low > market * 1.35` against margins recorded as 2.4x saas · 1.6x devtools · 2.1x
+  // ecommerce · 1.6x fintech · 2.9x social. Those are medians of the twelve seeds above, and they do
+  // not survive resampling: at 48 seeds, on the SAME tree that produced them, the same five sectors
+  // measure 1.55x · 1.60x · 2.36x · 1.03x · 2.54x. Fintech at 1.03x is already under the bar. The
+  // 1.35x was a property of one twelve-seed draw, not of the game, and any change that reshuffles
+  // which seed does what — the cohort-drain correction did — moves a sector across it. Measured
+  // after that correction: 1.66x · 1.40x · 1.64x · 1.23x · 2.12x at 48 seeds, and 1.55x · 1.06x ·
+  // 2.46x · 2.33x · 2.79x at the twelve used here. `low` beats `market` in all twenty of those
+  // cells; by how much is noise at this sample size.
+  //
+  // So the ORDERING is asserted against `market` — that is the property, and it is what "no pricing
+  // option is dominated" means — and the real headroom is asserted where it is real. Against
+  // `premium` the smallest margin measured anywhere is 1.40x (fintech, 48 seeds, before the
+  // correction) and 2.49x at the twelve seeds this file runs, so 1.35x still fails on a regression
+  // rather than on a draw.
   ok(
-    lo.low > lo.market * 1.35 && lo.low > lo.premium * 1.35,
+    lo.low > lo.market && lo.low > lo.premium * 1.35,
     `${sector}: on the price-sensitive segment, LOW pricing wins (${M(lo.low)} vs market ${M(lo.market)}, premium ${M(lo.premium)})`,
   )
 }

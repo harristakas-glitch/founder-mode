@@ -1647,6 +1647,50 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // no token slice or when no token capability is on, so those runs draw exactly zero times.
   if (tokenActive(s)) seeded(s, () => tickToken(s))
 
+  // A tokenised company can never raise, and `s.stage` is written in exactly one place —
+  // acceptTermSheet, which returns early once tokenised. So the fork silently froze the company at
+  // whatever stage it launched from, forever. That matters because marketingMax() is purely
+  // stage-based: a tokenised founder was capped at $30k/wk against a traditional median of $50k,
+  // no matter how large the treasury. Measured on identical seeds over 60 weeks, 3x the cap is
+  // +44% enterprise value and 10x is +116% — a 1.7x-5x handicap that has nothing to do with
+  // tokenomics and would have decided any comparison between the two paths.
+  //
+  // The community path earns its stage the way it earns everything else: by being worth it. The
+  // thresholds are already valuation-denominated, so this reuses them rather than inventing a
+  // second ladder.
+  //
+  // ONLY THE COMMUNITY PATH, AND THE GATE IS LOAD-BEARING RATHER THAN CAUTIOUS.
+  //
+  // `STAGE_THRESHOLDS[s.stage]` is not "the valuation of a ${up} company". It is the bar
+  // `pitchInvestorsInner` checks before it will offer term sheets for the NEXT round — the same
+  // constant, compared against the same `valuation(s)`. So for any company that can still raise,
+  // advancing the stage here consumes the round instead of enabling it: the week the company
+  // becomes worth $1.5M it is promoted to Seed for free, and from then on `pitchInvestors` compares
+  // against Seed's $12M bar. The Seed round becomes unreachable in the entire $1.5M-$12M band where
+  // it is exactly what the company should be raising.
+  //
+  // Measured, ungated, against this same tree: 6 of 12 Career companies sat at stage Seed on
+  // $0.6M-$3.4M of valuation with no round closed and no cash; `npm run bots` went from 2/24, 0/24,
+  // 1/24, 6/24, 2/24, 3/24 bankruptcies to 11/24, 9/24, 19/24, 10/24, 12/24, 16/24, and median SaaS
+  // revenue from $16.1k/wk to $4.9k/wk. Four assertions in test/career-balance.test.ts went red.
+  // The promotion is not free: `makeCandidate` prices every candidate off `STAGES.indexOf(s.stage)`,
+  // so the company buys the stage's salaries with none of the stage's money.
+  //
+  // A tokenised company is the one case where the constant means what this block needs it to mean,
+  // because `institutionalRoundsClosed` has already taken the round away — there is no raise left
+  // to consume. The bootstrapped traditional founder on $25M and a $30k/wk budget is a real
+  // complaint and the measurements above are real, but the answer is to stop `marketingMax` reading
+  // a fundraising ladder, not to hand out rungs of that ladder for free.
+  if (!s.gameOver && isTokenised(s)) {
+    const up = nextStage(s)
+    if (up && valuation(s) >= STAGE_THRESHOLDS[s.stage]) {
+      s.stage = up
+      s.flash = `📈 ${up}. The network is worth what a ${up} company is worth — you did not raise it, you built it.`
+      // No investors, no board. A raise still installs one; growing into the stage does not.
+      if (can(s, 'boardReviews')) s.board = null
+    }
+  }
+
   // --- endings (skip if the IPO already decided this week) ---
   if (s.gameOver) return s
   if (s.cash < 0) {

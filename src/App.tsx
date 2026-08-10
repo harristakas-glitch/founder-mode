@@ -3,6 +3,7 @@ import {
   Check,
   ChevronsRight,
   Globe,
+  Grid3x3,
   HandCoins,
   Hourglass,
   DoorOpen,
@@ -40,6 +41,7 @@ import { Fundraising } from './screens/Fundraising'
 import { Inbox } from './screens/Inbox'
 import { Career } from './screens/Career'
 import { Discovery } from './screens/Discovery'
+import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers, shareResultImage } from './shareImage'
 import { Coach } from './Coach'
@@ -54,6 +56,7 @@ const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolea
   { id: 'team', label: 'Team', icon: Users },
   { id: 'hiring', label: 'Hiring', icon: UserPlus },
   { id: 'discovery', label: 'Discovery', icon: Microscope, careerOnly: true },
+  { id: 'cohorts', label: 'Cohorts', icon: Grid3x3, careerOnly: true },
   { id: 'product', label: 'Product', icon: Package },
   { id: 'growth', label: 'Growth', icon: TrendingUp },
   { id: 'market', label: 'Market', icon: Swords },
@@ -574,6 +577,7 @@ export default function App() {
             {screen === 'fundraising' && <Fundraising />}
             {screen === 'career' && <Career />}
             {screen === 'discovery' && <Discovery />}
+            {screen === 'cohorts' && <CohortAnalytics />}
           </div>
         </main>
 
