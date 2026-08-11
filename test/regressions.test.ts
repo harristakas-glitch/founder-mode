@@ -5,6 +5,8 @@ import {
   advanceWeek,
   applyAttackIncoming,
   applyAttackOutgoing,
+  COVENANT_DEFAULT,
+  covenantConversion,
   MARKETING_CAP,
   marketingMax,
   newGame,
@@ -62,6 +64,56 @@ const before = d.cash
 d = advanceWeek(d)
 ok(d.cash <= before || d.gameOver !== null, `bank cannot gift money on a breach (cash ${Math.round(d.cash)})`)
 ok(!Number.isNaN(d.cash), 'cash is not NaN after a breach')
+
+console.log('— A covenant default is priced by the size of the hole (deep-dive finding 7) —')
+// The old rule was a flat `founderEquity *= 0.85` that never read `shortfall`, so defaulting on
+// $10M and on $250k cost the same 15%. That makes "max the line, spend it, breach" the dominant
+// use of debt the moment a mode can generate the revenue to draw a big one.
+{
+  const small = covenantConversion(250_000, 50_000_000)
+  const large = covenantConversion(10_000_000, 50_000_000)
+  ok(large > small, `defaulting on $10M costs more than on $250k (${(large * 100).toFixed(0)}% vs ${(small * 100).toFixed(0)}%)`)
+  ok(small >= COVENANT_DEFAULT.floor - 1e-9, 'and a small default is never free — the floor holds')
+  // LITERAL again, and with an input that actually BINDS the cap — `large` above converts 30% and
+  // never reaches it, so asserting `large <= COVENANT_DEFAULT.cap` was true under any cap at all.
+  ok(Math.abs(covenantConversion(100_000_000, 50_000_000) - 0.6) < 1e-9, 'nor can one breach take the whole company: a 200% hole still converts 60%')
+  ok(large <= 0.6 + 1e-9, 'and no ordinary default exceeds that either')
+  ok(covenantConversion(0, 50_000_000) === 0, 'a fully-covered call converts no equity at all')
+  ok(
+    covenantConversion(1_000_000, 0) === COVENANT_DEFAULT.cap,
+    'a worthless company defaults at the cap rather than dividing by zero',
+  )
+  // The premium is what makes a forced conversion worse than the round it replaces.
+  // LITERAL, not recomputed from COVENANT_DEFAULT: deriving the expectation from the same constant
+  // the function reads is a tautology that survives any change to it. (It did — see the mutation
+  // ledger at the bottom of this file.)
+  const priced = covenantConversion(5_000_000, 50_000_000)
+  ok(
+    Math.abs(priced - 0.15) < 1e-9,
+    `and it carries a distress premium over a negotiated round: a 10% hole converts ${(priced * 100).toFixed(0)}%, not 10%`,
+  )
+}
+{
+  // Through the real call path, not just the pure function.
+  const breach = (principal: number): number => {
+    let g = newGame('DebtCo', 'saas', 'technical', { seed: 3 })
+    g.cash = 0 // the bank can seize nothing, so the whole principal is shortfall
+    g.lastRevenue = 0
+    g.users = 5_000
+    g.debt = { principal, apr: 9, covenantRevenue: 50_000 }
+    const equityBefore = g.founderEquity
+    g = advanceWeek(g)
+    return equityBefore - g.founderEquity
+  }
+  const cheap = breach(100_000)
+  const dear = breach(20_000_000)
+  // ABSOLUTE BOUNDS on the small case, not just `dear > cheap`. The ordering alone survives the
+  // flat-15% rule, because a $20M breach bankrupts the company and other terms move equity too —
+  // it read as a pass while the defect was fully restored.
+  ok(cheap < 0.1, `the weekly step charges the small default at ${(cheap * 100).toFixed(1)} points, not a flat 15`)
+  ok(cheap > 0.02, 'and still charges it something — the floor survives the round trip through advanceWeek')
+  ok(dear > cheap * 3, `while a $20M hole costs ${(dear * 100).toFixed(1)} points through the same path`)
+}
 
 console.log('— Hostile inputs —')
 ok(sectorById('not-a-sector').id === 'saas', 'unknown sector id falls back instead of throwing')
@@ -233,3 +285,31 @@ console.log('\n— The marketing cap is what you can fund, not what you raised �
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)
+
+// =================================================================================================
+// MUTATIONS RUN AGAINST THE COVENANT BLOCK. Each applied alone, this file re-run, then reverted.
+//
+//   M1 flat 15% regardless of shortfall (the defect itself)          KILLED
+//   M2 floor removed — a small default becomes free                  KILLED
+//   M3 distress premium removed — default priced like a round        KILLED
+//   M4 cap removed                                                   KILLED
+//   M5 zero-valuation guard removed                                  EQUIVALENT, not killed
+//
+// * THREE OF THESE SURVIVED THE FIRST PASS and every one was the same class the token slices kept
+//   shipping — a test that derives its expectation from the constant under test:
+//
+//   M3  asserted `priced === (5e6/5e7) * COVENANT_DEFAULT.distressPremium`. Both sides move when
+//       the constant does, so the premium could be deleted and the assertion stayed green. Now a
+//       literal 0.15.
+//   M4  asserted `large <= COVENANT_DEFAULT.cap`. Same tautology, and worse: no input in the test
+//       reached the cap at all, so it was true under any cap. Now a 200%-of-valuation hole, which
+//       binds it, against a literal 0.6.
+//   M1  asserted only `dear > cheap` through advanceWeek. A $20M breach bankrupts the company and
+//       other terms move equity too, so the ordering held with the flat rule fully restored. Now
+//       bounded absolutely: the small default must cost under 10 points and over 2.
+//
+// * M5 IS AN EQUIVALENT MUTANT and is recorded rather than papered over. With the guard removed,
+//   `shortfall / 0` is Infinity, `Infinity * 1.5` is Infinity, and `clamp` returns the cap — the
+//   same answer the guard returns. It is kept as a statement of intent, not because it changes
+//   behaviour. `shortfall > 0` is checked first, so 0/0 and NaN are unreachable.
+

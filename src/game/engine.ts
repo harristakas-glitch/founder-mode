@@ -2029,6 +2029,40 @@ export function repayDebt(s: GameState, amount: number) {
   }
 }
 
+/**
+ * What a forced conversion costs, per dollar actually defaulted on.
+ *
+ * The old rule was a flat `founderEquity *= 0.85` that never read `shortfall`, so defaulting on
+ * $10M and defaulting on $250k cost a founder exactly the same 15%. That makes the dominant line
+ * "max the credit line, spend it the week it lands, breach" — the bank can only seize cash that
+ * still exists, and the conversion is a fixed price whatever the hole.
+ *
+ * docs/balance-deep-dive.md finding 7 measured it and found it NOT currently exploitable: zero
+ * breaches in any cell, because `debtCapacity` needs revenue Quick Play cannot generate today. It
+ * goes live the moment that is fixed, which is why this lands first.
+ *
+ * Priced like every other conversion of capital into ownership in this codebase — the same shape as
+ * `saleDilution` in token/launch.ts — with two differences that are the point:
+ *
+ *   • A DISTRESS PREMIUM. A negotiated round prices at `raised / enterprise`; a bank taking equity
+ *     from a founder who just broke a covenant does not offer those terms. That is what default is.
+ *   • A FLOOR, so a small default is never free. Without it, the fix would trade one exploit for
+ *     another: draw a small line, spend it, breach, pay nothing.
+ */
+export const COVENANT_DEFAULT = {
+  distressPremium: 1.5,
+  floor: 0.03,
+  cap: 0.6,
+} as const
+
+/** 0–1 of the founder's stake, for a shortfall of `shortfall` against an enterprise value. */
+export function covenantConversion(shortfall: number, enterprise: number): number {
+  if (!(shortfall > 0)) return 0
+  if (!(enterprise > 0)) return COVENANT_DEFAULT.cap
+  const priced = (shortfall / enterprise) * COVENANT_DEFAULT.distressPremium
+  return clamp(priced, COVENANT_DEFAULT.floor, COVENANT_DEFAULT.cap)
+}
+
 function covenantCheck(s: GameState) {
   if (!s.debt || s.lastRevenue >= s.debt.covenantRevenue) return
   const owed = s.debt.principal
@@ -2038,7 +2072,8 @@ function covenantCheck(s: GameState) {
   const shortfall = owed - paid
   s.debt = null
   if (shortfall > 0) {
-    s.founderEquity *= 0.85
+    const converted = covenantConversion(shortfall, valuation(s))
+    s.founderEquity *= 1 - converted
     applyEffects(s, { morale: -8, reputation: -6 })
     s.inbox.unshift({
       id: uid(),
@@ -2047,7 +2082,9 @@ function covenantCheck(s: GameState) {
       title: '🏦 Covenant breach — the bank calls the loan',
       body:
         `Revenue fell below the covenant. The bank seized $${(paid / 1000).toFixed(0)}k of cash and, for the remaining ` +
-        `$${(shortfall / 1000).toFixed(0)}k, forced an equity conversion — 15% of the company. This is why debt is cheap: it bites.`,
+        `$${(shortfall / 1000).toFixed(0)}k, forced an equity conversion — ${(converted * 100).toFixed(0)}% of your stake, priced off the ` +
+        `size of the hole rather than a flat rate. The bigger the line you could not cover, the more of the company it costs. ` +
+        `This is why debt is cheap: it bites.`,
     })
   } else {
     applyEffects(s, { reputation: -3 })
