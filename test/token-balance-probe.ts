@@ -63,6 +63,7 @@ import { STAGE_THRESHOLDS, sectorById } from '../src/game/data'
 import type { Stage } from '../src/game/types'
 import { canTokenise } from '../src/game/token/eligibility'
 import { fairValue } from '../src/game/token/market'
+import { resolveLaunchTerms } from '../src/game/token/launch'
 import { setIncentiveShares, type IncentiveShares } from '../src/game/token/incentives'
 import { maxTreasurySale } from '../src/game/token/treasury'
 import { founderStanding, networkValue, realisableTokenValue } from '../src/game/token/scoring'
@@ -174,6 +175,8 @@ interface RunResult {
   tokenRewards: number
   /** Weeks the marketing cap was the binding constraint on the bot's own budget rule. */
   cappedWeeks: number
+  boundBy: string
+  lateness: number
 }
 
 function play(seed: number, sector: SectorId, token: TokenPolicy, weeks = 90): RunResult {
@@ -189,6 +192,8 @@ function play(seed: number, sector: SectorId, token: TokenPolicy, weeks = 90): R
   let cashMarketing = 0
   let tokenRewards = 0
   let cappedWeeks = 0
+  let boundBy = '—'
+  let lateness = 0
 
   for (let w = 0; w < weeks && !s.gameOver; w++) {
     common(s, token.alwaysRaise === true)
@@ -234,6 +239,12 @@ function play(seed: number, sector: SectorId, token: TokenPolicy, weeks = 90): R
       if (ready) {
         standingAtLaunch = founderStanding(s)
         valuationAtLaunch = valuation(s)
+        // Which of §7.7's three bounds actually bit on the day, and how late the launch reads. If
+        // the valuation ceiling never binds early, then lowering it early cannot price the head
+        // start and the lever is the wrong one.
+        const pre = resolveLaunchTerms(s)
+        boundBy = pre.boundBy
+        lateness = pre.lateness
         const cashBefore = s.cash
         if (tokeniseCompany(s).ok) {
           tokenisedWeek = s.week
@@ -296,6 +307,8 @@ function play(seed: number, sector: SectorId, token: TokenPolicy, weeks = 90): R
     cashMarketing,
     tokenRewards,
     cappedWeeks,
+    boundBy,
+    lateness,
   }
 }
 
@@ -409,6 +422,16 @@ function summarise(name: string, runs: RunResult[]): string {
     ` · tokenised ${padL(String(tokenised), 2)}/${runs.length}${launchWeeks.length ? ` (wk ${padL(String(q(launchWeeks, 0.5)), 2)})` : '      '}` +
     ` · token leg ${padL(legs.length ? `${Math.round(q(legs, 0.5) * 100)}%` : '—', 4)}` +
     ` · capped ${padL(String(q(runs.map((r) => r.cappedWeeks), 0.5)), 2)}wk` +
+    (() => {
+      // §7.7's three bounds, on the runs that actually forked. Which one bites decides whether the
+      // sale ceiling is a lever at all: a ceiling that never binds cannot be lowered to any effect.
+      const forked = runs.filter((r) => r.tokenisedWeek !== null)
+      if (!forked.length) return ''
+      const by: Record<string, number> = {}
+      for (const r of forked) by[r.boundBy] = (by[r.boundBy] ?? 0) + 1
+      const top = Object.entries(by).sort((a, b) => b[1] - a[1])[0]
+      return ` · bound ${pad(`${top[0]}×${top[1]}`, 18)} · late ${q(forked.map((r) => r.lateness), 0.5).toFixed(2)}`
+    })() +
     ` · ${Object.entries(endings).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}×${v}`).join(' ')}`
   )
 }

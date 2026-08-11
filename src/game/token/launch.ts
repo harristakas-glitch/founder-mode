@@ -82,8 +82,31 @@ export const LAUNCH_TERMS = {
   tokensPerCommunityMember: 5_000,
   minSupply: 1_000_000,
   maxSupply: 10_000_000_000,
-  /** Share of the community allocation actually sold at launch; the rest is distributed over time. */
-  initialSaleShare: 0.35,
+  /**
+   * Share of the community allocation actually sold at launch; the rest is distributed over time.
+   *
+   * SCALED BY LATENESS (§7.7c), and this is the one lever that reaches the head start. A flat 0.35
+   * meant a week-24 company and a week-70 company each sold the same fraction of their book, so the
+   * fork's cheque arrived roughly fifty weeks before an institutional round of the same size could
+   * clear the stage ladder and a 10-week raise — and fifty weeks of compounding is worth more than
+   * any one-off charge can price.
+   *
+   * An early community will fund a seed; a community that has watched you retain customers for a
+   * year will fund the whole book. That is the same argument §7.12 already makes three times over —
+   * supply scale, founder share, vesting clock — applied to the size of the raise itself.
+   */
+  initialSaleShareEarly: 0.12,
+  initialSaleShareLate: 0.35,
+  /**
+   * The `launchLateness` reading at which a community will fund the full book.
+   *
+   * NOT 1. Measured rather than assumed: across 24 seeds × 5 sectors the Early Token arm launches at
+   * lateness 0.06 and the Late Token arm (week 60+) at 0.36, because `byAge` divides by a 104-week
+   * horizon and `bySize` by log(60). Interpolating over [0, 1] would move the two arms by four
+   * points of sale share and the lever would do nothing. 0.45 is just past the realised top end, so
+   * a genuinely late launch reaches the full book and nothing beyond it is wasted range.
+   */
+  saleShareFullLateness: 0.45,
   /** The equity round the sale replaces raises ~20% of enterprise value. The sale may match it,
    *  never beat it (§7.7). */
   saleCeilingOfValuation: 0.2,
@@ -404,7 +427,18 @@ export function resolveLaunchTerms(s: GameState, draft: LaunchDraft = {}): Launc
   const anchorPrice = anchor / totalSupply
 
   // (3) The sale, and the three bounds of §7.7.
-  const saleTokens = Math.round(totalSupply * allocation.community * LAUNCH_TERMS.initialSaleShare)
+  //
+  // §7.7c. How much of the book this community will actually take down, by how late the launch is.
+  // Note what this does NOT touch: `splitSupply` reads `allocation.community`, so the float, the
+  // treasury and the founder's allocation are all unchanged, and `launchPrice` is
+  // `saleProceeds / saleTokens` — both scale together, so the price is unchanged too. The ONLY thing
+  // that moves is the size of the cheque, which is the only thing that was mispriced.
+  const saleShare = lerp(
+    LAUNCH_TERMS.initialSaleShareEarly,
+    LAUNCH_TERMS.initialSaleShareLate,
+    lateness / LAUNCH_TERMS.saleShareFullLateness,
+  )
+  const saleTokens = Math.round(totalSupply * allocation.community * saleShare)
   const nominalProceeds = saleTokens * anchorPrice
   const perMember = lerp(LAUNCH_TERMS.spendPerMemberMin, LAUNCH_TERMS.spendPerMemberMax, strength / 100) * (0.6 + 0.4 * fit)
   const floatDepth = members * perMember
