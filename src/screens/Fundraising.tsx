@@ -702,12 +702,10 @@ export function Fundraising() {
         </div>
       )}
 
-      <TokenisationPanel />
-
-      <SecondaryPanel />
-
-      {ipoVisible(game) && <IpoPanel />}
-
+      {/* The institutional path leads and the fork sits at the bottom. Ordering is the loudest
+          thing a screen says about which choice is the default: with the tokenisation panel
+          first, a founder read "raise a round" as the alternative to a thing they had not
+          chosen yet. */}
       <div className="mt-3.5">
         <Panel title="Pitch investors">
           {/* ICO brief §47: the button stays on screen and carries its reason. A control that
@@ -762,6 +760,12 @@ export function Fundraising() {
           </Panel>
         </div>
       )}
+
+      {ipoVisible(game) && <IpoPanel />}
+
+      <SecondaryPanel />
+
+      <TokenisationPanel />
     </div>
   )
 }
