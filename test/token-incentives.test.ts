@@ -492,6 +492,7 @@ console.log('\n— Treasury sales: the round a tokenised company can still raise
   const seller = tokenised()
   const cashBefore = seller.cash
   const trustBefore = seller.token!.community.trust
+  const equityBefore = seller.founderEquity
   const budgetBefore = treasuryCommitment(seller).cap
   const rngBefore = seller.flags?.rngTick
   const sold = maxTreasurySale(seller)
@@ -500,6 +501,15 @@ console.log('\n— Treasury sales: the round a tokenised company can still raise
   ok(Math.abs(seller.cash - cashBefore - done.quote!.proceeds) < 1e-6, 'the cash is the quoted proceeds to the cent — the preview cannot lie')
   ok(seller.token!.supply.treasury === t.supply.treasury - sold && tokenInvariants(seller).length === 0, 'the tokens left the treasury and the supply identity holds')
   ok(seller.token!.community.trust < trustBefore - 1, `and it costs trust (${trustBefore.toFixed(1)} → ${seller.token!.community.trust.toFixed(1)})`)
+  // Cost 5. Costs 1–4 were measured by test/token-balance-probe.ts and found nearly free to the
+  // FOUNDER specifically: slippage and the price drop are borne by every holder, and trust reaches
+  // `engagement` at 0.35, which reaches `liquidityDiscount` at 0.2 — a maximum sale moved market
+  // quality by about one point. A raise has to be priced in ownership, whoever is on the other side.
+  ok(done.quote!.equityDilution > 0, 'the raise is priced: community capital dilutes like any other capital')
+  ok(
+    Math.abs(seller.founderEquity - equityBefore * (1 - done.quote!.equityDilution)) < 1e-9,
+    `and at the quoted rate exactly (${(equityBefore * 100).toFixed(1)}% → ${(seller.founderEquity * 100).toFixed(1)}%)`,
+  )
   ok(treasuryCommitment(seller).cap < budgetBefore, 'and every incentive programme is permanently smaller — the treasury is one budget, not two')
   ok(seller.flags?.rngTick === rngBefore, 'and the sale draws nothing: opening the panel cannot shift the RNG stream')
 
@@ -799,6 +809,7 @@ process.exit(fails.length === 0 ? 0 : 1)
 //   M43 sold tokens are not removed from the treasury                 KILLED
 //   M44 depth does not affect what a sale realises                    KILLED
 //   M45 the sale banks founder money instead of company cash          KILLED
+//   M46 a treasury sale does not dilute the founder                   KILLED
 //
 // * FOUR OF THESE SURVIVED THE FIRST PASS, and every one of them was the same hole the last three
 //   slices shipped — a test that proved a function works rather than that the CALL SITE calls it:

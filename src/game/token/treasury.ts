@@ -35,12 +35,22 @@
 //   4. THE TREASURY IS FINITE AND IT IS ALSO YOUR INCENTIVE BUDGET. Every token sold for cash is a
 //      token that cannot fund customer rewards, grants or liquidity, and the weekly incentive cap is
 //      2% of what remains. Raising is a direct trade against every programme you are running.
+//   5. IT DILUTES, exactly as the round it replaces would have. Added after
+//      test/token-balance-probe.ts measured costs 1–4 and found them nearly free: slippage and the
+//      price drop are paid by every holder rather than by the founder specifically, and cost 3 —
+//      the 14-point trust hit that reads as the moral centre of this file — reaches `engagement` at
+//      weight 0.35, which reaches `liquidityDiscount` at weight 0.2. A maximum sale cost about ONE
+//      POINT of market quality. The founder's own arithmetic barely noticed. `saleDilution` in
+//      launch.ts is the shared rule; see §7.7b there for why community capital is priced like any
+//      other capital.
 //
 // DETERMINISM: nothing here draws. A sale is a pure function of state plus the size the player
 // chose, so the quote the player is shown is exactly what they get.
 
+import { valuation } from '../engine'
 import { hasCapability } from '../modes'
 import type { GameState } from '../types'
+import { saleDilution } from './launch'
 import { priceFloor } from './market'
 import { TOKEN_BOUNDS, TOKEN_LIMITS, type TokenState } from './types'
 
@@ -83,6 +93,8 @@ export interface TreasurySaleQuote {
   sentimentCost: number
   /** How much of the incentive budget this sale costs, per week, forever after. */
   weeklyBudgetLost: number
+  /** 0–1. The share of the company this raise costs the founder — cost 5, and the binding one. */
+  equityDilution: number
 }
 
 /** Is the token path's capital mechanic live? Rides the Slice-4 switch: the contract assigns
@@ -124,6 +136,7 @@ export function treasurySaleQuote(s: GameState | null | undefined, tokens: numbe
     trustCost: 0,
     sentimentCost: 0,
     weeklyBudgetLost: 0,
+    equityDilution: 0,
   }
   const t = s?.token
   if (!t || !treasurySalesActive(s)) return { ...empty, reason: 'This company has no token treasury.' }
@@ -147,12 +160,14 @@ export function treasurySaleQuote(s: GameState | null | undefined, tokens: numbe
 
   const sizeShare = clamp01(size / Math.max(1, max))
   const confidence = sizeShare * (1 + recency(t, s!.week))
+  const proceeds = size * avgPrice
   return {
     ok: true,
     tokens: size,
     maxTokens: max,
     grossDollars: size * t.market.price,
-    proceeds: size * avgPrice,
+    proceeds,
+    equityDilution: saleDilution(proceeds, valuation(s!)),
     priceImpact,
     priceAfter,
     trustCost: TOKEN_TREASURY.trustCostMax * confidence,
@@ -204,7 +219,11 @@ export function sellTreasuryTokens(s: GameState, tokens: number): TreasurySaleRe
   t.treasurySales.proceeds += quote.proceeds
   t.treasurySales.lastSaleWeek = s.week
 
+  const equityBefore = s.founderEquity
   s.cash += quote.proceeds
+  // Cost 5, and the one that actually bites — see the header. Same rule and same function as the
+  // launch sale: a raise is priced in ownership, whoever is on the other side of it.
+  s.founderEquity = clamp(s.founderEquity * (1 - quote.equityDilution), 0, 1)
 
   t.history.push({
     week: s.week,
@@ -235,7 +254,11 @@ export function sellTreasuryTokens(s: GameState, tokens: number): TreasurySaleRe
       `slightly less of the same network.\n\n` +
       `Trust fell ${quote.trustCost.toFixed(0)} points. A treasury selling its own token is the loudest opinion anyone has about what ` +
       `it is worth, and the community can read a block trade as well as you can. ` +
-      `Your weekly incentive budget is ${Math.round(quote.weeklyBudgetLost).toLocaleString()} tokens smaller from now on.`,
+      `Your weekly incentive budget is ${Math.round(quote.weeklyBudgetLost).toLocaleString()} tokens smaller from now on.` +
+      (quote.equityDilution > 0.001
+        ? `\n\nAnd it is a raise, so it is priced like one: your stake went from ${(equityBefore * 100).toFixed(1)}% to ` +
+          `${(s.founderEquity * 100).toFixed(1)}%. Community capital is still capital.`
+        : ''),
   })
 
   return { ok: true, quote }

@@ -262,16 +262,21 @@ function TreasurySalePanel() {
                 <b className="tnum text-warn">−{pct(quote.priceImpact, 0)}</b>
               </div>
               <div>
-                <div className="text-[11px] text-mut">Trust cost</div>
-                <b className="tnum text-warn">−{quote.trustCost.toFixed(0)} pts</b>
+                <div className="text-[11px] text-mut">Your stake</div>
+                <b className="tnum text-warn">
+                  {pct(game.founderEquity * (1 - quote.equityDilution), 1)} −{pct(quote.equityDilution, 1)}
+                </b>
               </div>
             </div>
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
+              <b className="text-ink">This is a raise, so it dilutes you like a raise.</b> Community capital is still capital — the
+              people buying own a claim on what they are funding. Trust also falls {quote.trustCost.toFixed(0)} points, and selling
+              again soon costs roughly double that.
+              <br />
               You do not sell at the screen price — you walk the book down and realise the average. A deeper market costs you less,
               which is the second thing liquidity incentives buy. The tokens stay in the float afterwards, so every remaining token is
               worth slightly less of the same network, and your weekly incentive budget falls by{' '}
-              <b className="text-ink tnum">{Math.round(quote.weeklyBudgetLost).toLocaleString()}</b> tokens permanently. Selling again
-              soon costs roughly double the trust.
+              <b className="text-ink tnum">{Math.round(quote.weeklyBudgetLost).toLocaleString()}</b> tokens permanently.
               {t.treasurySales.tokensSold > 0 && (
                 <span className="text-ink">
                   {' '}
@@ -486,9 +491,12 @@ function TokenisationPanel() {
                 <b className="tnum">{pct(terms.plan.allocation.founder, 0)}</b>
               </div>
               <div>
-                <div className="text-[11px] text-mut">Vesting</div>
+                <div className="text-[11px] text-mut">Your stake after</div>
                 <b className="tnum">
-                  {terms.cliffWeeks}wk cliff · {terms.durationWeeks}wk
+                  {pct(game.founderEquity * (1 - terms.equityDilution), 1)}
+                  {terms.equityDilution > 0.001 && (
+                    <span className="text-bad"> −{pct(terms.equityDilution, 1)}</span>
+                  )}
                 </b>
               </div>
             </div>
@@ -502,6 +510,13 @@ function TokenisationPanel() {
                   : '.'}{' '}
               Launch early and you mint a small float, keep a larger share of it and vest it all before the run ends; launch late and you
               raise more against stronger fundamentals but may never get past your own cliff.
+            </div>
+            <div className="mt-2 text-xs leading-relaxed text-mut">
+              <b className="text-ink">The sale is a raise, and it is priced like one.</b> The community that funds you owns a claim on
+              what they funded, so {money(terms.saleProceeds)} against a {money(terms.enterpriseValue)} company costs you{' '}
+              <b className="text-ink tnum">{pct(terms.equityDilution, 1)}</b> of your stake — the same price the round you are closing the
+              door on would have charged. Vesting is {terms.cliffWeeks}wk cliff · {terms.durationWeeks}wk, and the{' '}
+              {pct(terms.plan.allocation.founder, 0)} of supply is what you keep on top of it.
             </div>
             <TokenomicsSetup game={game} draft={draft} setDraft={setDraft} />
             <div className="mt-3 rounded-xl border border-line bg-surface2 p-3.5">

@@ -335,11 +335,14 @@ export function tickCareerPMF(
   // two populations. Pure and noiseless, so a Career week draws the same number of times whether or
   // not the token capability is on — see the determinism note in token/users.ts.
   const incentives = incentiveContext(s, incentivisedCustomers(career))
-  if (incentives.active && incentives.dollars > 0) {
+  if (incentives.active && incentives.reward > 0) {
     const bought = resolveIncentivisedAcquisition({
       truth: targetTruth,
       productFit: targetFit,
-      incentiveDollars: incentives.dollars,
+      // `reward`, NOT `dollars`. The budget that buys customers has the token price taken out of it;
+      // `dollars` is what the same tokens cost the treasury at the market price, and it is recorded
+      // below as the cohort's acquisition cost. See `rewardBudget` in token/users.ts.
+      rewardBudget: incentives.reward,
       currentCustomers: totalCustomers(career, target),
       ceiling,
       marketingPenalty,

@@ -454,21 +454,21 @@ console.log('\n— Incentivised acquisition: pure, capped, and its own populatio
     productRequirement: 40, marketSize: 70, competitiveIntensity: 30, salesCycleWeeks: 2, expansionPotential: 50,
   }
   const base = { truth, productFit: 60, currentCustomers: 1_000, ceiling: 200_000, marketingPenalty: 1, acqScale: 1 }
-  ok(resolveIncentivisedAcquisition({ ...base, incentiveDollars: 0 }) === 0, 'no spend buys nobody')
-  ok(resolveIncentivisedAcquisition({ ...base, incentiveDollars: -5 }) === 0, 'and a negative budget does not buy negative people')
+  ok(resolveIncentivisedAcquisition({ ...base, rewardBudget: 0 }) === 0, 'no spend buys nobody')
+  ok(resolveIncentivisedAcquisition({ ...base, rewardBudget: -5 }) === 0, 'and a negative budget does not buy negative people')
   ok(
-    resolveIncentivisedAcquisition({ ...base, incentiveDollars: 40_000 }) > resolveIncentivisedAcquisition({ ...base, incentiveDollars: 10_000 }),
+    resolveIncentivisedAcquisition({ ...base, rewardBudget: 40_000 }) > resolveIncentivisedAcquisition({ ...base, rewardBudget: 10_000 }),
     'more spend buys more customers',
   )
   ok(
-    resolveIncentivisedAcquisition({ ...base, incentiveDollars: 40_000, currentCustomers: 190_000 }) <
-      resolveIncentivisedAcquisition({ ...base, incentiveDollars: 40_000 }),
+    resolveIncentivisedAcquisition({ ...base, rewardBudget: 40_000, currentCustomers: 190_000 }) <
+      resolveIncentivisedAcquisition({ ...base, rewardBudget: 40_000 }),
     'and a nearly-full market resists being bought — `room` binds here too',
   )
   // Diminishing returns: the sqrt shape is inherited from the organic spend term, so this cannot
   // become a linear money-printer.
-  const one = resolveIncentivisedAcquisition({ ...base, incentiveDollars: 10_000 })
-  const four = resolveIncentivisedAcquisition({ ...base, incentiveDollars: 40_000 })
+  const one = resolveIncentivisedAcquisition({ ...base, rewardBudget: 10_000 })
+  const four = resolveIncentivisedAcquisition({ ...base, rewardBudget: 40_000 })
   ok(four < one * 3, `quadrupling the budget buys ${(four / one).toFixed(2)}×, not 4× — sqrt, like every other spend term`)
 
   // PURE. `tickCareerPMF` is NOT inside the tokenActive gate, so a draw here would put a
@@ -480,11 +480,57 @@ console.log('\n— Incentivised acquisition: pure, capped, and its own populatio
     return prevNext()
   }
   try {
-    for (let i = 0; i < 200; i++) resolveIncentivisedAcquisition({ ...base, incentiveDollars: 1_000 + i })
+    for (let i = 0; i < 200; i++) resolveIncentivisedAcquisition({ ...base, rewardBudget: 1_000 + i })
   } finally {
     RNG.next = prevNext
   }
   ok(draws === 0, 'resolveIncentivisedAcquisition draws ZERO times — 200 calls, 0 draws')
+}
+
+// =================================================================================================
+console.log('\n— The denomination rule: the chart is not a growth lever —')
+
+{
+  // The regression this guards is the one test/token-balance-probe.ts measured and the reason
+  // `rewardBudget` exists. Five of the six incentive categories read a float share; customer_rewards
+  // reached users through this file and this file was handed `tokens × price`. The weekly release is
+  // capped in TOKENS, which bounds supply, and not at all in DOLLARS — so a price that re-rated
+  // 9.9x–90.1x over a run silently multiplied how many customers a fixed 0.8% of float could buy,
+  // and the token path beat the traditional one by up to 25.10x.
+  //
+  // Stated as a property rather than a formula: A TENFOLD TOKEN PRICE BUYS EXACTLY THE SAME NUMBER
+  // OF CUSTOMERS. It costs ten times as much, and that difference is the whole of the fix.
+  const s = structuredClone(tokenised('devtools', 4242))
+  fundRewards(s)
+  const cheap = incentiveContext(s)
+
+  const dear = structuredClone(s)
+  dear.token!.market.price *= 10
+  const dearCtx = incentiveContext(dear)
+
+  ok(cheap.reward > 0, `a funded programme has a reward budget ($${Math.round(cheap.reward).toLocaleString()}/wk)`)
+  ok(
+    Math.abs(dearCtx.reward - cheap.reward) < 1e-6,
+    'a 10x token price buys the SAME — the reward budget is denominated in the float share and the revenue base, never the price',
+  )
+  ok(
+    Math.abs(dearCtx.dollars - cheap.dollars * 10) < 1e-6,
+    'while it COSTS 10x — cost is what left the treasury at the market price, and the two are different numbers on purpose',
+  )
+  ok(
+    Math.abs(dearCtx.strength - cheap.strength) < 1e-9,
+    'and incentive strength does not move either, so retention cannot be bought with a re-rating',
+  )
+
+  // The other half: the budget scales with the BUSINESS. A company twice the size running the same
+  // float share is running twice the programme, which is what keeps the mechanic relevant late
+  // without letting the chart do the work.
+  const bigger = structuredClone(s)
+  bigger.users = s.users * 2
+  ok(
+    Math.abs(incentiveContext(bigger).reward - cheap.reward * 2) < 1e-6,
+    'twice the customers, twice the programme — the budget tracks the revenue base it is a share of',
+  )
 }
 
 // =================================================================================================
@@ -629,9 +675,18 @@ console.log('\n— §53: the token-driven-growth warning —')
   // product that no longer leaked. Premium pricing into Social's price-sensitive casual users is
   // an explicit leak: price fit is a retention factor by design, and it does not depend on where
   // the retention baseline happens to sit.
+  //
+  // THE WINDOW IS 15 WEEKS, NOT 45, AND THAT IS THE POINT OF §53 RATHER THAN A TUNING CONVENIENCE.
+  // It was 45 while `resolveIncentivisedAcquisition` was handed price-levered dollars: the reward
+  // budget grew with the chart, so it out-bought the leak indefinitely and the company was still
+  // "growing" at week 45. Once the budget was denominated in the company's own revenue instead
+  // (see `rewardBudget`), the same fixture peaks around week +11 at 9.4k users and is down to 5.0k
+  // by +45 — a 25% DECLINE over the last eight weeks. §53 warns about growth that is strong and
+  // mostly bought; a company in open collapse is a different lesson and the growth gate correctly
+  // refuses to call it this one. So the fixture is read while it is still growing.
   const leaky = structuredClone(tokenised('social', 555))
   leaky.career!.pricing = 'premium'
-  const s = play(leaky, 45, { fund: true })
+  const s = play(leaky, 15, { fund: true })
   ok(
     (s.career!.retentionBySegment[s.career!.primaryTargetSegmentId] ?? 1) < TOKEN_USERS.warnOrganicRetention,
     `the fixture really is leaky (organic retention ${((s.career!.retentionBySegment[s.career!.primaryTargetSegmentId] ?? 0) * 100).toFixed(0)}% against a ${(TOKEN_USERS.warnOrganicRetention * 100).toFixed(0)}% bar)`,
@@ -829,6 +884,8 @@ process.exit(fails.length === 0 ? 0 : 1)
 //   M33 incentivised acquisition becomes linear in spend, not sqrt     KILLED
 //   M34 organicUserCount stops reading the cohorts (fairValue leak)    KILLED
 //   M35 segmentSnapshots shows PMF on the total count                  KILLED
+//   M36 the reward budget is the price-levered dollars again           KILLED  ← the balance bug itself
+//   M37 the reward budget ignores the revenue base (flat constant)     KILLED
 //
 // The first version of this file had TWO survivors, M3 and M4 — the §52 exclusion itself. The
 // bit-identity assertion computed `organicCustomers` in the test and handed it to

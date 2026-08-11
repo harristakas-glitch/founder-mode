@@ -60,7 +60,7 @@ import type { CareerPMFState, SegmentId, SegmentTruth } from '../career/types'
 import type { GameState } from '../types'
 import { programmeRequest } from './incentives'
 import { treasuryCommitment } from './market'
-import { TOKEN_BOUNDS, TOKEN_USERS, type RetentionSplit, type TokenState } from './types'
+import { TOKEN_BOUNDS, TOKEN_INCENTIVES, TOKEN_USERS, type RetentionSplit, type TokenState } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => clamp(v, 0, 1)
@@ -120,15 +120,17 @@ export interface IncentiveContext {
   /** Tokens released to customer rewards this week. */
   tokens: number
   /** Those tokens at last week's close. The price is a LAG — this tick does not read a price it
-   *  wrote (docs/ico-architecture.md §4, the lag rule). */
+   *  wrote (docs/ico-architecture.md §4, the lag rule). What the programme COST; see `reward`. */
   dollars: number
+  /** What the programme BUYS, in dollars, with the price taken out. See `rewardBudget`. */
+  reward: number
   /** 0–1. Spend per incentivised user, against that sector's revenue per user. */
   strength: number
   /** The head count `strength` was divided by. Exposed so a test can pin the denominator. */
   heads: number
 }
 
-const IDLE_INCENTIVES: IncentiveContext = { active: false, tokens: 0, dollars: 0, strength: 0, heads: 0 }
+const IDLE_INCENTIVES: IncentiveContext = { active: false, tokens: 0, dollars: 0, reward: 0, strength: 0, heads: 0 }
 
 /**
  * Tokens the treasury releases to CUSTOMER REWARDS this week.
@@ -169,6 +171,55 @@ export function revenuePerUser(s: GameState): number {
 }
 
 /**
+ * WHAT A REWARDS PROGRAMME BUYS, IN DOLLARS, WITH THE TOKEN PRICE TAKEN OUT.
+ *
+ * This function exists because of a measured balance failure, and the failure is worth stating in
+ * full because the fix looks like a nerf and is not one.
+ *
+ * `incentives.ts` states the denomination rule in capitals over `spendIntensity`: "THE PRICE IS NOT
+ * IN THIS EXPRESSION". Five of the six categories obey it — they read `floatFraction`, a scale-free
+ * share of supply. `customer_rewards` was the one that escaped, because it reached users through
+ * this file and this file was handed `tokens × price`. The weekly release is capped in TOKENS, which
+ * correctly bounds how much supply hits the float; it does not bound DOLLARS at all, and
+ * test/token-balance-probe.ts measured the price re-rating 9.9x–90.1x over a single run. So the same
+ * 0.8% of float bought up to ninety times more customers in week 80 than in week 10, cumulative
+ * token rewards ran 1.6–3.0x the entire cash marketing budget for zero cash, and the token path beat
+ * the traditional one by 1.83x–25.10x. Rewards alone beat doing nothing by up to 9.69x while grants,
+ * liquidity and community treasury — all correctly float-denominated — sat within 1% of idle. That
+ * gap between the five and the one IS the diagnosis.
+ *
+ * So the budget is denominated in the company's OWN weekly revenue base instead:
+ *
+ *     reward = intensity × fullStrengthArpuShare × revenuePerUser × users
+ *
+ * `intensity` is the same 0–1 float-share term every other category reads. The remaining factors are
+ * exactly the definition `incentiveStrength` already uses for "fully rented": at full intensity, with
+ * every user incentivised, you are handing each of them back half of what they pay you. That is what
+ * the constant has always meant; it just was not the thing being spent.
+ *
+ * Two properties this buys, both deliberate:
+ *
+ *   • THE CHART IS NO LONGER A GROWTH LEVER. A re-rating token still makes the founder richer, still
+ *     deepens the market, still funds a bigger treasury sale. It no longer secretly multiplies how
+ *     many customers a fixed 0.8% of float can buy.
+ *   • THE PROGRAMME SCALES WITH THE BUSINESS. A bigger company can run a bigger rewards programme,
+ *     which is true and which keeps the mechanic relevant late. The residual loop
+ *     (users → base → budget → users) is sqrt-damped by `resolveIncentivisedAcquisition` and bounded
+ *     by `room`, so growth in it is sub-linear — unlike the price channel it replaces, which was
+ *     multiplicative on top of an already-reflexive price.
+ *
+ * The COST is unchanged and still leaves the treasury at the market price: see `dollars` on
+ * `IncentiveContext`. Cost in tokens, effect in float share. That is the rule the module already had.
+ */
+export function rewardBudget(s: GameState, tokens: number): number {
+  const t = s.token
+  if (!t || !(tokens > 0)) return 0
+  const floatFraction = tokens / Math.max(1, t.supply.circulating)
+  const intensity = clamp01(floatFraction / TOKEN_INCENTIVES.fullIntensityFloatPct)
+  return intensity * TOKEN_USERS.fullStrengthArpuShare * revenuePerUser(s) * Math.max(0, s.users)
+}
+
+/**
  * 0–1, and the whole of §12's second act.
  *
  * While it is high, incentivised retention EXCEEDS organic retention and growth genuinely looks
@@ -195,9 +246,13 @@ export function incentiveContext(s: GameState, heads?: number): IncentiveContext
   if (!userCompositionActive(s)) return IDLE_INCENTIVES
   const t = s.token!
   const tokens = userIncentiveTokens(s)
+  // `dollars` is the COST — what actually left the treasury at the market price, which is what the
+  // screen shows and what a cohort records as its acquisition cost. `reward` is the EFFECT budget,
+  // with the price taken out. They are different numbers on purpose; see `rewardBudget`.
   const dollars = tokens * t.market.price
+  const reward = rewardBudget(s, tokens)
   const h = heads ?? incentivisedUsers(s)
-  return { active: true, tokens, dollars, strength: incentiveStrength(s, dollars, h), heads: h }
+  return { active: true, tokens, dollars, reward, strength: incentiveStrength(s, reward, h), heads: h }
 }
 
 // ---------- acquisition (docs/ico-architecture.md §5.1) ----------
@@ -219,8 +274,14 @@ export function incentiveContext(s: GameState, heads?: number): IncentiveContext
 export function resolveIncentivisedAcquisition(args: {
   truth: SegmentTruth
   productFit: number
-  /** Dollars of token reward pointed at customers this week. */
-  incentiveDollars: number
+  /**
+   * The week's reward budget from `rewardBudget` — dollars with the TOKEN PRICE TAKEN OUT.
+   *
+   * Named for what it is rather than `incentiveDollars`, because the price-levered dollar figure is
+   * also in scope at the call site and passing it here is precisely the bug this parameter's old
+   * name concealed. If you are about to pass `context.dollars`, read `rewardBudget`'s comment first.
+   */
+  rewardBudget: number
   /** TOTAL customers in the segment. The market does not care who paid. */
   currentCustomers: number
   ceiling: number
@@ -228,13 +289,13 @@ export function resolveIncentivisedAcquisition(args: {
   /** sector.acqBase / 5, exactly as the organic term takes it. */
   acqScale: number
 }): number {
-  const { truth, productFit, incentiveDollars, currentCustomers, ceiling, marketingPenalty, acqScale } = args
-  if (!(incentiveDollars > 0)) return 0
+  const { truth, productFit, rewardBudget: budget, currentCustomers, ceiling, marketingPenalty, acqScale } = args
+  if (!(budget > 0)) return 0
   const room = Math.pow(Math.max(0, 1 - currentCustomers / Math.max(1, ceiling)), 1.3)
   const reach = 0.25 + (truth.acquisitionAccessibility / 100) * 1.5
   // Same shape as the organic spend term, so this inherits Career's user-count calibration rather
   // than inventing a second dollars-to-users rate. See the header's unit hazard.
-  const spendEffect = Math.sqrt(incentiveDollars / 6) * reach * acqScale * TOKEN_USERS.acquisitionEfficiency
+  const spendEffect = Math.sqrt(budget / 6) * reach * acqScale * TOKEN_USERS.acquisitionEfficiency
   // PRODUCT FIT ONLY. A customer moved by a reward is not weighing your price — which is the same
   // fact that disqualifies them as evidence of fit.
   const conversion = clamp01(TOKEN_USERS.conversionBase + (productFit / 100) * TOKEN_USERS.conversionProductSpan)

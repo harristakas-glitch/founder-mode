@@ -287,7 +287,24 @@ ok(
   'tokenActive is false when the capabilities are off even though a slice exists',
 )
 
-ok(forked.founderEquity === beforeEquity, 'existing equity does not disappear (§80)')
+// §80 says existing equity does not DISAPPEAR, and this file used to read that as "does not move".
+// That reading is what test/token-balance-probe.ts caught: it made the initial sale a free
+// undiluted round worth 1.09x-15.13x over the traditional path on its own, with no second decision
+// taken. Dilution is not disappearance — `pitchInvestors` dilutes and nobody says the founder's
+// equity vanished. What §80 protects is confiscation: the cash, the stage, the board and the debt
+// all survive the fork. See launch.ts §7.7b.
+const soldProceeds = forked.cash - beforeCash
+const forkEnterprise = valuation(before)
+ok(forked.founderEquity > 0, 'existing equity does not disappear (§80) — the fork confiscates nothing')
+ok(forked.founderEquity < beforeEquity, 'but it IS priced: community capital dilutes, like any other capital')
+ok(
+  Math.abs(forked.founderEquity - beforeEquity * (1 - soldProceeds / forkEnterprise)) < 1e-9,
+  'and priced at exactly the round it replaces: equity x (1 - proceeds/enterpriseValue)',
+)
+ok(
+  forked.founderEquity >= beforeEquity * (1 - 0.2) - 1e-9,
+  'never worse than a 20% round, because §7.7 caps the sale at 20% of enterprise value',
+)
 ok(forked.stage === beforeStage, 'the funding stage already reached is not rewound')
 ok(forked.cash > beforeCash, `the initial sale credits real cash (+$${((forked.cash - beforeCash) / 1e6).toFixed(2)}M)`)
 
@@ -704,4 +721,6 @@ process.exit(fails.length === 0 ? 0 : 1)
 // ⚑ M28 launch.ts       drops the float-depth bound              — likewise
 //   M29 launch.ts       supply fixed at 1e9 rather than community-scaled
 //   M30 launch.ts       the launch does not credit the sale
+//   M32 launch.ts       the sale does not dilute the founder      — §7.7b, the balance fix
+//   M33 launch.ts       dilution charged at half the round's price
 // ⚑ M31 launch.ts       term sheets survive the fork             — never asserted

@@ -104,6 +104,49 @@ export const LAUNCH_TERMS = {
   partnerShare: 0.05,
 } as const
 
+// ---------------------------------------------------------------------------------------------
+// §7.7b — WHAT THE SALE COSTS, AND WHY THE THREE BOUNDS ABOVE WERE NOT IT
+//
+// §7.7 above says the sale "can match the round it replaces on the median and never beat it", and
+// implemented that as a ceiling on its SIZE. test/token-balance-probe.ts then measured what was
+// missing: the ceiling matched the round's size while charging none of its PRICE. Take the fork and
+// do nothing else at all — no incentives, no treasury sale, no second decision — and you beat the
+// traditional path by 1.09x–15.13x. Burn the sale proceeds on the day they arrive and the identical
+// run is 0.73x–0.97x, a NET COST in four of five sectors. The whole of the fork's advantage was one
+// unpriced cheque.
+//
+// It was unpriced because the sold tokens come out of the COMMUNITY allocation, so `founderEquity`
+// never moved and `allocation.founder` never moved. An equity round raising 20% of enterprise value
+// costs ~20% of the company; this cost nothing. That is not a different path, it is a free one.
+//
+// So: THE SALE DILUTES, at the price an equity round charges.
+//
+//     founderEquity ×= 1 − proceeds / enterpriseValue
+//
+// Community capital is capital. Holders bought a claim on the network this company operates, and a
+// claim is exactly what an equity investor buys — this is what an ICO literally was. The founder
+// still receives the cash and still keeps their token allocation on top; what they no longer get is
+// both for free. It makes the fork a TRADE (company equity for community capital plus supply)
+// rather than a gift, and it is what gives `founderStanding`'s two disjoint legs any tension at all
+// — before this, both legs were pure gains.
+//
+// The same rule prices every later treasury sale (see treasury.ts), which is the second half of the
+// fix: a treasury raise was charging 14 points of `trust`, and trust reaches exactly one term —
+// `engagement` at weight 0.35, which reaches `liquidityDiscount` at weight 0.2. A maximum sale cost
+// about one point of market quality. It now costs equity, the same as any other raise.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The share of the company a raise of `proceeds` costs, against an enterprise value of `enterprise`.
+ *
+ * Clamped below 1 so no single sale can take a founder to zero, and 0 when there is no enterprise to
+ * price against — a company worth nothing cannot be diluted, and dividing by it would be worse.
+ */
+export function saleDilution(proceeds: number, enterprise: number): number {
+  if (!(proceeds > 0) || !(enterprise > 0)) return 0
+  return clamp(proceeds / enterprise, 0, 0.9)
+}
+
 // ---------- how late is this launch? ----------
 
 /**
@@ -304,6 +347,10 @@ export interface LaunchTerms {
   saleTokens: number
   /** What the whole network is worth at the launch price. */
   networkValue: number
+  /** Enterprise value the sale was priced against — and the base the dilution is charged on. */
+  enterpriseValue: number
+  /** 0–1. The share of the company the sale costs the founder. See §7.7b in the header. */
+  equityDilution: number
   /** The unbounded ask, so the UI can show what float depth cost you. */
   nominalProceeds: number
   /** Which of the three bounds actually bit. */
@@ -406,6 +453,8 @@ export function resolveLaunchTerms(s: GameState, draft: LaunchDraft = {}): Launc
     saleProceeds,
     saleTokens,
     networkValue: launchPrice * splitSupply(totalSupply, plan).circulating,
+    enterpriseValue: enterprise,
+    equityDilution: saleDilution(saleProceeds, enterprise),
     nominalProceeds,
     boundBy,
     communityMembers: members,
@@ -473,8 +522,13 @@ export function launchToken(s: GameState, draft: LaunchDraft = {}): LaunchResult
     },
   )
 
+  const before = s.founderEquity
   s.token = token
   s.cash += terms.saleProceeds
+  // §7.7b. The cheque is priced like the round it replaces: the community that funded you owns a
+  // claim on what they funded. Zero when the sale cleared nothing, so a launch into a market with
+  // no depth costs no equity either.
+  s.founderEquity = clamp(s.founderEquity * (1 - terms.equityDilution), 0, 1)
   // A token launch is the loudest week the company has had, and the institutional world reads it
   // as a founder who stopped taking their calls.
   s.hype = clamp(s.hype + 12, 0, 100)
@@ -502,6 +556,11 @@ export function launchToken(s: GameState, draft: LaunchDraft = {}): LaunchResult
       `${terms.boundBy === 'float_depth' ? 'the community absorbed everything it could, and that was the limit' : terms.boundBy === 'valuation_ceiling' ? 'capped at what an equity round of this size would have raised' : 'the book filled at the asking price'}. ` +
       `You hold ${(terms.plan.allocation.founder * 100).toFixed(0)}% of supply, vesting over ${terms.durationWeeks} weeks after a ` +
       `${terms.cliffWeeks}-week cliff. ` +
+      (terms.equityDilution > 0.001
+        ? `The money is not free, and it never was: the people who funded you own a claim on what they funded. Your stake in the ` +
+          `company went from ${(before * 100).toFixed(1)}% to ${(s.founderEquity * 100).toFixed(1)}% — the same price the round you ` +
+          `just closed the door on would have charged. What you keep on top of it is the ${(terms.plan.allocation.founder * 100).toFixed(0)}% of supply. `
+        : '') +
       (terms.reaction.founderExcess > 0.015
         ? `The forums did the arithmetic within the hour: ${(terms.reaction.founderExcess * 100).toFixed(0)} points more of supply than a company at this stage usually keeps, and they are already counting the weeks to your cliff. `
         : terms.reaction.founderExcess < -0.015
