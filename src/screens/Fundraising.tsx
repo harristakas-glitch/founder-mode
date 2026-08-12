@@ -31,6 +31,7 @@ import {
   type LaunchDraft,
 } from '../game/token/launch'
 import { treasuryValue } from '../game/token/market'
+import { CONDUCT_LABELS, communityReadout, moodLabel } from '../game/token/community'
 import { maxTreasurySale, treasurySaleQuote, treasurySalesActive } from '../game/token/treasury'
 import type { TokenUtilityModel, VestingPolicy } from '../game/token/types'
 import type { GameState } from '../game/types'
@@ -377,6 +378,79 @@ function IncentivePanel() {
   )
 }
 
+/** ICO brief §32–§35 and §38 (Slice 5). The community's mood, made visible — the cost side of the
+ *  token path is invisible unless the mood is on the screen next to the levers that move it. Words
+ *  before numbers (§9: "avoid turning Career into a trading terminal"). */
+function CommunityPanel() {
+  const game = useStore((s) => s.game)!
+  const c = communityReadout(game)
+  if (!c.active) return null
+  const drags = c.conduct.drags.filter((d) => d.points >= 0.5)
+  const trustColor = c.trust < 30 ? 'var(--color-bad)' : c.trust < 50 ? 'var(--color-warn)' : 'var(--color-good)'
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="The community — the people your capital came from">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
+          <div>
+            <div className="text-[11px] text-mut">Trust</div>
+            <b>{moodLabel(c.trust)}</b>
+            <div className="mt-1">
+              <Bar value={c.trust} color={trustColor} />
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Sentiment</div>
+            <b>{moodLabel(c.sentiment)}</b>
+            <div className="mt-1">
+              <Bar value={c.sentiment} />
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Community</div>
+            <b className="tnum">{c.members.toLocaleString()}</b>{' '}
+            <span className="text-[11px] text-mut">members · {c.holders.toLocaleString()} hold</span>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Your influence</div>
+            <b className="tnum">{Math.round(c.founderInfluence)}%</b>{' '}
+            <span className="text-[11px] text-mut">· network {Math.round(c.decentralisation)}% decentralised</span>
+          </div>
+        </div>
+
+        {c.decentralisationDemand >= 50 && (
+          <div className="mt-2.5 text-xs leading-relaxed text-warn">
+            Holders are demanding more control ({Math.round(c.decentralisationDemand)}/100)
+            {c.founderInfluence >= 50 ? ' — and you still hold it, which costs trust every week it stands open.' : '.'}{' '}
+            The community-treasury programme hands control over, permanently, and settles it.
+          </div>
+        )}
+
+        {c.trust < 40 && (
+          <div className="mt-2.5 text-xs leading-relaxed text-bad">
+            {c.exodusSeverity > 0
+              ? `Exodus: holders are leaving at ~${Math.round(c.exodusSeverity * 12)}%/week and selling on the way out. The market thins with them — and your own position is priced against that market.`
+              : `Trust is ${Math.round(c.trustHeadroom)} points above the exodus floor. Below it, holders start leaving — and selling.`}
+          </div>
+        )}
+
+        {drags.length > 0 ? (
+          <div className="mt-2.5 text-xs leading-relaxed text-mut">
+            <span className="font-bold text-ink">What they hold against you:</span>{' '}
+            {drags.map((d) => `${CONDUCT_LABELS[d.id]} (−${d.points.toFixed(1)})`).join(' · ')}. Trust recovers when the conduct stops
+            — the ledger fades, it does not accumulate.
+          </div>
+        ) : (
+          <div className="mt-2.5 text-xs leading-relaxed text-mut">
+            The conduct ledger is clean: nothing you have done recently is dragging trust down. A trusted community grows, deepens your
+            market and absorbs bad weeks; a betrayed one starves all three, and below the floor it leaves.
+          </div>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
 /**
  * ICO brief §1/§2/§3. The fork, and everything the player needs to judge it.
  *
@@ -427,6 +501,7 @@ function TokenisationPanel() {
             token position could actually be sold for.
           </div>
         </Panel>
+        <CommunityPanel />
         <TreasurySalePanel />
         <IncentivePanel />
       </div>

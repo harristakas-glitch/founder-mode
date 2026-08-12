@@ -526,7 +526,13 @@ console.log('— The lag rule: no level is both input and output of the same tic
   //   snapshot and cannot see it. Drop the snapshot and read the freshly-written sentiment instead,
   //   and trust leaks straight through into engagement. Same-tick self-reference, caught by
   //   construction rather than by a hard-coded expected value.
+  //
+  //   SLICE 5 CAVEAT: with `tokenCommunity` on, trust DOES reach engagement deliberately — the
+  //   exodus shock — still from the snapshot. This test asserts the Slice-2 property, so it runs
+  //   with the community off; test/token-community.test.ts asserts the Slice-5 snapshot discipline
+  //   on its own channel.
   const a = tokenised('saas', 8642)
+  a.capabilities = { ...a.capabilities, tokenCommunity: false }
   const b = structuredClone(a)
   a.token!.community.trust = 5
   b.token!.community.trust = 95

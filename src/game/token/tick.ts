@@ -34,20 +34,34 @@
 // WHAT THIS SLICE DOES NOT DO
 //
 // No founder token sales (§42 — still unbuilt, so `bankedPayout` remains unreachable on the token
-// path), no sentiment/founder-influence dynamics beyond what Slice 4 needed (Slice 5), no proposals
-// (Slice 6), no narrative (Slice 7).
+// path), no proposals (Slice 6), no narrative (Slice 7).
 //
 // SLICE 4 ADDED, and each is marked at its line: the six incentive categories' effects, vesting
 // unlocks as pure supply pressure, and the one write into `trust` that the community-treasury
-// category needs. `trust` was previously read-only here and Slice 5 still owns everything else
-// about it — conduct, delivery, revolt — which is the seam that slice takes over.
+// category needs.
+//
+// SLICE 5 ADDED the community as a counterparty (token/community.ts), behind `tokenCommunity`:
+// the full trust model (conduct ledger + crash shocks, resilience-scaled), decentralisation
+// demand that actually rises, founderInfluence's contractual reversion, and the exodus. With the
+// capability off, every branch below reduces to the exact Slice-4 arithmetic — measured, not
+// assumed: the acceptance test diffs `npm run bots` byte-for-byte.
 //
 // Supply moves in exactly two places, treasury → circulating and locked → circulating, each one
 // subtraction and one addition of the same integer, so the §4.6 identity cannot break here.
+// (Exodus sell pressure is priced pressure, not moved supply: departing holders sell to other
+// holders — the float does not change, the price does.)
 
 import { RNG } from '../data'
 import { hasCapability } from '../modes'
 import type { GameState } from '../types'
+import {
+  communityModifiers,
+  tickCommunity,
+  COMMUNITY_IDLE,
+  NEUTRAL_MODIFIERS,
+  type CommunityModifiers,
+  type CommunityTickReport,
+} from './community'
 import {
   advanceIncentiveStocks,
   incentiveEffects,
@@ -107,6 +121,9 @@ export interface TokenTickReport {
   /** Slice 4: the six categories' spend, and what the stocks bought. */
   spend: WeeklyIncentiveSpend
   effects: IncentiveEffects
+  /** Slice 5: what the community's mood did to the week, and what the community step decided. */
+  mods: CommunityModifiers
+  community: CommunityTickReport
 }
 
 const IDLE: TokenTickReport = {
@@ -122,6 +139,8 @@ const IDLE: TokenTickReport = {
   unlocked: 0,
   spend: NO_SPEND,
   effects: NO_EFFECTS,
+  mods: NEUTRAL_MODIFIERS,
+  community: COMMUNITY_IDLE,
 }
 
 /** The product the network ships. Local copy for the same reason market.ts keeps one. */
@@ -158,7 +177,16 @@ export function tickToken(s: GameState): TokenTickReport {
     holders: t.community.holders,
     depth: t.market.depth,
     momentum: momentum(t),
+    // Slice 5. The community step's inputs, snapshotted under the same rule as everything else.
+    decentralisation: t.community.decentralisation,
+    decentralisationDemand: t.community.decentralisationDemand,
+    founderInfluence: t.community.founderInfluence,
   }
+
+  // Slice 5: what the community's mood does to the week — member growth, market depth, and (below
+  // the trust floor) the exodus and its sell pressure. Computed from the snapshot BEFORE any
+  // write, neutral (scales 1, pressures 0) when `tokenCommunity` is off.
+  const mods = communityModifiers(s, prev)
 
   // ---- 1. the treasury releases tokens into the float (loop A) ----
   // Slice 4: the six categories' split of the week's release, read BEFORE anything moves, and the
@@ -194,7 +222,9 @@ export function tickToken(s: GameState): TokenTickReport {
 
   // ---- 3. the price. One draw, always. ----
   const noise = RNG.next() * 2 - 1
-  const step = priceStep(t, fair, floatFraction, spendEffectiveness(t), noise, unlockFraction)
+  // Slice 5: departing holders sell on the way out. Same supply-pressure coefficient as every
+  // other release; 0 whenever the community capability is off or trust is above the floor.
+  const step = priceStep(t, fair, floatFraction, spendEffectiveness(t), noise, unlockFraction, mods.sellPressure)
   t.market.price = step.price
   t.market.fairValue = fair
   t.market.lastDemand = step.demand
@@ -272,7 +302,13 @@ export function tickToken(s: GameState): TokenTickReport {
     TOKEN_ECONOMY.engagementSpendGain * floatFraction,
   )
   const engagementTarget = clamp(prev.sentiment * 0.45 + prev.utility * 0.3 + spendEngagement, 0, 100)
-  t.community.engagement = clamp(approach(prev.engagement, engagementTarget, TOKEN_ECONOMY.engagementReversion), 0, 100)
+  // Slice 5: an exodus is disengagement in motion. A saturating shock from the snapshot — the same
+  // composition the speculation shock uses — and zero whenever the community capability is off.
+  t.community.engagement = clamp(
+    saturatingAdd(approach(prev.engagement, engagementTarget, TOKEN_ECONOMY.engagementReversion), -mods.engagementShock),
+    0,
+    100,
+  )
 
   // Volatility is a level with a bounded target (brief §28): speculation raises it, utility and
   // community damp it, and a violent week raises it temporarily.
@@ -285,13 +321,20 @@ export function tickToken(s: GameState): TokenTickReport {
 
   // Community size tracks the organic user base, scaled by how engaged and how happy it is. Bounded
   // by construction: the target is a multiple of a population the token economy does not control.
+  // Slice 5 scales the TARGET by trust (a betrayed community stops arriving) and cuts the RESULT
+  // by the week's exodus (the ones already here leave). Both factors are 1/0 with the capability
+  // off, and both are computed from the snapshot.
   const membersTarget = Math.max(
     0,
     organicUserCount(s) *
       (TOKEN_ECONOMY.membersPerUserBase + TOKEN_ECONOMY.membersPerUserEngagement * clamp01(prev.engagement / 100)) *
-      (0.6 + 0.8 * clamp01(prev.sentiment / 100)),
+      (0.6 + 0.8 * clamp01(prev.sentiment / 100)) *
+      mods.membersScale,
   )
-  t.community.members = Math.max(0, Math.round(approach(prev.members, membersTarget, TOKEN_ECONOMY.membersReversion)))
+  t.community.members = Math.max(
+    0,
+    Math.round(approach(prev.members, membersTarget, TOKEN_ECONOMY.membersReversion) * (1 - mods.exodusFraction)),
+  )
   // `prev.engagement`, not the engagement written four lines above. Nothing in this block reads a
   // value this tick produced — the chain members → holders → depth is one-directional and could not
   // blow up, but keeping the rule absolute is what stops the next person adding the edge that can.
@@ -302,34 +345,46 @@ export function tickToken(s: GameState): TokenTickReport {
   // Depth is what the founder's exit discount reads (scoring.ts). It is earned the same way.
   // Slice 4: liquidity incentives are the useful half of §17, and the only category that pays the
   // founder directly — depth is 45% of `liquidityDiscount`'s market-quality term.
+  // Slice 5 scales this target by trust too: market makers price counterparty risk, and depth is
+  // the term that carries the community's mood into `liquidityDiscount` — the founder's own exit.
   const depthTarget = clamp01(
-    0.08 +
+    (0.08 +
       0.5 * clamp01(prev.engagement / 100) +
       0.25 * clamp01(prev.utility / 100) +
       0.15 * clamp01(prev.holders / 5000) +
-      effects.depth,
+      effects.depth) *
+      mods.depthScale,
   )
   t.market.depth = clamp01(approach(prev.depth, depthTarget, TOKEN_ECONOMY.depthReversion))
 
-  // ---- 4b. what the community treasury bought (§19, Slice 4) ----
+  // ---- 4b. the community (§19 Slice 4; §32–§35, §38 Slice 5) ----
   // Decentralisation is MONOTONE NON-DECREASING (§35): unlike every other effect in this slice it
   // does not reverse when the stock decays, and that asymmetry is the category's whole cost.
   if (effects.decentralisation > 0) {
     t.community.decentralisation = clamp(saturatingAdd(t.community.decentralisation, effects.decentralisation), 0, 100)
-    // Handing over control is what the loudest holders were asking for, so the demand subsides.
-    t.community.decentralisationDemand = clamp(
-      saturatingAdd(t.community.decentralisationDemand, -effects.decentralisation * 1.5),
-      0,
-      100,
-    )
   }
-  // Trust, through the ONE channel this slice owns: decision 4 loop E's concave
-  // `decentralisationTrustGain × sqrt(d)`. Slice 5 owns everything else about trust — founder
-  // conduct, delivery, revolt — and this is the seam it takes over. Written as an approach to a
-  // target rather than as an accumulation, so nothing ratchets and Slice 5 can extend the target
-  // without unpicking a running total.
-  if (effects.trustTarget !== null)
-    t.community.trust = clamp(approach(prev.trust, effects.trustTarget, TOKEN_BOUNDS.sentimentReversion), 0, 100)
+  // Slice 5 owns trust, decentralisation demand and founder influence from here — the seam Slice 4
+  // left it ("conduct, delivery, revolt"). With the capability off, the ORIGINAL Slice-4 writes run
+  // below, character for character, so a save that never turns it on computes what it always did.
+  let community: CommunityTickReport = COMMUNITY_IDLE
+  if (mods.active) {
+    const communityStock = clamp01(t.incentives.find((p) => p.category === 'community_treasury')?.effectiveness ?? 0)
+    community = tickCommunity(s, prev, effects, mods, communityStock)
+  } else {
+    if (effects.decentralisation > 0) {
+      // Handing over control is what the loudest holders were asking for, so the demand subsides.
+      t.community.decentralisationDemand = clamp(
+        saturatingAdd(t.community.decentralisationDemand, -effects.decentralisation * 1.5),
+        0,
+        100,
+      )
+    }
+    // Trust, through the ONE channel Slice 4 owned: decision 4 loop E's concave
+    // `decentralisationTrustGain × sqrt(d)`. Written as an approach to a target rather than as an
+    // accumulation, so nothing ratchets — which is exactly what let Slice 5 extend the target.
+    if (effects.trustTarget !== null)
+      t.community.trust = clamp(approach(prev.trust, effects.trustTarget, TOKEN_BOUNDS.sentimentReversion), 0, 100)
+  }
 
   // Partnerships buy DISTRIBUTION, and distribution is the engine's own `hype` — which feeds the
   // ORGANIC acquisition terms in both modes. This is the one category whose users are evidence:
@@ -374,7 +429,7 @@ export function tickToken(s: GameState): TokenTickReport {
 
   t.lastTickedWeek = s.week
 
-  return { ran: true, commitment, fair, step, flooredThisWeek: step.floored, unlocked, spend, effects }
+  return { ran: true, commitment, fair, step, flooredThisWeek: step.floored, unlocked, spend, effects, mods, community }
 }
 
 /** Facts only, and rate-limited: history is a 120-entry budget the postmortem quotes from. */

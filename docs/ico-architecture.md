@@ -487,6 +487,20 @@ decentralisation ↑ → trust ↑ → sentiment ↑ → price ↑ → more dece
 * `founderInfluence` reverts toward `(100 − decentralisation)` at `founderInfluenceReversion 0.1`.
   It never jumps.
 
+> **Slice 5 amendment — the loop now runs, and influence is read.** Until this slice the reversion
+> above was contract prose: `founderInfluence` was written at launch and never touched, and `trust`
+> reached exactly one term (engagement at 0.35 → liquidity discount at 0.2 — a maximum treasury
+> sale cost ~1 point of market quality). `token/community.ts` implements the loop behind
+> `tokenCommunity`: the trust TARGET carries a conduct ledger (treasury-sale memory, mercenary
+> share, founder overhang, unmet decentralisation demand × influence), crash shocks land scaled by
+> `resilienceFactor(founderInfluence)` (0.5–1.5 — §35's control-for-resilience trade, reading the
+> LAGGED variable so decentralising during the crisis does not help), demand rises when influence
+> outruns trust, and trust reaches the founder through members and depth target scales and, below
+> `exodusTrustFloor`, an exodus that cuts members/holders and sells (supply pressure, no demand
+> term). Every reaction is target-side or saturating, so nothing ratchets and the floor repels —
+> measured over a 40-week recovery from trust 2 in test/token-community.test.ts. §7.9 stands:
+> the revolt-terminates ending remains unbuilt; the exodus is the non-terminal §43 process.
+
 ### Loop F — Mercenary growth → valuation → capacity
 
 Incentivised users inflate `s.users` → `valuation()` rises → but VC and IPO are closed, so it buys
@@ -701,6 +715,16 @@ these jobs:
 > created are recorded above. **Founder token sales (§42) remain UNBUILT**, which means
 > `bankedPayout` is still unreachable on the token path — the hole loop F names is still open, and
 > whoever picks it up owns the salami-slicing question that `exitImpact` raises.
+
+> **Slice 5 note on this section.** Same situation: the table named nothing for Slice 5. What it
+> created, all in `token/community.ts` unless noted: `communityActive(s)`, `communityConduct(s)`,
+> `communityTrustTarget(s, prev, stock)`, `communityModifiers(s, prev)`, `tickCommunity(...)`,
+> `resilienceFactor(influence)`, `founderOverhang(t, week)`, `communityReadout(s)`, `moodLabel(v)`,
+> plus `saleInfluenceFactor(s)` in `token/treasury.ts` and the `TOKEN_COMMUNITY` constant block in
+> `token/types.ts`. `tickToken` gained two optional report fields (`mods`, `community`) and
+> `priceStep` a third supply-pressure argument (`communitySellFraction`, default 0). No persisted
+> field was added — the community sub-state Slice 0 shipped was already sufficient — so
+> `TOKEN_STATE_VERSION` stays 2.
 
 `modes.ts`, `types.ts`, `engine.ts` and `store.ts` belong to the **integrator only**. Build agents
 report the change they need; they do not make it.
