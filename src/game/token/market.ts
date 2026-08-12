@@ -257,6 +257,14 @@ export function priceStep(
    * and would delete the cost of choosing `short`.
    */
   unlockFraction = 0,
+  /**
+   * Slice 5, brief §33/§43. Holders leaving an exodus sell on the way out — priced through the
+   * same coefficient as every other release, with no demand term behind it (nobody was paid to
+   * build anything; they simply left). Unlike the two fractions above this is not new supply —
+   * the float does not change — which is why it is a third argument and not folded into either.
+   * 0 whenever `tokenCommunity` is off, so Slice-2/4 behaviour is unchanged by default.
+   */
+  communitySellFraction = 0,
 ): PriceStep {
   const m = momentum(t)
   const spec = clamp01(t.market.speculation / 100)
@@ -282,9 +290,10 @@ export function priceStep(
     TOKEN_ECONOMY.demandCap,
   )
 
-  // Strictly larger coefficient than ecosystemDemand's, by construction — and the unlock leg gets
-  // the same coefficient with no demand term at all behind it.
-  const supplyPressure = TOKEN_BOUNDS.supplyPressurePerFloatPct * (floatFraction + Math.max(0, unlockFraction))
+  // Strictly larger coefficient than ecosystemDemand's, by construction — and the unlock and
+  // exodus legs get the same coefficient with no demand term at all behind them.
+  const supplyPressure =
+    TOKEN_BOUNDS.supplyPressurePerFloatPct * (floatFraction + Math.max(0, unlockFraction) + Math.max(0, communitySellFraction))
 
   const safeFair = Math.max(priceFloor(t) * TOKEN_ECONOMY.fairValueFloorMultiple, fair)
   const d = clamp(Math.log(t.market.price / safeFair), -TOKEN_ECONOMY.logDeviationCap, TOKEN_ECONOMY.logDeviationCap)

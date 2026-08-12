@@ -854,6 +854,112 @@ export const TOKEN_INCENTIVES = {
   utilityFitMax: 1,
 } as const
 
+// ---------- community & decentralisation (Slice 5) ----------
+
+/**
+ * The community as a COUNTERPARTY. Brief §32–§35, §38; docs/ico-architecture.md §4 loop E.
+ *
+ * Slice 5 is the COST side of the token path, and this block is organised around one measured
+ * failure: before it, `trust` reached exactly one term (engagement at weight 0.35 → the liquidity
+ * discount at weight 0.2) and a maximum treasury sale cost about ONE POINT of market quality, while
+ * `founderInfluence` was written at launch and never read again. The community noticed everything
+ * and could do nothing about any of it.
+ *
+ * THE RULE THIS BLOCK ADDS, stated once:
+ *
+ *     TRUST IS PARTIALLY BUYABLE (the community-treasury category pays for it), SO TRUST MUST
+ *     NEVER REACH `fairValue`, `utility`, OR ANY OTHER ANCHOR INPUT. Its consequences run through
+ *     the community's own BODY — members, holders, engagement, depth — and through the price's
+ *     supply side (an exodus sells), never through the fundamental anchor.
+ *
+ * Every reaction here has a restoring force, per the standing contract:
+ *   • the trust TARGET carries the conduct drags; trust itself reverts toward it, so stopping the
+ *     conduct is what recovers the trust — nothing ratchets and nothing is absorbing;
+ *   • decentralisation demand reverts toward a target set by the influence−trust gap;
+ *   • founderInfluence reverts toward (100 − decentralisation) and never jumps (§34);
+ *   • an exodus removes the people who would have left, so each week's exodus shrinks the base the
+ *     next one is drawn from, and trust recovering re-grows members through the ordinary target.
+ */
+export const TOKEN_COMMUNITY = {
+  // --- the conduct ledger: what drags the trust TARGET down (§33's list, priced) ---
+  /** Weeks the community remembers a treasury sale when setting its expectation of you. The same
+   *  window the sale's own confidence cost uses, so the story is one story. */
+  saleMemoryWeeks: 16,
+  /** Points off the trust target at full, fresh memory of a treasury sale. This is what makes the
+   *  sale's one-off trust hit STAY DOWN instead of reverting away within a quarter. */
+  saleMemoryDrag: 12,
+  /** Points off the trust target when the whole user base is rented. The community can read the
+   *  §53 warning too: growth that is mostly bought reads as a founder buying a chart. */
+  mercenaryTrustDrag: 14,
+  /** Incentivised share of users below which nobody minds the rewards programme. Matches the §53
+   *  warning's own floor so the game tells one story in two places. */
+  mercenaryShareFloor: 0.25,
+  /** Founder vested-unsold tokens as a share of the FLOAT above which sell-pressure fear sets in.
+   *  Vested, not granted: tokens behind the cliff cannot hit the market, and the forums count the
+   *  weeks to your cliff (launch.ts already says so). */
+  overhangFloatFloor: 0.12,
+  /** Points off the trust target when the founder's sellable position IS the float. */
+  overhangTrustDrag: 10,
+  /** Points off the trust target at full decentralisation demand under a founder at full
+   *  influence. THE `founderInfluence` READ: the same unmet demand under a founder who already
+   *  handed over control costs nothing, because there is nothing left to demand. */
+  centralisationTrustDrag: 14,
+
+  // --- crash shocks, and the resilience trade (§35: decentralisation buys network resilience) ---
+  /** Points of trust shock per unit of negative momentum, before the resilience factor. */
+  crashTrustGain: 10,
+  /** The resilience factor at founderInfluence 0 and 100. A centralised network AMPLIFIES a trust
+   *  shock (everyone watches the founder, and the founder was the story); a decentralised one
+   *  absorbs it. Reads INFLUENCE, not decentralisation — influence lags the handover by design
+   *  (§34), so giving control away protects you only once the community believes it. */
+  resilienceAmpMin: 0.5,
+  resilienceAmpMax: 1.5,
+
+  // --- decentralisation demand (§33: "excessive centralisation"; §38: community pressure) ---
+  /** Demand target floor — some holders always want more say. */
+  demandBase: 12,
+  /** Points of demand target per point `founderInfluence` exceeds `trust`. The type's own comment
+   *  ("rises when founderInfluence outruns trust"), finally implemented. */
+  demandGapGain: 0.9,
+  demandReversion: 0.08,
+
+  // --- what the mood is worth: the founder-feel channels ---
+  /** Trust level at which the community neither grows nor shrinks the targets below — the pivot,
+   *  so a healthy community is a mild tailwind and a betrayed one is a real cost. */
+  trustNeutral: 0.55,
+  /** Members target scale = 1 + span × (trust/100 − trustNeutral). Community growth is organic
+   *  growth in the population that holders, engagement and depth are all built from. */
+  membersTrustSpan: 0.8,
+  /** Depth target scale, same shape. Depth is 45% of the liquidity discount's market quality —
+   *  this is the channel that makes trust reach the founder's own arithmetic. */
+  depthTrustSpan: 0.5,
+
+  // --- exodus (§43's community revolt, as a PROCESS rather than an event roll) ---
+  /** Trust below this and holders start leaving. Strictly above 0 so the floor is never where the
+   *  process starts; strictly below launch-day trust so no launch begins inside one. */
+  exodusTrustFloor: 30,
+  /** Share of holders leaving per week at trust 0. Severity scales linearly up from the floor. */
+  exodusRateMax: 0.12,
+  /** Float-fraction of sell pressure at full severity — the departing holders sell on the way
+   *  out, through the SAME supply-pressure coefficient every other release pays. */
+  exodusSellFloatPct: 0.012,
+  /** Points of engagement shock at full severity, saturating like every other shock. */
+  exodusEngagementShock: 6,
+  exodusInboxCooldownWeeks: 8,
+
+  // --- who was seen selling (treasury.ts, gated on `tokenCommunity`) ---
+  /** Confidence-cost multiplier on a treasury sale at founderInfluence 0 and 100. A sale by a
+   *  treasury the community effectively governs reads as their decision; a founder-controlled
+   *  treasury dumping into its own float reads as the boss cashing out. */
+  saleInfluenceCostMin: 0.6,
+  saleInfluenceCostMax: 1.4,
+
+  // --- community pressure (§38) ---
+  pressureDemand: 70,
+  pressureInfluence: 60,
+  pressureCooldownWeeks: 12,
+} as const
+
 // ---------- scoring (decision 1) ----------
 
 /**

@@ -50,9 +50,10 @@
 import { valuation } from '../engine'
 import { hasCapability } from '../modes'
 import type { GameState } from '../types'
+import { communityActive } from './community'
 import { saleDilution } from './launch'
 import { priceFloor } from './market'
-import { TOKEN_BOUNDS, TOKEN_LIMITS, type TokenState } from './types'
+import { TOKEN_BOUNDS, TOKEN_COMMUNITY, TOKEN_LIMITS, type TokenState } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => clamp(v, 0, 1)
@@ -121,6 +122,22 @@ function recency(t: TokenState, week: number): number {
 }
 
 /**
+ * Slice 5, and THE `founderInfluence` read the contract demanded. 0.6–1.4 on the confidence cost:
+ * a treasury the community effectively governs selling its own token reads as their decision — a
+ * founder-controlled treasury dumping into its own float reads as the boss cashing out, and the
+ * community prices the difference. This is the other half of §35's trade: decentralising costs
+ * control and buys exactly this kind of resilience.
+ *
+ * 1 when `tokenCommunity` is off, so the Slice-4 quote is unchanged to the last digit.
+ */
+export function saleInfluenceFactor(s: GameState | null | undefined): number {
+  const t = s?.token
+  if (!t || !communityActive(s)) return 1
+  const f = clamp(t.community.founderInfluence, 0, 100) / 100
+  return TOKEN_COMMUNITY.saleInfluenceCostMin + (TOKEN_COMMUNITY.saleInfluenceCostMax - TOKEN_COMMUNITY.saleInfluenceCostMin) * f
+}
+
+/**
  * What a sale of `tokens` would produce. Pure — the preview and the sale itself call the same
  * function with the same arguments, so the quote cannot lie.
  */
@@ -159,7 +176,8 @@ export function treasurySaleQuote(s: GameState | null | undefined, tokens: numbe
   const avgPrice = (t.market.price + priceAfter) / 2
 
   const sizeShare = clamp01(size / Math.max(1, max))
-  const confidence = sizeShare * (1 + recency(t, s!.week))
+  // Slice 5: WHO was seen selling scales what it costs in belief. 1 with `tokenCommunity` off.
+  const confidence = sizeShare * (1 + recency(t, s!.week)) * saleInfluenceFactor(s)
   const proceeds = size * avgPrice
   return {
     ok: true,

@@ -147,13 +147,13 @@ export interface GameCapabilities {
   // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
   // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
   // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
-  // Slices 1–4 shipped, so the first four are true in CAREER ONLY. The other three stay false in
+  // Slices 1–5 shipped, so the first five are true in CAREER ONLY. The other two stay false in
   // every mode until the code that honours them exists.
   tokenisation: boolean // BUILT (Slice 1). The capital fork: eligibility, the decision, VC/IPO restrictions
   tokenEconomy: boolean // BUILT (Slice 2). Price, supply, treasury, utility, community, speculation, volatility
   tokenUserComposition: boolean // BUILT (Slice 3). Organic vs incentivised users, split retention, PMF protection, the §53 warning
   tokenIncentives: boolean // BUILT (Slice 4). Tokenomics at launch, the six categories, vesting unlocks, employee token comp
-  tokenCommunity: boolean // sentiment, trust, decentralisation, founder influence (Slice 5)
+  tokenCommunity: boolean // BUILT (Slice 5). The conduct-priced trust model, decentralisation demand, founder influence, the exodus
   tokenGovernance: boolean // proposals resolved from state, never randomly (Slice 6)
   tokenNarrative: boolean // token Director candidates, media, company memory, postmortem sections (Slice 7)
 
@@ -353,6 +353,13 @@ const CAREER_BASE_RULES: GameRules = {
     // empty in every played game and the entire user-composition mechanic could only be reached by
     // a probe writing state directly. On HERE only, for the same reason as the three above.
     tokenIncentives: true,
+    // ICO Slice 5 — the community as a counterparty, and the COST side of the token path. The
+    // trust target carries a conduct ledger (treasury sales remembered, bought growth, founder
+    // overhang, unmet decentralisation demand); crash shocks land scaled by founderInfluence, so
+    // §35's control-for-resilience trade is real; and trust reaches numbers the founder feels —
+    // member growth, market depth (45% of the liquidity discount), and, at the trust floor, an
+    // exodus that sells on the way out. On HERE only: Quick Play is Slice 7, Arena is off (§58).
+    tokenCommunity: true,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.
