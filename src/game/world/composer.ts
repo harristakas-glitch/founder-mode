@@ -39,11 +39,12 @@ import type {
 import { LIVING_WORLD_LIMITS } from './types'
 import { EMPLOYEE_FRAGMENTS } from './content/composer-employee'
 import { MEDIA_FRAGMENTS } from './content/composer-media'
+import { ADVISOR_FRAGMENTS } from './content/advisors'
 import { shapesFor, type MessageShape } from './content/composer-shapes'
 export type { MessageShape } from './content/composer-shapes'
 
 /** Everything shipped today. Callers may pass their own library; this is the default. */
-export const DEFAULT_FRAGMENT_LIBRARY: FragmentLibrary = { ...EMPLOYEE_FRAGMENTS, ...MEDIA_FRAGMENTS }
+export const DEFAULT_FRAGMENT_LIBRARY: FragmentLibrary = { ...EMPLOYEE_FRAGMENTS, ...MEDIA_FRAGMENTS, ...ADVISOR_FRAGMENTS }
 
 // Sized against the caps in LIVING_WORLD_LIMITS: recentFragmentIds holds 60 ids and a message
 // spends 4-6 of them, so ~12 weeks of one-message-a-week history is what the buffer can actually
@@ -370,6 +371,13 @@ export interface ComposeInput {
   usage?: NarrativeUsageState
   library?: FragmentLibrary
   shapes?: readonly MessageShape[]
+  /**
+   * Fragment ids this message may not draw at all — the same hard guarantee the intra-message
+   * `used` list gives, extended across a group of messages composed together (the advisor panel:
+   * two seats reading the same fact must not read the same sentence). Unlike a cooldown this
+   * cannot be overridden by an exhausted pool; the message goes quieter instead.
+   */
+  exclude?: readonly string[]
   /** Escape hatch for callers that already own a seeded stream. Normally omitted. */
   rng?: () => number
 }
@@ -509,7 +517,10 @@ export function composeNarrative(input: ComposeInput): ComposedNarrative | null 
   )
   if (!shape) return null
 
-  const used: string[] = []
+  // `used` is the exclusion list (pre-seeded by the caller); `chosen` is what THIS message drew.
+  // They were one array until `exclude` existed — fragmentIds must never report an id the caller
+  // banned, only the ids actually spoken.
+  const used: string[] = [...(input.exclude ?? [])]
   const chosen: Fragment[] = []
   const take = (type: FragmentType): string | undefined => {
     if (type === 'memory' && !memory) return undefined
@@ -565,7 +576,7 @@ export function composeNarrative(input: ComposeInput): ComposedNarrative | null 
     subject,
     body,
     text: body ? `${subject}\n\n${body}` : subject,
-    fragmentIds: used,
+    fragmentIds: chosen.map((f) => f.id),
     shapeKey: shape.key,
     pattern: `${subjectTypes.join('+')}|${bodyTypes.join('+')}`,
     tags,

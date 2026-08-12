@@ -52,7 +52,7 @@ export interface GameConfig {
 //   founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame, macroShocks, pvpActions,
 //   sharedHiringPool, leaderboard, detailedPMF, customerResearch, hypothesisBoard,
 //   persistentCharacters, characterMemory, companyMemory, relationships, proceduralNarrative,
-//   promises, tokenisation.
+//   advisorOpinions, promises, tokenisation.
 //
 // DESCRIPTIVE (true statements about the experience, but nothing branches on them yet):
 //   humanRivals   — Arena's opponents come from the room's presence list, not this flag.
@@ -133,7 +133,7 @@ export interface GameCapabilities {
   characterMemory: boolean // they remember what you did to them
   companyMemory: boolean // the company's own notable history, for "since the Series A" comparisons
   relationships: boolean // trust/respect/alignment/dependence, per person
-  advisorOpinions: boolean // named advisors argue, with their own biases
+  advisorOpinions: boolean // BUILT (Phase 6). Named advisors argue, with their own biases — Career only
   structuredInterviews: boolean // customer interviews answered in character
   structuredEmployeeConversations: boolean // replaces the fixed 1:1 templates
   proceduralBoardMeetings: boolean // board sessions composed from the board's actual grievances
@@ -357,6 +357,11 @@ const CAREER_BASE_RULES: GameRules = {
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.
     relationships: true,
+    // Living World Phase 6 (brief §28-§33): named advisors read the same week through different
+    // weights and argue about it on the Dashboard (§76). Career only — §32 keeps Quick Play's
+    // advisor layer shallow and §33 keeps Arena's off entirely, because Arena's complexity is
+    // the other players.
+    advisorOpinions: true,
     // Career Phase 1 — PMF Discovery 2.0. Segment truth, beliefs, evidence, cohorts.
     detailedPMF: true,
     customerSegments: true,

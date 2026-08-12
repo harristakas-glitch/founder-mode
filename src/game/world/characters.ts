@@ -217,6 +217,17 @@ function generateName(key: string): { firstName: string; lastName: string } {
 
 export const fullName = (c: Character): string => (c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName)
 
+/**
+ * A cast id that survives a replay. The simulation's own ids come from `uid()`, which mixes
+ * Date.now() and Math.random() — fine for a runtime handle, useless as an identity, because the
+ * same seed would produce a differently-keyed cast on every run and no persisted world could ever
+ * be matched back to its people. Names ARE seeded, so they are the stable part; job role and skill
+ * disambiguate the rare collision.
+ */
+export function stableCastId(kind: string, name: string, extra: string | number = ''): string {
+  return `${kind}:${name}${extra === '' ? '' : `:${extra}`}`.toLowerCase().replace(/\s+/g, '_')
+}
+
 // ---------- personality ----------
 
 function applyWeights(base: CharacterPersonality, w: PersonalityWeights | undefined): void {

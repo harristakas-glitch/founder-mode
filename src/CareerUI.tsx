@@ -705,3 +705,48 @@ export function PmfExplainer() {
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------------------
+// 5. What the team thinks — Living World Phase 6 (brief §28-§33, panel format §76)
+//
+// The advisor panel: named people reading the same week through different weights and
+// disagreeing about it. Everything shown was composed once, when the week resolved, and
+// persisted in world.advisorPanel — this component only renders; it never recomputes prose
+// (§68/§72). Gated on the advisorOpinions capability, so Quick Play and Arena never see it.
+// ---------------------------------------------------------------------------------------
+
+export function TeamOpinions() {
+  const game = useStore((s) => s.game)
+  if (!game || !hasCapability(game, 'advisorOpinions')) return null
+  const panel = game.world?.advisorPanel
+  // Only this week's read. A panel from an earlier week is stale advice; a quiet week is quiet.
+  if (!panel || panel.week !== game.week || panel.opinions.length === 0) return null
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="What the team thinks">
+      <div className="space-y-2.5">
+        {panel.opinions.map((o) => (
+          <div key={o.id} className="flex gap-3">
+            <span
+              className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${o.direction < 0 ? 'bg-warn' : 'bg-good'}`}
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <div className="text-[12px] text-mut">
+                <b className="text-ink">{o.speaker}</b>
+                {o.title ? ` · ${o.title}` : ''}
+              </div>
+              <div className="text-[13.5px] font-semibold leading-snug">{o.headline}</div>
+              <div className="text-[13px] leading-snug text-mut">{o.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2.5 text-[11px] text-mut">
+        Each of them weighs the same week differently. None of them is automatically right.
+      </div>
+      </Panel>
+    </div>
+  )
+}

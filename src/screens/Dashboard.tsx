@@ -17,7 +17,7 @@ import {
   valuation,
   weeklyBurn,
 } from '../game/engine'
-import { FounderBriefing, PmfExplainer, careerActive } from '../CareerUI'
+import { FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
 import { PMF_LABEL, segmentSnapshots } from '../game/career/pmf'
 import { useStore } from '../store'
 
@@ -311,6 +311,12 @@ export function Dashboard() {
       <div className="mt-3.5">
         <Benchmarks />
       </div>
+
+      {/* Career: the same week, read by named people with different weights (§76). The benchmarks
+          above say what the numbers are; this says what your team would DO about them — and they
+          are allowed to disagree with each other. Carries its own margin so Quick Play (where it
+          renders null) gets no stray spacing. */}
+      <TeamOpinions />
 
       <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
         <Panel title={`Milestones (${game.milestones.length}/${MILESTONES.length})`}>

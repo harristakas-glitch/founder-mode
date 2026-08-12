@@ -20,7 +20,9 @@ import {
   founderSpec,
   fullName,
   rivalSpec,
+  stableCastId,
 } from './characters'
+import { advisorCastSpecs, buildAdvisorPanel } from './advisors'
 import { composeNarrative, recordNarrative } from './composer'
 import { directWeek, type NarrativeCandidate } from './director'
 import { recordCompanyMemory, sortedCharacterIds } from './memory'
@@ -36,19 +38,9 @@ export function livingWorldActive(s: GameState): boolean {
     hasCapability(s, 'characterMemory') ||
     hasCapability(s, 'companyMemory') ||
     hasCapability(s, 'relationships') ||
-    hasCapability(s, 'proceduralNarrative')
+    hasCapability(s, 'proceduralNarrative') ||
+    hasCapability(s, 'advisorOpinions')
   )
-}
-
-/**
- * A cast id that survives a replay. The simulation's own ids come from `uid()`, which mixes
- * Date.now() and Math.random() — fine for a runtime handle, useless as an identity, because the
- * same seed would produce a differently-keyed cast on every run and no persisted world could ever
- * be matched back to its people. Names ARE seeded, so they are the stable part; job role and skill
- * disambiguate the rare collision.
- */
-function stableCastId(kind: string, name: string, extra: string | number = ''): string {
-  return `${kind}:${name}${extra === '' ? '' : `:${extra}`}`.toLowerCase().replace(/\s+/g, '_')
 }
 
 /** Who the simulation currently knows about, as generation specs with replay-stable ids. */
@@ -61,6 +53,9 @@ function castSpecs(s: GameState): CharacterSpec[] {
   for (const r of s.rivals)
     if (r.alive)
       specs.push({ ...rivalSpec(seed, r), id: stableCastId('rival', r.name), companyId: stableCastId('co', r.name) })
+  // The advisor seats that are not employees (§28): they persist like anyone else, but only in a
+  // run that actually has advisors, so switching the capability off never grows the cast.
+  if (hasCapability(s, 'advisorOpinions')) specs.push(...advisorCastSpecs(s))
   return specs
 }
 
@@ -117,6 +112,10 @@ export function tickLivingWorld(s: GameState): void {
       world.characters[id] = upsertRelationship(c, change.after)
     }
   }
+
+  // Advisors read the week AFTER relationships settled and BEFORE the beat is narrated, so a
+  // fragment gated on the speaker's current relationship sees this week's numbers, not last week's.
+  if (hasCapability(s, 'advisorOpinions')) world.advisorPanel = buildAdvisorPanel(s, world, seed)
 
   if (hasCapability(s, 'proceduralNarrative')) composeWeeklyBeat(s, world, seed)
 
