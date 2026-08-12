@@ -42,7 +42,7 @@ function safeAvatar(v: unknown): string | null {
 export async function currentProfile(): Promise<AuthProfile | null> {
   if (!onlineConfigured) return null
   try {
-    const { data } = await getClient().auth.getSession()
+    const { data } = await (await getClient()).auth.getSession()
     return toProfile(data.session?.user ?? null)
   } catch {
     return null
@@ -51,14 +51,17 @@ export async function currentProfile(): Promise<AuthProfile | null> {
 
 export function onAuthChange(cb: (p: AuthProfile | null) => void): void {
   if (!onlineConfigured) return
-  getClient().auth.onAuthStateChange((_event, session) => cb(toProfile(session?.user ?? null)))
+  // fire-and-forget: if the lazy client chunk cannot load there is no session to observe anyway
+  getClient()
+    .then((c) => c.auth.onAuthStateChange((_event, session) => cb(toProfile(session?.user ?? null))))
+    .catch(() => {})
 }
 
 export async function signInWith(provider: AuthProvider): Promise<string | null> {
   if (!onlineConfigured) return 'Online features are not configured.'
   if (location.protocol === 'file:') return 'Sign-in needs the hosted version — open the game at its web address.'
   try {
-    const { error } = await getClient().auth.signInWithOAuth({
+    const { error } = await (await getClient()).auth.signInWithOAuth({
       provider,
       options: { redirectTo: location.origin + location.pathname },
     })
@@ -70,7 +73,7 @@ export async function signInWith(provider: AuthProvider): Promise<string | null>
 
 export async function signOut(): Promise<void> {
   try {
-    await getClient().auth.signOut()
+    await (await getClient()).auth.signOut()
   } catch {
     // signing out of a dead session is fine
   }

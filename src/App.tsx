@@ -43,7 +43,7 @@ import { Career } from './screens/Career'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
-import { runMarkers, shareResultImage } from './shareImage'
+import { runMarkers } from './runMarkers'
 import { Coach } from './Coach'
 import { PMF_CAUSAL_CHAIN } from './CareerUI'
 import { ChatWidget } from './ChatWidget'
@@ -698,7 +698,10 @@ function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof 
         if (busy) return // a second tap mid-share sheet would fire a stray download
         setBusy(true)
         try {
-          const r = await shareResultImage(game, text)
+          // lazy: the canvas renderer only loads the first time someone actually shares
+          const r = await import('./shareImage')
+            .then((m) => m.shareResultImage(game, text))
+            .catch(() => 'failed' as const)
           setState(r)
           setTimeout(() => setState('idle'), 2200)
         } finally {

@@ -3,7 +3,7 @@
 // Supabase keys in src/net/config.ts are still placeholders, and never throws:
 // the leaderboard is decoration, never something that can break a run.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { SUPABASE_ANON_KEY, SUPABASE_URL, onlineConfigured } from './config'
 import { inRoom, myId, resetPlayerId } from './online'
 
@@ -34,21 +34,29 @@ function scoreSecret(): string {
   return s
 }
 
-let client: SupabaseClient | null = null
+let clientPromise: Promise<SupabaseClient> | null = null
 let clientSecret = ''
 
-function getClient(): SupabaseClient {
+/** Lazy: the library is a dynamic import so a run that never posts a score never downloads it. */
+async function getClient(): Promise<SupabaseClient> {
   const secret = scoreSecret()
   // The secret is baked into a header at construction time, so a memoized client outlives any
   // change to it — the row would be written under one secret and authenticated with another,
   // and every later update would be refused as if we were a stranger to our own row.
-  if (!client || clientSecret !== secret) {
+  if (!clientPromise || clientSecret !== secret) {
     clientSecret = secret
-    client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { 'x-player-secret': secret } },
-    })
+    clientPromise = import('@supabase/supabase-js').then(
+      ({ createClient }) =>
+        createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: { headers: { 'x-player-secret': secret } },
+        }),
+      (e) => {
+        clientPromise = null // a failed chunk load retries next call instead of caching the failure
+        throw e
+      },
+    )
   }
-  return client
+  return clientPromise
 }
 
 /** The only endings the database accepts. Anything else is a bug, not a score. */
@@ -69,7 +77,7 @@ export async function submitDailyScore(
 ): Promise<void> {
   if (!onlineConfigured) return
   try {
-    const db = getClient()
+    const db = await getClient()
     const row = {
       day: Math.round(day),
       player_id: myId(),
@@ -135,7 +143,7 @@ function isIdentityRejection(error: { code?: string; message?: string }): boolea
 export async function fetchDailyTop(day: number, limit = 10): Promise<DailyScore[]> {
   if (!onlineConfigured) return []
   try {
-    const { data, error } = await getClient()
+    const { data, error } = await (await getClient())
       .from(TABLE)
       .select('player_id, company, score, weeks, ending, display_name')
       .eq('day', day)

@@ -2,7 +2,7 @@
 // Presence carries each player's public state; a single 'start' broadcast kicks off the match.
 // No database, no SQL — rooms exist only while someone is in them.
 
-import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 import type { FounderKind, Ruleset, SectorId } from '../game/types'
 
@@ -126,7 +126,7 @@ export interface Handlers {
   onConcede?: (p: ConcedePayload) => void
 }
 
-let client: SupabaseClient | null = null
+let clientPromise: Promise<SupabaseClient> | null = null
 let channel: RealtimeChannel | null = null
 let myState: NetPlayer | null = null
 
@@ -180,13 +180,25 @@ export function makeRoomCode(): string {
     .join('')
 }
 
-export function getClient(): SupabaseClient {
-  if (!client) {
-    client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      realtime: { params: { eventsPerSecond: 5 } },
-    })
+/**
+ * Lazy on purpose: @supabase/supabase-js is a third of the main bundle and a solo run never
+ * needs it, so the library is a dynamic import that only loads on first online use. A failed
+ * chunk load (offline PWA launch, say) clears the memo so the next attempt retries.
+ */
+export function getClient(): Promise<SupabaseClient> {
+  if (!clientPromise) {
+    clientPromise = import('@supabase/supabase-js').then(
+      ({ createClient }) =>
+        createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          realtime: { params: { eventsPerSecond: 5 } },
+        }),
+      (e) => {
+        clientPromise = null
+        throw e
+      },
+    )
   }
-  return client
+  return clientPromise
 }
 
 // Presence is attacker-controlled: any peer can track arbitrary JSON. Everything the rest
@@ -522,7 +534,7 @@ async function dropChannel(): Promise<void> {
   channel = null
   if (!dead) return
   try {
-    await getClient().removeChannel(dead)
+    await (await getClient()).removeChannel(dead)
   } catch {
     // removing an already-dead channel is fine
   }
@@ -533,13 +545,18 @@ async function dropChannel(): Promise<void> {
  * channel, not just the first join — handling only the initial status was why a dropped socket
  * left the player silently disconnected until they reloaded the page.
  */
-function openChannel(initial: boolean): Promise<void> {
+async function openChannel(initial: boolean): Promise<void> {
   const code = roomCode
   const handlers = liveHandlers
   const me = myState
-  if (!code || !handlers || !me) return Promise.resolve()
+  if (!code || !handlers || !me) return
 
-  const ch = getClient().channel(`fm-room-${code}`, {
+  const client = await getClient()
+  // the room may have been left (or replaced) while the client chunk was loading —
+  // opening a channel for it now would resurrect a membership nobody holds
+  if (roomCode !== code || liveHandlers !== handlers || myState !== me) return
+
+  const ch = client.channel(`fm-room-${code}`, {
     config: { presence: { key: me.id }, broadcast: { self: false } },
   })
   channel = ch
