@@ -23,6 +23,17 @@
 //  * **Score off `gameOver.payout`.** For an acquisition that number carries the 1.1–2.0x premium
 //    over `valuation()`; re-deriving `valuation(s) * founderEquity` throws the premium away and
 //    understates exactly the runs that did best.
+//  * **The `$2k/wk` milestone is gone (2026-08-12), so milestone columns printed before that date
+//    do not compare against milestone columns printed after it.** (failed/exits/customers/
+//    retention/rev/valuation/founder net are all untouched and still compare.) The $2k gate was
+//    written before the careerArpu fix; after it, 15–24 of 24 runs cleared the bar in every
+//    sector at a median of week 8–32, and it ordered the three strategies the same way in none —
+//    a boolean that is almost always true measures the fix, not the strategy. Replaced with
+//    **weeks to profitability** — the first week of four consecutive weeks with revenue covering
+//    expenses (`profitabilityWeek`). Measured at the swap, same 24 seeds: it separates all three
+//    strategies in every sector on BOTH count and timing — e.g. Fintech 2/24 Careless vs 15/24
+//    Disciplined vs 6/24 Enterprise; SaaS medians wk 87/48/53; Social 2 vs 19 vs 18 (wk 61/31/36).
+//    Note it is a milestone, not a score: an early premium exit while still burning reads 999.
 
 import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState, valuation } from '../src/game/engine'
 import {
@@ -214,6 +225,20 @@ function bestPmfLabel(r: GameState): string {
 /** Bankruptcy and being fired are the only failures. An acquisition or an IPO is a win. */
 export const failed = (s: GameState) => s.gameOver?.type === 'bankrupt' || s.gameOver?.type === 'fired'
 
+/**
+ * The milestone: first week of a 4-consecutive-week stretch where revenue covered expenses.
+ * 999 = never reached before the run ended (which includes runs that exited early — a company
+ * acquired in week 30 while still burning is a company that never reached profitability, and
+ * saying so is correct, not a penalty).
+ */
+export const profitabilityWeek = (r: GameState): number => {
+  const h = r.history
+  for (let i = 0; i + 3 < h.length; i++) {
+    if (h.slice(i, i + 4).every((x) => x.revenue >= x.expenses)) return h[i].week
+  }
+  return 999
+}
+
 /** What the founder walks away with — the ending's own number when there is one. */
 export const founderNet = (s: GameState) => s.gameOver?.payout ?? valuation(s) * s.founderEquity + s.bankedPayout
 
@@ -225,8 +250,8 @@ function report(name: string, runs: GameState[]) {
   const retention = runs.map((r) => (r.career ? (r.career.retentionBySegment[r.career.primaryTargetSegmentId] ?? 0) : 0))
   const rev = runs.map((r) => r.lastRevenue)
   const val = runs.map((r) => valuation(r))
-  const firstRev = runs.map((r) => r.history.find((x) => x.revenue > 2000)?.week ?? 999)
-  const reached = firstRev.filter((w) => w < 999).length
+  const profW = runs.map(profitabilityWeek)
+  const profReached = profW.filter((w) => w < 999).length
   const counts: Record<string, number> = {}
   for (const r of runs) {
     const l = bestPmfLabel(r)
@@ -237,7 +262,7 @@ function report(name: string, runs: GameState[]) {
     `  ${name.padEnd(22)} failed ${String(bad).padStart(2)}/${runs.length} · exits ${String(exits).padStart(2)} · customers ${spread(cust, (n) => Math.round(n).toLocaleString()).padEnd(24)} · 4wk retention ${spread(retention, (n) => `${Math.round(n * 100)}%`).padEnd(20)}`,
   )
   console.log(
-    `  ${' '.repeat(22)} rev/wk ${spread(rev, money).padEnd(28)} · valuation ${spread(val, (n) => `$${(n / 1e6).toFixed(1)}M`).padEnd(26)} · reached $2k/wk ${reached}/${runs.length}${reached ? ` (median wk ${q(firstRev.filter((w) => w < 999), 0.5)})` : ''}`,
+    `  ${' '.repeat(22)} rev/wk ${spread(rev, money).padEnd(28)} · valuation ${spread(val, (n) => `$${(n / 1e6).toFixed(1)}M`).padEnd(26)} · profitable 4wk+ ${profReached}/${runs.length}${profReached ? ` (median wk ${q(profW.filter((w) => w < 999), 0.5)})` : ''}`,
   )
   console.log(
     `  ${' '.repeat(22)} founder net ${spread(net, (n) => `$${(n / 1e6).toFixed(1)}M`)}`,
