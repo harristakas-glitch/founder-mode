@@ -1,6 +1,6 @@
 # Founder Mode — pending work
 
-Everything known-but-unfixed, as of 2026-08-07. Each item says what it is, why it was left,
+Everything known-but-unfixed, as of 2026-08-12 (refreshed after the balance campaign; stale entries marked in place). Each item says what it is, why it was left,
 and what "done" looks like — enough to pick up cold.
 
 Sources: a 4-part code review, an in-game balance audit (bot-measured, 20–40 runs per
@@ -218,12 +218,13 @@ literally zero customers).
 **Resolved.** No change to `src/game/**`. Three findings that fell out of this and are *not*
 resolved are filed as 4.5, 4.6 and 4.7.
 
-### 4.4 The PvP retune is unmeasured in a real arena
-The shield, poach, raid-leverage and attack-cost changes were verified mechanically (unit
-tests) but **not** re-measured in 4-player matches. The original audit's arena numbers are now
-stale. **Done when:** a 4-player arena harness re-runs builder / raider / smearer / poacher
-strategies over 25+ matches and confirms attacking is viable but not dominant, and that buying
-a shield is no longer a net loss.
+### 4.4 The PvP retune is unmeasured in a real arena — SUPERSEDED for 1v1, open for 4-player
+`test/arena-duel-probe.ts` (2026-08-12) measured 1v1 headless duels and retuned the whole attack
+layer: as shipped every attack was a self-own (33-43% win vs a passive victim) and the shield a
+second trap (turtle 45% vs bare 68%). After three measured rounds: smear is a real trade (57%
+situational), raid breakeven, spam correctly taxed, mirror wars negative-sum, shield price-neutral.
+**Still open:** a 4-player free-for-all harness — gang-up and kingmaking dynamics do not exist in
+1v1 — and the shield never quite EARNS its price against rational aggression.
 
 ### 4.5 `resolveChoiceOnState` is the one player action that isn't seeded — RESOLVED
 `resolveChoiceOnState` now delegates to `resolveChoiceOnStateInner` inside `seeded(s, …)` like
@@ -308,13 +309,9 @@ Now `test/modes.test.ts`, `test/rules.test.ts` and `test/regressions.test.ts`, r
 `npm test`. Remaining: wire them into CI on push, and note that `tsc -b` does not currently
 type-check `test/` (they are executed through tsx).
 
-### 6.2 The weekly simulation isn't seeded
-`newGame` is wrapped in `withSeed`, so everyone gets an identical *starting world* — but
-`advanceWeek` is not, so week-to-week rolls diverge. Daily Challenge players therefore share a
-starting hand, not a whole run. Seeding the weekly sim would make dailies truly comparable, and
-is a prerequisite for replays or server-side verification. Note `uid()` uses `Date.now()` +
-`Math.random()` and would need to change too (ids are currently nondeterministic even in seeded
-worlds — harmless today).
+### 6.2 The weekly simulation isn't seeded — STALE, RESOLVED
+`advanceWeek` reseeds on `(seed, week)` via `mixSeed` (engine.ts), golden traces pin the draw
+order, and dailies replay whole runs. Kept for history only.
 
 ### 6.3 The service worker has no update prompt
 Navigations are network-first, so an online launch always gets the newest build — but a user who
@@ -344,3 +341,19 @@ against the wrong thing. v2 was tested with an unrelated attacker id instead of 
 (which is public). v3 was tested for lockdown without checking that real players could still
 submit — the lockdown had broken every score submission. Always assert both properties in the
 same run: attackers are out, and legitimate users can still act.
+
+---
+
+## 7. Refreshed 2026-08-12 — the balance campaign's own residue
+
+The full record is `docs/balance-deep-dive.md` (Quick Play, allocation, founder kinds, events,
+covenant, resonance) plus the commit trail `8fbde4e..7c6f734`. What it left open:
+
+- **Token gap, E-commerce 2.49× / Social 2.76×.** Both paths behave correctly in isolation
+  ("idle, sale burned" loses everywhere); the residue is early-capital compounding. Watchlist.
+- **`salesCycleWeeks` is still dead data** (gameplay-review finding 6). Wire it in or delete it.
+- **The `$2k/wk` bot yardstick no longer discriminates** — every strategy clears it by ~week 10.
+- **Optional event content pass** — the audit scorer found option 0 best in 33/40; the free tier
+  was priced (energy), the residual ruled deliberate. A per-event pass is polish, not correction.
+- **Board ultimatum at 2 strikes vs "of 3" everywhere — FIXED 2026-08-12** (`strikes >= 3`).
+

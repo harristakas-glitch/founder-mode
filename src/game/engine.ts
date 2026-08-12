@@ -2778,7 +2778,10 @@ function boardReview(s: GameState) {
     return
   }
   s.board.strikes += 1
-  if (s.board.strikes >= 2) {
+  // Three, not two: the ultimatum's own body says "Three reviews, three misses", the strike news
+  // says "of 3", and the Dashboard renders three dots. The gate was the only place that said two,
+  // so a player who had been promised one more chance got the ultimatum a review early.
+  if (s.board.strikes >= 3) {
     drainEnergy(s, 5)
     s.inbox.unshift({
       id: uid(),
