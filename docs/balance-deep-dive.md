@@ -243,7 +243,17 @@ $250k of annual revenue and caps at half of it — revenue Quick Play cannot gen
 
 **So it is a live exploit the moment finding 1 is fixed.** Sequencing is load-bearing.
 
-### 8. Carried forward: the token path still leads in two sectors
+### 8. Carried forward: the token path still leads in two sectors — **P7 re-measured after the pass**
+
+Re-run after P5 (the only fix in this pass that touches Career, where the token path lives).
+Early Token ÷ Traditional: SaaS **1.06×** (parity), Fintech **1.32×**, Dev Tools **1.64×**,
+E-commerce **2.49×**, Social **6.0×** — against 1.83×/6.37×/6.17×/12.66×/25.10× before the three
+token fixes. Timing stays a real decision: Late Token is the best token arm in Dev Tools ($29.8M)
+and Fintech ($25.5M). Two Social facts to carry into the sector-curve work: the gap there widened
+with seed drift (its p90s run to $1B, so 24-seed medians swing), and "idle treasury" beats every
+active treasury policy ($497M vs $240M) — in Social the incentive programmes are EV-negative
+against just letting the float stay scarce. Both are Social's sector curve, not the token module:
+"idle, sale burned" still loses to Traditional there ($26.0M vs $40.0M).
 
 From `test/token-balance-probe.ts` after the three fixes in `b0ec4bd`/`c1cc65d`: E-commerce 2.82×
 and Social 4.44×. Both are sector-shaped rather than token-shaped — "idle, sale burned" loses in
