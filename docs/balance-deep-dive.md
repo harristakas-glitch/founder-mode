@@ -331,10 +331,31 @@ E-commerce and Social (finding 8) sit downstream of the sector curves P1 touches
   throughout.
 * **Career and the token path were not re-derived.** Both are already measured in their own
   documents, and re-running them here would only add noise.
-* **Arena/PvP** — `test/pricewar-probe.ts` and `test/arena-auction-probe.ts` exist and the auction
-  was cleared in `gameplay-review.md` §Fix 2. The attacks have not been swept against each other;
-  that is the next unmeasured surface after this one, and it needs two live clients or a headless
-  duel harness that does not exist yet. Recorded as open rather than guessed.
+* **Arena/PvP — now measured and retuned.** `test/arena-duel-probe.ts` is the headless duel
+  harness: two Arena companies ticked in lockstep for 40 weeks, attacks crossing in the store's
+  message order, 40 seed pairs × both seats so a seed edge cannot read as a policy edge.
+
+  **As shipped, every attack was a self-own.** Against a completely passive victim, every attack
+  policy won 33–43% (control: 50%) and cost the attacker more valuation than the victim — and the
+  shield was a second trap: turtling against a full-time aggressor won 45% against 68% for standing
+  bare. The mechanism is the compounding economy: a mid-game attack budget is marketing forfeited
+  forever (~13× the sticker price by week 40), attack damage was transient (hype heals), and each
+  launch drained 4 founder energy, which `energyMult` compounds into everything.
+
+  **Retuned in three measured rounds:** costs down ~40% (poach 30k, smear 24k, raid 40k, hit piece
+  35k, price war 20k), energy drain 4 → 2, smear −16 hype/−5 rep, hit-piece campaign 13/5 per week,
+  raid 10% of the victim's base with the 0.8 spoils haircut removed, shield $35k on the same soft
+  stage curve as the attacks it deflects (it scaled HARDER than attacks before, so defence outpaced
+  offence with every round raised).
+
+  **After, at 80 duels per row:** smear is a real trade (55% blind, **57% played situationally** —
+  you spend your own compounding for their scalp); raid is breakeven (50%); poach/hit piece/price
+  war are mildly negative when spammed blind (43–45%), which is correct — spam should be taxed;
+  mirror wars are properly negative-sum (peace $8.8M vs all-out war $5.4M, a prisoner's dilemma,
+  which is drama rather than a dominant-strategy tax); and the shield is price-neutral (46% vs
+  49%) instead of catastrophic. Left open: the shield never *earns* its price against rational
+  aggression — acceptable while attacks are trades rather than dominant, and recorded here rather
+  than papered over.
 
 ## Reproduction
 

@@ -114,10 +114,12 @@ ok(applyAttackOutgoing(a, 'raid', 'VictimCo', 100_000), 'raid launches')
 ok(a.cash === before - ATTACKS.find((x) => x.id === 'raid')!.cost, 'raid cost deducted')
 // Exact, and it INCLUDES the leverage term. The old bound was `100_000 * 0.04 * 0.8` = 3,200,
 // written before leverage existed; the real value is 9,600, so deleting leverage entirely left it
-// passing at a third of the truth.
+// passing at a third of the truth. The 0.8 spoils haircut is GONE — the duel probe measured raids
+// at a 25-35% win rate against a completely passive victim (a self-own, not a trade), and the
+// haircut meant a raid destroyed users rather than moving them.
 ok(
-  a.users === Math.round(raidMagnitude(100_000) * 0.8 * 3),
-  `raid spoils landed, leverage and all (users ${a.users}, expected ${Math.round(raidMagnitude(100_000) * 0.8 * 3)})`,
+  a.users === Math.round(raidMagnitude(100_000) * 3),
+  `raid spoils landed, leverage and all (users ${a.users}, expected ${Math.round(raidMagnitude(100_000) * 3)})`,
 )
 ok(a.flags.attackCooldown === ATTACK_COOLDOWN, 'cooldown set')
 ok(!canAttack(a).ok, 'second attack blocked by cooldown')
@@ -148,15 +150,16 @@ const smearBase = ATTACKS.find((x) => x.id === 'smear')!.cost
 ok(attackCost(d, 'smear') === smearBase, `pre-seed smear costs the base price ($${attackCost(d, 'smear')})`)
 d.stage = 'Series B'
 // Derived from the exported constants and the documented scaling rules, not from observed output.
-// Note the two rules genuinely differ — attacks scale 1 + 0.5/stage, shields scale linearly — and
-// hardcoding 100_000 / 480_000 hid that difference behind two unrelated-looking literals.
+// Attacks and shields now share ONE stage curve, deliberately: the shield used to scale linearly
+// against the attacks' softer 1 + 0.5/stage, so defence outpaced offence with every round raised —
+// measured in test/arena-duel-probe.ts as a turtle that WON LESS than standing bare (45% vs 68%).
 ok(
   attackCost(d, 'smear') === Math.round(smearBase * (1 + STAGES.indexOf('Series B') * 0.5)),
   `Series B smear scales softer than linear ($${attackCost(d, 'smear')})`,
 )
 ok(
-  shieldCost(d) === SHIELD_BASE_COST * (STAGES.indexOf('Series B') + 1),
-  `Series B shield scales linearly with stage ($${shieldCost(d)})`,
+  shieldCost(d) === Math.round(SHIELD_BASE_COST * (1 + STAGES.indexOf('Series B') * 0.5)),
+  `Series B shield scales on the same soft curve as the attacks it deflects ($${shieldCost(d)})`,
 )
 d.stage = 'Pre-seed'
 const cashBefore = d.cash
@@ -197,7 +200,11 @@ console.log('\n— A raid has to be worth its price at Arena scale —')
     [10, 25, 40, 80, 119].every((u) => raidMagnitude(u) <= Math.ceil(u * 0.15)),
     'and across the whole small-company range the cap is never exceeded',
   )
-  ok(raidMagnitude(10_000) === 400, 'large-scale behaviour is unchanged — this is a floor, not a buff')
+  // 10%, up from 4% — a deliberate buff this time, unlike the floor above. At 4% a raid was the
+  // worst attack in the game: 25-35% win rate against a PASSIVE victim in the duel probe, because
+  // absolute stage-scaled costs compound (cash forfeits marketing forever) while a 4% user bite
+  // does not. Users are the one thing a raid steals that compounds back.
+  ok(raidMagnitude(10_000) === 1000, `large-scale raids move 10% (${raidMagnitude(10_000)} of 10,000)`)
   ok(raidMagnitude(0) === 0 && raidMagnitude(NaN) === 0, 'no users and a hostile NaN both yield zero')
   ok(
     raidMagnitude(300) >= raidMagnitude(120) && raidMagnitude(2000) >= raidMagnitude(300),

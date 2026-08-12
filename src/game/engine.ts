@@ -2333,9 +2333,9 @@ export interface AttackDef {
 }
 
 export const ATTACKS: AttackDef[] = [
-  { id: 'poach', name: 'Poach talent', emoji: '🎣', cost: 50_000, blurb: 'Recruiters target their team. Their best engineer walks — and lands in your hiring pool.' },
-  { id: 'smear', name: 'Smear campaign', emoji: '🗞', cost: 40_000, blurb: 'Anonymous briefings to journalists. Their hype and reputation take a hit; a little mud sticks to you too.' },
-  { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 80_000, blurb: 'A targeted campaign at their customer base. Punching UP at a bigger rival pays far more than punching down.' },
+  { id: 'poach', name: 'Poach talent', emoji: '🎣', cost: 30_000, blurb: 'Recruiters target their team. Their best engineer walks — and lands in your hiring pool.' },
+  { id: 'smear', name: 'Smear campaign', emoji: '🗞', cost: 24_000, blurb: 'Anonymous briefings to journalists. Their hype and reputation take a hit; a little mud sticks to you too.' },
+  { id: 'raid', name: 'User raid', emoji: '⚔️', cost: 40_000, blurb: 'A targeted campaign at their customer base. Punching UP at a bigger rival pays far more than punching down.' },
   { id: 'hitpiece', name: 'Hit piece', emoji: '📰', cost: PR_BASE_COST, blurb: 'A three-week campaign that keeps running. It might be traced back to you — and the odds get worse every time you try it.' },
   { id: 'pricewar', name: 'Price war', emoji: '📉', cost: PRICE_WAR_COST, blurb: 'Undercut them for six weeks. It cuts your revenue too — start one because you can outlast them, not because you can afford it.' },
 ]
@@ -2359,7 +2359,7 @@ export const RAID_FLOOR_USERS = 18
 
 export function raidMagnitude(victimUsers: number): number {
   if (!Number.isFinite(victimUsers) || victimUsers <= 0) return 0
-  const proportional = victimUsers * 0.04
+  const proportional = victimUsers * 0.1
   return Math.round(Math.max(proportional, Math.min(victimUsers * 0.15, RAID_FLOOR_USERS)))
 }
 
@@ -2384,7 +2384,7 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
   if (!canAttack(s, kind).ok || s.cash < cost) return false
   s.cash -= cost
   s.flags.attackCooldown = ATTACK_COOLDOWN
-  drainEnergy(s, 4)
+  drainEnergy(s, 2)
   if (kind === 'poach') applyEffects(s, { special: 'talent-influx' })
   if (kind === 'smear') s.reputation = clamp(s.reputation - 2, 0, 100)
   if (kind === 'hitpiece') {
@@ -2407,7 +2407,7 @@ function applyAttackOutgoingInner(s: GameState, kind: AttackDef['id'], targetCom
     // Relative, not absolute: raiding the leader pays up to 3x, kicking a straggler pays half.
     // Absolute spoils meant raids only paid at a scale a 52-week match never reaches.
     const leverage = clamp(targetUsers / Math.max(1, s.users), 0.5, 3)
-    const won = Math.round(raidMagnitude(targetUsers) * 0.8 * leverage)
+    const won = Math.round(raidMagnitude(targetUsers) * leverage)
     s.users += won
     s.flags.lastRaidWon = won // surfaced in the flash, so the spend has a visible result
   }
@@ -2460,10 +2460,14 @@ export function applyConcedeGain(s: GameState, fromCompany: string, users: numbe
 }
 
 export const SHIELD_WEEKS = 8
-export const SHIELD_BASE_COST = 120_000
+export const SHIELD_BASE_COST = 35_000
 
 export function shieldCost(s: GameState): number {
-  return SHIELD_BASE_COST * (STAGES.indexOf(s.stage) + 1)
+  // The same soft stage curve attacks pay, for the same reason — and it used to be steeper than
+  // theirs (x(stage+1) against their x(1+stage/2)), so defence outpaced offence with every round
+  // raised. Measured before the reprice: turtling against a full-time aggressor WON LESS than
+  // standing bare (45% vs 68%) — the retainer cost more than every attack it deflected.
+  return Math.round(SHIELD_BASE_COST * (1 + STAGES.indexOf(s.stage) * 0.5))
 }
 
 export function canBuyShield(s: GameState): { ok: boolean; reason?: string } {
@@ -2499,7 +2503,7 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
     return
   }
   if (kind === 'poach') applyEffects(s, { morale: -6, special: 'lose-best' }) // they take a person, not just a mood
-  if (kind === 'smear') applyEffects(s, { hype: -10, reputation: -3 })
+  if (kind === 'smear') applyEffects(s, { hype: -16, reputation: -5 })
   if (kind === 'hitpiece') s.flags.prTarget = PR_CAMPAIGN_WEEKS
   if (kind === 'pricewar') {
     s.flags.priceWar = PRICE_WAR_WEEKS

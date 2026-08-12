@@ -17,7 +17,7 @@ import type { GameState } from './types'
 export const PR_CAMPAIGN_WEEKS = 3
 /** Weeks the target sees a story running before they learn who planted it. */
 export const PR_DECOY_WEEKS = 2
-export const PR_BASE_COST = 55_000
+export const PR_BASE_COST = 35_000
 
 /**
  * Chance the story is traced back to you, by how many you have already run this match.
@@ -57,7 +57,7 @@ export function prBackfired(seed: number, week: number, attackerId: string, time
 export function prWeeklyDamage(weeksRemaining: number): { hype: number; reputation: number } {
   const age = PR_CAMPAIGN_WEEKS - weeksRemaining // 0 on the week it breaks
   const decay = age === 0 ? 1 : age === 1 ? 0.65 : 0.4
-  return { hype: -Math.round(9 * decay), reputation: -Math.round(3 * decay) }
+  return { hype: -Math.round(13 * decay), reputation: -Math.round(5 * decay) }
 }
 
 /** True while the target can see a story running but not yet who planted it. */
@@ -72,7 +72,7 @@ export function prSourceHidden(s: GameState): boolean {
 // ---------------------------------------------------------------------------------------
 
 export const PRICE_WAR_WEEKS = 6
-export const PRICE_WAR_COST = 30_000
+export const PRICE_WAR_COST = 20_000
 /**
  * Weeks after a war ENDS before another can be declared. The generic 5-week attack cooldown is
  * shorter than the 6-week war, so it never bit: bots re-declared the instant one lapsed and spent
