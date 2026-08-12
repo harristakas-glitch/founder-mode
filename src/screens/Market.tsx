@@ -121,7 +121,62 @@ export function Market() {
 
       <div className="mt-3.5">
         <Panel title="Leaderboard">
-          <div className="overflow-x-auto">
+          {/* Phones get cards, same trade as Hiring: in a horizontally scrolling table the
+              right-hand columns (valuation, momentum) sit off-screen, invisible unless you
+              notice you can swipe sideways. */}
+          <div className="space-y-2.5 md:hidden">
+            {rows.map((r, i) => (
+              <div
+                key={r.id}
+                className={`rounded-xl border px-3.5 py-3 ${
+                  r.you ? 'border-accent/40 bg-accent/10' : !r.alive ? 'border-line/60 opacity-40' : 'border-line/60 bg-surface2/40'
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="min-w-0 text-[13px]">
+                    <span className="text-mut tnum">{r.alive ? `#${i + 1}` : '☠️'}</span> <b>{r.name}</b>
+                    {!r.alive && <span className="text-mut"> · shut down</span>}
+                    {r.alive && r.gone && <span className="text-mut"> · left the match</span>}
+                    {r.alive && r.absent && (
+                      <span className="text-warn" title="We've lost their connection. They're still in the match and still hold their users.">
+                        {' '}
+                        · reconnecting
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-[13px] font-bold tnum">{r.alive ? money(r.val) : '—'}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
+                  <span className="text-mut">Stage</span>
+                  <span className="text-right">{r.alive ? r.stage : '—'}</span>
+                  <span className="text-mut">Users</span>
+                  <span className="text-right tnum">{num(r.users)}</span>
+                  {online && (
+                    <>
+                      <span className="text-mut">Cash</span>
+                      <span className="text-right tnum">{r.alive && r.cash != null ? money(r.cash) : '—'}</span>
+                      <span className="text-mut">Rev /wk</span>
+                      <span className="text-right tnum">{r.alive && r.rev != null ? money(r.rev) : '—'}</span>
+                      <span className="text-mut">PMF</span>
+                      <span className="text-right tnum">{r.alive && r.pmf != null ? Math.round(r.pmf) : '—'}</span>
+                    </>
+                  )}
+                </div>
+                {!online && r.alive && (
+                  <div className="mt-2 flex items-center gap-3">
+                    <span className="shrink-0 text-[12px] text-mut">Momentum</span>
+                    <div className="flex-1">
+                      <Bar
+                        value={r.product ?? Math.min(100, 40 + game.pmf / 2)}
+                        color={r.you ? 'var(--color-accent)' : 'var(--color-mut)'}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[620px]">
               <thead>
                 <tr>
