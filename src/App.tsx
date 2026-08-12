@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Check,
+  ChevronDown,
   ChevronsRight,
   Globe,
   Grid3x3,
@@ -127,6 +128,7 @@ export default function App() {
   const link = useStore((s) => s.link)
   const emotes = useStore((s) => s.emotes)
   const [navOpen, setNavOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false) // mobile: the full metric sheet
 
   // rejoin the online room this device was in before a refresh; pick up any signed-in session
   useEffect(() => {
@@ -273,6 +275,51 @@ export default function App() {
         )
       })}
     </nav>
+  )
+
+  // One source for the metric strip: the desktop rail and the mobile sheet render the same
+  // entries, so a stat can never exist in one and not the other.
+  const statRail = (
+    <>
+      <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
+        <Ticker value={game.cash} format={money} />
+        <TrendBadge value={cashDelta} format={money} />
+      </Stat>
+      <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
+        {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
+      </Stat>
+      <Stat k="Rev /wk">
+        <Ticker value={game.lastRevenue} format={money} />
+      </Stat>
+      <Stat k="Burn /wk">
+        <Ticker value={burn} format={money} />
+      </Stat>
+      <Stat k="Net /wk" tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
+        <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
+      </Stat>
+      <Stat k="Users">
+        <Ticker value={totalUsers(game)} format={num} />
+        <TrendBadge value={usersTrend} />
+      </Stat>
+      <Stat
+        k="PMF"
+        tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}
+        title={hasCapability(game, 'detailedPMF') ? PMF_CAUSAL_CHAIN : undefined}
+      >
+        <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
+      </Stat>
+      <Stat k="Valuation">
+        <Ticker value={val} format={money} />
+      </Stat>
+      <Stat k="Morale" tone={morale < 45 ? 'bad' : undefined}>
+        {Math.round(morale)}
+      </Stat>
+      {online && secondsLeft !== null && !matchOver && (
+        <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
+          {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
+        </Stat>
+      )}
+    </>
   )
 
   const advanceDisabled = online ? pending || myReady || !!game.gameOver || matchOver : pending || !!game.gameOver
@@ -459,48 +506,32 @@ export default function App() {
           >
             <Menu size={20} />
           </button>
-          {/* the metric rail scrolls on narrow screens; the soft right edge is the
-              affordance, so a value is never chopped off mid-word */}
-          <div className="fade-r flex flex-1 items-center gap-4 overflow-x-auto pr-6 md:gap-6 [&::-webkit-scrollbar]:hidden">
+          {/* the metric rail scrolls if it must; the soft right edge is the
+              affordance, so a value is never chopped off mid-word — desktop only,
+              phones get the two vitals plus the tap-to-expand sheet below */}
+          <div className="fade-r hidden flex-1 items-center gap-4 overflow-x-auto pr-6 md:flex md:gap-6 [&::-webkit-scrollbar]:hidden">
+            {statRail}
+          </div>
+          {/* mobile: cash + runway always visible, everything else one tap away */}
+          <button
+            className="flex min-h-[44px] min-w-0 flex-1 items-center gap-4 overflow-hidden rounded-xl px-1.5 text-left transition-colors hover:bg-surface2 md:hidden"
+            aria-label="Show all stats"
+            aria-expanded={statsOpen}
+            onClick={() => setStatsOpen(true)}
+          >
             <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
               <Ticker value={game.cash} format={money} />
-              <TrendBadge value={cashDelta} format={money} />
             </Stat>
             <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
               {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
             </Stat>
-            <Stat k="Rev /wk">
-              <Ticker value={game.lastRevenue} format={money} />
-            </Stat>
-            <Stat k="Burn /wk">
-              <Ticker value={burn} format={money} />
-            </Stat>
-            <Stat k="Net /wk" tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
-              <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
-            </Stat>
-            <Stat k="Users">
-              <Ticker value={totalUsers(game)} format={num} />
-              <TrendBadge value={usersTrend} />
-            </Stat>
-            <Stat
-              k="PMF"
-              tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}
-              title={hasCapability(game, 'detailedPMF') ? PMF_CAUSAL_CHAIN : undefined}
-            >
-              <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
-            </Stat>
-            <Stat k="Valuation">
-              <Ticker value={val} format={money} />
-            </Stat>
-            <Stat k="Morale" tone={morale < 45 ? 'bad' : undefined}>
-              {Math.round(morale)}
-            </Stat>
             {online && secondsLeft !== null && !matchOver && (
-              <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
+              <Stat k="Ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
                 {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
               </Stat>
             )}
-          </div>
+            <ChevronDown size={16} className="ml-auto shrink-0 text-mut" />
+          </button>
           <MuteButton />
           <button
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-bad md:h-9 md:w-9"
@@ -587,6 +618,9 @@ export default function App() {
         </div>
       </div>
 
+      {/* mobile: the full metric sheet, same entries as the desktop rail */}
+      {statsOpen && <MobileStatsSheet onClose={() => setStatsOpen(false)}>{statRail}</MobileStatsSheet>}
+
       {/* week transition */}
       {weekFlash && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
@@ -631,6 +665,30 @@ export default function App() {
       )}
       {matchOver && !resultsClosed && <MatchOver onClose={() => setResultsClosed(true)} />}
       {!online && game.gameOver && !resultsClosed && <GameOver onClose={() => setResultsClosed(true)} />}
+    </div>
+  )
+}
+
+// The tap-to-expand counterpart of the desktop metric rail: a sheet under the topbar with the
+// same Stat entries laid out as a grid. Own component so useDialog (Escape + focus trap) applies.
+function MobileStatsSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const dialogRef = useDialog(onClose)
+  return (
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="All stats" className="fixed inset-0 z-40 md:hidden">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="rise-in absolute inset-x-0 top-0 border-b border-line bg-bg2 px-4 pt-3 pb-4 shadow-[var(--elev-3)]">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-mut">This week&apos;s numbers</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close stats"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3">{children}</div>
+      </div>
     </div>
   )
 }
