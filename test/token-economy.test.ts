@@ -480,7 +480,8 @@ console.log('— Every 0–100 level has a reversion term, and no clamp is load-
     t.lastTickedWeek = s.week - 1
     withSeed(w, () => tickToken(s))
     s.week++
-    if (t.market.speculation >= 100 || t.market.sentiment >= 100 || t.market.volatility >= 100) everPinned = true
+    // sentiment lives on the community, not the market — reading it off t.market was always undefined
+    if (t.market.speculation >= 100 || t.community.sentiment >= 100 || t.market.volatility >= 100) everPinned = true
   }
   ok(t.market.speculation > 80, `60 weeks of maximum momentum drives speculation to ${t.market.speculation.toFixed(1)}`)
   ok(!everPinned, 'and never pins any 0–100 level against its boundary: the saturating step is the bound, the clamp is only arithmetic')

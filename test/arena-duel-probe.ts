@@ -56,7 +56,10 @@ import {
   valuation,
   type AttackDef,
 } from '../src/game/engine'
-import type { Allocation, GameState, SectorId } from '../src/game/types'
+import type { GameState, SectorId } from '../src/game/types'
+
+// Not a named export — the engine types it inline on GameState.
+type Allocation = GameState['allocation']
 
 const q = (a: number[], p: number) => {
   if (!a.length) return 0
@@ -131,7 +134,7 @@ const POLICIES: DuelPolicy[] = [
   { name: 'Price war on cooldown', attack: always('pricewar') },
   {
     name: 'Any (cheapest ready)',
-    attack: (me, rival) => {
+    attack: (me) => {
       const ready = ATTACKS.filter((a) => canAttack(me, a.id).ok && me.cash >= attackCost(me, a.id) + (me.lastExpenses || 4000) * 12)
       if (!ready.length) return null
       return [...ready].sort((a, b) => attackCost(me, a.id) - attackCost(me, b.id))[0].id
@@ -172,7 +175,7 @@ const SITUATIONAL: DuelPolicy[] = [
     // War chest first: attack only from a position of cash strength, so the compounding the
     // attack budget forfeits is the surplus, not the engine.
     name: 'Any, only when flush',
-    attack: (me, rival) => {
+    attack: (me) => {
       if (me.cash < (me.lastExpenses || 4000) * 45) return null
       const ready = ATTACKS.filter((a) => canAttack(me, a.id).ok && me.cash >= attackCost(me, a.id) + (me.lastExpenses || 4000) * 12)
       if (!ready.length) return null

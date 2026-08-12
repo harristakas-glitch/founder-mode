@@ -34,7 +34,6 @@ import { tokenInvariants } from '../src/game/token/market'
 import { founderStanding, networkValue, realisableTokenValue } from '../src/game/token/scoring'
 import { maxTreasurySale } from '../src/game/token/treasury'
 import { mercenaryGrowthWarning, organicUsers, incentivisedUsers } from '../src/game/token/users'
-import type { TokenIncentiveCategory } from '../src/game/token/types'
 import type { GameState, SectorId } from '../src/game/types'
 import type { GameConfig } from '../src/game/modes'
 
@@ -533,7 +532,8 @@ const nets: number[] = []
 for (const sector of SECTORS) {
   for (const seed of SEEDS) {
     for (const weeks of [24, 40, 60, 80]) {
-      const s = tokenised(sector, seed, weeks)
+      // weeks is the FOURTH argument — passing it as the draft meant every horizon ran at the default 24
+      const s = tokenised(sector, seed, {}, weeks)
       if (!s) continue
       stages[s.stage] = (stages[s.stage] ?? 0) + 1
       caps.push(marketingMax(s))

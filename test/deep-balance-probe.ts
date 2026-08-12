@@ -47,11 +47,13 @@ import {
   repayDebt,
   resolveChoiceOnState,
   runwayWeeks,
-  valuation,
 } from '../src/game/engine'
 import { sectorById } from '../src/game/data'
 import { founderStanding } from '../src/game/token/scoring'
-import type { Allocation, FounderKind, GameState, SectorId } from '../src/game/types'
+import type { FounderKind, GameState, SectorId } from '../src/game/types'
+
+// Not a named export — the engine types it inline on GameState.
+type Allocation = GameState['allocation']
 
 // ---------------------------------------------------------------------------------------------
 // reporting

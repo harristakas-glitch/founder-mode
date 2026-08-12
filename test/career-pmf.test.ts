@@ -1,7 +1,7 @@
 // Career Phase 1 — PMF Discovery 2.0. Run: npx tsx test/career-pmf.test.ts
 import { advanceWeek, newGame, weeklyOffice } from '../src/game/engine'
 import { hasCapability, type GameConfig } from '../src/game/modes'
-import { generateAllTruth, generateSegmentTruth, segmentsForSector } from '../src/game/career/segments'
+import { generateAllTruth, segmentsForSector } from '../src/game/career/segments'
 import {
   ANSWER_EVIDENCE_FLOOR,
   EXPERIMENTS,

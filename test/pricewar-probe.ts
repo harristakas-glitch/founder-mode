@@ -2,7 +2,6 @@
 // degenerate lock-ins hide, so this simulates two founders under every combination of policy.
 import { advanceWeek, newGame, concedePriceWar, canConcedePriceWar } from '../src/game/engine'
 import { PRICE_WAR_WEEKS, PRICE_WAR_COOLDOWN } from '../src/game/pvp'
-import type { GameState } from '../src/game/types'
 
 const mk = (seed: number, name: string) =>
   newGame(name, 'saas', 'technical', { config: { mode: 'arena', format: 'standard', sector: 'saas', seed } as never })

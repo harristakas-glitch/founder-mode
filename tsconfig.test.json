@@ -1,0 +1,10 @@
+{
+  // The test/ harnesses execute through tsx, which strips types without checking them.
+  // This project exists purely so `tsc -b` (and therefore `npm run build` and CI) type-checks
+  // them with the same strictness as src/.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo"
+  },
+  "include": ["test", "src"]
+}

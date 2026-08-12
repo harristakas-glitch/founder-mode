@@ -74,7 +74,8 @@ const CASES: [number, SectorId][] = [
   [7, 'social'],
   [991, 'saas'],
   [13, 'saas'],
-  [555, 'marketplace'],
+  // 'marketplace' is not a SectorId — it fell back to the default sector at runtime anyway
+  [555, 'ecommerce'],
   [2024, 'fintech'],
   [88, 'devtools'],
   [301, 'ecommerce'],

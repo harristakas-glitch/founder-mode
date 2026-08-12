@@ -393,11 +393,6 @@ export const failed = (s: GameState) => s.gameOver?.type === 'bankrupt' || s.gam
  *  it is still trading at the horizon. */
 export const founderNet = (s: GameState) => s.gameOver?.payout ?? founderStanding(s)
 
-interface Row {
-  name: string
-  runs: RunResult[]
-}
-
 function summarise(name: string, runs: RunResult[]): string {
   const states = runs.map((r) => r.state)
   const net = states.map(founderNet)
