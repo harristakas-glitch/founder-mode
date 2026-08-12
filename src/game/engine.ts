@@ -732,6 +732,7 @@ export function applyEffects(s: GameState, fx: Effects) {
   if (fx.quality) s.quality = clamp(s.quality + fx.quality, 0, 100)
   if (fx.bugs) s.bugs = clamp(s.bugs + fx.bugs, 0, 100)
   if (fx.pmf) s.pmf = clamp(s.pmf + fx.pmf, 0, 100)
+  if (fx.energy) s.energy = clamp(s.energy + fx.energy, 0, 100)
   if (fx.users) {
     // Fractional values mean "percent of current users", whole numbers are absolute.
     const delta = Math.abs(fx.users) < 1 ? Math.round(s.users * fx.users) : Math.round(fx.users)

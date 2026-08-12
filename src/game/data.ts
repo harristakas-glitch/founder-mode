@@ -168,7 +168,7 @@ export const EVENTS: EventDef[] = [
           s.bugs > 40
             ? 'The piece runs: "Promising, but buggy." Some hype, some bruises.'
             : 'A glowing profile! Sign-ups spike.',
-        effects: s.bugs > 40 ? { hype: 8, reputation: -5 } : { hype: 18, reputation: 6 },
+        effects: s.bugs > 40 ? { hype: 8, reputation: -5, energy: -8 } : { hype: 18, reputation: 6, energy: -8 },
       },
       {
         label: 'Politely decline',
@@ -511,7 +511,7 @@ export const EVENTS: EventDef[] = [
           s.bugs > 45
             ? 'The demo crashes live. The clip goes viral for the wrong reasons.'
             : 'The demo lands perfectly. The signup queue is visible from space.',
-        effects: s.bugs > 45 ? { hype: -6, reputation: -8, morale: -5 } : { hype: 16, reputation: 8 },
+        effects: s.bugs > 45 ? { hype: -6, reputation: -8, morale: -5, energy: -12 } : { hype: 16, reputation: 8, energy: -12 },
       },
       {
         label: 'Send a polite no',
@@ -1063,7 +1063,7 @@ export const EVENTS: EventDef[] = [
       {
         label: 'Let them in',
         resultText: 'The team performs "casual" for three weeks. The episode, airing later, is unreasonably flattering.',
-        effects: { hype: 10, morale: -3, features: -1 },
+        effects: { hype: 10, morale: -3, features: -1, energy: -5 },
       },
       { label: 'Closed set', resultText: 'They film your competitor instead. You watch the episode twice.', effects: {} },
     ],
@@ -1088,7 +1088,7 @@ export const EVENTS: EventDef[] = [
       {
         label: 'Record the episode',
         resultText: 'You tell the pivot story well. Three great candidates mention the episode in cover letters.',
-        effects: { hype: 6, features: -1, special: 'talent-influx' },
+        effects: { hype: 6, features: -1, energy: -6, special: 'talent-influx' },
       },
       { label: 'Politely decline', resultText: 'The host books a thought leader instead.', effects: {} },
     ],

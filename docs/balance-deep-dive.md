@@ -192,7 +192,23 @@ pivoting below 1.05 lifts median PMF 30 → 36 in SaaS. It is a real and necessa
 bot had ever used and that the run does not signpost — `resonanceEstimate` shows a *band*, not the
 instruction "this seed cannot be won without a pivot".
 
-### 6. Inbox option 0 is systematically the right answer
+### 6. Inbox option 0 is systematically the right answer — **the free tier FIXED as P5; the rest is deliberate**
+
+A static audit (`/tmp` scorer, findings folded here) put option 0 best in 33 of 40 events. Four of
+the top offenders were PURE GIFTS — hype/reputation for no resource at all (conference keynote,
+press profile, podcast, documentary). **Fixed: `Effects` gained an `energy` field and all four now
+charge the founder's tank**, which `energyMult` converts into everything the founder touches. The
+rest of the engage column was already priced (cash, morale, equity via specials, or bug-gated
+risk), and the audit's biggest "gifts" (accelerator +$120k, angel +$120k) turned out to carry 7-8%
+equity costs in their specials — audit artifacts, not defects.
+
+**The residual 4-6× gap between "always engage" and "always decline" is deliberate, and the ~30%
+convergence target this plan originally set was the wrong bar.** Half the residual is that "always
+second" declines every acquisition offer (exits 0 in every cell — it truncates its own payoff);
+the other half is that engagement is EV-positive in an active-play game, which is the same design
+call balance-baseline made for coasting: activity is priced, and paid. What P5 guarantees is
+narrower and right: no event hands out value for free — every yes costs cash, energy, morale,
+equity or risk.
 
 `npx tsx test/deep-balance-probe.ts choices` — the only change is which index resolves each choice:
 

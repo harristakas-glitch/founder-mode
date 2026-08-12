@@ -86,6 +86,12 @@ export interface Effects {
   cash?: number
   hype?: number
   morale?: number
+  /** Founder energy. The price of every "say yes to exposure" event: a keynote week, a press
+   *  cycle or a podcast circuit eats the founder, and `energyMult` scales everything they touch.
+   *  Added when the event audit found the engage column was FREE in four events — pure
+   *  hype/reputation gifts with no resource, which is half of why a state-blind "always engage"
+   *  bot beat "always decline" 4-7x (docs/balance-deep-dive.md finding 6). */
+  energy?: number
   users?: number
   bugs?: number
   quality?: number
