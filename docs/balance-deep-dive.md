@@ -357,10 +357,34 @@ E-commerce and Social (finding 8) sit downstream of the sector curves P1 touches
   aggression — acceptable while attacks are trades rather than dominant, and recorded here rather
   than papered over.
 
+* **Arena at four hands — `test/arena-ffa-probe.ts`** (the other half of BACKLOG 4.4). Four
+  Arena companies in lockstep for 40 weeks, attacks crossing in seat order, each policy reading
+  only what presence actually shares (rival user counts). 20 seed quartets × 4 cyclic seat
+  rotations (shield rows re-run at 50 quartets — ±5pp of noise cannot call a ±5pp question);
+  par is 25%. Answers to the questions the duel could not ask:
+
+  - **Ganging up on the leader pays the bystander, not the gang.** Three gang-the-leader smearers
+    against one abstainer: gang 22%, bystander **35%** ($6.2M vs $5.8M median). Kick-the-weakest
+    is starker still: kickers 20%, bystander **39%**. All-four-gang is peace's $8.9M cut to $5.0M
+    for the same 25% everybody started with — the duel's prisoner's dilemma, four-handed.
+  - **The bystander who never fights is the best seat in every aggressive lobby** (29–39%
+    against par 25%), but never by enough to make abstention a tax on the layer — and attacks
+    with bystanders in the room are worse than in a duel (smear-at-leader 21% vs its 55–57%
+    duel record), because two-thirds of the damage you buy is a gift to seats you did not hit.
+    Aggression in a lobby is a genuine gamble rather than a dominant line, which is the healthy
+    shape.
+  - **The shield is dead at four hands too.** Under ambient fire (three gang-the-leader
+    aggressors) turtle reads 32–37% against bare's 30–33% — inside the noise even with the rows
+    re-run at 200 matches — and a peacetime turtle burns 11–13% against par 25%. Combined with
+    the duel's 46%-vs-49%, the retainer now earns its price in **no measured context**, which
+    upgrades the 1v1 pass's "recorded, acceptable" into a defect with a measurement behind it.
+
 ## Reproduction
 
 ```
 npx tsx test/deep-balance-probe.ts all
 npx tsx test/deep-balance-probe.ts alloc saas
 npx tsx test/deep-balance-probe.ts econ
+npx tsx test/arena-duel-probe.ts all
+npx tsx test/arena-ffa-probe.ts all            # 4-player lobbies; add quartets=50 for shield rows
 ```
