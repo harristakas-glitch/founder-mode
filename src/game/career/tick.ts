@@ -56,6 +56,34 @@ export interface CareerTickResult {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 /**
+ * Career's dollars-to-customers scale for a sector, from Quick Play's `acqBase`.
+ *
+ * `acqBase / 5` was the whole rule, and it is the same unit hazard `careerArpu` was added to fix on
+ * the revenue side: `acqBase` is calibrated for Quick Play's tens-of-thousands user counts, and
+ * dividing by 5 re-used it on Career's hundreds-scale cohorts. Revenue got recalibrated per sector;
+ * acquisition never did. Measured consequence (test/token-balance-probe.ts): the token path's edge
+ * over traditional ranked PERFECTLY with this scale — Social 24 → 6.0x, E-commerce 4 → 2.5x,
+ * Dev Tools 1.6 → 1.6x, Fintech 1.2 → 1.3x, SaaS 1 → 1.06x — because any early capital injection
+ * compounds through it (the fork's week-13 sale bought 61k users against traditional's 13k on the
+ * same seeds). It also made Social the always-right SECTOR pick: $40M median, zero failures,
+ * double the field.
+ *
+ * The fix is a knee, not a curve: at or below `HUMAN_SCALE` the old expression is returned to the
+ * bit, so four of five sectors — every one whose Career economy was tuned and measured in
+ * docs/balance-baseline.md — are untouched. Above it, the excess is compressed with a soft power.
+ * A straight exponent was measured and rejected: 0.6-0.8 across the board closed the gap in exact
+ * proportion to how badly it damaged E-commerce's and Social's own traditional health (E-commerce
+ * $20M → $9.5M at 0.8), because their whole economies lean on the efficiency, not just the exploit.
+ * The knee only reaches the range where capital compounds super-linearly.
+ */
+export const CAREER_ACQ = { humanScale: 5, excessExponent: 0.6, floor: 0.4 } as const
+export function careerAcqScale(acqBase: number): number {
+  const raw = acqBase / 5
+  const scaled = raw <= CAREER_ACQ.humanScale ? raw : CAREER_ACQ.humanScale + Math.pow(raw - CAREER_ACQ.humanScale, CAREER_ACQ.excessExponent)
+  return Math.max(CAREER_ACQ.floor, scaled)
+}
+
+/**
  * Advance the Career PMF subsystem by one week. Mutates `s` (which is already a clone inside
  * advanceWeek) and returns the numbers the shared simulation needs.
  */
@@ -312,7 +340,7 @@ export function tickCareerPMF(
     referralCustomers: organicCustomers(career, target),
     ceiling,
     marketingPenalty,
-    acqScale: Math.max(0.4, sectorAcqBase / 5),
+    acqScale: careerAcqScale(sectorAcqBase),
     rng,
   })
 
@@ -346,7 +374,7 @@ export function tickCareerPMF(
       currentCustomers: totalCustomers(career, target),
       ceiling,
       marketingPenalty,
-      acqScale: Math.max(0.4, sectorAcqBase / 5),
+      acqScale: careerAcqScale(sectorAcqBase),
     })
     if (bought > 0) {
       career.cohorts.push({

@@ -439,7 +439,8 @@ export function resolveSegmentAcquisition(args: {
   currentCustomers: number
   ceiling: number
   marketingPenalty: number
-  /** sector.acqBase / 5 — keeps a social app's scale different from a B2B tool's. */
+  /** `careerAcqScale(sector.acqBase)` — a social app's scale stays different from a B2B tool's,
+   *  compressed above the knee so capital cannot compound through it (see tick.ts). */
   acqScale: number
   rng: () => number
   /**

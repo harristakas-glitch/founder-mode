@@ -286,7 +286,7 @@ export function resolveIncentivisedAcquisition(args: {
   currentCustomers: number
   ceiling: number
   marketingPenalty: number
-  /** sector.acqBase / 5, exactly as the organic term takes it. */
+  /** `careerAcqScale(sector.acqBase)`, exactly as the organic term takes it. */
   acqScale: number
 }): number {
   const { truth, productFit, rewardBudget: budget, currentCustomers, ceiling, marketingPenalty, acqScale } = args

@@ -55,7 +55,7 @@ import {
   segmentProductFit,
   segmentCeiling,
 } from '../src/game/career/pmf'
-import { repositionTo, careerMarketingDrain } from '../src/game/career/tick'
+import { careerAcqScale, repositionTo, careerMarketingDrain } from '../src/game/career/tick'
 import { sectorById } from '../src/game/data'
 import type { GameState, SectorId } from '../src/game/types'
 import type { ExperimentType, PricingStrategy } from '../src/game/career/types'
@@ -186,7 +186,7 @@ function unitEconomics(s: GameState, budget: number): { cac: number; ltv: number
     currentCustomers: totalCustomers(c, target),
     ceiling: segmentCeiling(truth, sector.tam),
     marketingPenalty: c.repositioning ? c.repositioning.marketingPenalty : 1,
-    acqScale: Math.max(0.4, sector.acqBase / 5),
+    acqScale: careerAcqScale(sector.acqBase),
     rng: fixed,
   }
   const bump = 1_000
