@@ -15,8 +15,9 @@
 //   7. buildAdvisorPanel skips the exclude list    → "no line is spoken twice in one panel" fails.
 //   8. persistence drops advisorPanel              → "the panel survives a JSON round-trip" fails.
 //   9. capability gate removed in tick.ts          → "advisorOpinions off leaves no panel" fails.
-//  10. readWeekFacts flips a direction sign        → "§29: the same week reads differently per chair" fails
-//      (finance would celebrate a runway crisis).
+//  10. readWeekFacts flips the runway sign         → "two weeks of cash reads as a severe, BAD runway
+//      fact" fails. NOTE: the first version of this ledger claimed the §29 block caught this — it
+//      did not (§29's fixtures are hand-built facts), which is why the reader has its own assertion.
 import { advanceWeek, newGame } from '../src/game/engine'
 import { tickLivingWorld } from '../src/game/world/tick'
 import {
@@ -272,6 +273,12 @@ console.log('\n— readWeekFacts reads facts, not vibes —')
   ok(JSON.stringify(facts) === JSON.stringify(sorted), 'facts arrive in topic order — push order can never change a ranking')
   const rich = { ...run, cash: 1_000_000_000 } as GameState
   ok(!readWeekFacts(rich).some((f) => f.topic === 'runway' && f.direction === -1), 'a billion in the bank is not a runway crisis — the facts move with the state')
+  // The sign IS the fact (§64): a near-empty account must read as bad news at the source, or every
+  // seat downstream celebrates a crisis. M10 in the ledger originally claimed §29 caught this — it
+  // did not, because the §29 fixtures are hand-built facts. This is the assertion that does.
+  const broke = { ...run, cash: 20_000, lastExpenses: 10_000, lastRevenue: 1_000 } as GameState
+  const runwayFact = readWeekFacts(broke).find((f) => f.topic === 'runway')
+  ok(runwayFact?.direction === -1 && runwayFact.severity > 0.8, 'two weeks of cash reads as a severe, BAD runway fact straight from the reader')
 }
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
