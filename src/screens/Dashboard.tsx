@@ -2,6 +2,7 @@ import { BenchRow, EmptyState, LineChart, Panel, StatCard, TrendBadge } from '..
 import { money, num, pct } from '../format'
 import { STAGE_THRESHOLDS, sectorById } from '../game/data'
 import {
+  demandSignal,
   MILESTONES,
   avgMorale,
   boardEffectiveTarget,
@@ -126,6 +127,19 @@ function attentionItems(game: ReturnType<typeof useStore.getState>['game']): Att
       tone: 'good',
       text: `${game.termSheets.length} term sheet${game.termSheets.length === 1 ? '' : 's'} on the table — they expire.`,
       action: { label: 'Review', screen: 'fundraising' },
+    })
+  // The one warning that names the SEED, not the play. `demandSignal` only reads 'weak' once
+  // researchSignal >= 14 — i.e. the player has done the research and the research came back
+  // negative. Before this line the verdict lived only on the Product screen, while the player
+  // watching PMF stall was here, on the Dashboard, being told to work harder at an idea the
+  // engine had already priced as unwinnable-at-reasonable-effort. A weak-resonance company now
+  // settles at a low PMF equilibrium instead of decaying to zero (the P2 proportional decay), so
+  // "pivot" is honest advice rather than a eulogy: research carries over and tilts the next roll.
+  if (!careerActive(game) && demandSignal(game) === 'weak')
+    out.push({
+      tone: 'bad',
+      text: 'Your research came back: demand for this idea is WEAK. More effort will not fix the idea — a pivot might, and your research carries over.',
+      action: { label: 'Product — pivot', screen: 'product' },
     })
   // Career derives PMF from retained customers, so "research harder" is actively wrong advice
   // there — the fix is retention, and the screen that shows it is Discovery.
