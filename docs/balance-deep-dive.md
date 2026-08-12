@@ -72,7 +72,26 @@ being billed at a rate written for tens of thousands, which left "every Career c
 unprofitable in all five sectors". Quick Play reaches hundreds-to-thousands too, and still bills at
 `arpuWeekly`. **The fix was applied to one mode and not the other.**
 
-### 2. Research dominates the product allocation; three of five sliders are dominated
+### 2. Research dominates the product allocation; three of five sliders are dominated — **FIXED as P2**
+
+**Fixed, structurally — three changes that give each slider its own clock:**
+- **Research saturates on `researchSignal`** — the stock research itself accumulates, whose only
+  other reader already treats it as "how much you have learned about this idea". Early interviews
+  are gold; the hundredth is a rerun. A pivot resets it, so a new idea makes research young again.
+- **Quality earns fit as a stock** (`+ quality/100 × 0.35` in `pmfGain`) and the churn craft terms
+  run at full weight (`quality/120`, `bugs/90`, base re-centred so a mid product churns as before).
+- **PMF decay is proportional (`pmf × 0.012`), not flat.** The flat −0.5/wk is what made research
+  dominance inevitable: every other gain term saturates, so only the one unsaturated term could
+  outrun a constant drain forever. Proportional decay makes the block an equilibrium system —
+  sustained effort G settles at `G/(G/110 + 0.012)` — and it also removes finding 5's early-game
+  death spiral (at PMF 8 the drain is 0.1, not 0.5).
+
+**Measured after:** interior optimum at 10–30% research in four sectors; E-commerce prefers 0%
+(a high-churn transactional market rewards shipping over discovery — sector character, and research
+is first elsewhere). Research-100 is worst or near-worst everywhere. The game's default 40/30/20/10
+allocation is now competitive with the tuned split — a new player's default is no longer a trap.
+Exits fire at 2–7 of 16 through the unchanged $8M/pmf-50 gate, which closes most of P4. Original
+finding preserved below.
 
 `npx tsx test/deep-balance-probe.ts alloc`
 
@@ -121,7 +140,21 @@ realistic ending: reaching week 90 still trading, or going bankrupt.
 This is the same class of defect the token work already surfaced — zero IPO endings in ~9,000
 Career runs — and it is worse here, because Quick Play has no `network` ending to fall back on.
 
-### 4. Founder kind: technical dominates in 5 of 5 sectors
+### 4. Founder kind: technical dominates in 5 of 5 sectors — **FIXED as P3, half of it a harness artifact**
+
+**Half the gap was the bot, not the game.** The probe hired marketers-first for both kinds — the
+correct complement for a technical founder and redundant for a business one, who already holds 4
+marketer points against hype that saturates. Under matched play (engineer-first for both, which
+post-P2 wins for both kinds in all five sectors), the 1.6–2.7× gap shrinks to 1.1–1.4×.
+
+**The other half is the deal game**, added as three pure multipliers on existing draws: a business
+founder prices rounds 18% higher (less dilution per cheque), runs exit processes that clear 15%
+richer, closes candidates at +8 points, and the sales boost rises from decoration (8%) to 18%.
+
+**Measured after, matched play:** technical first in SaaS (1.13×), Dev Tools (1.37×), Fintech
+(1.17×), Social (1.32×); **business first in E-commerce** (1.12×, and safer, 1 failure vs 2). Each
+kind is first in a nameable situation — the bar §2 of balance-baseline set for pricing. Original
+finding preserved below.
 
 `npx tsx test/deep-balance-probe.ts founder` — identical policy, one field changed:
 
@@ -139,7 +172,12 @@ the PMF engine, `marketerPoints` feeds hype only, and PMF is worth four terms to
 finding 2 should mostly fix this; it is listed separately because it must be re-measured, not
 assumed.
 
-### 5. PMF decays on a seeded coefficient the player cannot see or change
+### 5. PMF decays on a seeded coefficient the player cannot see or change — **death spiral fixed by P2; signpost (P6) still open**
+
+P2's proportional decay removed the unwinnable-seed mechanism: a low-resonance company now settles
+at a low equilibrium it can see and pivot out of, instead of decaying to zero regardless of play.
+What remains open is the signpost — the UI still shows a resonance *band* rather than saying
+plainly that this product is not resonating and a pivot is the instrument.
 
 ```
 s.pmf = clamp(s.pmf + pmfGain − 0.5, 0, 100)

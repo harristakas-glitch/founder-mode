@@ -499,7 +499,9 @@ export function offerAcceptChance(s: GameState, c: Candidate, runwayNow: number)
   // so it works identically for a Quick Play offer at the asking price.
   const marketRate = marketSalary(c.role, c.skill)
   const overPay = clamp((c.salary - marketRate) / Math.max(1, marketRate), -0.2, 1)
-  return clamp(0.72 + s.reputation / 400 + overPay * 0.18 - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0), 0.05, 0.97)
+  // A business founder closes: the third leg of the deal-game column (term sheets, exits, hires).
+  const closer = s.founderKind === 'business' ? 0.08 : 0
+  return clamp(0.72 + s.reputation / 400 + overPay * 0.18 + closer - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0), 0.05, 0.97)
 }
 
 // Every one-off payment the player has already set in motion — no hidden bills.
@@ -1154,7 +1156,15 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
   const sheets: TermSheet[] = investors.map((investor) => {
     // Each fund prices you differently around your "fair" valuation; a cold market prices everyone down.
     const climateMult = 1 + 0.35 * s.climate
-    const offeredVal = val * rand(0.7, 1.25) * climateMult
+    // The business founder's trade is the DEAL GAME, and this is its biggest table. A technical
+    // founder gets 5 engineering points against 1.5 — direct access to the PMF engine, which four
+    // downstream terms read — and was measured beating business in all five sectors, 1.6-2.7x
+    // (docs/balance-deep-dive.md finding 4). The compensating column has to be one the product
+    // engine cannot buy: rounds priced 18% higher (less dilution for the same cheque), richer exit
+    // processes, and closed candidates. A multiplier on the offered valuation, so it changes no
+    // draw and no order.
+    const pitchMult = s.founderKind === 'business' ? 1.18 : 1
+    const offeredVal = val * rand(0.7, 1.25) * climateMult * pitchMult
     // Investors chase growth: a company compounding fast gets offered a bigger check.
     const growthAppetite = 1 + clamp(growth, 0, 0.3) * 4
     const amount = Math.round(Math.max(ROUND_FLOORS[target], offeredVal * rand(0.15, 0.25) * growthAppetite) / 10_000) * 10_000
@@ -1349,8 +1359,38 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     const researchPoints = engPoints * ar + designPoints * 0.3 + 0.5
     s.researchSignal += researchPoints
     s.totalResearch += researchPoints
-    const pmfGain = (0.3 + researchPoints * 0.35 + featureGain * 0.25) * s.resonance * (1 - s.pmf / 110)
-    s.pmf = clamp(s.pmf + pmfGain - 0.5, 0, 100)
+    // RESEARCH DISCOVERS; BUILDING DELIVERS. Research's own fiction is already in the state:
+    // `researchSignal` is "accumulated user-research on the current idea", and its only other
+    // reader (`resonanceEstimate`) treats it as how much you have LEARNED about what resonates.
+    // But this line used to credit research at 0.35/point forever, against features' effective
+    // 0.32 × 0.25 = 0.08 with a saturation term on top — so "ship nothing, research everything"
+    // was the measured optimum in all five sectors, monotone to 80-100% of the allocation
+    // (docs/balance-deep-dive.md finding 2). The `learn` factor is the same saturation features
+    // already had, on the stock research itself accumulates: early interviews are gold, the
+    // hundredth interview about the same idea is a rerun. A pivot resets `researchSignal`, so a
+    // new idea makes research young again — which is exactly the loop the game wants taught.
+    // Building keeps paying because a filling product is new information to USERS, not to you.
+    const learn = 1 - clamp(s.researchSignal / 130, 0, 0.9)
+    // Three gain terms, three different clocks: research pays FAST and saturates (learn), shipping
+    // pays WHILE you ship (featureGain is a flow), and quality pays FOREVER (a stock — a polished
+    // product keeps earning fit at every scale). The stock term is what lets a mature, well-built
+    // company hold high PMF against proportional decay after research has gone stale and the
+    // feature surface has filled in — without it, every equilibrium compressed into the mid-30s
+    // and no configuration could reach the acquisition gate again.
+    const pmfGain =
+      (0.3 + researchPoints * 0.35 * learn + featureGain * 0.6 + (s.quality / 100) * 0.35) *
+      s.resonance *
+      (1 - s.pmf / 110)
+    // Decay proportional to the fit you have, not a flat tax. The old −0.5/wk flat decay is what
+    // made saturating research impossible to afford: with every gain term bounded, only a term
+    // with NO saturation could outrun a constant drain forever, so the measured optimum was 80-100%
+    // research and nothing else could reach high PMF at all. Proportional decay turns the whole
+    // block into an equilibrium system — sustained effort G settles at G/(G/110 + 0.012), so a
+    // solo coasting founder drifts to the 20s, a real team with a good mix holds the 50s-70s, and
+    // the market drifting away from a shipped product is priced the same at every scale. It also
+    // takes the boot off early-game throats: at PMF 8 the old rule charged 0.5/wk against gains a
+    // low-resonance seed could not produce (finding 5's death spiral); now it charges 0.1.
+    s.pmf = clamp(s.pmf + pmfGain - s.pmf * 0.012, 0, 100)
   }
 
   const pScore = productScore(s)
@@ -1434,14 +1474,23 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const paid = paidUsersPerWeek(s, adSpend) * room * rand(0.8, 1.2)
   const acquired = sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2) + paid
   const wordOfMouth = s.users * sector.viral * Math.pow(s.pmf / 100, 1.5) * (1 + s.hype / 150) * room * rand(0.8, 1.2)
-  const churnMult = clamp(2.4 - s.pmf / 45 - s.quality / 250 + s.bugs / 200, 0.3, 3)
+  // The craft terms are real money now: quality's full range is worth 0.83 of churn and bugs' is
+  // worth 1.11, against PMF's 2.2 — they used to be 0.4 and 0.5, weak enough that the measured
+  // optimum was to never allocate a point to either (finding 2's other half: `productScore` was
+  // read by ONE term while s.pmf was read by four, so every craft slider bought the cheap
+  // currency). The base moves 2.4 → 2.5 so a mid product (quality 55, bugs 20) churns the same as
+  // before — the CENTRE is preserved, the spread between a polished product and a neglected one
+  // roughly doubles.
+  const churnMult = clamp(2.5 - s.pmf / 45 - s.quality / 120 + s.bugs / 90, 0.3, 3)
   const churned = s.users * sector.churn * churnMult
   s.users = Math.max(0, Math.round(s.users + acquired + wordOfMouth - churned))
   } // end Quick Play / Arena acquisition path
 
   // --- revenue & costs: people only pay for things they need ---
   const salesPoints = s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0) * rallyMult
-  const salesBoost = 1 + salesPoints / 40 + (s.founderKind === 'business' ? 0.08 : 0)
+  // 0.18, up from 0.08: the one direct revenue edge a business founder has, and at 8% it was
+  // decoration against a 3.3x engineering-point gap.
+  const salesBoost = 1 + salesPoints / 40 + (s.founderKind === 'business' ? 0.18 : 0)
   const conversion = 0.25 + (0.75 * s.pmf) / 100
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
   const scaleBoost = s.sector === 'social' ? 1 + Math.log10(Math.max(10, s.users)) / 3 : 1
@@ -1649,7 +1698,11 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     // Flat noise made every offer strictly worse than holding, so the button was pure bait.
     const premium =
       (maDiscounted ? TOKEN_ACQUISITION.premiumBase : 1.1) + (maDiscounted ? TOKEN_ACQUISITION.premiumSpan : 0.9) * clamp(growthRate(s) * 20, 0, 1)
-    const amount = Math.round((val * premium * rand(0.92, 1.12)) / 1e6) * 1e6
+    // A business founder runs the sale as a process — competing bidders, a banker, a deadline —
+    // and processes clear higher. Part of the deal-game column that offsets the technical
+    // founder's engineering points; see the term-sheet note.
+    const processMult = s.founderKind === 'business' ? 1.15 : 1
+    const amount = Math.round((val * premium * processMult * rand(0.92, 1.12)) / 1e6) * 1e6
     s.inbox.unshift({
       id: uid(),
       week: s.week,

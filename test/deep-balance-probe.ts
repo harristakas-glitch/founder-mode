@@ -95,8 +95,17 @@ function report(name: string, out: GameState[]): void {
 
 /** Balanced: what the game's own default allocation looks like. */
 const BALANCED: Allocation = { features: 40, quality: 30, bugs: 20, research: 10, bet: 0 }
-/** The calibrated policy's split — see `alloc`, where the 0→100% sweep that produced it lives. */
-const RESEARCH_80: Allocation = { features: 9, quality: 7, bugs: 4, research: 80, bet: 0 }
+/**
+ * The calibrated policy's split — see `alloc`, where the sweep that produced it lives.
+ *
+ * HISTORY: this was research-80 when the file was written, because research was the dominant
+ * slider (finding 2) and 80% was the measured optimum. After P2 landed — research saturates on
+ * `researchSignal`, quality earns fit as a stock, decay proportional — the sweep's optimum moved
+ * to 10–30% research in four sectors (E-commerce prefers 0: a high-churn transactional market
+ * rewards shipping over discovery, which is sector character, not dominance). 20% is the single
+ * split closest to first everywhere.
+ */
+const CALIBRATED: Allocation = { features: 36, quality: 27, bugs: 17, research: 20, bet: 0 }
 
 interface Policy {
   alloc?: Allocation
@@ -124,9 +133,13 @@ function play(seed: number, sector: SectorId, p: Policy = {}): GameState {
       if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
       const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
       if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < Math.min(8, 1 + Math.floor(s.lastRevenue / 2500)) && s.candidates.length) {
-        // MARKETERS first: `marketerPoints` is what holds hype up against its 8%/wk decay, and
-        // hype^1.25 is the whole of Quick Play acquisition.
-        const pick = (s.candidates.filter((c) => c.role === 'marketer').sort((a, b) => b.skill - a.skill)[0] ??
+        // ENGINEERS first. This was marketers-first when the file was written — hype^1.25 was the
+        // whole of acquisition and PMF was research's to move — but P2 made the quality stock feed
+        // PMF and the craft terms feed churn, and engineers build both. Re-measured: engineer-first
+        // beats marketer-first for BOTH founder kinds in all five sectors, up to 6x in Social
+        // ($30.3M vs $4.9M). Kept in sync with what the sweep actually rewards, because a stale
+        // bot policy is how finding 4 got overstated in the first place.
+        const pick = (s.candidates.filter((c) => c.role === 'engineer').sort((a, b) => b.skill - a.skill)[0] ??
           [...s.candidates].sort((a, b) => b.skill - a.skill)[0])
         s.candidates = s.candidates.filter((x) => x.id !== pick.id)
         s.offersOut.push(pick)
@@ -139,7 +152,7 @@ function play(seed: number, sector: SectorId, p: Policy = {}): GameState {
         repayDebt(s, Math.min(s.debt.principal, s.cash - (s.lastExpenses || 3000) * 30))
       }
     }
-    s.allocation = p.alloc ?? RESEARCH_80
+    s.allocation = p.alloc ?? CALIBRATED
     // `spend` converts the credit line into marketing the week it lands, so the bank has no cash
     // to seize and the shortfall — whatever its size — is charged at the flat 15%.
     const want = !active ? 0 : p.debt === 'spend' && s.debt ? Math.max(s.cash * 0.02, s.cash * 0.5) : s.cash * 0.02
@@ -162,7 +175,7 @@ const SECTIONS: Record<string, (sectors: SectorId[]) => void> = {
       console.log(`\n${LABEL[sector]}`)
       report('Coast (nothing)', sweep(sector, { play: false, alloc: BALANCED }))
       report("Balanced alloc (game's own)", sweep(sector, { alloc: BALANCED }))
-      report('Calibrated (research 80)', sweep(sector, {}))
+      report('Calibrated (research 20)', sweep(sector, {}))
     }
   },
 
