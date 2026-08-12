@@ -119,9 +119,13 @@ ok(
  * Re-record the hash in the same commit as the change, never separately.
  */
 const GOLDEN_TRACES: Record<number, number> = {
-  7: 0x7edba86d,
-  4242: 0x7401e275,
-  31337: 0xe4a66ca2,
+  // Re-recorded when `arpuWeekly`/`careerArpu` collapsed into one `arpuPerCustomer` rate
+  // (docs/balance-deep-dive.md finding 1). Quick Play revenue changed VALUE, which moves cash in
+  // the hash; the draw ORDER did not move — advanceWeek reseeds on (seed, week), so order cannot
+  // drift across weeks, and the change swaps one multiplicand with no new branch or draw.
+  7: 0x323394e6,
+  4242: 0x47637223,
+  31337: 0x4da34a34,
 }
 
 for (const [seedKey, expected] of Object.entries(GOLDEN_TRACES)) {

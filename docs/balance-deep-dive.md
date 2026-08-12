@@ -40,7 +40,16 @@ its 8%/wk decay. Every number in this document is from the calibrated policy.
 
 ## Findings, ranked
 
-### 1. Quick Play's revenue model is calibrated for a scale the mode cannot reach — **highest**
+### 1. Quick Play's revenue model is calibrated for a scale the mode cannot reach — **highest, FIXED**
+
+**Fixed as P1:** `arpuWeekly` and `careerArpu` collapsed into one `arpuPerCustomer` (the Career
+values, which were the calibrated ones). Measured after: bankruptcies fall from 10–15/16 to 0–3/16
+in every sector under the calibrated policy, coasting still loses 7–21×, exits land at 4–9 of 16 —
+which also satisfies P4's verification condition without touching a threshold — and `npm run bots`
+is byte-identical, since Career already billed at these values. Golden traces re-recorded in the
+same commit: the draw order is unchanged (advanceWeek reseeds per week; the change swaps one
+multiplicand), only the state values in the hash moved. The table below is preserved as the
+pre-fix record.
 
 `npx tsx test/deep-balance-probe.ts econ`
 
@@ -162,7 +171,13 @@ events *read* as dilemmas but the menu is lopsided: there is a safe column and a
 it is the same column every time. (Caveat: this policy also declines acquisitions, but exits are
 0–3 per cell everywhere, so they cannot account for a 1→14 swing in failures.)
 
-### 7. The covenant default is a flat 15% — latent, and the ordering matters
+### 7. The covenant default is a flat 15% — latent, and the ordering matters — **FIXED as P0**
+
+**Fixed:** `covenantConversion(shortfall, valuation) = clamp(shortfall/valuation × 1.5, 0.03, 0.6)`,
+the same "capital costs ownership" shape as `saleDilution`, with a distress premium and a floor.
+Measured through `advanceWeek`: a $100k default costs 3.0 points of equity, a $20M default 66.0,
+against a flat 15.0 for both before. Landed BEFORE P1, which is what makes the credit line big
+enough to abuse. Original finding preserved below.
 
 `gameplay-review.md` flagged this by inspection and never ran it. Confirmed by reading
 `covenantCheck`: the conversion is `s.founderEquity *= 0.85`, which **never reads `shortfall`**.

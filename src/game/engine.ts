@@ -1445,11 +1445,10 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const conversion = 0.25 + (0.75 * s.pmf) / 100
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
   const scaleBoost = s.sector === 'social' ? 1 + Math.log10(Math.max(10, s.users)) / 3 : 1
-  // Career counts retained accounts in the hundreds where Quick Play counts users in the tens of
-  // thousands, so it bills at its own per-customer rate. Charging the Quick Play rate left every
-  // Career company structurally unprofitable in all five sectors — revenue ran far under payroll
-  // and "surviving" only meant draining the starting $200k more slowly.
-  const arpu = careerOn ? sector.careerArpu : sector.arpuWeekly
+  // ONE rate, both modes. See `arpuPerCustomer` in types.ts: the Quick Play rate was calibrated
+  // for a scale the mode does not reach, which bankrupted E-commerce, Fintech and Social at every
+  // setting a player could choose (docs/balance-deep-dive.md finding 1).
+  const arpu = sector.arpuPerCustomer
   // A running hit piece bleeds hype and reputation weekly; a price war cuts revenue on both sides.
   const pvp = tickPvpEffects(s)
   if (pvp.prDamage) applyEffects(s, pvp.prDamage)
@@ -1459,7 +1458,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     if (!v.launched) return acc
     const vs = sectorById(v.sector)
     const vScale = v.sector === 'social' ? 1 + Math.log10(Math.max(10, v.users)) / 3 : 1
-    return acc + v.users * vs.arpuWeekly * salesBoost * (0.25 + (0.75 * v.pmf) / 100) * vScale * (0.6 + pScore / 150)
+    return acc + v.users * vs.arpuPerCustomer * salesBoost * (0.25 + (0.75 * v.pmf) / 100) * vScale * (0.6 + pScore / 150)
   }, 0)
   const revenue = Math.round(coreRevenue + ventureRevenue)
   // ICO Slice 4, brief §16. Token compensation SUBSTITUTES for cash pay — it does not add a second

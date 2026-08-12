@@ -7,16 +7,25 @@ export interface Sector {
   id: SectorId
   name: string
   blurb: string
-  arpuWeekly: number // revenue per active user per week (at full PMF & conversion)
   /**
-   * Career's revenue per *customer* per week. Career counts named, retained accounts in the
-   * hundreds where Quick Play counts raw users in the tens of thousands, so charging the Quick
-   * Play rate left every Career company structurally unprofitable — revenue ran 5–20× under
-   * payroll in all five sectors and survival was just a question of how slowly $200k drained.
-   * Calibrated so a few hundred well-retained customers can carry a small team. The sector's
-   * character is preserved in the ratios: a social user is still worth a fraction of a B2B seat.
+   * Revenue per active customer per week, at full PMF and conversion.
+   *
+   * ONE FIELD, AND THAT IS THE POINT. There used to be two — `arpuWeekly` for Quick Play and
+   * `careerArpu` for Career — on the theory that "Career counts named accounts in the hundreds
+   * where Quick Play counts raw users in the tens of thousands". Half of that was measured and
+   * half was assumed. `careerArpu` was added because charging the Quick Play rate left every
+   * Career company structurally unprofitable; nobody ever checked the other half, and
+   * docs/balance-deep-dive.md finding 1 found Quick Play reaches 1,000–4,400 users, not tens of
+   * thousands. It had exactly the same defect, unfixed: E-commerce and Fintech needed 1.9x the
+   * users they could reach to cover a modest cost base, and Social needed 16.6x — which is why
+   * those two sectors bankrupted 10–15 of every 16 runs at EVERY allocation, budget, hiring rule
+   * and founder kind tested.
+   *
+   * A second rate did not describe a second scale, it described a second GUESS at the scale. So
+   * there is one, and a third mode cannot inherit the bug by picking the wrong one. The sector's
+   * character survives in the ratios: a social user is still worth a fraction of a B2B seat.
    */
-  careerArpu: number
+  arpuPerCustomer: number
   acqBase: number // base user acquisition scale
   viral: number // word-of-mouth growth factor
   churn: number // weekly churn base

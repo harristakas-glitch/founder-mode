@@ -167,7 +167,7 @@ export function userIncentiveTokens(s: GameState | null | undefined): number {
 /** Weekly revenue per user in the units this mode counts users in. See the header's unit hazard. */
 export function revenuePerUser(s: GameState): number {
   const sector = sectorById(s.sector)
-  return Math.max(0.01, s.career ? sector.careerArpu : sector.arpuWeekly)
+  return Math.max(0.01, sector.arpuPerCustomer)
 }
 
 /**

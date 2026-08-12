@@ -32,7 +32,7 @@ const scale = (values: number[]) => {
   const hi = Math.max(...values)
   return values.map((v) => Math.round(1 + 4 * ((v - lo) / (hi - lo || 1))))
 }
-const REV = scale(SECTORS.map((s) => Math.log10(s.arpuWeekly)))
+const REV = scale(SECTORS.map((s) => Math.log10(s.arpuPerCustomer)))
 const VIRAL = scale(SECTORS.map((s) => s.viral))
 const LOYAL = scale(SECTORS.map((s) => -s.churn))
 const SECTOR_TRAITS: Record<string, { k: string; label: string; v: number }[]> = Object.fromEntries(

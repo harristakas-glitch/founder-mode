@@ -216,20 +216,23 @@ const SECTIONS: Record<string, (sectors: SectorId[]) => void> = {
     }
   },
 
-  // Arithmetic, not simulation: what scale does Quick Play's revenue model need, and what scale
-  // does the mode actually reach? `reached` is the research-80% median from `alloc`.
+  // Arithmetic, not simulation: what scale does the revenue model need, and what scale does the
+  // mode actually reach? `reached` is the research-80% median from `alloc`. The finding this
+  // section produced — Quick Play billing at a rate written for tens of thousands of users while
+  // reaching 1,000–4,400 — is FIXED: `arpuWeekly` and `careerArpu` collapsed into one
+  // `arpuPerCustomer`, so this now reports the post-fix margin.
   econ() {
     console.log('\n=== UNIT ECONOMICS — break-even scale vs reachable scale ===')
-    const reached: Record<SectorId, number> = { saas: 1210, devtools: 1583, ecommerce: 1392, fintech: 1047, social: 4410 }
-    console.log('  sector       arpuWk  careerArpu   users for $6k/wk   reached@90wk    verdict')
+    const reached: Record<SectorId, number> = { saas: 1112, devtools: 2284, ecommerce: 3678, fintech: 1368, social: 12414 }
+    console.log('  sector       arpu/customer   users for $6k/wk   reached@90wk    verdict')
     for (const id of ALL) {
       const sec = sectorById(id)
       // conversion at pmf 70 is 0.25 + 0.75 × 0.7 = 0.775, and infra is charged per user.
-      const perUser = sec.arpuWeekly * 0.775 - (sec.infraCost ?? 0)
+      const perUser = sec.arpuPerCustomer * 0.775 - (sec.infraCost ?? 0)
       const need = perUser > 0 ? 6000 / perUser : Infinity
       const ratio = need / reached[id]
       console.log(
-        `  ${pad(LABEL[id], 13)}${padL(String(sec.arpuWeekly), 6)}${padL(String(sec.careerArpu), 12)}` +
+        `  ${pad(LABEL[id], 13)}${padL(String(sec.arpuPerCustomer), 13)}` +
           `${padL(Number.isFinite(need) ? Math.round(need).toLocaleString() : 'never', 19)}` +
           `${padL(reached[id].toLocaleString(), 15)}    ${ratio <= 1 ? 'viable' : `${ratio.toFixed(1)}x short`}`,
       )
