@@ -63,10 +63,11 @@
 //     never by enough to be a strategy tax on the layer (35-39% at its best, not 60%), and the
 //     aggression that buys it is a choice the attackers made. Peace remains the group optimum;
 //     that is the prisoner's dilemma the duel already found, at four hands.
-//   * THE SHIELD, at its shipped $35k: dead here too. Under ambient fire (3 gang-the-leader
-//     aggressors) turtle reads 32-37% vs bare's 30-33% — inside the noise even at 200 matches —
-//     and a PEACETIME turtle burns 11-13% (par 25%). Combined with the duel's 46%-vs-49%, the
-//     retainer earns its price in NO measured context, which is the input to the reprice.
+//   * THE SHIELD (the reason SHIELD_BASE_COST moved $35k → $25k, see engine.ts): at $35k it
+//     earned nothing anywhere — 1v1 46% vs bare's 49%, ambient lobby 32-37% vs bare's 30-33%,
+//     inside the noise at 200 matches. At $25k: ambient turtle 36-37% vs bare 30-33% with ~$1.1M
+//     more median valuation, 1v1 turtle 55% vs bare 49%, while a PEACETIME turtle still burns
+//     13% (par 25%, $7.5M vs the passives' $8.8M). Bought hot, skipped quiet: a real decision.
 
 import {
   acceptTermSheet,

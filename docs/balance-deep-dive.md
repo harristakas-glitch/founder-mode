@@ -353,9 +353,8 @@ E-commerce and Social (finding 8) sit downstream of the sector curves P1 touches
   war are mildly negative when spammed blind (43–45%), which is correct — spam should be taxed;
   mirror wars are properly negative-sum (peace $8.8M vs all-out war $5.4M, a prisoner's dilemma,
   which is drama rather than a dominant-strategy tax); and the shield is price-neutral (46% vs
-  49%) instead of catastrophic. Left open: the shield never *earns* its price against rational
-  aggression — acceptable while attacks are trades rather than dominant, and recorded here rather
-  than papered over.
+  49%) instead of catastrophic. ~~Left open: the shield never *earns* its price against rational
+  aggression~~ — closed below, by the 4-player measurement and a reprice.
 
 * **Arena at four hands — `test/arena-ffa-probe.ts`** (the other half of BACKLOG 4.4). Four
   Arena companies in lockstep for 40 weeks, attacks crossing in seat order, each policy reading
@@ -373,11 +372,14 @@ E-commerce and Social (finding 8) sit downstream of the sector curves P1 touches
     duel record), because two-thirds of the damage you buy is a gift to seats you did not hit.
     Aggression in a lobby is a genuine gamble rather than a dominant line, which is the healthy
     shape.
-  - **The shield is dead at four hands too.** Under ambient fire (three gang-the-leader
-    aggressors) turtle reads 32–37% against bare's 30–33% — inside the noise even with the rows
-    re-run at 200 matches — and a peacetime turtle burns 11–13% against par 25%. Combined with
-    the duel's 46%-vs-49%, the retainer now earns its price in **no measured context**, which
-    upgrades the 1v1 pass's "recorded, acceptable" into a defect with a measurement behind it.
+  - **The shield earns its price exactly where attacks are ambient — after a reprice.** At $35k
+    it earned nothing anywhere: 1v1 turtle 46% vs 49% bare, ambient lobby inside the noise at 200
+    matches a row. Its value scales with incoming fire while its price is flat, so
+    `SHIELD_BASE_COST` moved $35k → $25k. Re-measured, both harnesses: ambient-fire turtle
+    **36–37% vs bare 30–33%** (~$1.1M more median valuation), 1v1 turtle-vs-aggressor **55% vs
+    49%**, and a peacetime turtle still burns **13%** (par 25%, $7.5M vs $8.8M). Bought when the
+    lobby is hot, skipped when it is not — a real decision in both directions, which is the bar
+    the duel pass set and could not reach at the old price.
 
 ## Reproduction
 
@@ -385,6 +387,4 @@ E-commerce and Social (finding 8) sit downstream of the sector curves P1 touches
 npx tsx test/deep-balance-probe.ts all
 npx tsx test/deep-balance-probe.ts alloc saas
 npx tsx test/deep-balance-probe.ts econ
-npx tsx test/arena-duel-probe.ts all
-npx tsx test/arena-ffa-probe.ts all            # 4-player lobbies; add quartets=50 for shield rows
 ```

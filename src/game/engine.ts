@@ -2460,7 +2460,17 @@ export function applyConcedeGain(s: GameState, fromCompany: string, users: numbe
 }
 
 export const SHIELD_WEEKS = 8
-export const SHIELD_BASE_COST = 35_000
+// $35k → $25k, measured in test/arena-ffa-probe.ts + test/arena-duel-probe.ts (2026-08-12).
+// At $35k the retainer never EARNED its price anywhere: 1v1 turtle 46% vs 49% bare, and even in
+// a 4-player lobby with three gang-the-leader aggressors it sat inside the noise (turtle 32-37%
+// vs bare 30-33% at 200 matches a row). The shield's value scales with the rate of incoming fire
+// while its price is flat, so a price cut moves the break-even down into the fire rate an ambient
+// lobby actually produces. Re-measured at $25k: under ambient fire turtle wins 36-37% vs bare's
+// 30-33% (par 25%) and carries ~$1.1M more median valuation; 1v1 turtle-vs-aggressor flips from
+// 46% to 55% (bare 49%); and always-shielding in a PEACEFUL lobby still loses badly (13% vs par
+// 25%, $7.5M vs $8.8M) — bought when the lobby is hot, skipped when it is not, which is what
+// "a real decision" means.
+export const SHIELD_BASE_COST = 25_000
 
 export function shieldCost(s: GameState): number {
   // The same soft stage curve attacks pay, for the same reason — and it used to be steeper than
