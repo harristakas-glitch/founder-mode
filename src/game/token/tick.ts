@@ -63,6 +63,13 @@ import {
   type CommunityTickReport,
 } from './community'
 import {
+  governanceActive,
+  tickGovernance,
+  GOVERNANCE_IDLE,
+  type GovernanceInputs,
+  type GovernanceTickReport,
+} from './governance'
+import {
   advanceIncentiveStocks,
   incentiveEffects,
   weeklyIncentiveSpend,
@@ -124,6 +131,8 @@ export interface TokenTickReport {
   /** Slice 5: what the community's mood did to the week, and what the community step decided. */
   mods: CommunityModifiers
   community: CommunityTickReport
+  /** Slice 6: what governance tabled, resolved and warned about this week. */
+  governance: GovernanceTickReport
 }
 
 const IDLE: TokenTickReport = {
@@ -141,6 +150,7 @@ const IDLE: TokenTickReport = {
   effects: NO_EFFECTS,
   mods: NEUTRAL_MODIFIERS,
   community: COMMUNITY_IDLE,
+  governance: GOVERNANCE_IDLE,
 }
 
 /** The product the network ships. Local copy for the same reason market.ts keeps one. */
@@ -427,9 +437,33 @@ export function tickToken(s: GameState): TokenTickReport {
   // chain could not blow up on its own.
   advanceIncentiveStocks(s, spend)
 
+  // ---- 8. governance (Slice 6), after everything — the vote reads the week it just watched ----
+  // Every DECISION input comes from the same `prev` snapshot as the rest of the tick (the lag
+  // rule), so a proposal's support this week is a pure function of last week's close: recompute
+  // the tick and you recompute the vote. Draws nothing; the one-draw contract above is untouched.
+  // With `tokenGovernance` off this is the idle constant and the tick is the Slice-5 tick exactly.
+  let governance: GovernanceTickReport = GOVERNANCE_IDLE
+  if (governanceActive(s)) {
+    const inputs: GovernanceInputs = {
+      week: s.week,
+      trust: prev.trust,
+      sentiment: prev.sentiment,
+      engagement: prev.engagement,
+      decentralisation: prev.decentralisation,
+      decentralisationDemand: prev.decentralisationDemand,
+      founderInfluence: prev.founderInfluence,
+      momentum: prev.momentum,
+      speculation: prev.speculation,
+      utility: prev.utility,
+      holders: prev.holders,
+      members: prev.members,
+    }
+    governance = tickGovernance(s, inputs)
+  }
+
   t.lastTickedWeek = s.week
 
-  return { ran: true, commitment, fair, step, flooredThisWeek: step.floored, unlocked, spend, effects, mods, community }
+  return { ran: true, commitment, fair, step, flooredThisWeek: step.floored, unlocked, spend, effects, mods, community, governance }
 }
 
 /** Facts only, and rate-limited: history is a 120-entry budget the postmortem quotes from. */

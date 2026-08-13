@@ -29,6 +29,8 @@ import {
   sellSecondary,
   startIPO,
   sellTokenTreasury,
+  setGovernanceStance,
+  defyGovernance,
   setTokenIncentives,
   tokeniseCompany,
   takeVacation,
@@ -330,6 +332,10 @@ interface Store {
   setIncentives: (shares: Partial<IncentiveShares>) => void
   /** ICO Slice 4. Sell treasury tokens for company cash — the token path's fundraising. */
   sellTreasury: (tokens: number) => boolean
+  /** ICO Slice 6. Take a public position on an active proposal — the campaign, priced once. */
+  setProposalStance: (proposalId: string, stance: 'support' | 'oppose') => boolean
+  /** ICO Slice 6. Tear up a standing mandate — the priced defiance. */
+  defyMandate: (proposalId: string) => boolean
 }
 
 export const useStore = create<Store>()(
@@ -1273,6 +1279,29 @@ export const useStore = create<Store>()(
           const game = structuredClone(g)
           if (!sellTokenTreasury(game, tokens).ok) return false
           sfx.cash()
+          set({ game })
+          return true
+        },
+
+        // ICO Slice 6, brief §36/§69. The campaign: a public position on an active proposal. No
+        // sound and no seeding — a position shifts the weekly tally through the sway term, it does
+        // not touch the RNG stream (see `setGovernanceStance` in engine.ts).
+        setProposalStance: (proposalId, stance) => {
+          const g = get().game
+          if (!g) return false
+          const game = structuredClone(g)
+          if (!setGovernanceStance(game, proposalId, stance).ok) return false
+          set({ game })
+          return true
+        },
+
+        // ICO Slice 6. The priced defiance. Re-checks the capability itself rather than trusting
+        // the caller — it moves trust, reputation and the legitimacy of every future vote.
+        defyMandate: (proposalId) => {
+          const g = get().game
+          if (!g) return false
+          const game = structuredClone(g)
+          if (!defyGovernance(game, proposalId).ok) return false
           set({ game })
           return true
         },

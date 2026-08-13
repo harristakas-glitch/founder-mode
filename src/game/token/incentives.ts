@@ -52,6 +52,7 @@
 import { weeklyPayroll } from '../engine'
 import { hasCapability } from '../modes'
 import type { GameState } from '../types'
+import { governanceShareFloors } from './governance'
 import { treasuryCommitment } from './market'
 import {
   TOKEN_BOUNDS,
@@ -161,6 +162,12 @@ export function incentiveShares(s: GameState | null | undefined): IncentiveShare
  * category set to zero has its programme REMOVED, which keeps `TOKEN_LIMITS.incentives` (6) honest
  * and stops a dormant programme carrying a stale stock forever.
  *
+ * SLICE 6: a live governance mandate holds a FLOOR under its category. The floor is applied here —
+ * at the one write — so a passed vote binds by construction: the slider physically cannot go below
+ * it, and when the request over-commits, only the headroom ABOVE the floors is scaled down. With no
+ * mandate running the floors are all zero and this is the Slice-4 arithmetic character for
+ * character. Defying the mandate (token/governance.ts) is the priced way out, not this function.
+ *
  * Returns the shares actually stored, which is what the caller should show — never the request.
  */
 export function setIncentiveShares(s: GameState, next: Partial<IncentiveShares>): IncentiveShares {
@@ -172,13 +179,20 @@ export function setIncentiveShares(s: GameState, next: Partial<IncentiveShares>)
     const v = next[c]
     if (v !== undefined) asked[c] = Number.isFinite(v) ? clamp01(v) : 0
   }
-  const total = INCENTIVE_CATEGORIES.reduce((a, c) => a + asked[c], 0)
-  const scale = total > 1 ? 1 / total : 1
+  // Function-body import both ways round (governance.ts calls setIncentiveShares to materialise a
+  // fresh mandate) — the same cycle shape market ↔ users already carries, for the same reason:
+  // re-deriving the floors here from raw mandate rows would be the desync §7.3 warns about.
+  const floors = governanceShareFloors(s)
+  const minFor = (c: TokenIncentiveCategory) => clamp01(floors[c] ?? 0)
+  for (const c of INCENTIVE_CATEGORIES) asked[c] = Math.max(asked[c], minFor(c))
+  const fixed = INCENTIVE_CATEGORIES.reduce((a, c) => a + minFor(c), 0)
+  const flexible = INCENTIVE_CATEGORIES.reduce((a, c) => a + (asked[c] - minFor(c)), 0)
+  const flexScale = fixed + flexible > 1 && flexible > 0 ? Math.max(0, 1 - fixed) / flexible : 1
 
   const before = incentiveShares(s)
   const kept: TokenIncentiveProgramme[] = []
   for (const c of INCENTIVE_CATEGORIES) {
-    const share = Math.round(asked[c] * scale * 1000) / 1000
+    const share = Math.round((minFor(c) + (asked[c] - minFor(c)) * flexScale) * 1000) / 1000
     if (share <= 0) continue
     const existing = t.incentives.find((p) => p.category === c)
     kept.push({

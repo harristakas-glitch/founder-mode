@@ -51,6 +51,7 @@ import { valuation } from '../engine'
 import { hasCapability } from '../modes'
 import type { GameState } from '../types'
 import { communityActive } from './community'
+import { governanceSaleFactor, treasurySaleFreeze } from './governance'
 import { saleDilution } from './launch'
 import { priceFloor } from './market'
 import { TOKEN_BOUNDS, TOKEN_COMMUNITY, TOKEN_LIMITS, type TokenState } from './types'
@@ -106,12 +107,14 @@ export function treasurySalesActive(s: GameState | null | undefined): boolean {
 }
 
 /** The most this treasury could sell in one sale. Bounded by the float and by how much of it the
- *  market absorbs — never by ambition (§7.7, the same rule the initial sale is held to). */
+ *  market absorbs — never by ambition (§7.7, the same rule the initial sale is held to).
+ *  SLICE 6: a passed sale-freeze vote multiplies this by 0 for its term — the community voted the
+ *  treasury out of the market, and the vote binds at the same point every other bound binds. */
 export function maxTreasurySale(s: GameState | null | undefined): number {
   const t = s?.token
   if (!t || !treasurySalesActive(s)) return 0
   const byFloat = t.supply.circulating * TOKEN_TREASURY.maxSaleFloatShare * Math.max(TOKEN_TREASURY.minEffectiveDepth, t.market.depth)
-  return Math.max(0, Math.floor(Math.min(t.supply.treasury, byFloat)))
+  return Math.max(0, Math.floor(Math.min(t.supply.treasury, byFloat) * governanceSaleFactor(s)))
 }
 
 /** 0–1. How much a sale of this size has been done recently — the confidence multiplier. */
@@ -157,6 +160,10 @@ export function treasurySaleQuote(s: GameState | null | undefined, tokens: numbe
   }
   const t = s?.token
   if (!t || !treasurySalesActive(s)) return { ...empty, reason: 'This company has no token treasury.' }
+  // Slice 6: the vote binds, and it says so — §47's rule: never silently hide why a control is dark.
+  const freeze = treasurySaleFreeze(s)
+  if (freeze.frozen)
+    return { ...empty, maxTokens: 0, reason: `Treasury sales are frozen by governance vote until week ${freeze.untilWeek}. Defy it from the governance panel — at a price — or wait it out.` }
   const max = maxTreasurySale(s)
   if (!(max > 0)) return { ...empty, maxTokens: 0, reason: 'The treasury is empty, or the market is too thin to absorb anything.' }
 

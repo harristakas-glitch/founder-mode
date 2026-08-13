@@ -21,6 +21,12 @@ import { livingWorldActive, tickLivingWorld } from './world/tick'
 // always took. `founderStanding` is the one that touches every ending: with no token slice its
 // token leg is 0 and it is character-for-character the payout expression it replaced.
 import { tokenisationEligibility } from './token/eligibility'
+import {
+  defyGovernanceMandate as defyMandateInner,
+  founderRemovalPassed,
+  setGovernanceStance as setStanceInner,
+  type GovernanceActionResult,
+} from './token/governance'
 import { employeeTokenComp, setIncentiveShares, tokenCompMoraleDelta, type IncentiveShares } from './token/incentives'
 import { sellTreasuryTokens, type TreasurySaleResult } from './token/treasury'
 import { launchToken, type LaunchDraft, type LaunchResult } from './token/launch'
@@ -1265,6 +1271,26 @@ export function sellTokenTreasury(s: GameState, tokens: number): TreasurySaleRes
   return sellTreasuryTokens(s, tokens)
 }
 
+/**
+ * ICO Slice 6, brief §36–§37. Take a public position on an active governance proposal — the
+ * campaign. Unseeded like the two calls above and for the same reason: a position is a pure write,
+ * priced once in energy (and reputation when opposing), and it shifts the WEEKLY tally through the
+ * sway term from the next tick. It never re-rolls a vote, so the RNG stream cannot depend on it.
+ */
+export function setGovernanceStance(s: GameState, proposalId: string, stance: 'support' | 'oppose'): GovernanceActionResult {
+  if (!can(s, 'tokenGovernance')) return { ok: false, reason: 'Governance is not part of this mode.' }
+  return setStanceInner(s, proposalId, stance)
+}
+
+/**
+ * ICO Slice 6. Tear up a standing mandate — the priced defiance. Unseeded: pure function of state
+ * and the choice, so the confirmation the player read is exactly what they get.
+ */
+export function defyGovernance(s: GameState, proposalId: string): GovernanceActionResult {
+  if (!can(s, 'tokenGovernance')) return { ok: false, reason: 'Governance is not part of this mode.' }
+  return defyMandateInner(s, proposalId)
+}
+
 // ---------- weekly tick ----------
 
 // externalUsers: other human players' users in the same market (multiplayer).
@@ -1755,6 +1781,30 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // and golden trace — even for a run that never tokenised. `tokenActive` is false when there is
   // no token slice or when no token capability is on, so those runs draw exactly zero times.
   if (tokenActive(s)) seeded(s, () => tickToken(s))
+
+  // ICO Slice 6, brief §43's Community Revolt at its terminus — docs/ico-architecture.md §7.9:
+  // a revolt that removes the founder routes to the EXISTING `fired` ending, in exactly the
+  // board's shape. The vote itself resolved inside the tick, from state, never from a roll; this
+  // is only the engine honouring it, because terminating a run is engine territory. Being removed
+  // halves what your EQUITY is worth — it does not confiscate your token position, which is the
+  // same disjoint-legs rule every other ending follows.
+  if (!s.gameOver && founderRemovalPassed(s)) {
+    s.gameOver = {
+      type: 'fired',
+      week: s.week,
+      payout: Math.round(founderStanding(s, { equityMultiplier: 0.5 })),
+      detail:
+        'The community that funded the network voted you out of it. You were warned — the brewing notice, the tabling, four weeks of a tally you could read — and the state the vote read never changed.',
+    }
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: 'The vote of no confidence passed',
+      body:
+        'The network keeps running — it was never yours to keep. You leave with half of what your equity was worth and every token you had vested. The community governs what remains.',
+    })
+  }
 
   // A tokenised company can never raise, and `s.stage` is written in exactly one place —
   // acceptTermSheet, which returns early once tokenised. So the fork silently froze the company at

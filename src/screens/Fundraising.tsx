@@ -31,6 +31,7 @@ import {
   type LaunchDraft,
 } from '../game/token/launch'
 import { treasuryValue } from '../game/token/market'
+import { PROPOSAL_CONTENT, governancePanel, supportLabel } from '../game/token/governance'
 import { CONDUCT_LABELS, communityReadout, moodLabel } from '../game/token/community'
 import { maxTreasurySale, treasurySaleQuote, treasurySalesActive } from '../game/token/treasury'
 import type { TokenUtilityModel, VestingPolicy } from '../game/token/types'
@@ -451,6 +452,125 @@ function CommunityPanel() {
   )
 }
 
+/** ICO brief §36–§38, §69 (Slice 6). Governance: proposals visible BEFORE they resolve, the vote
+ *  arithmetic legible (§69 shows the tally; §9 says words over candles), the founder's three moves
+ *  — comply, campaign, defy — each with its price on the label. Only shown when relevant (§69). */
+function GovernancePanel() {
+  const game = useStore((s) => s.game)!
+  const setProposalStance = useStore((s) => s.setProposalStance)
+  const defyMandate = useStore((s) => s.defyMandate)
+  const gov = governancePanel(game)
+  if (!gov.active) return null
+  const p = gov.proposal
+  const brewing = gov.revoltHeat >= 4 && (!p || p.type !== 'founder_removal')
+  if (!p && gov.mandates.length === 0 && gov.recent.length === 0 && !brewing) return null
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Governance — the community votes, and the votes bind">
+        {p ? (
+          <div className="rounded-xl border border-line bg-surface2 p-3.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div className="text-[13px] font-bold">{p.type === 'founder_removal' ? '⚠️ ' : ''}{p.content.title}</div>
+              <span className="text-[11px] text-mut">
+                {p.weeksLeft <= 0 ? 'Voting closes this week' : `Voting closes week ${p.closesWeek} · ${p.weeksLeft} wk left`}
+              </span>
+            </div>
+            <div className="mt-1.5 text-[13px] leading-relaxed text-mut">{p.content.ask}</div>
+            <div className="mt-1 text-xs leading-relaxed text-warn">{p.content.binds}</div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-2">
+              <div className="min-w-[180px] flex-1">
+                <div className="mb-1 flex items-baseline justify-between text-[11px] text-mut">
+                  <span>Community support — {supportLabel(p.support)}</span>
+                  <b className="tnum text-ink">
+                    {p.support.toFixed(0)} <span className="font-normal text-mut">/ needs {p.passBar}</span>
+                  </b>
+                </div>
+                <Bar
+                  value={p.support}
+                  color={p.support >= p.passBar ? (p.type === 'founder_removal' ? 'var(--color-bad)' : 'var(--color-good)') : 'var(--color-warn)'}
+                />
+              </div>
+            </div>
+
+            <div className="mt-2 text-[11px] leading-relaxed text-mut">
+              <span className="font-bold text-ink">What is driving the vote:</span>{' '}
+              {p.breakdown.terms
+                .filter((t) => Math.abs(t.points) >= 1)
+                .map((t) => `${t.label} (${t.points > 0 ? '+' : ''}${t.points.toFixed(0)})`)
+                .join(' · ') || 'Nothing is pulling it far from the middle.'}
+              . The tally is arithmetic over trust, mood, the chart and who holds the float — recomputed every week from the state, never
+              rolled. Change the state and you change the vote.
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {p.campaigned ? (
+                <span className="text-xs text-mut">
+                  Your public position: <b className="text-ink">{p.founderPosition === 'oppose' ? 'against' : 'for'}</b>. You said it in
+                  public — it stands, and it moves the tally every week through what your influence and their trust are worth.
+                </span>
+              ) : (
+                <>
+                  <Btn onClick={() => setProposalStance(p.id, 'support')}>Back it publicly · 2 energy</Btn>
+                  <Btn variant="danger" onClick={() => setProposalStance(p.id, 'oppose')}>
+                    Campaign against · 4 energy, a little reputation
+                  </Btn>
+                  <span className="text-[11px] text-mut">One position, once. Staying neutral is also a choice.</span>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="text-[13px] text-mut">
+            No question is on the ballot. Proposals table themselves when the community's own state demands one — pressure for control, fear
+            of sell pressure, an ecosystem asking to be funded.
+          </div>
+        )}
+
+        {brewing && (
+          <div className="mt-2.5 text-xs leading-relaxed text-bad">
+            A no-confidence movement is organising. Trust is on the floor while you still hold the network — get trust back up or hand over
+            control before they take it to a vote.
+          </div>
+        )}
+
+        {gov.mandates.length > 0 && (
+          <div className="mt-3 grid gap-2">
+            {gov.mandates.map((m) => (
+              <div key={m.proposalId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2 px-3.5 py-2.5">
+                <div className="text-[13px]">
+                  <b>{m.content.title}</b> <span className="text-mut">— passed, and binding for {m.weeksLeft} more wk.</span>{' '}
+                  <span className="text-[11px] text-mut">
+                    {m.shareFloor
+                      ? `Holds ≥${Math.round(m.shareFloor * 100)}% of your weekly incentive budget there; the slider cannot go below it.`
+                      : 'Treasury sales are frozen.'}
+                  </span>
+                </div>
+                <Btn variant="danger" onClick={() => defyMandate(m.proposalId)}>
+                  Defy it · trust −12, and every future vote remembers
+                </Btn>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {gov.recent.length > 0 && (
+          <div className="mt-2.5 text-[11px] leading-relaxed text-mut">
+            <span className="font-bold text-ink">Recent votes:</span>{' '}
+            {gov.recent
+              .map((r) => `${PROPOSAL_CONTENT[r.type].title} — ${r.status} at ${r.support.toFixed(0)} (wk ${r.resolvedWeek ?? r.closesWeek})`)
+              .join(' · ')}
+            {gov.defiances > 0 && (
+              <span className="text-warn"> · You have defied {gov.defiances} — every vote from here starts angrier.</span>
+            )}
+          </div>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
 /**
  * ICO brief §1/§2/§3. The fork, and everything the player needs to judge it.
  *
@@ -502,6 +622,7 @@ function TokenisationPanel() {
           </div>
         </Panel>
         <CommunityPanel />
+        <GovernancePanel />
         <TreasurySalePanel />
         <IncentivePanel />
       </div>
