@@ -26,6 +26,10 @@ import type { GameState, HistoryPoint } from '../types'
 import {
   LIVING_WORLD_LIMITS,
   LIVING_WORLD_STATE_VERSION,
+  type AdvisorOpinion,
+  type AdvisorPanelState,
+  type AdvisorSeat,
+  type AdvisorStance,
   type Character,
   type CharacterBackground,
   type CharacterId,
@@ -103,6 +107,8 @@ export interface PersistedWorld {
   companyMemory: CompanyMemory[]
   promises: PromiseRecord[]
   narrative: NarrativeHistory
+  /** §68: composed advisor prose is persisted — the panel must not reword itself on reload. */
+  advisorPanel?: AdvisorPanelState
   lastGeneratedWeek?: number
   narrativeLastSeen?: Record<string, number>
 }
@@ -185,6 +191,7 @@ export function toPersistedWorld(world: LivingWorldState, rebuild?: CharacterReb
     companyMemory: world.companyMemory,
     promises: world.promises,
     narrative: world.narrative,
+    advisorPanel: world.advisorPanel,
     lastGeneratedWeek: world.lastGeneratedWeek,
     narrativeLastSeen: world.narrativeLastSeen,
   })
@@ -354,6 +361,47 @@ function normalizePromise(raw: unknown, index: number): PromiseRecord | null {
   })
 }
 
+// Same `satisfies` trick as the status lists: rename a union member and this stops compiling.
+const ADVISOR_SEATS_ALL = ['finance', 'growth', 'product', 'investor'] as const satisfies readonly AdvisorSeat[]
+const ADVISOR_STANCES = ['cut', 'push', 'fix', 'hold', 'warn', 'celebrate'] as const satisfies readonly AdvisorStance[]
+
+function normalizeAdvisorOpinion(raw: unknown): AdvisorOpinion | null {
+  if (!isObj(raw)) return null
+  const id = str(raw.id)
+  const seat = str(raw.seat) as AdvisorSeat
+  const headline = str(raw.headline)
+  const detail = str(raw.detail)
+  // An opinion that lost its prose or its seat cannot be rendered honestly — drop it, never guess.
+  if (!id || !headline || !detail || !ADVISOR_SEATS_ALL.includes(seat)) return null
+  const stanceRaw = str(raw.stance, 'warn') as AdvisorStance
+  return prune({
+    id,
+    seat,
+    characterId: str(raw.characterId, 'unknown'),
+    speaker: str(raw.speaker, 'An advisor'),
+    title: optStr(raw.title),
+    topic: str(raw.topic, 'company'),
+    stance: ADVISOR_STANCES.includes(stanceRaw) ? stanceRaw : 'warn',
+    headline,
+    detail,
+    direction: raw.direction === 1 ? (1 as const) : (-1 as const),
+    fragmentIds: strings(raw.fragmentIds),
+  })
+}
+
+function normalizeAdvisorPanel(raw: unknown): AdvisorPanelState | undefined {
+  if (!isObj(raw)) return undefined
+  const week = optNum(raw.week)
+  if (week === undefined) return undefined
+  return {
+    week: Math.max(0, Math.round(week)),
+    opinions: asArray(raw.opinions)
+      .map(normalizeAdvisorOpinion)
+      .filter((o): o is AdvisorOpinion => o !== null)
+      .slice(0, LIVING_WORLD_LIMITS.advisorOpinions),
+  }
+}
+
 function normalizeNarrativeEntry(raw: unknown): NarrativeEntry | null {
   if (!isObj(raw)) return null
   const id = str(raw.id)
@@ -453,6 +501,7 @@ export function fromPersistedWorld(raw: unknown, rebuild?: CharacterRebuilder): 
       .map(normalizePromise)
       .filter((p): p is PromiseRecord => p !== null),
     narrative: normalizeNarrative(raw.narrative),
+    advisorPanel: normalizeAdvisorPanel(raw.advisorPanel),
     lastGeneratedWeek: optNum(raw.lastGeneratedWeek),
     // Novelty must survive a reload: if it reset, the Director would treat every story as
     // first-time again and the same one could lead week after week — the exact repetition this
@@ -634,6 +683,11 @@ export function enforceLivingWorldLimits(world: LivingWorldState): void {
       world.promises = keepTop(world.promises, LIVING_WORLD_LIMITS.promises * 2)
   }
 
+  // One week's panel, hard-capped. Replaced whole each week, so this only ever cuts a slice a
+  // hand-edited save (or a future bug) inflated.
+  if (world.advisorPanel && world.advisorPanel.opinions.length > LIVING_WORLD_LIMITS.advisorOpinions)
+    world.advisorPanel.opinions = world.advisorPanel.opinions.slice(0, LIVING_WORLD_LIMITS.advisorOpinions)
+
   const n = world.narrative
   if (n.entries.length > LIVING_WORLD_LIMITS.narrativeEntries)
     n.entries = n.entries.slice(n.entries.length - LIVING_WORLD_LIMITS.narrativeEntries)
@@ -666,7 +720,7 @@ export interface LivingWorldFootprint {
 }
 
 // Per-item averages from the persisted shape; used to skip the stringify on the common small case.
-const ROUGH = { character: 240, memory: 130, relationship: 70, companyMemory: 110, promise: 120, narrativeEntry: 140, usageItem: 30 }
+const ROUGH = { character: 240, memory: 130, relationship: 70, companyMemory: 110, promise: 120, narrativeEntry: 140, usageItem: 30, advisorOpinion: 260 }
 
 function roughBytes(world: LivingWorldState): number {
   let total = 0
@@ -678,6 +732,7 @@ function roughBytes(world: LivingWorldState): number {
   }
   total += world.companyMemory.length * ROUGH.companyMemory
   total += world.promises.length * ROUGH.promise
+  total += (world.advisorPanel?.opinions.length ?? 0) * ROUGH.advisorOpinion
   total += world.narrative.entries.length * ROUGH.narrativeEntry
   const u = world.narrative.usage
   total += (u.recentFragmentIds.length + u.recentTags.length + u.recentPatterns.length) * ROUGH.usageItem

@@ -332,9 +332,62 @@ export interface PromiseRecord {
   resolvedWeek?: number
 }
 
+// ---------- advisors (§28-§33, §76) ----------
+
+/**
+ * A perspective on the company, not a person: the person who HOLDS the seat is resolved each week
+ * from the actual cast (the strongest salesperson speaks for growth), so who argues with you is
+ * itself a fact of the run.
+ */
+export type AdvisorSeat = 'finance' | 'growth' | 'product' | 'investor'
+
+/** What the seat wants done about what it sees. The verb of the opinion; the topic is the noun. */
+export type AdvisorStance = 'cut' | 'push' | 'fix' | 'hold' | 'warn' | 'celebrate'
+
+/**
+ * §30. Derived from the character (stage, years, personality, sim skill) rather than stored —
+ * a second copy would drift from the person. 0–100 each.
+ */
+export interface AdvisorSkill {
+  functionalExpertise: number
+  judgement: number
+  forecasting: number
+}
+
+/**
+ * One advisor's read of the week. Composed prose is persisted (§68) — the panel must not reword
+ * itself on reload. Everything here is interpretation; no field is read by the simulation.
+ */
+export interface AdvisorOpinion {
+  /** Narrative id (§67): 'w12_advisor_finance'. */
+  id: string
+  seat: AdvisorSeat
+  characterId: CharacterId
+  /** Display name, denormalised so the panel renders even if the character is later pruned. */
+  speaker: string
+  title?: string
+  /** What the seat chose to talk about ('runway', 'retention', …). */
+  topic: string
+  stance: AdvisorStance
+  /** The verdict line ("Slow spending."). */
+  headline: string
+  /** The grounded reason ("We are at 9 weeks of runway."). */
+  detail: string
+  /** -1 bad news, +1 good news. The UI tones on the sign; never shown as a number. */
+  direction: -1 | 1
+  /** For week-over-week repetition control, self-contained — never folded into narrative usage. */
+  fragmentIds: string[]
+}
+
+/** The current week's panel, replaced whole each week. A quiet week is an empty `opinions`. */
+export interface AdvisorPanelState {
+  week: number
+  opinions: AdvisorOpinion[]
+}
+
 // ---------- narrative history ----------
 
-export type NarrativeSurface = 'inbox' | 'media' | 'board' | 'interview' | 'conversation' | 'postmortem' | 'recap'
+export type NarrativeSurface = 'inbox' | 'media' | 'board' | 'interview' | 'conversation' | 'postmortem' | 'recap' | 'advice'
 
 /**
  * One story already told. Separate from the Decision Journal (what the player chose), Character
@@ -447,6 +500,7 @@ export const LIVING_WORLD_LIMITS = {
   recentTags: 40,
   recentPatterns: 30,
   promises: 40,
+  advisorOpinions: 6,
 } as const
 
 /** Bumped when the slice's shape changes, so in-slice migration never needs a global persist bump. */
@@ -469,6 +523,11 @@ export interface LivingWorldState {
   companyMemory: CompanyMemory[]
   promises: PromiseRecord[]
   narrative: NarrativeHistory
+  /**
+   * §76's "What the team thinks", current week only — replaced whole on each resolve, so it is
+   * bounded by construction. Absent until the advisorOpinions capability first runs.
+   */
+  advisorPanel?: AdvisorPanelState
   /** Guards against a second pass over the same week after a reload — §72. */
   lastGeneratedWeek?: number
   /**
