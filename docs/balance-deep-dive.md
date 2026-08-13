@@ -353,9 +353,33 @@ E-commerce and Social (finding 8) sit downstream of the sector curves P1 touches
   war are mildly negative when spammed blind (43–45%), which is correct — spam should be taxed;
   mirror wars are properly negative-sum (peace $8.8M vs all-out war $5.4M, a prisoner's dilemma,
   which is drama rather than a dominant-strategy tax); and the shield is price-neutral (46% vs
-  49%) instead of catastrophic. Left open: the shield never *earns* its price against rational
-  aggression — acceptable while attacks are trades rather than dominant, and recorded here rather
-  than papered over.
+  49%) instead of catastrophic. ~~Left open: the shield never *earns* its price against rational
+  aggression~~ — closed below, by the 4-player measurement and a reprice.
+
+* **Arena at four hands — `test/arena-ffa-probe.ts`** (the other half of BACKLOG 4.4). Four
+  Arena companies in lockstep for 40 weeks, attacks crossing in seat order, each policy reading
+  only what presence actually shares (rival user counts). 20 seed quartets × 4 cyclic seat
+  rotations (shield rows re-run at 50 quartets — ±5pp of noise cannot call a ±5pp question);
+  par is 25%. Answers to the questions the duel could not ask:
+
+  - **Ganging up on the leader pays the bystander, not the gang.** Three gang-the-leader smearers
+    against one abstainer: gang 22%, bystander **35%** ($6.2M vs $5.8M median). Kick-the-weakest
+    is starker still: kickers 20%, bystander **39%**. All-four-gang is peace's $8.9M cut to $5.0M
+    for the same 25% everybody started with — the duel's prisoner's dilemma, four-handed.
+  - **The bystander who never fights is the best seat in every aggressive lobby** (29–39%
+    against par 25%), but never by enough to make abstention a tax on the layer — and attacks
+    with bystanders in the room are worse than in a duel (smear-at-leader 21% vs its 55–57%
+    duel record), because two-thirds of the damage you buy is a gift to seats you did not hit.
+    Aggression in a lobby is a genuine gamble rather than a dominant line, which is the healthy
+    shape.
+  - **The shield earns its price exactly where attacks are ambient — after a reprice.** At $35k
+    it earned nothing anywhere: 1v1 turtle 46% vs 49% bare, ambient lobby inside the noise at 200
+    matches a row. Its value scales with incoming fire while its price is flat, so
+    `SHIELD_BASE_COST` moved $35k → $25k. Re-measured, both harnesses: ambient-fire turtle
+    **36–37% vs bare 30–33%** (~$1.1M more median valuation), 1v1 turtle-vs-aggressor **55% vs
+    49%**, and a peacetime turtle still burns **13%** (par 25%, $7.5M vs $8.8M). Bought when the
+    lobby is hot, skipped when it is not — a real decision in both directions, which is the bar
+    the duel pass set and could not reach at the old price.
 
 ## Reproduction
 

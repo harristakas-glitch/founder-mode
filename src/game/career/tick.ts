@@ -320,6 +320,31 @@ export function tickCareerPMF(
   career.activeExperiments = career.activeExperiments.filter((e) => e.status === 'active')
 
   // --- customers ---------------------------------------------------------------------------
+  // Deals whose sales cycle has completed land first: they become paying cohorts THIS week, so
+  // they are decayed this week (exactly the arrival semantics a directly-pushed cohort always
+  // had), they feed this week's `room` and referral terms, and their snapshot fields are the
+  // ones taken when the deal was won. No RNG is drawn here — the draws all happened the week
+  // the deal was won — so the weekly draw count is unchanged whatever the pipeline holds.
+  if (career.pipeline?.length) {
+    const due = career.pipeline.filter((p) => p.landWeek <= s.week)
+    if (due.length) {
+      career.pipeline = career.pipeline.filter((p) => p.landWeek > s.week)
+      for (const p of due) {
+        career.cohorts.push({
+          id: uid(),
+          acquiredWeek: s.week,
+          segmentId: p.segmentId,
+          startingCustomers: p.customers,
+          activeCustomers: p.customers,
+          exactCustomers: p.customers,
+          acquisitionCost: p.acquisitionCost,
+          priceAtAcquisition: p.priceAtAcquisition,
+          productQualityAtAcquisition: p.productQualityAtAcquisition,
+        })
+      }
+    }
+  }
+
   const targetTruth = career.segmentTruth[target]
   const targetFit = segmentProductFit(targetTruth, s.quality, career.focus, sector, target)
   const targetPrice = segmentPriceFit(targetTruth, career.pricing)
@@ -345,17 +370,36 @@ export function tickCareerPMF(
   })
 
   if (acquired > 0) {
-    career.cohorts.push({
-      id: uid(),
-      acquiredWeek: s.week,
-      segmentId: target,
-      startingCustomers: acquired,
-      activeCustomers: acquired,
-      exactCustomers: acquired,
-      acquisitionCost: marketingSpend,
-      priceAtAcquisition: career.pricing === 'low' ? 26 : career.pricing === 'premium' ? 82 : 52,
-      productQualityAtAcquisition: s.quality,
-    })
+    // `salesCycleWeeks` wired in (gameplay-review finding 6). Customers this week's spend WON
+    // land `salesCycleWeeks − 1` weeks from now: a 1-week cycle is interest and money inside the
+    // same tick — the exact code path that always existed, byte for byte, so the reachable
+    // low-end segments (Freelancers, Individual Developers, …, all cycle 1) are untouched and
+    // only the genuinely long-cycle end of the market gets SLOW. The snapshot fields are taken
+    // now, when the deal is won; the cohort starts churning when it lands, because a customer
+    // cannot leave before they have arrived.
+    const lag = Math.max(0, Math.round(targetTruth.salesCycleWeeks) - 1)
+    if (lag === 0) {
+      career.cohorts.push({
+        id: uid(),
+        acquiredWeek: s.week,
+        segmentId: target,
+        startingCustomers: acquired,
+        activeCustomers: acquired,
+        exactCustomers: acquired,
+        acquisitionCost: marketingSpend,
+        priceAtAcquisition: career.pricing === 'low' ? 26 : career.pricing === 'premium' ? 82 : 52,
+        productQualityAtAcquisition: s.quality,
+      })
+    } else {
+      ;(career.pipeline ??= []).push({
+        landWeek: s.week + lag,
+        segmentId: target,
+        customers: acquired,
+        acquisitionCost: marketingSpend,
+        priceAtAcquisition: career.pricing === 'low' ? 26 : career.pricing === 'premium' ? 82 : 52,
+        productQualityAtAcquisition: s.quality,
+      })
+    }
   }
 
   // --- incentivised acquisition (ICO Slice 3) -----------------------------------------------

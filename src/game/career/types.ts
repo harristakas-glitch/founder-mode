@@ -108,6 +108,26 @@ export interface CustomerCohort {
   origin?: import('../token/types').CohortOrigin
 }
 
+/**
+ * Customers WON but not yet LANDED — `salesCycleWeeks` finally wired in (gameplay-review
+ * finding 6: it was generated per segment per seed, believed, measured by paid pilots, and read
+ * by nothing). A deal closed this week turns into a paying cohort `salesCycleWeeks − 1` weeks
+ * later: a one-week cycle is interest and money inside the same tick — bit-identical to before
+ * this existed — so the lag only bites where the cycle is genuinely long. It is what makes
+ * Enterprise SLOW rather than merely expensive.
+ *
+ * The acquisition-week snapshot fields are taken when the deal is WON (that is when the price
+ * was quoted and the product demoed), and carried until it lands.
+ */
+export interface PipelineEntry {
+  landWeek: number
+  segmentId: SegmentId
+  customers: number
+  acquisitionCost: number
+  priceAtAcquisition: number
+  productQualityAtAcquisition: number
+}
+
 export interface RepositioningState {
   previousSegmentId: SegmentId
   newSegmentId: SegmentId
@@ -155,6 +175,12 @@ export interface CareerPMFState {
   evidence: EvidenceItem[]
   activeExperiments: ActiveExperiment[]
   cohorts: CustomerCohort[]
+  /**
+   * The sales pipeline: deals won, money not yet in. ABSENT MEANS EMPTY — the same trick
+   * `origin` and `exactCustomers` use, so a save written before this existed loads without a
+   * migration write, and a run whose target has a one-week cycle never grows the key at all.
+   */
+  pipeline?: PipelineEntry[]
   primaryTargetSegmentId: SegmentId
   repositioning?: RepositioningState
   journal: DecisionJournalEntry[]

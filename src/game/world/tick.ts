@@ -215,13 +215,24 @@ function weekCandidates(s: GameState, world: LivingWorldState): NarrativeCandida
       .map((id) => world.characters[id])
       .filter((c) => c && c.status === 'active' && c.role === 'employee')
     if (cast.length > 0) {
-      const speaker = cast[Math.floor(s.week / BEAT_INTERVAL_WEEKS) % cast.length]
-      out.push({
-        id: `checkin_${s.week}`, type: 'team_request', category: 'request',
-        financialImpact: 0.05, strategicImpact: 0.2, relationshipImpact: 0.75, competitiveImpact: 0,
-        urgency: 0.2, novelty: 0, callbackValue: 0.5, tags: ['team'],
-        characterId: speaker.id, slots: { name: speaker.firstName },
-      })
+      // The least-recently-heard person speaks; ties keep sorted-cast order (the sort is stable).
+      // This used to be `floor(week/4) % cast.length`, which re-picks the FIRST-sorted character
+      // on every beat whose index the cast size divides — a cast growing one hire per beat
+      // (1, 2, 3…) heard from the same person three check-ins running, because n % n === 0.
+      // Latent while Career runs started fast; the salesCycleWeeks pipeline slowed early hiring
+      // on seed 4242 and test/world-director.test.ts caught the streak.
+      const lastSpoke = (c: (typeof cast)[number]) => world.checkinLastSpoke?.[c.id] ?? -1
+      const speaker = [...cast].sort((a, b) => lastSpoke(a) - lastSpoke(b))[0]
+      // A cast of one is the one case rotation cannot help. The same voice every fourth week as
+      // the ONLY narration reads robotic — skip that beat and let them speak every other one.
+      const spokeLastBeat = lastSpoke(speaker) >= s.week - BEAT_INTERVAL_WEEKS
+      if (!spokeLastBeat)
+        out.push({
+          id: `checkin_${s.week}`, type: 'team_request', category: 'request',
+          financialImpact: 0.05, strategicImpact: 0.2, relationshipImpact: 0.75, competitiveImpact: 0,
+          urgency: 0.2, novelty: 0, callbackValue: 0.5, tags: ['team'],
+          characterId: speaker.id, slots: { name: speaker.firstName },
+        })
     }
   }
 
@@ -281,6 +292,9 @@ function emit(s: GameState, world: LivingWorldState, seed: number, c: NarrativeC
   // Record AFTER emitting. Without this the usage buffers stay empty, every fragment stays off
   // cooldown forever, and the composer keeps re-picking its favourites.
   world.narrative = recordNarrative(world.narrative, composed, composed.id)
+  // The check-in rotation reads EMISSIONS, not candidates: a beat the Director dropped did not
+  // happen, and counting it would silence the person it never asked to speak.
+  if (c.type === 'team_request' && speaker) (world.checkinLastSpoke ??= {})[speaker.id] = s.week
 }
 
 /**
