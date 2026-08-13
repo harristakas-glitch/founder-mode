@@ -32,7 +32,6 @@ import {
 } from '../src/game/world/advisors'
 import { SEAT_DEFS } from '../src/game/world/content/advisors'
 import { validateFragmentLibrary } from '../src/game/world/composer'
-import { generateCharacter } from '../src/game/world/characters'
 import { emptyLivingWorld, migrateLivingWorldSlice } from '../src/game/world/persistence'
 import type { Character } from '../src/game/world/types'
 import type { GameState, SectorId } from '../src/game/types'
@@ -127,7 +126,7 @@ console.log('\n— §83: each seat responds strongly to its own metric —')
   const mild = pickSeatOpinion('finance', person(), skilled, [...backdrop, fact('runway', 0.2, -1, { runway: '25 weeks' })], noSlip)
   const dire = pickSeatOpinion('finance', person(), skilled, [...backdrop, fact('runway', 0.9, -1, { runway: '4 weeks' })], noSlip)
   ok(dire?.fact.topic === 'runway', 'the CFO responds strongly to runway deterioration')
-  ok(mild?.fact.topic !== 'runway' || (mild && dire && mild.fact.severity < dire.fact.severity), 'and it is the deterioration doing it, not a hardcoded favourite topic')
+  ok(mild?.fact.topic !== 'runway' || !!(mild && dire && mild.fact.severity < dire.fact.severity), 'and it is the deterioration doing it, not a hardcoded favourite topic')
   const sales = pickSeatOpinion('growth', person(), skilled, [fact('growth', 0.6, 1, { growth: '8%' }), fact('quality', 0.6, -1, { bugs: 70 })], noSlip)
   ok(sales?.fact.topic === 'growth', 'sales responds to pipeline over product trouble')
   const prod = pickSeatOpinion('product', person(), skilled, [fact('retention', 0.5, -1, { retention: '55%' }), fact('growth', 0.5, 1, { growth: '7%' })], noSlip)
