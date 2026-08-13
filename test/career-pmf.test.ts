@@ -388,11 +388,79 @@ const maintained = allocRun({ features: 40, quality: 25, bugs: 35, research: 0, 
 ok(neglected.bugs > maintained.bugs, `shipping features without fixing bugs accumulates them (${Math.round(neglected.bugs)} vs ${Math.round(maintained.bugs)})`)
 ok(maintained.pmf > neglected.pmf, `and that costs PMF — bug-neglect ${Math.round(neglected.pmf)} vs maintained ${Math.round(maintained.pmf)}`)
 
+console.log('— The sales cycle is a pipeline, not a modifier (gameplay-review finding 6) —')
+// `salesCycleWeeks` was generated per segment per seed, believed, measured by $28k paid pilots —
+// and read by nothing. Wired in: customers won this week land `salesCycleWeeks − 1` weeks later
+// through CareerPMFState.pipeline. These pin the three properties that make the wiring safe.
+//
+// Seed 606's belief-chosen starting target is Enterprise with a 12-week cycle — the segment the
+// lag exists for.
+{
+  let g = newGame('Cycle', 'saas', 'technical', { config: cfg({ seed: 606 }) })
+  const target = g.career!.primaryTargetSegmentId
+  const cycle = g.career!.segmentTruth[target].salesCycleWeeks
+  ok(cycle >= 8, `seed 606 opens on ${target}, a long-cycle segment (${cycle} wk) — the setup this block needs`)
+  let firstUsersWeek = 0
+  let pipelinePeak = 0
+  for (let w = 0; w < 18; w++) {
+    g.cash = Math.max(g.cash, 3_000_000)
+    g.marketingSpend = 30_000
+    g = advanceWeek(g)
+    pipelinePeak = Math.max(pipelinePeak, g.career!.pipeline?.reduce((a, p) => a + p.customers, 0) ?? 0)
+    if (!firstUsersWeek && g.users > 0) firstUsersWeek = g.week
+  }
+  ok(pipelinePeak > 100, `deals accumulate in the pipeline while the cycle runs (peak ${pipelinePeak} customers in flight)`)
+  ok(
+    firstUsersWeek >= cycle && firstUsersWeek <= cycle + 4,
+    `the first customers LAND when the sales cycle completes — week ${firstUsersWeek} on a ${cycle}-week cycle, not week 2`,
+  )
+}
+// A one-week cycle is interest and money inside the same tick — the exact code path that always
+// existed — so the fast half of the market must never even grow the pipeline key.
+{
+  let g = newGame('Fast', 'saas', 'technical', { config: cfg({ seed: 606 }) })
+  repositionTo(g, 'freelancers', 1)
+  const cycle = g.career!.segmentTruth.freelancers.salesCycleWeeks
+  ok(cycle === 1, `freelancers run a one-week cycle in every seed (${cycle})`)
+  let firstUsersWeek = 0
+  for (let w = 0; w < 12; w++) {
+    g.cash = Math.max(g.cash, 3_000_000)
+    g.marketingSpend = 30_000
+    g = advanceWeek(g)
+    if (!firstUsersWeek && g.users > 0) firstUsersWeek = g.week
+  }
+  ok(g.career!.pipeline === undefined, 'a one-week-cycle run never grows the pipeline key — bit-identical path to before the lag existed')
+  ok(firstUsersWeek > 0 && firstUsersWeek <= 6, `and its customers arrive without a lag (first landed week ${firstUsersWeek})`)
+}
+// Save-compat: a Career save persisted before the pipeline existed simply has no key. Absent
+// means empty — the `origin` / `exactCustomers` trick — so it must load and tick, no migration.
+{
+  let g = newGame('Old', 'saas', 'technical', { config: cfg({ seed: 606 }) })
+  for (let w = 0; w < 6; w++) {
+    g.cash = Math.max(g.cash, 3_000_000)
+    g.marketingSpend = 30_000
+    g = advanceWeek(g)
+  }
+  delete g.career!.pipeline // exactly what an old save looks like the moment it is loaded
+  let survived = true
+  try {
+    for (let w = 0; w < 4; w++) g = advanceWeek(g)
+  } catch {
+    survived = false
+  }
+  ok(survived && !g.gameOver, 'a save without the pipeline key loads and ticks — absent means empty, no migration write')
+}
+
 console.log('— Briefing, explanations and capacity drain are real (not inert) —')
 let br = newGame('Brief', 'saas', 'technical', { config: cfg({ seed: 606 }) })
 br.cash = 3_000_000
 br.marketingSpend = 30_000
-for (let w = 0; w < 12; w++) br = advanceWeek(br)
+// 20 weeks, not 12 — seed 606's belief-chosen starting target is Enterprise with a 12-week
+// sales cycle, so since `salesCycleWeeks` was wired in (gameplay-review finding 6) the first
+// cohort LANDS at week 13 and freezes its four-week retention snapshot at week 16. At 12 weeks
+// this block was reading a pipeline full of deals and a customer base of zero, which is the
+// mechanism working, not retention tracking being dead.
+for (let w = 0; w < 20; w++) br = advanceWeek(br)
 ok(!!br.career!.lastBriefing, 'a weekly founder briefing is produced')
 ok(br.career!.lastBriefing!.week === br.week, 'the briefing is for the current week')
 const revenues = br.history.map((h) => h.revenue).filter((r) => r > 0)

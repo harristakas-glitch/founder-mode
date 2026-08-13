@@ -184,7 +184,13 @@ hiring is denominated in gross margin, which I did not build. Recorded as open r
 
 ---
 
-### 6. `salesCycleWeeks` is dead data — CONFIRMED
+### 6. `salesCycleWeeks` is dead data — CONFIRMED, since WIRED IN (2026-08-12)
+
+> Closed: customers won this week now land `salesCycleWeeks − 1` weeks later through a pending
+> `pipeline` queue on `CareerPMFState` (deterministic, no extra RNG draws, absent-means-empty
+> save compat). A one-week cycle is the byte-identical old path, so only the long-cycle end of
+> the market slowed. Measured re-baseline is in the wiring commit; regression assertions in
+> `test/career-pmf.test.ts`, mutation-verified 4/4. The original finding follows.
 
 `SegmentTruth.salesCycleWeeks` is generated per segment per seed
 (`src/game/career/segments.ts`, with real per-sector variety: 1 week for Freelancers, 14 for
@@ -309,6 +315,7 @@ moves; it only prices the range the Arena auction opens up.
   Capping the slider by runway would remove a legitimate aggressive line.
 * **`salesCycleWeeks` (finding 6)** — deleting it throws away per-sector data that is already
   correct and evocative; wiring it in is a feature. Costs the player nothing today.
+  *(Since wired in — see the note on finding 6.)*
 * **`src/net/**` and `supabase/**`** — out of my ownership; the security agent holds them and was
   editing them during this review. Nothing gameplay-relevant found that lives there. The "no bid
   always wins" result **depends on `premiumPct` being bounded to `[0,100]`**; both clamps were
@@ -330,6 +337,7 @@ moves; it only prices the range the Arena auction opens up.
 3. **Should Social be survivable on a revenue-denominated hiring rule?** See finding 5 — I showed
    the rule is wrong for Social but not that Social is fine with a right one.
 4. **`salesCycleWeeks`** — wire it in, or delete it and stop generating it.
+   *(Decided and done, 2026-08-12: wired in. See the note on finding 6.)*
 
 ---
 
@@ -339,6 +347,10 @@ moves; it only prices the range the Arena auction opens up.
   by ~week 10). Confirmed by inspection of the baseline run: 23/24, 24/24, 24/24 across the three
   strategies in four of five sectors. Not replaced with a discriminating gate — doing so is a
   harness change that would invalidate comparison against this review's numbers.
+  *(Since replaced, 2026-08-12, with weeks-to-profitability — 4 consecutive weeks of revenue
+  covering expenses — which separates all three strategies in every sector. The invalidation the
+  bullet above predicted is real and is declared in the harness's own header: milestone columns
+  printed before that date do not compare with columns printed after it.)*
 * Quick Play / Arena-only systems (M&A, IPO pricing, debt covenants, PvP attacks and shields) were
   read but not bot-tested; the review's budget went to Career and the auction as ranked. One thing
   noticed while reading and **not verified**: `covenantCheck` seizes `min(cash, principal)` and
