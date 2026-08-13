@@ -60,6 +60,12 @@ export interface WeekFact {
   direction: -1 | 1
   /** The actual numbers, preformatted, for §66-grade grounding. */
   slots: FragmentSlots
+  /**
+   * Extra tags the fact carries into composition, on top of (seat, topic, stance, direction).
+   * Phase 7 uses this to keep an approaching commitment ('due') from borrowing a settled one's
+   * sentence ('settled'). Optional so every pre-existing fact is unchanged.
+   */
+  tags?: readonly string[]
 }
 
 /**
@@ -220,8 +226,12 @@ const CFO_SPEC = (s: GameState): CharacterSpec => ({
   sector: s.config?.sector,
 })
 
-/** The investor seat exists only once outside money owns a piece of you — a fact, not a choice. */
-const BOARD_SPEC = (s: GameState): CharacterSpec => ({
+/**
+ * The investor seat exists only once outside money owns a piece of you — a fact, not a choice.
+ * Exported because Phase 7 makes promises TO this person: the promise ledger and the advisor
+ * panel must agree about who the board is, so there is exactly one spec for them.
+ */
+export const BOARD_SPEC = (s: GameState): CharacterSpec => ({
   id: 'adv:board',
   role: 'board_member',
   title: 'Lead investor',
@@ -400,9 +410,19 @@ function panelUsage(prev: AdvisorPanelState | undefined): NarrativeUsageState {
 /**
  * §76's "What the team thinks", built once per resolved week (the caller sits inside the
  * shouldGenerateForWeek guard). Reads only facts; writes only world.advisorPanel.
+ *
+ * `extraFacts` is how another capability's facts reach the panel without this module importing
+ * that capability's engine: tick.ts computes Phase 7's commitment facts and passes them in, so a
+ * run without promises composes an identical panel to the one this signature replaced.
  */
-export function buildAdvisorPanel(s: GameState, world: LivingWorldState, seed: number): AdvisorPanelState {
-  const facts = readWeekFacts(s)
+export function buildAdvisorPanel(
+  s: GameState,
+  world: LivingWorldState,
+  seed: number,
+  extraFacts: readonly WeekFact[] = [],
+): AdvisorPanelState {
+  // Re-sorted after the merge so the ranking can never depend on which module produced a fact.
+  const facts = [...readWeekFacts(s), ...extraFacts].sort((a, b) => a.topic.localeCompare(b.topic))
   const panel: AdvisorPanelState = { week: s.week, opinions: [] }
   if (facts.length === 0) return panel
 
@@ -435,7 +455,7 @@ export function buildAdvisorPanel(s: GameState, world: LivingWorldState, seed: n
       id,
       character,
       relationship: relationshipsOn ? relationshipWith(character, s.week) : undefined,
-      tags: [holder.seat, pick.fact.topic, pick.stance, pick.fact.direction < 0 ? 'bad' : 'good'],
+      tags: [holder.seat, pick.fact.topic, pick.stance, pick.fact.direction < 0 ? 'bad' : 'good', ...(pick.fact.tags ?? [])],
       slots: { company: s.companyName, ...pick.fact.slots },
       memory: null, // the panel is this week's read; callbacks belong to the inbox
       usage,

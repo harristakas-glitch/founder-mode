@@ -104,11 +104,12 @@ console.log('\n— The weekly check-in is an event you can answer (player report
 }
 
 console.log('\n— Inert when off (brief §89: the acceptance criterion) —')
-// Every capability livingWorldActive() consults. Phase 6 added advisorOpinions to that list, and
-// this fixture must track it: leave one on and "no world is created" fails for the right reason.
+// Every capability livingWorldActive() consults. Phase 6 added advisorOpinions and Phase 7 added
+// promises to that list, and this fixture must track it: leave one on and "no world is created"
+// fails for the right reason.
 const OFF = {
   proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false,
-  advisorOpinions: false,
+  advisorOpinions: false, promises: false,
 }
 const trace = (s: GameState) => `${s.users}|${s.pmf.toFixed(6)}|${Math.round(s.cash)}|${s.quality.toFixed(4)}|${s.inbox.length}`
 const offRun = play(4242, 24, 'career', OFF)

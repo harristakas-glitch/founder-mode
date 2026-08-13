@@ -16,6 +16,7 @@ import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilit
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
+import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
 // Tokenisation / ICO — Slice 1, the capital fork. Every one of these reads `capitalPath(s)`, which
 // is `institutional` unless a token slice exists, so a run that never tokenised takes the branch it
 // always took. `founderStanding` is the one that touches every ending: with no token slice its
@@ -1210,7 +1211,13 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
   s.reputation = clamp(s.reputation + (downRound ? -6 : 8), 0, 100)
   s.hype = clamp(s.hype + (downRound ? 2 : 10), 0, 100)
   // New money, new masters: the board resets its expectations for the new stage.
-  if (can(s, 'boardReviews')) s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
+  if (can(s, 'boardReviews')) {
+    s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
+    // Living World Phase 7 (§34): the round IS a growth expectation. Noted here because this is
+    // where the expectation becomes fact — the board installs with the target and the review date
+    // that will judge it. World-only; a no-op without the promises capability.
+    noteFundingExpectations(s, sheet.investor)
+  }
   if (downRound) applyEffects(s, { morale: -8 })
   s.inbox.unshift({
     id: uid(),
@@ -3027,6 +3034,17 @@ function resolveChoiceOnStateInner(s: GameState, messageId: string, choiceIndex:
   if (!choice) return
   msg.resolved = true
   msg.resultText = choice.resultText
+  // Living World Phase 7: some choices ARE promises (§34), and they are noted at the moment of
+  // the saying — before applyEffects, because the promise is what was SAID and the effects are
+  // what then happened (raiseDemandTarget must be read before the raise moves the morale it
+  // filters on). World-only writes; every hook no-ops without the promises capability.
+  const special = choice.effects.special
+  if (special === 'board-defy' && s.board) noteBoardDefiance(s, { target: boardEffectiveTarget(s) })
+  if (special === 'grant-raise' || special === 'refuse-raise') {
+    const star = raiseDemandTarget(s)
+    if (star) noteRaiseOutcome(s, star, special === 'grant-raise')
+  }
+  if (special === 'cola-raise') noteColaAdjustment(s)
   if (choice.effects.special === 'acquired' && msg.meta?.acquisitionAmount) {
     // The offer prices the COMPANY. The token leg rides along untouched — disjoint legs.
     s.gameOver = {

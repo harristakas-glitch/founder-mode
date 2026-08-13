@@ -17,7 +17,7 @@ import {
   valuation,
   weeklyBurn,
 } from '../game/engine'
-import { FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
 import { PMF_LABEL, segmentSnapshots } from '../game/career/pmf'
 import { useStore } from '../store'
 
@@ -317,6 +317,10 @@ export function Dashboard() {
           are allowed to disagree with each other. Carries its own margin so Quick Play (where it
           renders null) gets no stray spacing. */}
       <TeamOpinions />
+
+      {/* Career: the promises ledger (§77) — what you committed to, who heard it, when it lands,
+          and whether the numbers say you are on track. Renders null without the capability. */}
+      <Commitments />
 
       <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
         <Panel title={`Milestones (${game.milestones.length}/${MILESTONES.length})`}>

@@ -142,6 +142,15 @@ export const PROMISE_KEYS = {
   betterHours: 'promised_better_hours',
   autonomy: 'promised_autonomy',
   shipDate: 'promised_ship_date',
+  // Phase 7 — the promises the simulation's own events actually constitute (§34).
+  /** "Defy the board — bet on yourself": growth by the next review, or clean out your desk. */
+  boardGrowth: 'promised_board_growth',
+  /** Accepting a term sheet IS a growth expectation — the board installs with a target attached. */
+  fundingGrowth: 'promised_growth_target',
+  /** "The comp bands are the comp bands" — a fairness commitment the next exception breaks. */
+  compDiscipline: 'promised_comp_discipline',
+  /** The cost-of-living adjustment, granted: promised and paid in the same breath. */
+  cola: 'promised_cola_adjustment',
 } as const
 
 /**
@@ -165,8 +174,12 @@ export const MEMORY_CUES: Record<string, MemoryCueDef> = {
     recalls: [PROMISE_KEYS.promotion, PROMISE_KEYS.engineeringLeadership],
     recallTypes: ['promise', 'support'],
   },
-  raise_given: { tags: ['compensation', 'recognition'], recalls: [PROMISE_KEYS.raise] },
-  raise_refused: { tags: ['compensation'], recalls: [PROMISE_KEYS.raise, PROMISE_KEYS.equity], recallTypes: ['promise'] },
+  raise_given: { tags: ['compensation', 'recognition'], recalls: [PROMISE_KEYS.raise, PROMISE_KEYS.compDiscipline] },
+  raise_refused: {
+    tags: ['compensation'],
+    recalls: [PROMISE_KEYS.raise, PROMISE_KEYS.equity, PROMISE_KEYS.compDiscipline],
+    recallTypes: ['promise'],
+  },
   layoff: {
     tags: ['layoff', 'headcount', 'trust'],
     recalls: [PROMISE_KEYS.noLayoffs, PROMISE_KEYS.headcount],
@@ -177,14 +190,21 @@ export const MEMORY_CUES: Record<string, MemoryCueDef> = {
   outage: { tags: ['outage', 'crisis', 'quality', 'blame'], recallTypes: ['crisis', 'support', 'failure'] },
   crunch: { tags: ['workload', 'burnout'], recalls: [PROMISE_KEYS.betterHours, PROMISE_KEYS.headcount] },
   missed_payroll: { tags: ['compensation', 'crisis', 'trust'], recallTypes: ['promise', 'betrayal'] },
-  funding_round: { tags: ['funding', 'board', 'equity', 'growth'], recalls: [PROMISE_KEYS.equity, PROMISE_KEYS.headcount] },
+  funding_round: {
+    tags: ['funding', 'board', 'equity', 'growth'],
+    recalls: [PROMISE_KEYS.equity, PROMISE_KEYS.headcount, PROMISE_KEYS.fundingGrowth],
+  },
   down_round: { tags: ['funding', 'equity', 'crisis'], recalls: [PROMISE_KEYS.equity] },
   pivot: { tags: ['pivot', 'strategy'], recallTypes: ['strategy_change', 'promise', 'conflict'] },
   strategy_change: { tags: ['strategy'], recallTypes: ['strategy_change', 'conflict'] },
   ship_slipped: { tags: ['quality', 'strategy', 'blame'], recalls: [PROMISE_KEYS.shipDate] },
   quality_collapse: { tags: ['quality', 'blame'], recallTypes: ['conflict', 'failure'] },
   rival_raised: { tags: ['rival', 'funding', 'strategy'], recallTypes: ['strategy_change'] },
-  board_pressure: { tags: ['board', 'strategy', 'blame'], recallTypes: ['conflict', 'promise'] },
+  board_pressure: {
+    tags: ['board', 'strategy', 'blame'],
+    recalls: [PROMISE_KEYS.boardGrowth, PROMISE_KEYS.fundingGrowth],
+    recallTypes: ['conflict', 'promise'],
+  },
   hire_made: { tags: ['hiring', 'headcount'], recalls: [PROMISE_KEYS.headcount] },
   performance_review: { tags: ['recognition', 'promotion'], recallTypes: ['promise', 'recognition', 'rejection'] },
   one_on_one: { tags: ['trust'], recallTypes: ['promise', 'conflict', 'support'] },
