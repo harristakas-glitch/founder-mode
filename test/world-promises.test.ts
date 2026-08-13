@@ -7,34 +7,49 @@
 // (event windows, 1:1 dedupe), and one extra message there would break bot byte-identity.
 //
 // MUTATION LEDGER — each entry was verified by making the named break and watching the named
-// assertion fail, then reverting. An assertion that cannot fail is not a test.
-//   1. engine.ts drops the board-defy hook            → "defying the board IS a promise" fails.
+// assertion fail, then reverting. An assertion that cannot fail is not a test. First-pass
+// survivors are recorded, because they are the ledger's whole point.
+//   1. engine.ts drops the board-defy hook            → "defying the board IS a promise" fails
+//      (plus the deadline, the quoted number, and the board-person assertions with it).
 //   2. settleWeeklyPromises flips the defiance verdict (kept↔broken)
 //                                                     → "a cleared review settles it kept" and
 //                                                       "still-defied past due settles it broken" fail.
-//   3. settleWeeklyPromises returns {} (facts dropped) → "a broken promise is a trust event" fails
-//                                                       (board trust identical either way).
-//   4. noteRaiseOutcome loses the comp-bands dueWeek   → "the deadline is tracked on the record" fails.
-//   5. commitmentAdvisorFacts returns [] for due promises
-//                                                     → "§35: the panel warns before the deadline" fails.
-//   6. notePromise ignores the capability gate (memory.ts)
-//                                                     → "a frozen pre-phase ruleset never grows a
-//                                                       ledger" fails. SURVIVED FIRST PASS as
-//                                                       written earlier against `world === undefined`
-//                                                       only — the in-flight fixture needed a run
-//                                                       whose world EXISTS (advisors on) so the gate
-//                                                       is what is being tested, not world absence.
-//   7. resolvePromise stops souring the memory        → "the memory sours" fails (emotionalImpact
-//                                                       stays +30, no 'blame' tag).
+//   3. settleWeeklyPromises stops emitting relationship facts (add() gutted)
+//                                                     → "a broken promise costs real trust vs
+//                                                       keeping it" fails: kept 36.41 vs broken
+//                                                       36.41, byte-equal. SURVIVOR NOTE: the
+//                                                       first draft asserted only "trust dropped
+//                                                       vs before the promise", and baseline decay
+//                                                       alone (41.24 → 36.41 over 13 quiet weeks)
+//                                                       satisfied that — the kept-vs-broken
+//                                                       comparison on the same seed is what
+//                                                       actually pins the consequence.
+//   4. noteRaiseOutcome loses the comp-bands dueWeek   → "the deadline is tracked on the record"
+//                                                       and "holding the line settles it kept" fail.
+//   5. commitmentAdvisorFacts returns []              → "§35: the panel warns before the deadline",
+//                                                       "the verdict is voiced", and the unit fact
+//                                                       assertion all fail.
+//   6. capability-gate removal — RECORDED SURVIVORS: removing the gate in memory.ts's notePromise
+//      alone SURVIVES (every caller gates first), and removing noteRaiseOutcome's gate alone also
+//      SURVIVES (notePromise's own gate catches it). The gates are deliberate defense in depth —
+//      the hook gate also protects ensureCounterpart from growing the cast — so no single-line
+//      assertion can see one of them. Removing BOTH → "a frozen pre-phase ruleset never grows a
+//      ledger" and "the run without it grew none" fail, which is the behavior the pair exists for.
+//   7. resolvePromise stops souring the broken memory → "the memory sours: negative, blamed,
+//                                                       resolved", "the board remembers it,
+//                                                       soured" and the check-in callback fail.
 //   8. persistence normalizePromise drops resolvedWeek → "the ledger survives a JSON round-trip
 //                                                       verbatim" fails.
-//   9. breakCompDiscipline removed                    → "the next exception breaks it" fails.
-//  10. tick.ts stops passing commitmentAdvisorFacts   → "§35: the panel warns" fails at the
-//                                                       integration level (the unit fact still
-//                                                       existed — integration IS the deliverable).
+//   9. breakCompDiscipline removed                    → "the next exception breaks it" fails,
+//                                                       and with it the sour memory, the trust
+//                                                       drop and the check-in callback.
+//  10. tick.ts stops passing commitmentAdvisorFacts   → both §35 panel assertions fail while the
+//                                                       unit fact still passes — integration IS
+//                                                       the deliverable, so both layers are pinned.
 //  11. commitmentLedger 'at_risk' branch removed      → "§77: off-track reads At risk" fails.
 //  12. supersedeBoardPromises removed                 → "a new round supersedes the old target"
-//                                                       fails (two open board promises at once).
+//                                                       and "closes as expired" fail (two open
+//                                                       board promises at once).
 import { acceptTermSheet, advanceWeek, migrateLegacySave, newGame, resolveChoiceOnState } from '../src/game/engine'
 import { tickLivingWorld } from '../src/game/world/tick'
 import {
@@ -237,6 +252,13 @@ console.log('\n— The real seed: a term sheet at w21, judged by its own first r
   ok(settledBroken?.status === 'broken', `the same commitment, unfed, settles broken (strike ${b.board?.strikes})`)
   ok((b.board?.strikes ?? 0) >= 1, 'and the verdict came from the review itself — the strike is the fact')
   ok(trustOf(b, 'adv:board')! < before, `the board's trust in the founder drops (${before} → ${trustOf(b, 'adv:board')})`)
+  // Against the KEPT variant, not just against time: baseline decay alone moves trust a point or
+  // two, so "it dropped" would survive the settlement facts being dropped entirely. The gap
+  // between keeping and breaking the same promise on the same seed is the consequence.
+  ok(
+    trustOf(b, 'adv:board')! < trustOf(s, 'adv:board')! - 10,
+    `a broken promise costs real trust vs keeping it (kept ${trustOf(s, 'adv:board')} vs broken ${trustOf(b, 'adv:board')})`,
+  )
   const boardMem = b.world?.characters['adv:board']?.memories.find((m) => m.sourceId === settledBroken?.id)
   ok(!!boardMem && boardMem.emotionalImpact < 0 && boardMem.tags.includes('blame'), 'the board remembers it, soured')
 
