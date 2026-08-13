@@ -18,7 +18,7 @@
 //  10. readWeekFacts flips the runway sign         → "two weeks of cash reads as a severe, BAD runway
 //      fact" fails. NOTE: the first version of this ledger claimed the §29 block caught this — it
 //      did not (§29's fixtures are hand-built facts), which is why the reader has its own assertion.
-import { advanceWeek, newGame } from '../src/game/engine'
+import { advanceWeek, migrateLegacySave, newGame } from '../src/game/engine'
 import { tickLivingWorld } from '../src/game/world/tick'
 import {
   SPEAK_FLOOR,
@@ -239,6 +239,23 @@ console.log('\n— Interpretation only: flipping the capability moves no simulat
   ok(play(7, 20, 'quick').world?.advisorPanel === undefined, 'Quick Play has no advisor layer (§32)')
   const OFF = { proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false, advisorOpinions: false }
   ok(play(7, 12, 'career', OFF).world === undefined, 'with every living-world capability off, no world is created at all')
+}
+
+console.log('\n— Legacy saves: frozen rulesets stay frozen (the Slice 5 precedent) —')
+{
+  // A save carries the capability set it was created with, resolved ONCE (modes.ts header). New
+  // capabilities reach NEW runs — exactly how tokenCommunity shipped (887b483: mode table only,
+  // no save-path backfill), and what ICO §74 depends on. An in-flight Career save from before
+  // this phase must keep advisorOpinions: false and simply never grow a panel.
+  const inFlight = newGame('Frozen', 'saas', 'technical', { config: cfg(5) })
+  inFlight.capabilities = { ...inFlight.capabilities, advisorOpinions: false } // as an older build stored it
+  const advanced = advanceWeek(advanceWeek(inFlight))
+  ok(advanced.world?.advisorPanel === undefined, 'an in-flight save with a frozen pre-phase ruleset never grows a panel')
+  // A pre-config save (no capabilities at all) resolves against the CURRENT tables — but those
+  // migrations never assign Career, so advisorOpinions still cannot appear retroactively.
+  const preConfig = { ...newGame('Ancient', 'saas', 'technical', { config: cfg(5, 'quick') }), config: undefined, capabilities: undefined } as never as GameState
+  const migrated = migrateLegacySave(preConfig)
+  ok(migrated.capabilities.advisorOpinions === false, 'a pre-config save migrates to Quick Play and gains no advisor layer')
 }
 
 console.log('\n— Persistence (§68/§88): the panel is prose that must never reword itself —')
