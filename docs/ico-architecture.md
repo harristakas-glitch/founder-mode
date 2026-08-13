@@ -726,6 +726,24 @@ these jobs:
 > field was added — the community sub-state Slice 0 shipped was already sufficient — so
 > `TOKEN_STATE_VERSION` stays 2.
 
+> **Slice 6 note on this section.** Same situation: the table named nothing for Slice 6. What it
+> created, all in `token/governance.ts` unless noted: `governanceActive(s)`, `governanceInputs(s)`,
+> `proposalNeed(s, type, inp)`, `proposalSupport(s, p, inp)`, `passBarFor(type)`,
+> `tickGovernance(s, inp)`, `activeMandates(s)`, `governanceShareFloors(s)`,
+> `governanceSaleFactor(s)`, `treasurySaleFreeze(s)`, `setGovernanceStance(s, id, stance)`,
+> `defyGovernanceMandate(s, id)`, `founderRemovalPassed(s)`, `governancePanel(s)`,
+> `supportLabel(v)`, `PROPOSAL_CONTENT`; plus the `TOKEN_GOVERNANCE` constant block,
+> `GovernanceMandate`, and four fields on `TokenGovernanceState` (`mandates`, `defiances`,
+> `revoltHeat`, `lastWarnWeek`) in `token/types.ts`, and `GovernanceProposalType`'s sixth member
+> `'founder_removal'`. Enforcement reaches two existing writes: `setIncentiveShares` applies the
+> mandate share floors (a governance ↔ incentives cycle, function-body-only in both directions,
+> same shape as market ↔ users) and `maxTreasurySale` multiplies by the sale factor. `tickToken`
+> gained a `governance` report field and calls `tickGovernance` LAST, from the same `prev`
+> snapshot; it still draws exactly once. Engine integration is two exports
+> (`setGovernanceStance`, `defyGovernance`) and one read after the tick — `founderRemovalPassed`
+> routes to the existing `fired` ending per §7.9, which is now BUILT (see the note there). New
+> persisted fields are absent-means-none, so `TOKEN_STATE_VERSION` stays 2.
+
 `modes.ts`, `types.ts`, `engine.ts` and `store.ts` belong to the **integrator only**. Build agents
 report the change they need; they do not make it.
 
@@ -778,6 +796,15 @@ Resolved in §1.4: one `'network'` type plus `TokenEndingKind`.
 **7.9 §43 does not say what a Community Revolt terminating actually is.** Decision: it routes to the
 existing `fired` ending, whose payout formula already halves the equity leg — the right shape for
 being removed. Recorded here so Slice 5 does not invent a seventh ending type.
+
+> **Slice 6 amendment — built, exactly as decided.** The terminus is a `founder_removal`
+> governance proposal: heat builds only while trust < 25 AND founderInfluence ≥ 60 AND legitimacy
+> is already broken (a defied mandate, or the Slice-5 exodus running), ~8 weeks to a tabling, a
+> 4-week ballot at a raised bar (62), support a pure function of state throughout — so recovering
+> trust before the close defeats it. Telegraphed twice by governance (the brewing warning, the
+> tabling notice) on top of the exodus and pressure messages already firing in that territory.
+> On a pass the engine applies the board's own shape: `fired`, equity leg × 0.5, token position
+> untouched. Mutation-tested end to end through `advanceWeek` in test/token-governance.test.ts.
 
 **7.10 §70 asks for determinism but the brief never mentions the draw-order hazard**, which is the
 actual way determinism breaks in this codebase. See §3.2. This is the failure most likely to ship
