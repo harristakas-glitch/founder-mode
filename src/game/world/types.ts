@@ -477,4 +477,14 @@ export interface LivingWorldState {
    * resets on reload would let the repetition straight back in.
    */
   narrativeLastSeen?: Record<string, number>
+  /**
+   * CharacterId → the week that person's team check-in was last actually EMITTED (not merely
+   * generated as a candidate). The check-in speaker is the least-recently-heard active employee;
+   * this is what "least recently" reads. It replaced `floor(week/4) % cast.length`, which
+   * re-picks the first-sorted character every beat that `cast.length` divides the beat index —
+   * a cast growing one hire per beat (1, 2, 3…) heard from the same person forever, because
+   * n % n === 0. Optional and persisted like `narrativeLastSeen`: absent means nobody has spoken,
+   * so an old save loads clean and the rotation starts from the top of the sorted cast.
+   */
+  checkinLastSpoke?: Record<CharacterId, number>
 }
