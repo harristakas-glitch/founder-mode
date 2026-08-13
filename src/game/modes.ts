@@ -137,7 +137,7 @@ export interface GameCapabilities {
   structuredInterviews: boolean // customer interviews answered in character
   structuredEmployeeConversations: boolean // replaces the fixed 1:1 templates
   proceduralBoardMeetings: boolean // board sessions composed from the board's actual grievances
-  promises: boolean // commitments the world holds you to
+  promises: boolean // BUILT (Phase 7). Commitments the world holds you to — Career only
   longTermCallbacks: boolean // week 48 remembers week 18
   rivalArchetypes: boolean // rivals have a posture, not just momentum
   rivalNarrative: boolean // rivals get narrated, not just tabulated
@@ -288,9 +288,10 @@ const QUICK_BASE_RULES: GameRules = {
   tokenDepth: 'light',
   capabilities: {
     ...NO_CAPABILITIES,
-    // Brief §3. Only the Phase 1–3 systems are wired; advisors, promises, interviews and board
-    // meetings stay off until their own phases land, so a capability is never on before the code
-    // that honours it exists. Quick Play gets people and company history, not a relationship sim.
+    // Brief §3. Only the Phase 1–3 systems are wired here; advisors (§32) and promises (§36) are
+    // built but Career-only, and interviews and board meetings stay off until their own phases
+    // land, so a capability is never on before the code that honours it exists. Quick Play gets
+    // people and company history, not a relationship sim.
     proceduralNarrative: true,
     // Built and running (src/game/world/director.ts, src/game/world/content/composer-media.ts).
     // Nothing branches on either — they run because proceduralNarrative does — so these declare
@@ -369,6 +370,14 @@ const CAREER_BASE_RULES: GameRules = {
     // advisor layer shallow and §33 keeps Arena's off entirely, because Arena's complexity is
     // the other players.
     advisorOpinions: true,
+    // Living World Phase 7 (brief §34-§35): the choices that ARE promises — defying the board,
+    // answering the raise demand, signing the term sheet — get noted, tracked against their own
+    // deadlines, and settled from the simulation's verdicts, with the fallout flowing through
+    // memory, relationships and the §77 commitments panel. Career only: §36 keeps Quick Play's
+    // promises to whatever is already natural in its events (that is Phase 10's slice) and §37
+    // keeps Arena's off entirely. Mode-table only, per the Slice 5 precedent — an in-flight save
+    // keeps the frozen capability set it was created with and simply never grows a ledger.
+    promises: true,
     // Career Phase 1 — PMF Discovery 2.0. Segment truth, beliefs, evidence, cohorts.
     detailedPMF: true,
     customerSegments: true,

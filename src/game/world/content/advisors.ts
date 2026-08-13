@@ -30,6 +30,9 @@ export type AdvisorTopic =
   | 'morale'
   | 'board'
   | 'market'
+  // Phase 7 (§35): a promise coming due, delivered, or missed. The fact itself is produced by
+  // world/promises.ts from the promise ledger, so a run without that capability never has one.
+  | 'commitment'
 
 export const ADVISOR_TOPICS: readonly AdvisorTopic[] = [
   'runway',
@@ -42,6 +45,7 @@ export const ADVISOR_TOPICS: readonly AdvisorTopic[] = [
   'morale',
   'board',
   'market',
+  'commitment',
 ]
 
 export interface SeatDef {
@@ -58,7 +62,7 @@ export interface SeatDef {
 export const SEAT_DEFS: Record<AdvisorSeat, SeatDef> = {
   finance: {
     label: 'Finance',
-    weights: { runway: 0.3, profit: 0.25, marketing: 0.2, growth: 0.1, board: 0.1, market: 0.05 },
+    weights: { runway: 0.3, profit: 0.25, marketing: 0.2, growth: 0.1, board: 0.1, market: 0.05, commitment: 0.15 },
     stances: {
       runway: { bad: 'cut', good: 'celebrate' },
       profit: { bad: 'cut', good: 'celebrate' },
@@ -66,6 +70,8 @@ export const SEAT_DEFS: Record<AdvisorSeat, SeatDef> = {
       growth: { bad: 'warn', good: 'hold' },
       board: { bad: 'warn', good: 'hold' },
       market: { bad: 'warn', good: 'hold' },
+      // §35's mid-way warning: "we're not currently on track for the commitment" is a CFO line.
+      commitment: { bad: 'warn', good: 'hold' },
     },
   },
   growth: {
@@ -97,14 +103,17 @@ export const SEAT_DEFS: Record<AdvisorSeat, SeatDef> = {
   },
   investor: {
     label: 'Board',
-    // §31: the growth investor pushes expansion; the board chair also owns the commitments.
-    weights: { growth: 0.3, board: 0.25, market: 0.15, runway: 0.15, pmf: 0.15 },
+    // §31: the growth investor pushes expansion; the board chair also owns the commitments —
+    // literally, now: 'commitment' is the promise ledger speaking, and it outweighs everything
+    // else in this chair because the person you promised is the person doing the weighing.
+    weights: { growth: 0.3, board: 0.25, market: 0.15, runway: 0.15, pmf: 0.15, commitment: 0.35 },
     stances: {
       growth: { bad: 'warn', good: 'push' },
       board: { bad: 'warn', good: 'celebrate' },
       market: { bad: 'hold', good: 'push' },
       runway: { bad: 'warn', good: 'push' },
       pmf: { bad: 'warn', good: 'push' },
+      commitment: { bad: 'warn', good: 'celebrate' },
     },
   },
 }
@@ -189,6 +198,14 @@ const contexts: readonly Fragment[] = [
   // market
   { id: 'adv.cx.market.winter', type: 'context', text: 'The funding market is frozen — raising in this climate costs twice the dilution', tags: ['market', 'bad'], weight: 3, conditions: { requiresTags: ['market', 'bad'] } },
   { id: 'adv.cx.market.window', type: 'context', text: 'Capital is cheap right now, and windows like this close without notice', tags: ['market', 'good'], weight: 3, conditions: { requiresTags: ['market', 'good'] } },
+  // commitment (§35) — the promise ledger speaking. 'due' tags a deadline still ahead, 'settled'
+  // tags this week's verdict; the fact carries the tag, so an approaching commitment can never
+  // borrow the "we missed it" sentence or vice versa.
+  { id: 'adv.cx.commitment.off_track', type: 'context', text: 'The {commitment} commitment lands {duein} and we are not currently on track for it', tags: ['commitment', 'bad'], weight: 3, conditions: { requiresTags: ['commitment', 'bad', 'due'] } },
+  { id: 'adv.cx.commitment.clock', type: 'context', text: 'You committed to {commitment} — that clock runs out {duein}', tags: ['commitment', 'bad'], weight: 2, conditions: { requiresTags: ['commitment', 'bad', 'due'] } },
+  { id: 'adv.cx.commitment.missed', type: 'context', text: 'We missed the {commitment} commitment — it was promised, and it was not delivered', tags: ['commitment', 'bad'], weight: 3, conditions: { requiresTags: ['commitment', 'bad', 'settled'] } },
+  { id: 'adv.cx.commitment.on_track', type: 'context', text: 'The {commitment} commitment lands {duein} and the numbers are there', tags: ['commitment', 'good'], weight: 3, conditions: { requiresTags: ['commitment', 'good', 'due'] } },
+  { id: 'adv.cx.commitment.delivered', type: 'context', text: 'You delivered on {commitment}, exactly as committed — that buys real credibility', tags: ['commitment', 'good'], weight: 3, conditions: { requiresTags: ['commitment', 'good', 'settled'] } },
 ]
 
 export const ADVISOR_FRAGMENTS: FragmentLibrary = {

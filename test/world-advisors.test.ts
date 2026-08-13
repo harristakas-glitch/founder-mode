@@ -236,7 +236,7 @@ console.log('\n— Interpretation only: flipping the capability moves no simulat
   ok(trace(withA) === trace(withoutA), 'and the simulation is byte-identical either way — advisors interpret, never decide')
   ok(withoutA.world?.characters['adv:cfo'] === undefined, 'no capability, no CFO in the cast — the flag buys exactly its own system')
   ok(play(7, 20, 'quick').world?.advisorPanel === undefined, 'Quick Play has no advisor layer (§32)')
-  const OFF = { proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false, advisorOpinions: false }
+  const OFF = { proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false, advisorOpinions: false, promises: false }
   ok(play(7, 12, 'career', OFF).world === undefined, 'with every living-world capability off, no world is created at all')
 }
 

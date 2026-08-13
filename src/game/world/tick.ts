@@ -1,11 +1,14 @@
 // The living world's weekly step.
 //
-// This is the ONLY entry point the simulation calls, and it runs at the very end of advanceWeek —
-// after every fact for the week already exists. The brief's central rule (§"Core architecture",
-// §64) is that narrative interprets facts and never decides them, so nothing in here or anything
-// it calls may write to a field the simulation reads: users, cash, pmf, quality, bugs, features,
-// hype, reputation, morale, employees, rivals, candidates. It appends to `s.world` and, when
-// `proceduralNarrative` is on, to `s.inbox`.
+// This is the simulation's weekly entry point, and it runs at the very end of advanceWeek —
+// after every fact for the week already exists. (The only other calls the simulation makes into
+// the world are the capability-gated note* hooks in memory.ts and promises.ts, fired at the
+// moment of a player action — a promise is noted where the saying happens; it is still judged
+// here.) The brief's central rule (§"Core architecture", §64) is that narrative interprets facts
+// and never decides them, so nothing in here or anything it calls may write to a field the
+// simulation reads: users, cash, pmf, quality, bugs, features, hype, reputation, morale,
+// employees, rivals, candidates. It appends to `s.world` and, when `proceduralNarrative` is on,
+// to `s.inbox`.
 //
 // Every stage is independently capability-gated. With all of them off this function returns
 // immediately and the game is byte-for-byte what it was before the system existed.
@@ -22,10 +25,11 @@ import {
   rivalSpec,
   stableCastId,
 } from './characters'
-import { advisorCastSpecs, buildAdvisorPanel } from './advisors'
+import { BOARD_SPEC, advisorCastSpecs, buildAdvisorPanel } from './advisors'
 import { composeNarrative, recordNarrative } from './composer'
 import { directWeek, type NarrativeCandidate } from './director'
 import { recordCompanyMemory, sortedCharacterIds } from './memory'
+import { commitmentAdvisorFacts, settleWeeklyPromises } from './promises'
 import { emptyLivingWorld, enforceLivingWorldLimits, markWeekGenerated, shouldGenerateForWeek } from './persistence'
 import { tickRelationship, upsertRelationship } from './relationships'
 import type { CharacterSpec } from './characters'
@@ -39,7 +43,8 @@ export function livingWorldActive(s: GameState): boolean {
     hasCapability(s, 'companyMemory') ||
     hasCapability(s, 'relationships') ||
     hasCapability(s, 'proceduralNarrative') ||
-    hasCapability(s, 'advisorOpinions')
+    hasCapability(s, 'advisorOpinions') ||
+    hasCapability(s, 'promises')
   )
 }
 
@@ -56,6 +61,10 @@ function castSpecs(s: GameState): CharacterSpec[] {
   // The advisor seats that are not employees (§28): they persist like anyone else, but only in a
   // run that actually has advisors, so switching the capability off never grows the cast.
   if (hasCapability(s, 'advisorOpinions')) specs.push(...advisorCastSpecs(s))
+  // Phase 7 without Phase 6: promises to the board still need the board to be a person. The same
+  // spec the advisor seat uses, so the two capabilities can never disagree about who the board is;
+  // the else keeps a run with both from listing them twice.
+  else if (hasCapability(s, 'promises') && s.board) specs.push(BOARD_SPEC(s))
   return specs
 }
 
@@ -102,20 +111,28 @@ export function tickLivingWorld(s: GameState): void {
 
   if (hasCapability(s, 'companyMemory')) recordMilestones(world, s, hasCapability(s, 'characterMemory'))
 
+  // Promises settle BEFORE relationships, from facts the week already resolved (the board review
+  // has spoken by now), and the settlement facts ride the relationship tick below — so a promise
+  // kept or broken this week is felt this week, through the same weekly pass as everything else.
+  const promiseFacts = hasCapability(s, 'promises') ? settleWeeklyPromises(s, world) : {}
+
   if (hasCapability(s, 'relationships')) {
     for (const id of sortedCharacterIds(world)) {
       const c = world.characters[id]
       if (!c || c.status === 'departed') continue
       // Persist unconditionally, not only when it moved: the first tick is what CREATES the
       // relationship from the character's baseline, and that one never "moves".
-      const change = tickRelationship(c, s.week)
+      const change = tickRelationship(c, s.week, promiseFacts[id] ?? [])
       world.characters[id] = upsertRelationship(c, change.after)
     }
   }
 
   // Advisors read the week AFTER relationships settled and BEFORE the beat is narrated, so a
   // fragment gated on the speaker's current relationship sees this week's numbers, not last week's.
-  if (hasCapability(s, 'advisorOpinions')) world.advisorPanel = buildAdvisorPanel(s, world, seed)
+  // The commitment fact (§35) arrives as an input rather than being read inside the panel, so the
+  // advisor module never imports the promise engine and each capability stays its own switch.
+  if (hasCapability(s, 'advisorOpinions'))
+    world.advisorPanel = buildAdvisorPanel(s, world, seed, hasCapability(s, 'promises') ? commitmentAdvisorFacts(s, world) : [])
 
   if (hasCapability(s, 'proceduralNarrative')) composeWeeklyBeat(s, world, seed)
 

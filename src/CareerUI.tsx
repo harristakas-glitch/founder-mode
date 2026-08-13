@@ -22,6 +22,7 @@ import {
 } from './game/career/pmf'
 import type { PricingStrategy, ProductFocus, SegmentTruth } from './game/career/types'
 import { hasCapability } from './game/modes'
+import { commitmentLedger, type CommitmentStatus } from './game/world/promises'
 import type { GameState } from './game/types'
 import { useStore } from './store'
 
@@ -746,6 +747,57 @@ export function TeamOpinions() {
       <div className="mt-2.5 text-[11px] text-mut">
         Each of them weighs the same week differently. None of them is automatically right.
       </div>
+      </Panel>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------------------
+// 6. Commitments — Living World Phase 7 (brief §34-§35, panel format §77)
+//
+// The promises ledger the player can see: what was committed to, who heard it, when it lands,
+// and whether the simulation's own numbers say it is on track. A pure render over
+// world.promises — every status is a deterministic read of facts (a due week, a growth number,
+// a stored verdict), never seeded prose, so recomputing per render cannot reword anything
+// (§68). Gated on the promises capability, so Quick Play and Arena never see it.
+// ---------------------------------------------------------------------------------------
+
+const COMMITMENT_BADGE: Record<CommitmentStatus, { label: string; cls: string }> = {
+  on_track: { label: 'On track', cls: 'border-line2 text-mut' },
+  at_risk: { label: 'At risk', cls: 'border-warn/60 text-warn' },
+  kept: { label: 'Kept', cls: 'border-good/60 text-good' },
+  broken: { label: 'Broken', cls: 'border-warn/60 text-warn' },
+  expired: { label: 'Lapsed', cls: 'border-line2 text-mut' },
+}
+
+export function Commitments() {
+  const game = useStore((s) => s.game)
+  if (!game || !hasCapability(game, 'promises')) return null
+  const rows = commitmentLedger(game)
+  if (rows.length === 0) return null
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Commitments">
+        <div className="space-y-2.5">
+          {rows.map((r) => (
+            <div key={r.id} className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[13.5px] font-semibold leading-snug">{r.title}</div>
+                <div className="text-[12px] text-mut">
+                  To {r.toName} · made week {r.madeWeek}
+                  {r.dueWeek !== undefined ? ` · lands week ${r.dueWeek}` : ''}
+                </div>
+              </div>
+              <span
+                className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COMMITMENT_BADGE[r.status].cls}`}
+              >
+                {COMMITMENT_BADGE[r.status].label}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2.5 text-[11px] text-mut">People remember what you said. The kept ones count too.</div>
       </Panel>
     </div>
   )
