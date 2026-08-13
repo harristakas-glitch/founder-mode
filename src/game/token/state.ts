@@ -271,10 +271,11 @@ export function createTokenState(
       sold: 0,
       realisedProceeds: 0,
     },
-    // Owned by Slice 6: present, empty, and no reader here creates it.
     incentives: [],
     treasurySales: { tokensSold: 0, proceeds: 0, lastSaleWeek: 0 },
-    governance: { proposals: [], lastProposalWeek: s.week },
+    // Slice 6 owns the behaviour; creation stays whole per the contract — every field present,
+    // zeroed, and nothing tabled: a launch begins with no questions on the ballot.
+    governance: { proposals: [], lastProposalWeek: s.week, mandates: [], defiances: 0, revoltHeat: 0, lastWarnWeek: 0 },
     // Authoritative only when detailedPMF is off (Career reads the cohorts). Every user at launch
     // is organic — nothing has been paid for yet.
     users: { organic: Math.max(0, Math.round(s.users)), incentivised: 0 },

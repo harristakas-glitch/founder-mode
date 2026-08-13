@@ -26,6 +26,7 @@ import { isIncentiveCategory, shareFromTokens } from './incentives'
 import {
   TOKEN_LIMITS,
   TOKEN_STATE_VERSION,
+  type GovernanceMandate,
   type GovernanceProposal,
   type TokenAllocationPlan,
   type TokenHistoryEntry,
@@ -35,7 +36,7 @@ import {
   type TokenUtilityModel,
   type VestingPolicy,
 } from './types'
-import { TOKEN_BOUNDS } from './types'
+import { TOKEN_BOUNDS, TOKEN_GOVERNANCE } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -113,6 +114,17 @@ function readSeries(raw: unknown): TokenSeriesPoint[] {
   return out.slice(-TOKEN_LIMITS.series)
 }
 
+// Slice 6. An unknown proposal type has no content, no need function and no binding effect —
+// there is nothing honest to do with it, so it is dropped like any other malformed row.
+const PROPOSAL_TYPES: GovernanceProposal['type'][] = [
+  'treasury_allocation',
+  'ecosystem_initiative',
+  'protocol_change',
+  'expansion_subsidy',
+  'decentralisation',
+  'founder_removal',
+]
+
 function readProposals(raw: unknown): GovernanceProposal[] {
   if (!Array.isArray(raw)) return []
   const out: GovernanceProposal[] = []
@@ -121,6 +133,8 @@ function readProposals(raw: unknown): GovernanceProposal[] {
     const week = req(p.week)
     const closesWeek = req(p.closesWeek)
     if (week === null || closesWeek === null || typeof p.id !== 'string' || typeof p.type !== 'string') continue
+    if (!(PROPOSAL_TYPES as string[]).includes(p.type)) continue
+    const resolvedWeek = req(p.resolvedWeek)
     out.push({
       id: p.id,
       week,
@@ -130,9 +144,44 @@ function readProposals(raw: unknown): GovernanceProposal[] {
       founderPosition: oneOf(p.founderPosition, ['support', 'oppose', 'neutral'], 'neutral'),
       closesWeek,
       status: oneOf(p.status, ['active', 'passed', 'rejected'], 'active'),
+      ...(p.campaigned === true ? { campaigned: true } : {}),
+      ...(resolvedWeek !== null && resolvedWeek >= 0 ? { resolvedWeek } : {}),
     })
   }
   return out.slice(-TOKEN_LIMITS.proposals)
+}
+
+/**
+ * Slice 6. A mandate is a claim on the player's controls, so a hostile row is dropped rather than
+ * repaired: a floor of 4.0 or a category that does not exist must never reach `setIncentiveShares`.
+ * Floors are clamped to 0–1 and, together, renormalised below 1 so stacked mandates can never
+ * claim more than the whole budget.
+ */
+function readMandates(raw: unknown, week: number): GovernanceMandate[] {
+  if (!Array.isArray(raw)) return []
+  const out: GovernanceMandate[] = []
+  for (const m of raw) {
+    if (!isObj(m) || typeof m.proposalId !== 'string' || typeof m.type !== 'string') continue
+    if (!(PROPOSAL_TYPES as string[]).includes(m.type)) continue
+    const untilWeek = req(m.untilWeek)
+    if (untilWeek === null || untilWeek <= week) continue // expired rows do not survive a reload
+    const hasCategory = isIncentiveCategory(m.category)
+    const shareFloor = typeof m.shareFloor === 'number' && Number.isFinite(m.shareFloor) ? clamp(m.shareFloor, 0, 1) : undefined
+    const saleFactor = typeof m.saleFactor === 'number' && Number.isFinite(m.saleFactor) ? clamp(m.saleFactor, 0, 1) : undefined
+    if (!hasCategory && saleFactor === undefined) continue // a mandate that binds nothing is not one
+    out.push({
+      proposalId: m.proposalId,
+      type: m.type as GovernanceMandate['type'],
+      ...(hasCategory ? { category: m.category as GovernanceMandate['category'] } : {}),
+      ...(hasCategory && shareFloor !== undefined ? { shareFloor } : {}),
+      ...(saleFactor !== undefined ? { saleFactor } : {}),
+      untilWeek,
+    })
+  }
+  const kept = out.slice(0, TOKEN_LIMITS.proposals)
+  const totalFloor = kept.reduce((a, m) => a + (m.shareFloor ?? 0), 0)
+  if (totalFloor > 1) for (const m of kept) if (m.shareFloor !== undefined) m.shareFloor = m.shareFloor / totalFloor
+  return kept
 }
 
 /**
@@ -273,6 +322,16 @@ export function migrateTokenSlice(raw: unknown): TokenState | undefined {
     governance: {
       proposals: readProposals(governanceRaw.proposals),
       lastProposalWeek: num(governanceRaw.lastProposalWeek, launchWeek),
+      // Slice 6, absent-means-none: a save written before governance existed loads with nothing
+      // tabled, nothing bound and a clean legitimacy record. Expiry is judged against the last
+      // week the slice ticked — the closest thing to "now" the slice itself records.
+      mandates: readMandates(
+        governanceRaw.mandates,
+        typeof raw.lastTickedWeek === 'number' && Number.isFinite(raw.lastTickedWeek) ? raw.lastTickedWeek : launchWeek,
+      ),
+      defiances: count(governanceRaw.defiances),
+      revoltHeat: clamp(num(governanceRaw.revoltHeat, 0), 0, TOKEN_GOVERNANCE.removalHeatMax),
+      lastWarnWeek: Math.max(0, num(governanceRaw.lastWarnWeek, 0)),
     },
     users: { organic: count(usersRaw.organic), incentivised: count(usersRaw.incentivised) },
     history: readHistory(raw.history),

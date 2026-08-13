@@ -271,6 +271,12 @@ export type GovernanceProposalType =
   | 'protocol_change'
   | 'expansion_subsidy'
   | 'decentralisation'
+  /**
+   * Slice 6, brief §43's Community Revolt at its terminus — architecture §7.9: a revolt that
+   * removes the founder routes to the existing `fired` ending. Rare by construction (see
+   * TOKEN_GOVERNANCE's removal* constants) and telegraphed twice before it is even tabled.
+   */
+  | 'founder_removal'
 
 export interface GovernanceProposal {
   id: string
@@ -283,11 +289,47 @@ export interface GovernanceProposal {
   founderPosition: 'support' | 'oppose' | 'neutral'
   closesWeek: number
   status: 'active' | 'passed' | 'rejected'
+  /**
+   * Slice 6. True once the founder has taken a public position on this proposal. A position is
+   * taken ONCE — you said it in public — and shifts the weekly tally from the NEXT tick; it never
+   * re-rolls a resolved vote.
+   */
+  campaigned?: boolean
+  /** Slice 6. The week the vote closed. The engine's ouster check reads it; the postmortem quotes it. */
+  resolvedWeek?: number
+}
+
+/**
+ * Slice 6. What a PASSED proposal binds, while it binds it. A mandate is the outcome made real:
+ * a share floor holds part of the weekly incentive budget where the vote pointed it, a sale factor
+ * of 0 freezes treasury sales. Enforced at the write sites (`setIncentiveShares`,
+ * `maxTreasurySale`) and re-asserted weekly by the governance tick, so complying is the default
+ * and defying is a priced decision, never an oversight.
+ */
+export interface GovernanceMandate {
+  proposalId: string
+  type: GovernanceProposalType
+  /** Which incentive category the vote directed budget to (the three floor types). */
+  category?: TokenIncentiveCategory
+  /** 0–1 minimum share of the weekly incentive budget, while the mandate runs. */
+  shareFloor?: number
+  /** 0–1 multiplier on `maxTreasurySale`. 0 is a freeze (protocol_change). */
+  saleFactor?: number
+  untilWeek: number
 }
 
 export interface TokenGovernanceState {
   proposals: GovernanceProposal[]
   lastProposalWeek: number
+  /** Slice 6. Active bindings from passed proposals. Expired entries are pruned by the tick. */
+  mandates: GovernanceMandate[]
+  /** Slice 6. Mandates the founder tore up. Feeds the legitimacy term of every later vote. */
+  defiances: number
+  /** Slice 6. 0–TOKEN_GOVERNANCE.removalHeatMax. Consecutive-week pressure toward a no-confidence
+   *  vote; rises only while ALL removal preconditions hold and decays faster than it builds. */
+  revoltHeat: number
+  /** Slice 6. Rate-limits the brewing-revolt warning, like every other inbox warning. */
+  lastWarnWeek: number
 }
 
 // ---------- history (brief §72) ----------
@@ -958,6 +1000,122 @@ export const TOKEN_COMMUNITY = {
   pressureDemand: 70,
   pressureInfluence: 60,
   pressureCooldownWeeks: 12,
+} as const
+
+// ---------- governance (Slice 6) ----------
+
+/**
+ * Proposals and votes. Brief §36–§38, §43, §69; docs/ico-architecture.md §7.9.
+ *
+ * THE GATE THIS BLOCK EXISTS TO HONOUR, from the slice plan: votes resolve FROM STATE, never
+ * randomly. Nothing in governance.ts draws — a proposal is tabled when the state's own need for it
+ * crosses a threshold, its support is a pure function of the community state §37 lists (sentiment,
+ * proposal utility, founder influence, holder composition, recent token performance, trust,
+ * decentralisation), and the vote at the close is that function's value that week. Two founders in
+ * identical states get identical votes; the way to change a vote is to change the state.
+ *
+ * THE SECOND RULE: OUTCOMES BIND. A passed vote is not a mood — it holds a floor under part of the
+ * weekly incentive budget, freezes treasury sales, or hands over control (monotone, §35). The
+ * founder's surface is comply (the default — mandates enforce themselves), campaign (a public
+ * position, priced in energy and reputation, that shifts the tally from the next week), or defy a
+ * standing mandate (priced in trust, reputation and legitimacy — every later vote remembers).
+ */
+export const TOKEN_GOVERNANCE = {
+  // --- cadence (§36: "keep frequency low, only major issues") ---
+  /** Weeks a tabled proposal stays open before the vote closes (§69's countdown). */
+  votingWeeks: 4,
+  /** No new proposal inside this many weeks of the last one being tabled. */
+  proposalCooldownWeeks: 10,
+  /** The same argument is not re-tabled inside this window, whichever way it went. */
+  typeCooldownWeeks: 24,
+  /** 0–1 need below which nothing is worth the community's meeting. */
+  tablingNeedFloor: 0.5,
+  /** Support at the close required to pass. Above 50 so a shrug never binds anyone. */
+  passBar: 55,
+  /** The no-confidence bar is higher: removing a founder takes a majority with conviction. */
+  removalPassBar: 62,
+
+  // --- the support function (§37's list, weighted) ---
+  /** Support starts at needBase + needGain × need: the proposal's utility is the dominant term. */
+  needBase: 30,
+  needGain: 40,
+  /** Points of support per unit of sentiment deviation (±1), signed by the proposal's stance:
+   *  a happy crowd funds ambition and keeps its founder; a sour one reaches for restraint. */
+  moodGain: 12,
+  hostileMoodGain: 16,
+  /** Recent token performance (momentum, tanh-squashed ±1). A falling chart radicalises. */
+  perfGain: 8,
+  hostilePerfGain: 10,
+  /** Holder composition: holder-heavy communities protect the float (restraint ↑, spending ↓);
+   *  member-heavy ones vote for programmes. Signed by stance, centred at half holders. */
+  holderGain: 8,
+  /** Points of support, on EVERY proposal, at maxDefiances torn-up mandates. A founder who
+   *  ignores votes makes every next vote angrier — §43's "governance legitimacy weak". */
+  legitimacyGain: 10,
+  maxDefiances: 3,
+  /** The founder's word, at full influence and full trust. Influence is the megaphone and trust is
+   *  whether anyone believes it — a distrusted founder campaigning against a proposal moves
+   *  almost nothing. Endorsement is worth swaySupportRatio of opposition. */
+  swayMax: 18,
+  swaySupportRatio: 0.6,
+  swayTrustFloor: 0.3,
+  /** Turnout scales how far the tally deviates from 50: a disengaged community cannot organise a
+   *  majority either way, and a decentralised one's votes are decisive (§37's decentralisation
+   *  level, as legitimacy rather than as a direction). */
+  turnoutEngagementBase: 0.55,
+  turnoutEngagementSpan: 0.55,
+  turnoutDecentralisationBase: 0.75,
+  turnoutDecentralisationSpan: 0.5,
+  turnoutMin: 0.35,
+  turnoutMax: 1.3,
+
+  // --- what the needs read ---
+  /** Treasury share of total supply at which "there is something to give" saturates. */
+  treasuryRichFloor: 0.08,
+
+  // --- what a passed vote binds ---
+  /** ecosystem_initiative → developer_grants floor (§38: "demanding more ecosystem grants"). */
+  grantFloorShare: 0.25,
+  /** treasury_allocation → community_treasury floor: funds the community actually controls. */
+  communityFloorShare: 0.2,
+  /** expansion_subsidy → partnerships floor (§36's "international expansion subsidy"). */
+  expansionFloorShare: 0.15,
+  mandateWeeks: 16,
+  expansionMandateWeeks: 12,
+  /** protocol_change: treasury sales freeze outright — saleFactor 0 — for this long. */
+  saleFreezeWeeks: 16,
+  /** decentralisation: points of control handed over on a pass. Monotone, §35 — this is the one
+   *  outcome that cannot be defied, because control given away is not taken back. */
+  decentralisationStep: 12,
+  decentralisationRelief: 25,
+
+  // --- the founder's surface, priced ---
+  campaignEnergyCost: 4,
+  endorseEnergyCost: 2,
+  campaignReputationCost: 2,
+  defyEnergyCost: 8,
+  defyReputationCost: 5,
+  /** Tearing up a passed vote is the loudest possible statement about whose network this is. */
+  defyTrustCost: 12,
+  defyDemandSpike: 15,
+
+  // --- the ouster (§43's revolt terminus; architecture §7.9). Rare, and telegraphed twice. ---
+  /** ALL preconditions must hold for heat to build: trust below this… */
+  removalTrustCeiling: 25,
+  /** …influence at or above this (there is a founder to remove)… */
+  removalInfluenceFloor: 60,
+  /** …and legitimacy already broken: at least one defiance, or an exodus inside this window. */
+  removalExodusWindowWeeks: 12,
+  /** Heat builds 1/wk while all preconditions hold and decays 2/wk when any lapses, so recovery
+   *  is always faster than the descent. Warning at 4, tabled at 8, vote 4 weeks later: a founder
+   *  gets ~12 weeks of explicit warnings on top of the exodus and pressure messages already firing
+   *  in this territory. */
+  removalHeatMax: 10,
+  removalHeatBuild: 1,
+  removalHeatDecay: 2,
+  removalWarnAt: 4,
+  removalHeatTabling: 8,
+  warnCooldownWeeks: 6,
 } as const
 
 // ---------- scoring (decision 1) ----------
