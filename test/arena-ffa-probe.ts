@@ -88,7 +88,10 @@ import {
   valuation,
   type AttackDef,
 } from '../src/game/engine'
-import type { Allocation, GameState, SectorId } from '../src/game/types'
+import type { GameState, SectorId } from '../src/game/types'
+
+// Not a named export — the engine types it inline on GameState.
+type Allocation = GameState['allocation']
 
 const q = (a: number[], p: number) => {
   if (!a.length) return 0
@@ -379,13 +382,13 @@ const SECTIONS: Record<string, () => void> = {
     console.log(`\n=== THE SHIELD IN A LOBBY — ambient attacks, not a targeted duel ===`)
     const gang = () => gangLeader('smear', 'Gang (smear)')
     printLobby('3x Gang (smear) + Bare passive', [gang(), gang(), gang(), { name: 'Bare passive' }])
-    printLobby('3x Gang (smear) + Turtle', [gang(), gang(), gang(), { name: 'Turtle', shield: 'always' }])
-    printLobby('3x Gang (smear) + Reactive shield', [gang(), gang(), gang(), { name: 'Reactive shield', shield: 'reactive' }])
+    printLobby('3x Gang (smear) + Turtle', [gang(), gang(), gang(), TURTLE])
+    printLobby('3x Gang (smear) + Reactive shield', [gang(), gang(), gang(), REACTIVE])
     // and against the noisier ganging policy
     const any = () => ({ ...anyAtLeader, name: 'Gang (any)' })
     printLobby('3x Gang (any) + Bare passive', [any(), any(), any(), { name: 'Bare passive' }])
-    printLobby('3x Gang (any) + Turtle', [any(), any(), any(), { name: 'Turtle', shield: 'always' }])
-    printLobby('3x Gang (any) + Reactive shield', [any(), any(), any(), { name: 'Reactive shield', shield: 'reactive' }])
+    printLobby('3x Gang (any) + Turtle', [any(), any(), any(), TURTLE])
+    printLobby('3x Gang (any) + Reactive shield', [any(), any(), any(), REACTIVE])
     // The other half of the decision: what an unneeded retainer costs. If always-shielding in a
     // lobby that never attacks is free, "buy it every match" is dominant and the price is fake.
     printLobby('3x Passive + Turtle (peace)', [PASSIVE, PASSIVE, PASSIVE, { name: 'Turtle in peacetime', shield: 'always' }])
