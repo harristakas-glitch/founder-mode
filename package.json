@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "npx tsx test/modes.test.ts && npx tsx test/career-pmf.test.ts && npx tsx test/rules.test.ts && npx tsx test/regressions.test.ts && npx tsx test/hiring-market.test.ts && npx tsx test/world-foundation.test.ts && npx tsx test/world-director.test.ts && npx tsx test/world-advisors.test.ts && npx tsx test/world-promises.test.ts && npx tsx test/token-fork.test.ts && npx tsx test/token-economy.test.ts && npx tsx test/token-users.test.ts && npx tsx test/token-incentives.test.ts && npx tsx test/token-community.test.ts && npx tsx test/token-governance.test.ts && npx tsx test/cohort-analytics.test.ts && npx tsx test/career-balance.test.ts && npx tsx test/replay.test.ts && npx tsx test/story.test.ts",
+    "test": "npx tsx test/modes.test.ts && npx tsx test/career-pmf.test.ts && npx tsx test/rules.test.ts && npx tsx test/regressions.test.ts && npx tsx test/hiring-market.test.ts && npx tsx test/world-foundation.test.ts && npx tsx test/world-director.test.ts && npx tsx test/world-advisors.test.ts && npx tsx test/world-promises.test.ts && npx tsx test/token-fork.test.ts && npx tsx test/token-economy.test.ts && npx tsx test/token-users.test.ts && npx tsx test/token-incentives.test.ts && npx tsx test/token-community.test.ts && npx tsx test/token-governance.test.ts && npx tsx test/token-endings.test.ts && npx tsx test/cohort-analytics.test.ts && npx tsx test/career-balance.test.ts && npx tsx test/replay.test.ts && npx tsx test/story.test.ts",
     "bots": "npx tsx test/career-bots.ts",
     "balance": "npx tsx test/balance-probe.ts"
   },
