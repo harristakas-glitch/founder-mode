@@ -2659,14 +2659,60 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
  * the target actually FEELING it, which in Arena is the other client's job and here is nobody's.
  * Deliberately not a second attack economy: it is the calibrated one, aimed somewhere new.
  */
+/**
+ * The most you can win from ONE raid, as a share of the company you already have.
+ *
+ * MEASURED DEFECT, and it was mine. `applyAttackOutgoing` pays `raidMagnitude(target) × leverage`
+ * with `leverage = clamp(targetUsers / yourUsers, 0.5, 3)` — "punching up at the leader pays 3x",
+ * calibrated in test/arena-duel-probe.ts against PEERS, where the size gap in a 40-week match is a
+ * small multiple. Pointed at an AI rival it meets a gap of 10–350x, and 10% of a 19,000-user
+ * incumbent times 3 is 5,700 customers for one $40k cheque against a 434-user company. The
+ * counterplay probe found exactly that: shield+raid returned $868M–$1.05B of founder net against
+ * the bare policy's $13–36M, on 40k–99k users. An infinite-money glitch, not a counter-punch.
+ *
+ * The cap is on the RAIDER's own size because that is the real constraint — you can only onboard,
+ * serve and keep so many new customers in a week, however many the campaign reached. 15% is the
+ * same order as what a raid takes FROM you (10–20%), so answering in kind is a fair trade rather
+ * than a better business than the business.
+ *
+ * Applied HERE and not inside `applyAttackOutgoing`: Arena's numbers are measured and balanced,
+ * a 3x leverage against a 3x-larger peer already pays 90% of your own user base there, and this
+ * cap would silently rebalance every duel in the file that calibrated it.
+ */
+export const RIVAL_RAID_GAIN_CAP = 0.15
+
+/**
+ * How much a raid still yields after you have run this many. The cap above was necessary and not
+ * sufficient: ANY cap proportional to your own size compounds, because the 5-week ops cooldown lets
+ * a 200-week run stack forty of them — 1.15^40 is 267x, and the probe duly reported $183M against
+ * a bare policy's $13–36M even with the cap in place.
+ *
+ * So it decays, for the same reason `backfireChance` escalates and `learn` saturates: the second
+ * campaign against a market is aimed at the customers who ignored the first one. The lifetime
+ * product converges to roughly 1.6x rather than diverging, which makes the counter-raid a way to
+ * claw back what was taken from you instead of a better business than the business.
+ */
+export const RIVAL_RAID_FATIGUE = 0.7
+
+export function rivalRaidYield(raidsRun: number): number {
+  return RIVAL_RAID_GAIN_CAP * Math.pow(RIVAL_RAID_FATIGUE, Math.max(0, raidsRun))
+}
+
 export function attackRival(s: GameState, kind: AttackDef['id'], rivalId: string): boolean {
   const r = s.rivals.find((x) => x.id === rivalId && x.alive)
   if (!r) return false
   const before = s.users
   if (!applyAttackOutgoing(s, kind, r.name, r.users)) return false
-  // The other half of the transfer: `applyAttackOutgoing` credited us the users, so they have to
-  // leave someone. Without this a raid mints customers out of nothing.
-  if (kind === 'raid') r.users = Math.max(0, r.users - Math.max(0, s.users - before))
+  if (kind === 'raid') {
+    const run = s.flags.rivalRaidsRun ?? 0
+    const won = Math.min(Math.max(0, s.users - before), Math.round(before * rivalRaidYield(run)))
+    s.flags.rivalRaidsRun = run + 1
+    s.users = before + won
+    s.flags.lastRaidWon = won // the flash already quoted a number; it must be the one that landed
+    // The other half of the transfer: they have to leave someone. Without this a raid mints
+    // customers out of nothing.
+    r.users = Math.max(0, r.users - won)
+  }
   if (kind === 'smear') r.momentum *= 0.9
   if (kind === 'poach') r.product = clamp(r.product - 3, 0, 100)
   if (kind === 'pricewar') r.momentum *= 0.88
@@ -3223,7 +3269,10 @@ function rivalAggressionStep(s: GameState, r: Rival): void {
       characterIds: [stableCastId('rival', r.name)],
       metadata: { rival: r.name, stance: stance.id, posture: stance.attack },
     })
-    return
+    // Deliberately NO early return here. It would give one week of notice as a side effect of the
+    // announcement and leave the guard below dead — mutation testing caught exactly that: deleting
+    // the guard changed nothing, because the return had already done its job. The guard is the
+    // notice, so RIVAL_AGGRO_NOTICE is a real dial rather than a comment on an accident.
   }
   if (s.week < r.hostileSince + RIVAL_AGGRO_NOTICE) return
   if (s.week < (r.aggroCooldown ?? 0)) return
