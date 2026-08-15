@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
@@ -28,6 +28,7 @@ import { avgMorale, hasPendingDecision, runwayWeeks, totalUsers, valuation, week
 import { money, num } from './format'
 import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
 import { MODE_META, hasCapability } from './game/modes'
+import { verifyRun, type VerifyResult } from './game/replay'
 import { isMuted, setMuted } from './sound'
 import { NewGame } from './screens/NewGame'
 import { Lobby } from './screens/Lobby'
@@ -858,6 +859,10 @@ function ResultCta({ label }: { label: string }) {
 function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame } = useStore()
   const dialogRef = useDialog(onClose)
+  // Replay verification: re-simulate the whole run from its decision log and compare the
+  // end-state fingerprint. Memoized — the replay costs real work and `game` is stable while
+  // this dialog is open. Before the early return: hooks must run unconditionally.
+  const replay: VerifyResult | null = useMemo(() => (game?.gameOver ? verifyRun(game) : null), [game])
   if (!game?.gameOver) return null
   const go = game.gameOver
   const peakUsers = Math.max(...game.history.map((h) => h.users), game.users)
@@ -951,6 +956,34 @@ function GameOver({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
+
+        {replay && (
+          <div
+            className={`mx-auto mt-4 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] ${
+              replay.state === 'verified'
+                ? 'border-good/40 text-good'
+                : replay.state === 'unverifiable_desync'
+                  ? 'border-bad/40 text-bad'
+                  : 'border-line text-mut'
+            }`}
+            title={
+              replay.state === 'verified'
+                ? 'This run was re-simulated from its decision log and reproduced this exact result.'
+                : replay.state === 'unverifiable_desync'
+                  ? 'The decision log does not reproduce this result — the save was modified outside the game.'
+                  : 'This run has no decision log (older save or online match), so it cannot be re-checked.'
+            }
+          >
+            {replay.state === 'verified' && (
+              <>
+                ✓ Verified replay
+                {game.challenge?.label.startsWith('Daily') ? <span className="text-mut"> · proof stored on this device</span> : null}
+              </>
+            )}
+            {replay.state === 'unverifiable_desync' && <>⚠ Unverified — replay desync</>}
+            {replay.state === 'legacy_no_journal' && <>No decision log — unverifiable run</>}
+          </div>
+        )}
 
         {hasCapability(game, 'leaderboard') && game.challenge?.label.startsWith('Daily') && (
           <div className="mt-5 text-left">
