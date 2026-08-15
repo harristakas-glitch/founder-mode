@@ -148,7 +148,7 @@ console.log('— No pricing option is dominated (review finding 2) —')
   )
 }
 
-const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
+const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social', 'aiml']
 const netFor = (sector: SectorId, pricing: PricingStrategy, target: 'cheapest' | 'richest') =>
   median(run(sector, { pricing, target }).map(founderNet))
 

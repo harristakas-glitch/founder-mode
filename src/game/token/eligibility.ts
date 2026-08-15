@@ -267,8 +267,9 @@ const BASE_BARS = {
 } as const
 
 /** Sector TAMs, duplicated deliberately: importing `data.ts` here would drag the whole content
- *  module into a pure predicate. Kept in one place and asserted against `data.ts` in the tests. */
-const SECTOR_TAM: Record<SectorId, number> = {
+ *  module into a pure predicate. Kept in one place and asserted against `data.ts` in the tests
+ *  (exported for exactly that assertion — test/token-fork.test.ts). */
+export const SECTOR_TAM: Record<SectorId, number> = {
   saas: 250_000,
   social: 60_000_000,
   fintech: 3_000_000,

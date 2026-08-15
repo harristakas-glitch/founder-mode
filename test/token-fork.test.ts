@@ -20,6 +20,7 @@ import {
 } from '../src/game/engine'
 import { defaultCapabilities, type GameConfig } from '../src/game/modes'
 import {
+  SECTOR_TAM,
   communityStrength,
   runSectorSuitability,
   sectorSuitability,
@@ -28,6 +29,7 @@ import {
   tokenisationBars,
   tokenisationEligibility,
 } from '../src/game/token/eligibility'
+import { sectorById } from '../src/game/data'
 import { launchLateness, launchToken, resolveLaunchTerms } from '../src/game/token/launch'
 import { splitSupply } from '../src/game/token/state'
 import { migrateTokenSlice } from '../src/game/token/persistence'
@@ -49,7 +51,7 @@ const ok = (cond: boolean, msg: string) => {
   else console.log('  ✓', msg)
 }
 
-const SECTORS: SectorId[] = ['saas', 'social', 'fintech', 'devtools', 'ecommerce']
+const SECTORS: SectorId[] = ['saas', 'social', 'fintech', 'devtools', 'ecommerce', 'aiml']
 const cfg = (seed: number, sector: SectorId = 'saas'): GameConfig => ({ mode: 'career', format: 'standard', sector, seed })
 
 function career(sector: SectorId, seed: number, weeks = 0): GameState {
@@ -143,8 +145,16 @@ console.log('— Sector suitability is a disposition, not a verdict (§2) —')
 
 ok(
   new Set(SECTORS.map(sectorSuitability)).size >= 4,
-  'the five sectors do not share one base disposition (' + SECTORS.map((x) => `${x}:${sectorSuitability(x)}`).join(' ') + ')',
+  'the sectors do not share one base disposition (' + SECTORS.map((x) => `${x}:${sectorSuitability(x)}`).join(' ') + ')',
 )
+
+// The TAM table in eligibility.ts is a deliberate duplicate of data.ts (importing the content
+// module into a pure predicate would drag the whole deck along). The duplication is only safe
+// while this assertion exists — a sector added to one table and not the other fails here, not in
+// a launch-terms bug three screens later.
+for (const sec of SECTORS) {
+  ok(SECTOR_TAM[sec] === sectorById(sec).tam, `eligibility's TAM for ${sec} (${SECTOR_TAM[sec].toLocaleString()}) matches data.ts`)
+}
 
 const SUITE_SEEDS = [7, 42, 101, 303, 909, 4242, 31337, 90210, 5150, 6060]
 const perSector: Record<string, Set<string>> = {}

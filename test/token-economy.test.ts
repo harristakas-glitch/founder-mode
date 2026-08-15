@@ -45,7 +45,7 @@ const ok = (cond: boolean, msg: string) => {
   else console.log('  ✓', msg)
 }
 
-const SECTORS: SectorId[] = ['saas', 'social', 'fintech', 'devtools', 'ecommerce']
+const SECTORS: SectorId[] = ['saas', 'social', 'fintech', 'devtools', 'ecommerce', 'aiml']
 const cfg = (seed: number, sector: SectorId = 'saas'): GameConfig => ({ mode: 'career', format: 'standard', sector, seed })
 
 /** A Career company that has taken the fork. Bars are set rather than played, so these tests assert
