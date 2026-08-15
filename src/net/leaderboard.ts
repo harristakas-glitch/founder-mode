@@ -59,8 +59,16 @@ async function getClient(): Promise<SupabaseClient> {
   return clientPromise
 }
 
-/** The only endings the database accepts. Anything else is a bug, not a score. */
-const ENDINGS = new Set(['bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo'])
+/**
+ * The only endings the database accepts. Anything else is a bug, not a score.
+ *
+ * `network` is ICO Slice 7's token ending. It was added here and to the three constraint sites in
+ * supabase/leaderboard-v5.sql IN THE SAME COMMIT, because this list mirrors that CHECK — adding it
+ * on one side only converts a silent client-side refusal into a silent server-side one. v5 has not
+ * been applied yet (BACKLOG 1.3), so the owner's single run now carries the ending with it and no
+ * follow-up migration is needed.
+ */
+const ENDINGS = new Set(['bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo', 'network'])
 
 /** Mirrors the CHECK constraint in supabase/leaderboard-v5.sql. */
 const SCORE_MAX = 1e12

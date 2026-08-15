@@ -188,6 +188,75 @@ is a warning, not an ending, exactly as §43 says.
 
 Payout for `network`: `founderStanding(s)`. Equity leg at 1.0×, token leg at its earned discount.
 
+> **Slice 7 amendment — built, and the gate and the payout both had to be re-cut against
+> measurement. Both changes are recorded here because §1.4 as written would have shipped an ending
+> that nobody reaches and that pays nothing.**
+>
+> **1. The gate.** `networkValue >= $1B` fires in ZERO of ~450 measured runs.
+> `npx tsx test/token-balance-probe.ts reach` (24 seeds × 6 sectors × 4 token arms, week 90) puts
+> network value at p50 $7.6M–$32.5M, p90 $39M–$262M, p99 $65M–$836M — the best sector's p99 is
+> below the bar. That is the IPO's defect (zero IPO endings in ~9,000 Career runs) rebuilt in a new
+> subsystem, and `docs/balance-deep-dive.md` §3 names the same class of defect in Quick Play.
+> `TOKEN_ENDINGS.networkValue` is therefore **$100M**, and because lowering the value bar without
+> hardening the quality bars is exactly how §53's lesson gets undone by the scoreboard, §1.4's two
+> anti-bubble clauses are kept VERBATIM (utility ≥ 55, organic ≥ 0.5) and three more are added:
+> the three value clauses must hold for **6 consecutive weeks** (read back off `series`, so nothing
+> is stored and nothing can desync); the network must be worth **at least as much as the company**
+> it grew out of; and community **trust ≥ 42**. Measured firing: 0–30% of tokenised runs by sector
+> and arm, ~8% overall, median week 65–91. B2B SaaS (0/51) and Fintech (1/58) essentially never
+> reach it — their networks are structurally smaller, the same sector character the rest of the
+> game has, and it is recorded rather than tuned away.
+>
+> **2. The payout.** §1.4 specified `founderStanding(s)` at 1.0×, which `docs/balance-deep-dive.md`
+> priced at **$0.00** — it is character-for-character what a still-trading token run already scores.
+> The ending now pays `founderStanding(s, { tokenMultiplier: networkExitPremium(s) })`.
+> `liquidityDiscount` is a product of two factors: `marketQuality` (earned) × `(1 − exitImpact)`
+> (your share of the float). A `network` ending is by construction the case where the second is no
+> longer binding — the gate IS the statement that the position clears into a market that outgrew it
+> — so the premium is exactly `1 / (1 − exitImpact)`, capped by `liquidityDiscountMax`, on the
+> **token leg only**. §1.4's equity-at-1.0× and the disjoint-legs rule are untouched. Measured:
+> 1.33–1.40× on the token leg, which is **1.02×–1.07× on the whole score**, because the token leg
+> is only 5–17% of standing under the probe's bot policies. Real, bounded, earned, and small at
+> those weights — that last part is a founder-allocation question for Slice 8, not an endings one.
+>
+> **3. It is OFFERED, not imposed.** The first build ended the run automatically the week the gate
+> closed, as `unicorn` does. `npx tsx test/token-balance-probe.ts counterfactual` priced that
+> against the same seed played on to week 90 with Slice 7 off: a **trap in 17 of 25 firing runs**,
+> ratios 0.57×–1.53×. The gate closes around week 65–70 and the network is usually still
+> compounding, so imposing the ending confiscated the back third of the run and called it a win.
+> It is now an inbox choice resolved through the same `special` channel as an acquisition offer,
+> re-offered every 12 weeks while the network still qualifies, with the gate re-checked at
+> resolution. Default answer: keep building.
+>
+> **4. §42 founder sales, built** (`token/founder.ts`) — `bankedPayout` is reachable on the token
+> path for the first time. Priced with the same `supplyPressurePerFloatPct` slippage every release
+> uses at half the treasury's float share, one sale per 16 weeks, half the grant across the run, and
+> the Slice-5 morality reused rather than duplicated: `saleInfluenceFactor` scales the confidence
+> cost and the conduct ledger's existing `treasury_sales` drag reads whichever sale was more recent.
+> Measured at maximum rate against the same arm without it: **0.56×–1.32×, median ≈ 1.00×**, with
+> trust falling from ~46 to 10–22 (revolt territory). A decision, not a cash-out.
+>
+> **5. A latent bug in `founderVestedTokens`, fixed by the slice that made it reachable.** It read
+> `(granted − sold) × fraction`, which discounts a sale by the vesting fraction — sell 100 at
+> half-vested and the sellable balance falls by 50, so the pool partially regenerates. Unreachable
+> through Slices 1–6 (nothing could make `sold` non-zero, and `(granted − 0) × f` is `granted × f`),
+> so the correction to `granted × fraction − sold` is byte-identical for every save written before
+> Slice 7. `founderOverhang` in community.ts carried the same expression and got the same fix.
+>
+> **6. `NARRATIVE_MAIL_PREFIX`, and why a narrative layer needed one.** `maybeOneOnOne` and
+> `maybeFireEvent` guard against repeats over a window of the most recent **8 and 12 messages**, and
+> a window counted in messages gets shorter in weeks whenever anything else adds mail. The first
+> build of the narrative layer measurably moved token-run outcomes for exactly that reason — colour
+> mail displaced a 1:1 out of the window and a different employee was picked. Beats now carry the
+> `token-beat-` prefix and both windows skip it, which restores the counts they had before the layer
+> existed. Nothing predating Slice 7 is affected: no traditional run, no golden trace, no Slice-6
+> token run. The probe's whole core table is byte-identical to the pre-slice baseline for every arm
+> that does not opt into a Slice-7 mechanic, and the `(Slice 6)` counterfactual arms match their
+> Slice-7 twins exactly, which is the proof that the layer is inert.
+>
+> **7. Quick Play was NOT reached.** It was the last item of the slice and the plan deliberately put
+> it there. Every token capability stays `false` in Quick Play; §58 keeps Arena off.
+
 > **Owner action required.** `src/net/leaderboard.ts:55` holds
 > `const ENDINGS = new Set(['bankrupt','unicorn','acquired','fired','timeup','ipo'])` and
 > `submitDailyScore` silently refuses anything not in it. `src/net/**` is off-limits to build

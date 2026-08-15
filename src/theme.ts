@@ -50,6 +50,9 @@ export const ENDINGS: Record<EndingType, { emoji: string; name: string; title: s
   timeup: { emoji: '⏱', name: 'Time up', title: 'Challenge complete' },
   fired: { emoji: '🪑', name: 'Fired', title: 'Fired by the board' },
   bankrupt: { emoji: '💸', name: 'Bankrupt', title: 'Out of money' },
+  // ICO Slice 7 (§1.4). One face for all five of brief §44's success states — `gameOver.tokenEnding`
+  // is what tells them apart, and the ending screen reads it for the sentence.
+  network: { emoji: '🕸', name: 'Network', title: 'The network stands on its own' },
 }
 
 /**

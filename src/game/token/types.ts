@@ -347,6 +347,8 @@ export type TokenHistoryType =
   | 'decentralisation'
   | 'incentive_change'
   | 'crisis'
+  /** Slice 7. The network passing a mark on the way to its own ending. */
+  | 'network_milestone'
 
 export interface TokenHistoryEntry {
   week: number
@@ -381,8 +383,20 @@ export interface FounderTokenPosition {
    * Cash already taken. Founder sales are the token path's SECONDARY: they must add to
    * `GameState.bankedPayout` exactly as sellSecondary does, or the token founder has no way to
    * de-risk at all (canSellSecondary needs Series B, which a tokenised company rarely reaches).
+   *
+   * SLICE 7 built it (`token/founder.ts`). Until then this was permanently 0 and `bankedPayout`
+   * was unreachable on the token path.
    */
   realisedProceeds: number
+  /**
+   * Slice 7. The week of the last founder sale, or 0 for never. Stored for the same reason
+   * `treasurySales.lastSaleWeek` is: it is the memory the COOLDOWN and the CONFIDENCE cost are
+   * built from, and there is no other field it could be recovered from.
+   *
+   * Optional so that a save written at Slices 1–6 loads without a migration write; absence reads
+   * as "never sold", which is exactly what those saves are.
+   */
+  lastSaleWeek?: number
 }
 
 // ---------- the persisted slice ----------
@@ -460,6 +474,61 @@ export type TokenEndingKind =
   | 'community_network'
   | 'founder_decentralised'
   | 'self_sustaining_protocol'
+
+/**
+ * Slice 7. The `network` ending's gate and its exit premium.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY THE §1.4 GATE HAD TO BE AMENDED, WITH THE MEASUREMENT THAT FORCED IT
+ *
+ * §1.4 specified `networkValue >= 1_000_000_000` — the token mirror of the $1B company unicorn.
+ * `npx tsx test/token-balance-probe.ts reach` measured what a token run actually reaches over
+ * 24 seeds × 6 sectors × 4 token arms (n≈70–80 per sector, week 90):
+ *
+ *   network value   p50 $7.6M–$32.5M · p90 $39M–$262M · p99 $65M–$836M
+ *
+ * The p99 of the best sector is $836M. **A $1B gate fires in zero runs out of ~450**, which is the
+ * same defect the IPO has (zero IPO endings in ~9,000 Career runs) and the same one
+ * `docs/balance-deep-dive.md` §3 names in Quick Play. An ending nobody reaches is not an ending.
+ *
+ * So `networkValue` is the gate at a threshold a strong run reaches — and the two §1.4 clauses that
+ * stop a bubble ringing the bell are KEPT VERBATIM and then hardened, because lowering the value
+ * bar without hardening the quality bars is exactly how §53's lesson gets undone by the scoreboard:
+ *
+ *   • utility ≥ 55 and organic share ≥ 0.5 — §1.4's own numbers, unchanged.
+ *   • SUSTAINED for `sustainWeeks` consecutive weeks, read back off `series`. Speculation sits at
+ *     72–84 in a live token run; a one-week print of any of these clauses is a spike, not a state.
+ *   • the network must be worth at least `minNetworkToEnterprise ×` the company it grew out of —
+ *     a *network* ending should require that the network is the thing that happened.
+ *   • trust ≥ `minTrust`. A community that has repudiated the founder does not hand them a
+ *     success state; that run's terminus is the Slice-6 ouster.
+ */
+export const TOKEN_ENDINGS = {
+  /** The sustained network value the run must reach. Calibrated against the reach distribution
+   *  above: below every sector's p99 and above every sector's p50, so it is a tail outcome that
+   *  a strong run in any sector can actually get to. */
+  networkValue: 100_000_000,
+  /** §1.4, verbatim. A bubble must be able to reach the value bar and still not be a win. */
+  minUtility: 55,
+  minOrganicShare: 0.5,
+  /** The network has to be the thing that happened, not a side-car on a company. */
+  minNetworkToEnterprise: 1,
+  /** The community has not repudiated the founder. Reach p90 for trust is 51–55, so this is a
+   *  real bar without being the Slice-6 revolt floor (25) dressed up as a gate. */
+  minTrust: 42,
+  /** Consecutive weeks every value clause must hold, read off `series`. A spike is not an ending. */
+  sustainWeeks: 6,
+  /** A network cannot outlive a founder it has only just met. Also guarantees `series` is long
+   *  enough for the sustain window to mean something. */
+  minWeeksSinceLaunch: 20,
+  /** Which kind the ending is called. Ordered; first match wins. See `tokenEndingKind`. */
+  unicornValue: 1_000_000_000,
+  decentralisedMinDecentralisation: 55,
+  decentralisedMaxInfluence: 45,
+  categoryProtocolRatio: 3,
+  communityMinTrust: 55,
+  communityMinHolders: 2000,
+} as const
 
 // ---------- caps ----------
 
@@ -1120,6 +1189,92 @@ export const TOKEN_GOVERNANCE = {
   removalWarnAt: 4,
   removalHeatTabling: 8,
   warnCooldownWeeks: 6,
+} as const
+
+// ---------- narrative (brief §59, §72; Slice 7) ----------
+
+/**
+ * What the token economy is allowed to tell the player about itself, and how often.
+ *
+ * Slices 2–6 wrote a rich `history` ledger and then mailed almost none of it: a 40% crash, a
+ * doubling, a vesting unlock that moved the float and every utility milestone happened silently,
+ * visible only to a player who happened to open the chart that week. `src/game/story.ts` reads
+ * that ledger for the run biography, so the beats existed in the postmortem and nowhere in the
+ * run. This block is the rate limit on closing that gap without turning the inbox into a ticker.
+ */
+export const TOKEN_NARRATIVE = {
+  /** Minimum weeks between token beats reaching the inbox. The ledger keeps recording either way. */
+  cooldownWeeks: 5,
+  /** A move has to be at least this large, on top of the ledger's own threshold, to be mailed. */
+  mailCrashMove: -0.25,
+  mailRallyMove: 0.35,
+  /** An unlock is mail when it moves at least this share of the float. */
+  mailUnlockFloatShare: 0.03,
+  /** Utility crossing this, once, is the "the token is being used for the thing itself" beat. */
+  utilityMilestone: 60,
+  /** Holder counts worth a sentence, each said once. */
+  holderMilestones: [1000, 5000, 25_000],
+  /** Network value marks on the way to the ending, each said once. Ends one mark BELOW
+   *  TOKEN_ENDINGS.networkValue so the last one reads as "you are nearly there" rather than as a
+   *  duplicate of the ending itself. */
+  networkMilestones: [10_000_000, 50_000_000],
+} as const
+
+// ---------- the founder's own sales (brief §42, Slice 7) ----------
+
+/**
+ * Selling YOUR OWN vested position for personal cash.
+ *
+ * `treasury.ts` sells the COMPANY's tokens for COMPANY cash and prices it as a raise (it dilutes).
+ * This is the other one, and it is deliberately a different shape: nothing is issued, nothing
+ * dilutes, and the money lands in `bankedPayout` — the founder's, banked, whatever happens to the
+ * company afterwards. That is the whole of §42, and until Slice 7 `bankedPayout` was unreachable
+ * on the token path.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY IT IS PRICED AT ALL, AND WHY IT IS PRICED *THIS* WAY
+ *
+ * The hazard is precise. `liquidityDiscount` (scoring.ts) says a founder realises 0.20–0.85 of
+ * their bag at the horizon because a block sale into your own float does not clear at the screen
+ * price. If a founder could instead sell in slices at ~spot, the discount stops being the token
+ * path's exit multiple and the whole scoring model collapses into "sell everything, slowly". So:
+ *
+ *   1. SLIPPAGE, the same coefficient. `supplyPressurePerFloatPct × f / depth`, average price along
+ *      the way down, price stays down afterwards. Identical arithmetic to the treasury sale, at
+ *      HALF the float share — a founder is absorbed thinner than the company's own treasury.
+ *   2. THE COOLDOWN AND THE LIFETIME CAP. One sale per `cooldownWeeks`, and never more than
+ *      `lifetimeShareOfGrant` of the grant across the run. That is what makes it a decision with a
+ *      shape rather than a one-click cash-out, and it is what bounds the arbitrage above: at 4% of
+ *      float per sale, 16 weeks apart, half a grant is 3–4 sales inside a 90-week run.
+ *   3. THE COMMUNITY, and it is the same morality as the treasury sale rather than a second one.
+ *      `saleInfluenceFactor` scales the confidence cost by founder influence exactly as it does
+ *      there, and the conduct ledger's `treasury_sales` drag reads whichever sale was more recent —
+ *      one memory, one fade window, one price. The coefficients are LARGER here because the
+ *      community is pricing the beneficiary, not the act: the treasury selling funds the thing they
+ *      hold; the founder selling funds the founder.
+ *
+ * And the cost that does the most work is indirect, which is the point: trust drives depth, members
+ * and sentiment, all three drive `liquidityDiscount`, so selling half your bag at spot degrades the
+ * market you would have realised the other half into. The sale is priced by the thing it damages.
+ *
+ * The countervailing pull is real too, and it is why this is a decision: selling CUTS the
+ * `founder_overhang` conduct drag and cuts `exitImpact`, so a founder who takes some off the table
+ * realises a *higher* fraction of what is left. Bag size is itself a cost.
+ */
+export const TOKEN_FOUNDER_SALE = {
+  /** Share of CIRCULATING supply one founder sale may push, before depth. Half the treasury's. */
+  maxSaleFloatShare: 0.04,
+  /** As treasury.ts: a thin market is punishing rather than impossible. */
+  minEffectiveDepth: 0.15,
+  /** Weeks between founder sales. */
+  cooldownWeeks: 16,
+  /** Across the whole run, as a share of `founder.granted`. Vesting is a schedule, not a cap. */
+  lifetimeShareOfGrant: 0.5,
+  /** Points of trust / sentiment at a maximum sale into a fresh market, before influence. */
+  trustCostMax: 20,
+  sentimentCostMax: 14,
+  /** §17's crowd arrives when anyone is seen distributing. */
+  speculationCostMax: 8,
 } as const
 
 // ---------- scoring (decision 1) ----------

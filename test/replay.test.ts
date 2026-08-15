@@ -304,8 +304,13 @@ const EXPECTED_ACTIONS = [
   'accept_sheet', 'advance', 'allocation', 'buy_rival', 'concede_price_war', 'decline_sheet',
   'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'incentives', 'interaction',
   'marketing', 'pay_debt', 'pitch', 'pivot', 'pricing', 'proposal_stance', 'raise', 'rally', 'recharge',
-  'resolve_choice', 'run_experiment', 'secondary', 'sell_treasury', 'send_offer', 'shelve_bet',
-  'start_bet', 'take_debt', 'target_segment', 'tokenise',
+  'resolve_choice', 'run_experiment', 'secondary', 'sell_founder', 'sell_treasury', 'send_offer',
+  'shelve_bet', 'start_bet', 'take_debt', 'target_segment', 'tokenise',
+  // Two actions joined the surface in the same batch, from parallel worktrees:
+  // `interaction` is Living World Phase 8's structured rooms — an answer given in a room can open a
+  // promise, which settles from simulation facts, so the answer is simulation-mutating.
+  // `sell_founder` is ICO Slice 7's §42 founder secondary. It moves `bankedPayout`, so it is a
+  // simulation-mutating action and must be journalled, or a token run's score stops replaying.
 ].sort()
 ok(
   JSON.stringify([...REPLAY_ACTION_NAMES].sort()) === JSON.stringify(EXPECTED_ACTIONS),

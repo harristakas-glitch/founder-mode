@@ -72,7 +72,7 @@ alter table public.daily_scores
     and (secret is null or char_length(secret) <= 128)
     and score >= 0 and score <= 1000000000000
     and weeks >= 0 and weeks <= 520
-    and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo')
+    and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo', 'network')
     and day >= 1 and day <= 100000            -- challenge number, ~270 years of headroom
   ) not valid;
 
@@ -220,7 +220,7 @@ create policy "anon can submit daily scores"
     and secret is not null and char_length(secret) >= 16
     and score >= 0 and score <= 1000000000000
     and weeks >= 0 and weeks <= 520
-    and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo')
+    and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo', 'network')
     and day >= 1 and day <= 100000
     and day between private.current_challenge() - 14 and private.current_challenge() + 1
   );
@@ -236,7 +236,7 @@ create policy "anon can improve own daily score"
     char_length(company) <= 30
     and score >= 0 and score <= 1000000000000
     and weeks >= 0 and weeks <= 520
-    and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo')
+    and ending in ('bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo', 'network')
   );
 
 -- No DELETE policy for anon: rows cannot be removed from the client.

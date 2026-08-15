@@ -81,18 +81,41 @@ console.log('— Capabilities: exactly one switch flipped —')
 const CAREER = defaultCapabilities('career')
 const QUICK = defaultCapabilities('quick')
 const ARENA = defaultCapabilities('arena')
-// Slices 2–6 shipped `tokenEconomy`, `tokenUserComposition`, `tokenIncentives`, `tokenCommunity`
-// and `tokenGovernance`, so they moved off this list — the same ratchet `detailedPMF` went
-// through. The remaining one still has no code that honours it.
-const LATER_SLICES = ['tokenNarrative'] as const
+// Slices 2–7 shipped every remaining token capability, so the later-slice list is now EMPTY and
+// the ratchet is complete — the same ratchet `detailedPMF` went through. `tokenNarrative` came off
+// with Slice 7 (the `network` ending, §42 founder sales, the beats that reach the inbox).
+//
+// The list stays here rather than being deleted: it is the assertion that no flag ever claims a
+// system that does not exist, and the next capability anyone adds belongs in it on the day it is
+// declared and not on the day it works.
+const LATER_SLICES = [] as const
+/** Every token capability, and the mode that is allowed to have them on. */
+const TOKEN_KEYS = [
+  'tokenisation',
+  'tokenEconomy',
+  'tokenUserComposition',
+  'tokenIncentives',
+  'tokenCommunity',
+  'tokenGovernance',
+  'tokenNarrative',
+] as const
 
 ok(CAREER.tokenisation === true, 'Career has `tokenisation` on — Slice 1 built the fork it gates')
-ok(QUICK.tokenisation === false, 'Quick Play stays off: its simplified fork is Slice 7')
+ok(QUICK.tokenisation === false, 'Quick Play stays off: its simplified fork was Slice 7 and was not reached')
 ok(ARENA.tokenisation === false, 'Arena stays off for the whole feature (§58)')
 ok(
   LATER_SLICES.every((k) => !CAREER[k] && !QUICK[k] && !ARENA[k]),
-  'the later-slice token capability is false in every mode — no flag claims a system that does not exist',
+  'no later-slice token capability is on anywhere — the list is empty and the ratchet is complete',
 )
+ok(
+  TOKEN_KEYS.every((k) => CAREER[k] === true),
+  'Slice 7: every one of the seven token capabilities is on in Career — the feature is whole there',
+)
+ok(
+  TOKEN_KEYS.every((k) => QUICK[k] === false && ARENA[k] === false),
+  'and off in BOTH other modes — Quick Play never got its simplified fork, and Arena is off by §58',
+)
+ok(CAREER.tokenNarrative === true, 'Slice 7 flipped `tokenNarrative` for Career: the ending, §42 sales and the beats exist')
 
 // ---------------------------------------------------------------------------------------------
 console.log('— Eligibility (§79) —')

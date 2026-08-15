@@ -38,11 +38,14 @@ import { employeeTokenComp, setIncentiveShares, tokenCompMoraleDelta, type Incen
 import { sellTreasuryTokens, type TreasurySaleResult } from './token/treasury'
 import { launchToken, type LaunchDraft, type LaunchResult } from './token/launch'
 import { TOKEN_ACQUISITION, acquisitionDiscounted, institutionalRoundsClosed, ipoClosed } from './token/restrictions'
-import { founderStanding, realisableTokenValue } from './token/scoring'
+import { founderStanding, networkExitPremium, realisableTokenValue } from './token/scoring'
 import { isTokenised, tokenActive } from './token/state'
 import { tickToken } from './token/tick'
+import { tickTokenNarrative } from './token/narrative'
+import { TOKEN_ENDING_FACES, networkEndingProgress, tokenEndingKind } from './token/endings'
+import { sellFounderPosition, type FounderSaleResult } from './token/founder'
 import { incentivisedUsers } from './token/users'
-import { TOKEN_SCORING } from './token/types'
+import { TOKEN_ENDINGS, TOKEN_SCORING } from './token/types'
 import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, prSourceHidden, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
 import type {
   Candidate,
@@ -1279,9 +1282,95 @@ export function setTokenIncentives(s: GameState, shares: Partial<IncentiveShares
  * size chosen, so the quote the player was shown is exactly what they get, and opening the panel
  * cannot shift the RNG stream.
  */
+// ---------- ICO Slice 7: the network ending, offered ----------
+
+/** Weeks before a declined network exit is put back on the table. */
+export const NETWORK_OFFER_COOLDOWN = 12
+
+/**
+ * docs/ico-architecture.md §1.4 and brief §44. The token path's own success state, and the ONLY one
+ * it has: tokenising closes the IPO permanently and prices acquisitions off a discounted valuation,
+ * so without this a token run's whole ceiling is `unicorn` (which no run in ~9,000 has ever reached)
+ * or the clock running out.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * IT IS A CHOICE, AND THAT IS A MEASUREMENT RESULT RATHER THAN A PREFERENCE
+ *
+ * The first build of this ended the run automatically the week the gate closed, exactly as
+ * `unicorn` does. `npx tsx test/token-balance-probe.ts counterfactual` priced that against the
+ * same seed played on to week 90 with Slice 7 off, and it was a **trap in 17 of 25 firing runs**:
+ * median ratios of 0.57×–1.53× and only 8 of 25 seeds better off. The gate closes around week
+ * 65–70, and a network that has just cleared it is usually still compounding — so imposing the
+ * ending confiscated the back third of the run and called it a win.
+ *
+ * A founder who has built something that no longer needs them can step back. That is what §44's
+ * five success states all describe, and it is a decision, not an event. So the run offers it, the
+ * player answers, and a declined offer comes back in `NETWORK_OFFER_COOLDOWN` weeks — the same
+ * shape an acquisition offer already has, resolved through the same `special` channel.
+ *
+ * The default (option 0) is **keep building**, which is also what makes this measurable: every bot
+ * in the harness answers 0, so the probe's core table is unchanged by this ending to the last
+ * digit, and the whole balance question becomes "what is it worth when a player DOES take it".
+ */
+function offerNetworkEnding(s: GameState): void {
+  if (s.gameOver) return
+  const prog = networkEndingProgress(s)
+  if (!prog.reached) return
+  // One offer at a time, and a declined one waits out the cooldown. Derived from the inbox rather
+  // than stored: the inbox is never trimmed, so it is a memory that cannot desync from a reload.
+  const last = s.inbox.find((m) => typeof m.id === 'string' && m.id.startsWith('token-network-offer-'))
+  if (last && (!last.resolved || s.week - last.week < NETWORK_OFFER_COOLDOWN)) return
+
+  const face = TOKEN_ENDING_FACES[prog.kind]
+  const payout = Math.round(founderStanding(s, { tokenMultiplier: networkExitPremium(s) }))
+  const premium = networkExitPremium(s)
+  s.inbox.unshift({
+    id: `token-network-offer-${s.week}`,
+    week: s.week,
+    kind: 'choice',
+    title: `The network no longer needs you — ${face.name}`,
+    body:
+      `${face.line}\n\n` +
+      `It cleared its own bar and held it for ${TOKEN_ENDINGS.sustainWeeks} straight weeks: real utility, users who arrived on ` +
+      `their own, a community that still trusts you, and more value in the network than in the company that started it. Nobody is ` +
+      `going to ring a bell or wire you a number — this path does not have those. This is the version of finishing it has.\n\n` +
+      `Step back now and your position clears INTO that network rather than being dumped into a float you dominate: your token leg ` +
+      `is realised at a ${premium.toFixed(2)}× premium on its ordinary exit discount, for a standing of ` +
+      `$${payout.toLocaleString('en-US')}.\n\n` +
+      `Or keep building. The offer comes back in ${NETWORK_OFFER_COOLDOWN} weeks if the network still qualifies, and a network that ` +
+      `keeps growing is worth more when you do step back. It can also stop qualifying.`,
+    choices: [
+      {
+        label: 'Keep building — it is not finished with you yet',
+        resultText:
+          'You stay. The network keeps running and so do you, and the same door will be open again in a few months — assuming it still is.',
+        effects: {},
+      },
+      {
+        label: `Step back — hand the network over for $${Math.round(payout / 1e6)}M`,
+        resultText: `${face.line}`,
+        effects: { special: 'network-exit' },
+      },
+    ],
+  })
+}
+
 export function sellTokenTreasury(s: GameState, tokens: number): TreasurySaleResult {
   if (!can(s, 'tokenIncentives')) return { ok: false, reason: 'Treasury sales are not part of this mode.' }
   return sellTreasuryTokens(s, tokens)
+}
+
+/**
+ * ICO Slice 7, brief §42. Sell from your OWN vested position for personal cash — the token path's
+ * secondary, and the only route by which `bankedPayout` is reachable on it at all.
+ *
+ * Unseeded for the same reason as the two calls above: a sale is a pure function of state and the
+ * size chosen, so the quote the player read is exactly what they get, and dragging the slider
+ * cannot shift the RNG stream.
+ */
+export function sellFounderTokens(s: GameState, tokens: number): FounderSaleResult {
+  if (!can(s, 'tokenNarrative')) return { ok: false, reason: 'Founder token sales are not part of this mode.' }
+  return sellFounderPosition(s, tokens)
 }
 
 /**
@@ -1793,7 +1882,16 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // unconditional call would shift the RNG stream for every daily challenge, Arena match, replay
   // and golden trace — even for a run that never tokenised. `tokenActive` is false when there is
   // no token slice or when no token capability is on, so those runs draw exactly zero times.
-  if (tokenActive(s)) seeded(s, () => tickToken(s))
+  // ICO Slice 7: the narrative layer runs INSIDE the same guard and the same `seeded` call, right
+  // after the tick that produced the week it narrates. It draws nothing, so the one-draw contract
+  // `tickToken` documents is untouched and the RNG stream is bit-identical to Slice 6's; putting it
+  // inside the existing call rather than adding a second `seeded()` is what keeps `s.flags.rngTick`
+  // unchanged, which is the thing the golden traces actually hash.
+  if (tokenActive(s))
+    seeded(s, () => {
+      tickToken(s)
+      tickTokenNarrative(s)
+    })
 
   // ICO Slice 6, brief §43's Community Revolt at its terminus — docs/ico-architecture.md §7.9:
   // a revolt that removes the founder routes to the EXISTING `fired` ending, in exactly the
@@ -1862,6 +1960,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       if (can(s, 'boardReviews')) s.board = null
     }
   }
+
+  // ICO Slice 7. The `network` ending is OFFERED here, never imposed — see `offerNetworkEnding`.
+  offerNetworkEnding(s)
 
   // --- endings (skip if the IPO already decided this week) ---
   if (s.gameOver) return s
@@ -2312,10 +2413,28 @@ const ONE_ON_ONES: OneOnOne[] = [
   },
 ]
 
+/**
+ * ICO Slice 7. Two anti-repeat guards below read a WINDOW of the most recent inbox messages —
+ * "have I shown this in the last 8/12" — and a window counted in messages gets shorter in weeks
+ * every time some other system adds mail. Slice 7's narrative layer adds a lot of mail, and the
+ * first build of it measurably moved token-run outcomes for exactly that reason: a colour beat
+ * about the token price pushed a 1:1 out of the window and a different employee got picked.
+ *
+ * A NARRATIVE LAYER MUST NOT BE ABLE TO CHANGE THE SIMULATION. Its beats therefore carry this
+ * prefix and are skipped by both windows, which restores them to the message counts they had
+ * before the layer existed. Nothing that predates Slice 7 is affected — no traditional run, no
+ * golden trace, and no token run at Slice 6, because nothing else writes this prefix.
+ *
+ * Any future purely-cosmetic mail belongs behind this prefix for the same reason.
+ */
+export const NARRATIVE_MAIL_PREFIX = 'token-beat-'
+const isColourMail = (m: Message) => typeof m.id === 'string' && m.id.startsWith(NARRATIVE_MAIL_PREFIX)
+
 function maybeOneOnOne(s: GameState) {
   if (s.employees.length < 2 || RNG.next() > 0.1) return
   if (s.inbox.some((m) => m.kind === 'choice' && !m.resolved)) return
-  const candidates = s.employees.filter((e) => !s.inbox.slice(0, 12).some((m) => m.meta?.employeeId === e.id))
+  const window12 = s.inbox.filter((m) => !isColourMail(m)).slice(0, 12)
+  const candidates = s.employees.filter((e) => !window12.some((m) => m.meta?.employeeId === e.id))
   if (candidates.length === 0) return
   const e = candidates[Math.floor(RNG.next() * candidates.length)]
   const eligible = ONE_ON_ONES.filter((o) => o.cond(e, s))
@@ -3358,6 +3477,8 @@ function tickRivals(s: GameState, room: number) {
 function maybeFireEvent(s: GameState) {
   if (RNG.next() > 0.45) return
   if (s.inbox.some((m) => m.kind === 'choice' && !m.resolved)) return
+  // Slice 7: the repeat window is counted over real mail only — see NARRATIVE_MAIL_PREFIX.
+  const window8 = s.inbox.filter((m) => !isColourMail(m)).slice(0, 8)
   const eligible = EVENTS.filter(
     (e) =>
       (e.minWeek ?? 0) <= s.week &&
@@ -3368,7 +3489,7 @@ function maybeFireEvent(s: GameState) {
       (!e.formats || e.formats.includes(s.config?.format ?? 'standard')) &&
       (!e.requiresCapabilities || e.requiresCapabilities.every((k) => can(s, k))) &&
       (!e.cond || e.cond(s)) &&
-      !s.inbox.slice(0, 8).some((m) => m.title === e.title), // avoid rapid repeats
+      !window8.some((m) => m.title === e.title), // avoid rapid repeats
   )
   if (eligible.length === 0) return
   const total = eligible.reduce((acc, e) => acc + e.weight, 0)
@@ -3466,6 +3587,28 @@ function resolveChoiceOnStateInner(s: GameState, messageId: string, choiceIndex:
       type: 'acquired',
       week: s.week,
       payout: Math.round(founderStanding(s, { exitValue: msg.meta.acquisitionAmount })),
+    }
+  } else if (choice.effects.special === 'network-exit') {
+    // ICO Slice 7. The mirror of the line above, on the other capital path: the equity leg is
+    // marked at plain enterprise value (there is no acquirer and no premium to negotiate) and the
+    // TOKEN leg carries the one multiplier this path has. Disjoint legs, still — see
+    // `networkExitPremium` in token/scoring.ts.
+    //
+    // The gate is re-checked at resolution rather than trusted from the offer: a message sits in
+    // the inbox until it is answered, the run keeps ticking underneath it, and a network that fell
+    // apart in the meantime must not still pay out an ending it no longer qualifies for.
+    if (networkEndingProgress(s).reached) {
+      const kind = tokenEndingKind(s)
+      s.gameOver = {
+        type: 'network',
+        week: s.week,
+        payout: Math.round(founderStanding(s, { tokenMultiplier: networkExitPremium(s) })),
+        tokenEnding: kind,
+        detail: TOKEN_ENDING_FACES[kind].line,
+      }
+    } else {
+      s.flash =
+        '🕸 Too late — the network stopped clearing its own bar while the offer sat in your inbox. You are still here, and so is the work.'
     }
   } else {
     applyEffects(s, choice.effects)

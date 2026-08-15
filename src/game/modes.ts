@@ -158,15 +158,16 @@ export interface GameCapabilities {
   // Seven switches, one per slice of docs/ico-implementation-plan.md, so the capability set
   // doubles as the rollout ratchet: each slice turns on exactly one, and the acceptance test
   // ("with tokenisation off, `npm run bots` is byte-identical") is checkable per slice.
-  // Slices 1–6 shipped, so the first six are true in CAREER ONLY. The last one stays false in
-  // every mode until the code that honours it exists.
+  // All seven slices have shipped, so all seven are true in CAREER ONLY. Quick Play's simplified
+  // fork was Slice 7's last item and was NOT reached — see the slice report — so every token
+  // capability stays false there, and Arena is off for the whole feature (§58).
   tokenisation: boolean // BUILT (Slice 1). The capital fork: eligibility, the decision, VC/IPO restrictions
   tokenEconomy: boolean // BUILT (Slice 2). Price, supply, treasury, utility, community, speculation, volatility
   tokenUserComposition: boolean // BUILT (Slice 3). Organic vs incentivised users, split retention, PMF protection, the §53 warning
   tokenIncentives: boolean // BUILT (Slice 4). Tokenomics at launch, the six categories, vesting unlocks, employee token comp
   tokenCommunity: boolean // BUILT (Slice 5). The conduct-priced trust model, decentralisation demand, founder influence, the exodus
   tokenGovernance: boolean // BUILT (Slice 6). Proposals emerging from state, votes resolved from state, mandates that bind
-  tokenNarrative: boolean // token Director candidates, media, company memory, postmortem sections (Slice 7)
+  tokenNarrative: boolean // BUILT (Slice 7). The `network` ending, §42 founder token sales, token beats reaching the inbox, the tokenised postmortem
 
   // ---- planned: Arena ----------------------------------------------------------------
   sharedCustomerMarket: boolean
@@ -386,6 +387,18 @@ const CAREER_BASE_RULES: GameRules = {
     // simplified fork is Slice 7 and §113 explicitly keeps deep governance out of it; Arena is off
     // for the whole feature (§58).
     tokenGovernance: true,
+    // ICO Slice 7 — the run becomes a story with an ending of its own. Three things ride this flag.
+    // (1) The `network` ending (§1.4, §44): the token path's ONLY success state, since tokenising
+    // closes the IPO permanently and prices acquisitions off a discounted valuation. Its gate was
+    // re-cut against measurement — §1.4's $1B network bar fires in zero of ~450 measured runs — and
+    // its payout carries the one premium the token path has, `networkExitPremium`, because §1.4's
+    // specified payout was measured at a $0.00 delta. (2) §42 founder token sales, the mechanic
+    // that makes vesting and the liquidity discount decisions rather than end-of-run arithmetic,
+    // and the only route by which `bankedPayout` is reachable on this path. (3) The narrative
+    // layer: the crashes, rallies, unlocks and milestones the ledger has always recorded and never
+    // told anyone about during the run. On HERE only: Quick Play's simplified fork was the last
+    // item of this slice and was not reached; Arena is off for the whole feature (§58).
+    tokenNarrative: true,
     // Brief §3: Career is where the deep living world lives. It inherits Quick Play's characters,
     // company history and composed narrative, and adds the one system Quick Play deliberately
     // leaves off — a real relationship with each person, which is what makes them remember you.
