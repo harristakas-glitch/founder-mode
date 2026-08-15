@@ -597,17 +597,50 @@ console.log('\n— Frozen rulesets stay frozen (the Slice 5 / Phase 7 precedent)
   ok((inFlight.world?.interactions?.length ?? 0) === 0, 'a frozen pre-phase ruleset never opens a room, through the same weeks')
   ok(recentInteractions(inFlight, 'interview').length === 0, 'and the panels render nothing for it')
 
-  // Per-kind gating: the three switches are genuinely independent.
-  let onlyInterviews = newGame('Split', 'saas', 'technical', {
-    config: cfg(11, 'career', { structuredEmployeeConversations: false, proceduralBoardMeetings: false }),
-  })
-  for (let w = 0; w < 40 && !onlyInterviews.gameOver; w++) {
-    onlyInterviews.marketingSpend = 3000
-    if (w % 6 === 0 && onlyInterviews.career && onlyInterviews.cash > 60_000) runInterviewStudy(onlyInterviews)
-    onlyInterviews = advanceWeek(onlyInterviews)
+  // PER-KIND GATING, on a run that genuinely reaches all three rooms — a funded company, forty
+  // weeks, studies running. The control below is also this file's non-vacuity evidence: without it
+  // "the capability is off and the room is absent" would be true for the wrong reason.
+  const fundedKinds = (overrides?: Record<string, boolean>) => {
+    let s = newGame('Split', 'saas', 'technical', { config: cfg(4242, 'career', overrides) })
+    for (let w = 0; w < 46 && !s.gameOver; w++) {
+      for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
+      s.marketingSpend = 3000
+      if (s.employees.length + s.offersOut.length + s.pendingHires.length < 5 && s.candidates.length) {
+        const best = [...s.candidates].sort((a, b) => b.skill - a.skill)[0]
+        s.candidates = s.candidates.filter((c) => c.id !== best.id)
+        s.offersOut.push(best)
+      }
+      if (w === 20) {
+        s.termSheets.push({ id: 'ts-1', investor: 'Granite Peak', amount: 1_200_000, equity: 0.18, weeksLeft: 2 })
+        acceptTermSheet(s, 'ts-1')
+      }
+      if (w % 6 === 0 && s.career && s.cash > 60_000) runInterviewStudy(s)
+      s = advanceWeek(s)
+    }
+    return new Set((s.world?.interactions ?? []).map((r) => r.kind))
   }
-  const kinds = new Set((onlyInterviews.world?.interactions ?? []).map((r) => r.kind))
-  ok(kinds.size > 0 && !kinds.has('conversation') && !kinds.has('board_meeting'), `one switch buys one room type (${[...kinds].join(', ') || 'none'})`)
+  const all = fundedKinds()
+  ok(
+    all.has('interview') && all.has('conversation') && all.has('board_meeting'),
+    `the control: one funded run reaches all three rooms (${[...all].sort().join(', ')})`,
+  )
+  for (const [capability, kind] of [
+    ['structuredInterviews', 'interview'],
+    ['structuredEmployeeConversations', 'conversation'],
+    ['proceduralBoardMeetings', 'board_meeting'],
+  ] as const) {
+    const without = fundedKinds({ [capability]: false })
+    ok(!without.has(kind) && without.size === 2, `${capability} off removes exactly ${kind} and nothing else (${[...without].sort().join(', ')})`)
+  }
+
+  // The gate on ANSWERING is separate from the gate on opening, and defends the case the opening
+  // gate cannot: a save whose ruleset changed under an already-open room.
+  const { s: withRoom, room: openRoom } = playUntilRoom(4242, 'interview')
+  if (openRoom) {
+    const revoked = structuredClone(withRoom)
+    revoked.capabilities = { ...revoked.capabilities, structuredInterviews: false }
+    ok(chooseInteractionOption(revoked, openRoom.id, 'pay') === null, 'a room left open by a since-revoked capability cannot be answered')
+  }
 
   // Quick Play and Arena never get any of it (§40, §33).
   for (const mode of ['quick', 'arena'] as const) {
