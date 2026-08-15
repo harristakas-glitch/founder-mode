@@ -133,11 +133,33 @@ it's doing. Unfixable without an authoritative server; fine for a friendly game.
 
 ## 4. Balance — measured but unfixed
 
-### 4.1 "Late Entrant" isn't actually harder
-97% win rate versus 90% for Standard. It only takes *longer* (median week 165) and pushes you
-toward acquisitions, because oversized rivals occupy TAM without ever attacking you.
-**Suggested:** have rivals starting 8–14× your size actively raid your users, not just sit on
-the market.
+### 4.1 "Late Entrant" isn't actually harder — FIXED, measured in `docs/balance-baseline.md` §5
+97% win rate versus 90% for Standard. It only took *longer* (median week 165) and pushed you
+toward acquisitions, because oversized rivals occupied TAM without ever attacking you.
+
+**Done.** AI rivals now use the attack layer that already existed and was calibrated for Arena
+(`ATTACKS`, `raidMagnitude`, `applyAttackIncoming`, the shield), behind a `rivalAggression`
+capability that is on in Quick Play and Career and off in Arena. The policy is **situational, not
+timed** — `rivalStance` reads market position, your growth, the funding gap and the product
+comparison, and the rival table renders that same function, so a hostile rival is visible for a
+full week before their first move and the crisis retainer and counter-punch are available to answer
+it. Standard is a talent fight arriving around week 73–94; Late Entrant is a user raid from week
+15–21.
+
+Measured, 24 seeds × 200 weeks × 6 sectors, A/B on the capability inside one build:
+
+* Late Entrant takes **1.5–2.2× the pressure** of Standard in every sector and returns the lowest
+  founder net of any scenario in every sector (SaaS Late/Standard net 0.587 → **0.359**).
+* Fintech is the clean inversion: Late Entrant used to fail **less** than Standard (0/24 vs 1/24)
+  and now fails more (3/24 vs 1/24).
+* Standard's win rate is unchanged in five of six sectors; the reference Career policy's failures
+  move by at most one in any sector; `npm run bots` keeps Disciplined Discovery strongest in all
+  six. Golden traces did not need re-recording (§5.7 explains why that is a property, not luck).
+
+**Still open, deliberately:** the win rate under the *calibrated* policy is saturated at 100% in
+most scenarios, so the headline 97%/90% comparison could only be reproduced on a weaker "ordinary
+play" bot. That is BACKLOG §2.1's missing clock, not this defect — free play cannot be lost by not
+playing, so a 200-week run resolves on score rather than survival.
 
 ### 4.2 Secondary sales are correctly EV-negative but nothing says so
 `secondaryProceeds` = `valuation × 0.02 × 0.7` — you give up 2% of the company for cash worth
