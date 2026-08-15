@@ -28,8 +28,10 @@ import {
 import { BOARD_SPEC, advisorCastSpecs, buildAdvisorPanel } from './advisors'
 import { composeNarrative, recordNarrative } from './composer'
 import { directWeek, type NarrativeCandidate } from './director'
+import { generateInteractions, interactionCastSpecs, interactionsEnabled } from './interactions'
 import { recordCompanyMemory, sortedCharacterIds } from './memory'
 import { commitmentAdvisorFacts, settleWeeklyPromises } from './promises'
+import { segmentDef } from '../career/segments'
 import { emptyLivingWorld, enforceLivingWorldLimits, markWeekGenerated, shouldGenerateForWeek } from './persistence'
 import { tickRelationship, upsertRelationship } from './relationships'
 import type { CharacterSpec } from './characters'
@@ -44,7 +46,8 @@ export function livingWorldActive(s: GameState): boolean {
     hasCapability(s, 'relationships') ||
     hasCapability(s, 'proceduralNarrative') ||
     hasCapability(s, 'advisorOpinions') ||
-    hasCapability(s, 'promises')
+    hasCapability(s, 'promises') ||
+    interactionsEnabled(s)
   )
 }
 
@@ -65,6 +68,9 @@ function castSpecs(s: GameState): CharacterSpec[] {
   // spec the advisor seat uses, so the two capabilities can never disagree about who the board is;
   // the else keeps a run with both from listing them twice.
   else if (hasCapability(s, 'promises') && s.board) specs.push(BOARD_SPEC(s))
+  // Phase 8's second chair (§47's independent director). Deduped by id so a run with advisors,
+  // promises AND board meetings still lists the lead investor exactly once.
+  for (const spec of interactionCastSpecs(s)) if (!specs.some((x) => x.id === spec.id)) specs.push(spec)
   return specs
 }
 
@@ -131,8 +137,21 @@ export function tickLivingWorld(s: GameState): void {
   // fragment gated on the speaker's current relationship sees this week's numbers, not last week's.
   // The commitment fact (§35) arrives as an input rather than being read inside the panel, so the
   // advisor module never imports the promise engine and each capability stays its own switch.
-  if (hasCapability(s, 'advisorOpinions'))
-    world.advisorPanel = buildAdvisorPanel(s, world, seed, hasCapability(s, 'promises') ? commitmentAdvisorFacts(s, world) : [])
+  const commitmentFacts = hasCapability(s, 'promises') ? commitmentAdvisorFacts(s, world) : []
+  if (hasCapability(s, 'advisorOpinions')) world.advisorPanel = buildAdvisorPanel(s, world, seed, commitmentFacts)
+
+  // Phase 8's rooms open AFTER the advisor panel, so a board meeting can exclude the sentences the
+  // Dashboard panel already spoke this week, and BEFORE the inbox beat, so the week's narrative
+  // budget is spent in one order every time. Career's segment names are looked up through an
+  // injected reader rather than imported inside the interactions module — the world layer stays
+  // ignorant of the Career subsystem, and a Quick Play run (no career slice) simply has no
+  // interviews to open.
+  if (interactionsEnabled(s))
+    generateInteractions(s, world, seed, commitmentFacts, (segmentId) => {
+      const truth = s.career?.segmentTruth[segmentId]
+      if (!truth) return null
+      return { name: segmentDef(s.config?.sector ?? s.sector, segmentId).name, truth }
+    })
 
   if (hasCapability(s, 'proceduralNarrative')) composeWeeklyBeat(s, world, seed)
 

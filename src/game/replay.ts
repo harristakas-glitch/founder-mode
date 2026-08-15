@@ -51,6 +51,7 @@ import {
 } from './engine'
 import { addJournal, experimentDef, segmentDef, startExperiment } from './career/pmf'
 import { repositionTo } from './career/tick'
+import { chooseInteractionOption } from './world/interactions'
 import type { GameConfig } from './modes'
 import type { ExperimentType, PricingStrategy, ProductFocus } from './career/types'
 import type { LaunchDraft } from './token/launch'
@@ -336,6 +337,23 @@ const REPLAY_ACTIONS = {
   defy_mandate: (g, p) => ({
     result: defyGovernance(g, g.token?.governance.mandates[idx(p.i)]?.proposalId ?? ''),
   }),
+
+  /**
+   * Living World Phase 8: answer one structured room (a question put to the interview panel, a
+   * reply to an employee, a board decision).
+   *
+   * The ONE action in this registry keyed by ID rather than by index, and deliberately: a room's
+   * id is a §67 narrative id built from (week, kind, character, topic) and is therefore identical
+   * on a replay, while `world.interactions` is a capped array whose contents shift as settled
+   * rooms are shed — the exact hazard indices exist to avoid everywhere else.
+   *
+   * It mutates `s.world` and nothing the fingerprint covers, so a desync can never come from
+   * here. It is journaled anyway: which room a founder answered, and how, is part of what the run
+   * DID, and a replay that skipped it would rebuild the same numbers under a different biography.
+   */
+  interaction: (g, p) => {
+    chooseInteractionOption(g, str(p.r), str(p.o))
+  },
 } satisfies Record<string, ReplayFn>
 
 export type ReplayActionName = keyof typeof REPLAY_ACTIONS

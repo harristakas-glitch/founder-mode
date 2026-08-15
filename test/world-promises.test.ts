@@ -340,7 +340,8 @@ console.log('\n— Interpretation only: flipping the capability moves no simulat
     inboxShape(withP) === inboxShape(withoutP),
     'the inbox is untouched: not one message added, dropped or reordered (the sim READS inbox windows)',
   )
-  const OFF = { proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false, advisorOpinions: false, promises: false }
+  // Tracks livingWorldActive(): Phase 8 added the three structured-interaction switches to it.
+  const OFF = { proceduralNarrative: false, persistentCharacters: false, characterMemory: false, companyMemory: false, relationships: false, advisorOpinions: false, promises: false, structuredInterviews: false, structuredEmployeeConversations: false, proceduralBoardMeetings: false }
   ok(play(7, 12, 'career', OFF).world === undefined, 'with every living-world capability off, no world is created at all')
 }
 

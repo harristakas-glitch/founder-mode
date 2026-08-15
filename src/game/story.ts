@@ -13,9 +13,10 @@
 //   3. world.companyMemory — what the company itself considers notable (first customer,
 //      profitability), only where the inbox did not already say it
 //   4. world.promises — what was said, and how it settled
-//   5. career.journal — the Discovery record: segment pivots and PMF verdicts
-//   6. token.history — the launch, the crashes, the votes, the exodus
-//   7. the ending
+//   5. world.interactions — the rooms: what somebody asked for and what you answered
+//   6. career.journal — the Discovery record: segment pivots and PMF verdicts
+//   7. token.history — the launch, the crashes, the votes, the exodus
+//   8. the ending
 //
 // TOLERANCE IS THE CONTRACT. Every subsystem here is optional (no career, no world, no token),
 // every array is user-writable localStorage, and a malformed row must be skipped, never thrown
@@ -78,6 +79,7 @@ export function buildStory(s: GameState): StoryBeat[] {
   safely(() => addInboxBeats(s, add, told))
   safely(() => addCompanyMemoryBeats(s, add, told))
   safely(() => addPromiseBeats(s, add))
+  safely(() => addInteractionBeats(s, add))
   safely(() => addJournalBeats(s, add))
   safely(() => addTokenBeats(s, add))
   safely(() => addEnding(s, add))
@@ -261,6 +263,19 @@ function promisePhrase(summaryKey: string, facts: Record<string, unknown> | unde
       return 'the raise'
     case PROMISE_KEYS.cola:
       return 'the cost-of-living adjustment'
+    // Phase 8 — what was said in a room. Worded so both "kept" and "broken" read as sentences.
+    case PROMISE_KEYS.boardPace:
+      return `the ${pctWk} you took off the board`
+    case PROMISE_KEYS.burnCut:
+      return 'the smaller burn you promised the board'
+    case PROMISE_KEYS.promotion:
+      return 'the step up you put a date on'
+    case PROMISE_KEYS.equity:
+      return 'the equity refresh you owed'
+    case PROMISE_KEYS.headcount:
+      return 'the two people you promised'
+    case PROMISE_KEYS.steadyCourse:
+      return 'the quarter you swore would be quiet'
     default:
       return `the ${summaryKey.replace(/^promised_/, '').replace(/_/g, ' ')} promise`
   }
@@ -293,6 +308,13 @@ function addPromiseBeats(s: GameState, add: Add): void {
       add(raw.week, `${who} asks for a raise and gets it — 20%, on the spot.`, 'good', 44)
     } else if (key === PROMISE_KEYS.cola) {
       add(raw.week, '"They actually did it" — a 5% cost-of-living adjustment for everyone on payroll.', 'good', 46)
+    } else if (key === PROMISE_KEYS.boardPace) {
+      // Phase 8's board decisions. Told HERE rather than from the room, because the commitment is
+      // the story — the room is only where it was made.
+      const target = numOr(facts?.target, 0)
+      add(raw.week, `In the board room you take the number: ${Math.round(target * 1000) / 10}%/wk, by the next review.`, 'neutral', 58)
+    } else if (key === PROMISE_KEYS.burnCut) {
+      add(raw.week, 'In the board room you choose the other answer: the burn comes down by the next review.', 'neutral', 54)
     }
 
     // The settling of it — kept and broken are the story; superseded expiries are bookkeeping.
@@ -305,7 +327,79 @@ function addPromiseBeats(s: GameState, add: Add): void {
   }
 }
 
-// ---------- 5. the Career journal ----------
+// ---------- 5. the rooms (Living World Phase 8) ----------
+
+/**
+ * What a settled room was, in one sentence.
+ *
+ * A room is a beat only when the founder actually SAID something: a stale room that closed
+ * unattended has an outcome sentence but no `chosen`, and "you never got back to them" is not a
+ * decision the biography should credit anyone with. A board decision that created a commitment is
+ * already told by `addPromiseBeats` — the making of that promise is the same week said twice — so
+ * only 'maintain', the decision that promises nothing, gets its own line here.
+ */
+const CONVERSATION_BEAT: Record<string, Record<string, { text: string; tone: StoryTone; weight: number }>> = {
+  promotion: {
+    explain: { text: 'asks where they are going. You explain the shape of the company instead of answering.', tone: 'neutral', weight: 38 },
+    commit: { text: 'asks where they are going, and you name a date.', tone: 'good', weight: 48 },
+    hold: { text: 'asks where they are going. You tell them the decision is final.', tone: 'bad', weight: 46 },
+  },
+  compensation: {
+    explain: { text: 'asks about their pay. You open the books and let the runway make the argument.', tone: 'neutral', weight: 36 },
+    commit: { text: 'asks about their pay, and you commit to a refresh at the next round.', tone: 'good', weight: 46 },
+    hold: { text: 'asks about their pay and hears that the bands are the bands.', tone: 'bad', weight: 44 },
+  },
+  workload: {
+    explain: { text: 'tells you they are carrying too much. You tell them what season the company is in.', tone: 'neutral', weight: 36 },
+    commit: { text: 'tells you they are carrying too much, and you promise two more people.', tone: 'good', weight: 46 },
+    hold: { text: 'tells you they are carrying too much. You ask them to hold on a while longer.', tone: 'bad', weight: 46 },
+  },
+  strategy: {
+    explain: { text: 'does not agree with the strategy. You argue it out properly, end to end.', tone: 'neutral', weight: 42 },
+    commit: { text: 'does not agree with the strategy, and you promise a quarter without another turn.', tone: 'neutral', weight: 48 },
+    hold: { text: 'does not agree with the strategy. You tell them it is not up for a vote.', tone: 'bad', weight: 48 },
+  },
+  departure: {
+    explain: { text: 'has been taking the recruiters’ calls. You ask what it would take, and you listen.', tone: 'neutral', weight: 50 },
+    commit: { text: 'has been taking the recruiters’ calls, and you promise to make it right at the next round.', tone: 'good', weight: 54 },
+    hold: { text: 'has been taking the recruiters’ calls. You wish them well and do not bid.', tone: 'bad', weight: 52 },
+  },
+}
+
+function addInteractionBeats(s: GameState, add: Add): void {
+  const rooms: unknown = s.world?.interactions
+  if (!Array.isArray(rooms)) return
+  for (const raw of rooms) {
+    if (!isRecord(raw) || !finiteWeek(raw.resolvedWeek)) continue
+    if (str(raw.status) !== 'resolved') continue
+    const chosen = Array.isArray(raw.chosen) ? raw.chosen.filter((c): c is string => typeof c === 'string') : []
+    if (chosen.length === 0) continue // closed unattended: nothing was said, so nothing is told
+    const week = raw.resolvedWeek
+    const kind = str(raw.kind)
+
+    if (kind === 'conversation') {
+      const lines = Array.isArray(raw.lines) ? raw.lines : []
+      const who = isRecord(lines[0]) ? str(lines[0].speaker) : ''
+      const def = CONVERSATION_BEAT[str(raw.topic)]?.[chosen[0]]
+      if (who && def) add(week, `${who} ${def.text}`, def.tone, def.weight)
+    } else if (kind === 'board_meeting') {
+      // Accelerate and Slow down ARE commitments; the promise beats already narrate those.
+      if (chosen[0] === 'maintain')
+        add(week, 'The board asks which way you are going. You hold the line and promise them nothing.', 'neutral', 42)
+    } else if (kind === 'interview') {
+      const segment = isRecord(raw.facts) ? str(raw.facts.segment) : ''
+      if (segment)
+        add(
+          week,
+          `You sit in on the ${segment} interviews yourself — ${chosen.length} question${chosen.length === 1 ? '' : 's'}, three people, and the answers are not the ones the deck assumed.`,
+          'neutral',
+          40,
+        )
+    }
+  }
+}
+
+// ---------- 6. the Career journal ----------
 
 function addJournalBeats(s: GameState, add: Add): void {
   const journal: unknown = s.career?.journal
@@ -330,7 +424,7 @@ function addJournalBeats(s: GameState, add: Add): void {
   }
 }
 
-// ---------- 6. the token ledger ----------
+// ---------- 7. the token ledger ----------
 
 function addTokenBeats(s: GameState, add: Add): void {
   const history: unknown = s.token?.history
@@ -388,7 +482,7 @@ function addGovernanceBeat(add: Add, week: number, md: Record<string, unknown>):
   }
 }
 
-// ---------- 7. the ending ----------
+// ---------- 8. the ending ----------
 
 const ENDING_TEXT: Record<EndingType, { text: (s: GameState) => string; tone: StoryTone }> = {
   bankrupt: { text: (s) => `The account hits zero. ${str(s.companyName)} is out of money, and the servers go dark.`, tone: 'bad' },

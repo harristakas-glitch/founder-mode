@@ -60,8 +60,13 @@ export const COMMITMENT_RECENT_WEEKS = 10
 /** §77 is a panel, not an archive. */
 export const COMMITMENT_PANEL_ROWS = 8
 
-/** The promises whose counterparty is the board seat. A new round supersedes all of them. */
-const BOARD_PROMISE_KEYS: readonly string[] = [PROMISE_KEYS.boardGrowth, PROMISE_KEYS.fundingGrowth]
+/**
+ * The promises whose counterparty is the board seat AND whose yardstick is a growth number. A new
+ * round supersedes all of them — a fresh board installs a fresh target, and nobody is owed two
+ * contradictory growth numbers at once. Phase 8's board-meeting "accelerate" belongs here for
+ * exactly that reason; its "slow down" does not, because a burn commitment survives a raise.
+ */
+const BOARD_PROMISE_KEYS: readonly string[] = [PROMISE_KEYS.boardGrowth, PROMISE_KEYS.fundingGrowth, PROMISE_KEYS.boardPace]
 
 // Stored facts are JSON forever, so the target is rounded once here rather than trusting float noise.
 const round4 = (v: number) => Math.round(v * 10_000) / 10_000
@@ -256,6 +261,71 @@ export function noteColaAdjustment(s: GameState): PromiseRecord | null {
   return record
 }
 
+// ---------- Phase 8: the commitments made in a room (§38, §46) ----------
+
+/**
+ * A room commitment's standing, read purely from facts.
+ *
+ *   'kept'    — the thing promised has demonstrably happened. Settles NOW, before the deadline:
+ *               a promise honoured early should stop hanging over the relationship early.
+ *   'broken'  — the thing promised has been demonstrably contradicted (a pivot inside the quarter
+ *               you swore would be quiet). Also settles now, for the same reason inverted.
+ *   'holding' — kept by ABSENCE, and the absence still holds. Settles kept when the window closes.
+ *   'pending' — nothing has happened yet. Settles broken when the window closes.
+ *   'expired' — the counterparty no longer exists (the board dissolved). Moot, not missed.
+ *   undefined — not one of Phase 8's keys; the caller's own branches decide.
+ *
+ * Every branch names a field the SIMULATION computes. That is the whole contract: a founder keeps
+ * "I'll get you two more people" by hiring two more people, not by the narrative deciding they meant it.
+ */
+type RoomVerdict = 'kept' | 'broken' | 'holding' | 'pending' | 'expired'
+
+function interactionPromiseVerdict(s: GameState, p: PromiseRecord): RoomVerdict | undefined {
+  const f = p.facts ?? {}
+  const numFact = (k: string, fallback = 0) => (typeof f[k] === 'number' ? (f[k] as number) : fallback)
+  const strFact = (k: string) => (typeof f[k] === 'string' ? (f[k] as string) : '-')
+
+  switch (p.summaryKey) {
+    // "The step up is yours." In this simulation a promotion IS the pay rise — `giveRaise` is the
+    // only lever that moves a person's standing — so a salary above what it was is the fact.
+    case PROMISE_KEYS.promotion: {
+      const employee = s.employees.find((e) => stableCastId('emp', e.name, e.role) === p.characterId)
+      if (!employee) return 'pending' // they left before it landed; the deadline still judges it
+      return employee.salary > numFact('salary') ? 'kept' : 'pending'
+    }
+    // "A real refresh at the next round." A round closing is dilution, and dilution is visible.
+    case PROMISE_KEYS.equity:
+      return s.founderEquity < numFact('equity', 1) - 0.0001 ? 'kept' : 'pending'
+    // "Two more people on your team."
+    case PROMISE_KEYS.headcount:
+      return s.employees.length >= numFact('headcount') + 2 ? 'kept' : 'pending'
+    // "A quarter without another turn of the wheel." Broken by the first turn of the wheel.
+    case PROMISE_KEYS.steadyCourse: {
+      const turned =
+        s.pivots > numFact('pivots') ||
+        (s.career !== undefined &&
+          (s.career.focus !== strFact('focus') ||
+            s.career.pricing !== strFact('pricing') ||
+            s.career.primaryTargetSegmentId !== strFact('segment')))
+      return turned ? 'broken' : 'holding'
+    }
+    // The board meeting's two commitments, judged the way the board's own review judges: either
+    // yardstick clears it, and a board that no longer exists cannot be missed.
+    case PROMISE_KEYS.boardPace: {
+      if (!s.board) return 'expired'
+      const target = numFact('target')
+      return monthlyUserGrowth(s) >= target || monthlyRevenueGrowth(s) >= target ? 'kept' : 'pending'
+    }
+    case PROMISE_KEYS.burnCut: {
+      if (!s.board) return 'expired'
+      const burn = Math.max(0, Math.round((s.lastExpenses || 0) - (s.lastRevenue || 0)))
+      return burn <= numFact('burn') ? 'kept' : 'pending'
+    }
+    default:
+      return undefined
+  }
+}
+
 // ---------- settled: once per resolved week, from facts ----------
 
 /**
@@ -278,9 +348,27 @@ export function settleWeeklyPromises(s: GameState, world: LivingWorldState): Rec
   const add = (p: PromiseRecord, kind: RelationshipFactKind) => {
     ;(felt[p.characterId] ??= []).push({ kind, week: s.week, magnitude: settlementMagnitude(p), sourceId: p.id })
   }
+  const settleAs = (p: PromiseRecord, kept: boolean) => {
+    const settled = settlePromise(s, p.id, kept ? 'kept' : 'broken')
+    if (settled) add(settled, kept ? 'promise_kept' : 'promise_broken')
+  }
 
   for (const p of openPromises(world)) {
-    if (p.dueWeek === undefined || s.week < p.dueWeek) continue
+    const due = p.dueWeek !== undefined && s.week >= p.dueWeek
+    // Phase 8's room commitments are judged CONTINUOUSLY, not only at the deadline: the fact that
+    // keeps them (a salary that moved, a round that closed, two more people on the team) is an
+    // event, and a promise that has already been kept should stop hanging over the relationship
+    // the week it is honoured. The ones that are kept by ABSENCE — hold the course, hold the
+    // bands — can only be judged when the window closes, so those still wait for `due`.
+    const roomVerdict = interactionPromiseVerdict(s, p)
+    if (roomVerdict !== undefined) {
+      if (roomVerdict === 'expired') settlePromise(s, p.id, 'expired')
+      else if (roomVerdict === 'kept') settleAs(p, true)
+      else if (roomVerdict === 'broken') settleAs(p, false)
+      else if (due) settleAs(p, roomVerdict === 'holding')
+      continue
+    }
+    if (!due) continue
     if (p.summaryKey === PROMISE_KEYS.boardGrowth) {
       if (!s.board) {
         settlePromise(s, p.id, 'expired')
@@ -348,6 +436,19 @@ function commitmentPhrase(p: PromiseRecord): string {
       return 'the raise'
     case PROMISE_KEYS.cola:
       return 'the cost-of-living adjustment'
+    // Phase 8 — the commitments made in a room rather than in the inbox.
+    case PROMISE_KEYS.boardPace:
+      return pctPerWeek(p.facts?.target)
+    case PROMISE_KEYS.burnCut:
+      return 'burn'
+    case PROMISE_KEYS.promotion:
+      return 'the step up'
+    case PROMISE_KEYS.equity:
+      return 'the equity refresh'
+    case PROMISE_KEYS.headcount:
+      return 'the two hires'
+    case PROMISE_KEYS.steadyCourse:
+      return 'a quarter without a turn'
     default:
       return 'the'
   }
@@ -445,6 +546,20 @@ function commitmentTitle(p: PromiseRecord): string {
       return 'A 20% raise for your star'
     case PROMISE_KEYS.cola:
       return 'A 5% cost-of-living adjustment'
+    // Phase 8 (§38, §46). Each title names the FACT that settles it, because the panel is where a
+    // player finds out what "keeping it" is going to take.
+    case PROMISE_KEYS.boardPace:
+      return `Take the number — ${pctPerWeek(p.facts?.target)} by the next review`
+    case PROMISE_KEYS.burnCut:
+      return 'Bring the burn down by the next review'
+    case PROMISE_KEYS.promotion:
+      return 'The step up, with a date on it'
+    case PROMISE_KEYS.equity:
+      return 'An equity refresh at the next round'
+    case PROMISE_KEYS.headcount:
+      return 'Two more people on their team'
+    case PROMISE_KEYS.steadyCourse:
+      return 'Hold this course for a quarter'
     default:
       // A record from a future phase this build does not know: show its key rather than nothing.
       return p.summaryKey.replace(/_/g, ' ')
@@ -467,13 +582,18 @@ export function commitmentLedger(s: GameState): CommitmentView[] {
     const toName = character ? fullName(character) : 'the board'
     if (p.status === 'open') {
       const dated = BOARD_PROMISE_KEYS.includes(p.summaryKey) && p.dueWeek !== undefined
+      // A burn commitment has its own yardstick and the panel should read it: the number promised
+      // is on the record, and this week's burn is a fact, so "at risk" here is arithmetic.
+      const burnAtRisk =
+        p.summaryKey === PROMISE_KEYS.burnCut &&
+        Math.max(0, Math.round((s.lastExpenses || 0) - (s.lastRevenue || 0))) > (typeof p.facts?.burn === 'number' ? p.facts.burn : 0)
       open.push({
         id: p.id,
         title: commitmentTitle(p),
         toName,
         madeWeek: p.week,
         dueWeek: p.dueWeek,
-        status: dated && !boardPromiseOnTrack(s, p) ? 'at_risk' : 'on_track',
+        status: (dated && !boardPromiseOnTrack(s, p)) || burnAtRisk ? 'at_risk' : 'on_track',
       })
     } else if (p.resolvedWeek !== undefined && s.week - p.resolvedWeek <= COMMITMENT_RECENT_WEEKS) {
       settled.push({

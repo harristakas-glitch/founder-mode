@@ -302,8 +302,8 @@ console.log('— Overflow —')
 console.log('— Action-surface ledger —')
 const EXPECTED_ACTIONS = [
   'accept_sheet', 'advance', 'allocation', 'buy_rival', 'concede_price_war', 'decline_sheet',
-  'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'incentives', 'marketing',
-  'pay_debt', 'pitch', 'pivot', 'pricing', 'proposal_stance', 'raise', 'rally', 'recharge',
+  'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'incentives', 'interaction',
+  'marketing', 'pay_debt', 'pitch', 'pivot', 'pricing', 'proposal_stance', 'raise', 'rally', 'recharge',
   'resolve_choice', 'run_experiment', 'secondary', 'sell_treasury', 'send_offer', 'shelve_bet',
   'start_bet', 'take_debt', 'target_segment', 'tokenise',
 ].sort()
@@ -330,7 +330,7 @@ for (const fn of [
   'pitchInvestors', 'acceptTermSheet', 'resolveChoiceOnState', 'tokeniseCompany', 'drawDebt',
   'repayDebt', 'sellSecondary', 'takeVacation', 'startVenture', 'killVenture', 'acquireRival',
   'startIPO', 'pitchTeam', 'sellTokenTreasury', 'setGovernanceStance', 'defyGovernance',
-  'setTokenIncentives', 'applyEffects', 'startExperiment', 'repositionTo',
+  'setTokenIncentives', 'applyEffects', 'startExperiment', 'repositionTo', 'chooseInteractionOption',
 ])
   ok(!new RegExp(`\\b${fn}\\b`).test(storeSrc), `store no longer touches ${fn} directly`)
 // KILLS: quietly re-inlining a mutation in the store — the exact bug class the canary would
