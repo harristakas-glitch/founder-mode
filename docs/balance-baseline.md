@@ -309,3 +309,207 @@ Every assertion in `test/career-balance.test.ts` was verified by breaking the th
 | Social `careerArpu` 1.8 → 0.25 | Social is not a harder sector (3/12 vs 0/12) and the margin-rule row (4/12) — and nothing outside Social except its own pricing rows |
 
 Each mutation was reverted immediately; `git diff` was checked clean between runs.
+
+---
+
+# 5. Rivals that act — BACKLOG §4.1, closed
+
+**The defect.** `BACKLOG.md` §4.1: the "Late Entrant" scenario won **97% of runs against Standard's
+90%** and was merely *longer* (median exit week 165). Rivals starting 8–14× your size occupied TAM
+and never came for you. Meanwhile a whole attack economy existed and was calibrated against human
+play (`test/arena-duel-probe.ts`, `test/arena-ffa-probe.ts`) — and AI rivals could not reach any
+of it.
+
+**Harness:** `npx tsx test/rival-pressure-probe.ts <scenarios|ordinary|counter|posture> [sectors]`.
+24 seeds (`11 × n`) × 200 weeks × 6 sectors × 5 scenarios. 200 rather than 90 because free play has
+no clock (§2.1) and §4.1's own median exit is week 165, so a 90-week harness scores most Late
+Entrant runs as "still going" and measures nothing.
+
+`rivalAggression` is a capability, so **every table below is an A/B on one flag inside one build** —
+the "off" column is not a comparison against an older checkout. `npm run bots -- no-aggro` and
+`npm run balance -- <mode> no-aggro` take the same switch.
+
+## 5.1 The measurement that mattered: the obvious variable was useless
+
+The natural gate for "a big rival raids a small one" is the size ratio. Swept over 24 seeds × 200
+weeks, **an AI rival is bigger than the player essentially always**, by wildly sector-dependent
+amounts — median rival/player ratio **8.9× in B2B SaaS but 54× in Fintech**, and 45× / 348× under
+Late Entrant. A `ratio >= 2.5` gate is satisfied **92–100% of the time**, so it gates nothing, and a
+leverage term built on it pins at its cap in every sector — which is the defect restated, not fixed.
+Iteration 1 duly moved Late/Standard founder net from 0.587 to 0.547: no separation at all.
+
+**Share of the effective TAM** is normalised by construction and separates the scenarios. Median
+rival share, same sweep:
+
+| Sector | Standard | Late Entrant |
+|---|---|---|
+| B2B SaaS | 2.6% | 11.8% |
+| Dev Tools | 5.1% | 14.8% |
+| E-commerce | 0.9% | 6.7% |
+| Fintech | 1.7% | 9.7% |
+| Social App | 9.1% | 18.5% |
+| AI/ML Infra | 2.5% | 11.2% |
+
+Both force (`rivalRaidLeverage`) and frequency (`rivalAggroCooldown`) ramp on it, 5% → 13%. Social
+is high in both, which is sector character rather than a bug: a winner-take-all market has
+entrenched incumbents by design.
+
+## 5.2 Iterations
+
+24 seeds × 200 wk, B2B SaaS, calibrated reference policy.
+
+| # | change | attacks/run | Standard net | Late net | Late/Std |
+|---|---|---|---|---|---|
+| — | *(aggression off)* | 0 | $48.4M | $28.4M | 0.587 |
+| 1 | cooldown 12, chance .34, player-symmetric leverage | **27** | $31.6M | $17.3M | 0.547 |
+| 2 | cooldown 26, chance .22, tighter poach/smear gates | 10 | $42.4M | $22.4M | 0.528 |
+| 3 | leverage on TAM share (floor 3%, cap 18%) | 10 | $36.2M | $13.0M | 0.359 |
+| 4 | + cooldown ramps 26→14 with grip | 10 | $27.9M | $14.7M | 0.527 |
+| 5 | floor 3%→5%, cap 14%→13% **(shipped)** | 6.9 | **$36.2M** | **$13.0M** | **0.359** |
+
+Iteration 1's 27 attacks per run is weather, and players are right to ignore weather — the same
+failure `test/pricewar-probe.ts` found in the Arena bots, which sat at war 86% of all weeks until a
+cooldown made a war an episode. Iteration 4 bought separation at the cost of a 42% hit to Standard,
+which is not "moves only modestly"; raising the share floor to 5% put Standard's median rival back
+below the bar in five of six sectors and left Late Entrant's above it in all six.
+
+## 5.3 Result — all six sectors, calibrated policy
+
+`win` = 1 − (bankrupt + fired)/24. `atk` = attacks landed per run.
+
+| Sector | Standard off | Standard ON | Late off | Late ON |
+|---|---|---|---|---|
+| B2B SaaS | 100% · $48.4M | 100% · $36.2M · 6.9 atk | 100% · $28.4M | 100% · **$13.0M** · 9.9 atk |
+| Dev Tools | 100% · $141.8M | 100% · $43.2M · 9.1 | 100% · $25.9M | **96%** · $20.0M · 13.5 |
+| E-commerce | 92% · $74.0M | 92% · $64.7M · 5.7 | 88% · $23.3M | 92% · **$19.5M** · 9.5 |
+| Fintech | 96% · $51.0M | 96% · $25.1M · 5.9 | **100%** · $40.7M | **88%** · $20.0M · 11.3 |
+| Social App | 92% · $52.8M | 79% · $34.4M · 5.1 | 75% · $26.0M | **63%** · $15.0M · 8.0 |
+| AI/ML Infra | 100% · $56.7M | 100% · $45.7M · 6.1 | 100% · $48.4M | 100% · **$13.8M** · 13.0 |
+
+* **Late Entrant now takes 1.5–2.2× the pressure of Standard in every sector**, and returns the
+  lowest or near-lowest founder net of any scenario in every sector.
+* **Fintech is the clean case**: Late Entrant was *easier* than Standard before (0/24 failures
+  against 1/24) and is now clearly harder (3/24 against 1/24).
+* **Standard's win rate is unchanged in five of six sectors.** Social moves 92%→79%, and Social is
+  the one market whose rivals genuinely hold ~9% of TAM at baseline.
+* **Nothing became unplayable.** The worst cell is Social + Late Entrant at 63%, in the sector that
+  was already hardest (75% before) and where Funding Winter and Rich Kid still sit at 96%/100%.
+
+## 5.4 The mix is situational, not a timer
+
+Total attacks over 24 seeds × 200 wk, and the median week of the first one:
+
+| Sector · scenario | first attack | mix |
+|---|---|---|
+| SaaS · standard | wk 73 | poach 103 · raid 58 · pricewar 4 |
+| SaaS · late | **wk 21** | **raid 176** · poach 62 |
+| Fintech · standard | wk 94 | poach 99 · raid 39 · pricewar 2 · smear 1 |
+| Fintech · late | **wk 15** | **raid 209** · poach 61 |
+
+Standard is a **talent fight arriving late** — a rival who out-raised you by two rounds comes for
+your people. Late Entrant is a **user raid from week 15** that never really stops. Different
+scenario, different threat, different answer, from one policy reading one state.
+
+## 5.5 Does answering pay?
+
+Both counter-policies act only on `hostileRivals` — the same posture the rival table renders, so the
+bot has no information a player lacks.
+
+| Sector · scenario | bare | shield when threatened | shield + counter-raid |
+|---|---|---|---|
+| SaaS · standard | $36.2M | $51.5M · 6.0 blocked | $53.6M |
+| SaaS · late | $13.0M | **$31.4M** · 12.0 blocked | $27.5M |
+| Fintech · standard | $25.1M | $28.5M | $34.1M |
+| Fintech · late | $20.0M · 3/24 failed | $21.6M · 1/24 | $32.2M · 1/24 |
+
+The retainer is the reliable answer and pays most exactly where the pressure is (SaaS Late Entrant,
++142%). The counter-raid is a genuine gamble — better in Fintech, **worse than simply turtling in
+SaaS Late Entrant**. That is the shape `arena-ffa-probe` already found for the shield: bought when
+the lobby is hot, skipped when it is not.
+
+### The exploit this section found
+
+Opening `applyAttackOutgoing` to AI rivals pointed an Arena-calibrated formula at a size gap it was
+never measured against. `leverage = clamp(targetUsers / yourUsers, 0.5, 3)` — "punching up at the
+leader pays 3×" — is fine between peers and absurd when the target is 10–350× you: 10% of a
+19,000-user incumbent times 3 is **5,700 customers for one $40k cheque** against a 434-user company.
+Measured before the fix: shield+raid returned **$868M–$1.05B** of founder net against a bare
+policy's $13–36M, on 40k–99k users.
+
+A cap alone was not enough. **Any** cap proportional to your own size compounds over the 5-week ops
+cooldown — 1.15^40 is 267×, and the capped policy still returned $183M. The fix is
+`RIVAL_RAID_GAIN_CAP` (15% of your own users) **and** `RIVAL_RAID_FATIGUE` (each raid yields 0.7× the
+last), the latter for the same reason `backfireChance` escalates: the second campaign against a
+market is aimed at the customers who ignored the first. Both live in `attackRival` and **not** in
+`applyAttackOutgoing`, because a 3× leverage against a 3× peer already pays 90% of your own user
+base in Arena and capping it centrally would silently rebalance the duels that calibrated it.
+
+## 5.6 Career: the reference policy barely notices
+
+`npm run balance -- ladder all`, with and without the flag. Career runs are 90 weeks and the first
+attack in a Standard market lands around week 73–94, so most Career runs end before the pressure
+arrives. This is the intended shape: the fix targets long free-play runs, which is where §4.1's
+defect lived.
+
+| Sector | failed before → after | founder net before → after |
+|---|---|---|
+| B2B SaaS | 4 → 4 | $6.3M → $6.2M |
+| Dev Tools | 1 → **0** | $11.6M → $10.3M |
+| E-commerce | 5 → 5 | $15.0M → $15.0M |
+| Fintech | 4 → 4 | $12.1M → $12.1M |
+| Social App | 6 → **7** | $14.5M → $10.4M |
+| AI/ML Infra | 1 → 1 | $13.0M → $13.7M |
+
+**Failures move by at most one in any sector.**
+
+`npm run bots -- all`, founder net, and the property that must not break:
+
+| Sector | Careless | **Disciplined** | Enterprise |
+|---|---|---|---|
+| B2B SaaS | $5.3M → $4.0M | **$7.6M → $6.2M** | $4.5M → $4.3M |
+| Dev Tools | $2.6M → $2.5M | **$11.3M → $9.4M** | $5.2M → $4.0M |
+| E-commerce | $4.3M → $4.3M | **$14.1M → $14.1M** | $12.0M → $12.0M |
+| Fintech | $2.1M → $2.0M | **$11.2M → $8.8M** | $3.5M → $3.5M |
+| Social App | $1.7M → $1.7M | **$11.6M → $12.1M** | $9.7M → $5.9M |
+| AI/ML Infra | $3.1M → $3.1M | **$12.9M → $12.9M** | $10.4M → $6.4M |
+
+**Disciplined Discovery is strongest in all six sectors, before and after.** The strategy ordering
+is preserved.
+
+## 5.7 Golden traces: not re-recorded, and that is a property rather than luck
+
+All three hashes in `test/modes.test.ts` pass unchanged. Two independent reasons, both pinned by
+`test/rival-aggression.test.ts`:
+
+1. With the capability **off**, `rivalAggressionStep` is never called and draws **zero** times, so a
+   passive run is byte-identical to the pre-change engine. This is what makes every "off" column
+   above a valid baseline rather than a second game.
+2. With it **on**, no rival may act before week 12 (`RIVAL_AGGRO_MIN_WEEK`) — and the traces cover
+   exactly weeks 1–12.
+
+The test asserts a played 12-week run is identical with the flag on or off, that a 120-week run
+**diverges** (so the first assertion is a property and not a tautology), and that the grace period
+is `>= 12` against a literal rather than against the constant being guarded.
+
+## 5.8 Mutation proofs
+
+28 mutations of `src/game/engine.ts`, **27 killed, 1 equivalent**. Reproduce with
+`bash scripts/mutate-rival-aggression.sh`; the full table is at the bottom of
+`test/rival-aggression.test.ts`.
+
+The survivor is genuinely equivalent: aggression is gated twice (`tickRivals` will not call the
+step, and `rivalStance` returns `calm`), so removing either gate alone leaves behaviour identical.
+Mutations 2 and 3 kill the two gates individually.
+
+**The sweep found two real defects**, which is the argument for running it:
+
+* **Dead code.** The announcement used to `return` after writing `hostileSince`, handing out one
+  week of notice as a side effect and leaving the `RIVAL_AGGRO_NOTICE` guard unreachable — deleting
+  the guard changed nothing. The return is gone and the guard is the notice.
+* **A gate nothing depended on.** `rivalStance` checked the capability, but no assertion cared, so a
+  run with rivals passive would still have painted Hostile badges for attacks that could never come.
+
+And two weak assertions of the classic kinds: fixtures built from the very constants under mutation
+(`staged({ week: RIVAL_AGGRO_MIN_WEEK - 1 })` moves with the code, so zeroing the floor stayed
+green), and bounds loose enough to pass on a broken engine (`product < before + 1.1` holds with the
+product cost at zero, since the weekly build is +0.3..+1.1).

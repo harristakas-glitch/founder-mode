@@ -12,6 +12,7 @@ import {
   buyShield,
   raidMagnitude,
   canAttack,
+  canBuyShield,
   newGame,
   pivot,
   shieldCost,
@@ -140,8 +141,24 @@ ok(
   `raid drains exactly raidMagnitude users (${v.users}, expected ${50_000 - raidMagnitude(50_000)})`,
 )
 
-const noPvp = newGame('Peace', 'saas', 'technical', { seed: 3, capabilities: { ...DEFAULT_RULES }, aiRivals: false })
-ok(!canAttack(noPvp).ok, 'attacks blocked when pvp rule is off')
+// Who may use the attack layer. Two capabilities open it — `pvpActions` (Arena: other founders)
+// and `rivalAggression` (single player: the AI rivals came for you first, so the shield and the
+// counter-punch have to exist) — and the assertion states BOTH halves in the same run, because
+// this repo has twice shipped a control that blocked the attack and the legitimate path together
+// (BACKLOG §1.3). A blanket "attacks are always blocked outside Arena" would now be a lie: Quick
+// Play has aggressive rivals, and a player with no answer to them is being handed noise.
+const noCombat = newGame('Peace', 'saas', 'technical', {
+  seed: 3,
+  capabilities: { ...DEFAULT_RULES, rivalAggression: false },
+  aiRivals: false,
+})
+ok(!canAttack(noCombat).ok, 'attacks blocked when neither pvpActions nor rivalAggression is on')
+ok(!canBuyShield(noCombat).ok, 'and so is the shield — offence and defence share one gate')
+const quickPlay = newGame('Solo', 'saas', 'technical', { seed: 3, capabilities: { ...DEFAULT_RULES }, aiRivals: true })
+ok(DEFAULT_RULES.rivalAggression, 'Quick Play rivals are aggressive by default')
+ok(canAttack(quickPlay).ok, 'a Quick Play founder CAN answer them — the counter-punch is available')
+ok(canBuyShield(quickPlay).ok, 'and so is the crisis retainer')
+ok(!defaultCapabilities('arena').rivalAggression, 'Arena has no AI rivals, so nothing to make aggressive')
 
 console.log('— Shields & cost scaling —')
 let d = newGame('Defender', 'saas', 'technical', { seed: 11, capabilities: { ...PVP_RULES }, aiRivals: false })

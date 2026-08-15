@@ -80,6 +80,14 @@ export interface Rival {
   alive: boolean
   acquired?: boolean // you bought them
   rebuffedUntil?: number // week until which they won't take your calls after a rejected offer
+  // ---- rival aggression (capability `rivalAggression`). All optional: a save written before the
+  // system loads with them absent, which reads as a rival who has never gone after anyone.
+  /** Week they may act again. Their own ops team recovers exactly like yours does. */
+  aggroCooldown?: number
+  /** Week their posture first turned hostile — the week the market was told. */
+  hostileSince?: number
+  /** How many attacks they have launched at you. Drives escalation and the rival table's read. */
+  attacksLaunched?: number
 }
 
 export interface Effects {
@@ -139,7 +147,19 @@ export interface Message {
   choices?: Choice[]
   resolved?: boolean
   resultText?: string
-  meta?: { acquisitionAmount?: number; arcInstance?: string; employeeId?: string }
+  meta?: {
+    acquisitionAmount?: number
+    arcInstance?: string
+    employeeId?: string
+    /** Attack id, on the inbox message an AI rival's attack writes. The harness reads runs off the
+     *  inbox rather than a side channel, so what it can measure is exactly what a player is told. */
+    rivalAttack?: string
+    /** Who threw it, for the same reason. */
+    rivalName?: string
+    /** True when the crisis retainer ate it. Both messages carry `rivalAttack`, so a harness can
+     *  count pressure and counterplay separately without parsing prose. */
+    deflected?: boolean
+  }
 }
 
 // Legacy shape, kept only so old saves and older multiplayer clients can be migrated.

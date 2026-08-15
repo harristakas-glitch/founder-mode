@@ -4,6 +4,7 @@ import {
   advanceWeek,
   applyAttackIncoming,
   applyAttackOutgoing,
+  attackRival,
   buyShield,
   capabilitiesFromLegacyRules,
   migrateLegacySave,
@@ -281,6 +282,8 @@ interface Store {
   setMyCompany: (name: string) => void
   beginMatch: (sector: SectorId, caps?: Partial<GameCapabilities>, cap?: number) => void
   attackPlayer: (targetId: string, kind: AttackDef['id']) => void
+  /** Single player's counter-punch: the same attack economy, aimed at an AI rival. */
+  attackRival: (rivalId: string, kind: AttackDef['id']) => void
   buyShield: () => void
   resumeOnline: () => Promise<void>
   cancelReady: () => void
@@ -918,6 +921,17 @@ export const useStore = create<Store>()(
           set({ game: g })
           void broadcastAttack({ fromCompany: online.myCompany, targetId, kind, fromId: myId() })
           void pushState(myNetSummary(g))
+        },
+
+        // No broadcast and no presence push: there is no room and the rival is not a peer. The
+        // engine applies both sides itself, which is the half Arena delegates to the other client.
+        attackRival: (rivalId, kind) => {
+          const { game } = get()
+          if (!game || game.gameOver) return
+          const g = structuredClone(game)
+          if (!attackRival(g, kind, rivalId)) return
+          sfx.ominous()
+          set({ game: g })
         },
 
         buyShield: () => {
