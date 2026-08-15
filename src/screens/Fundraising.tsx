@@ -34,7 +34,10 @@ import { treasuryValue } from '../game/token/market'
 import { PROPOSAL_CONTENT, governancePanel, supportLabel } from '../game/token/governance'
 import { CONDUCT_LABELS, communityReadout, moodLabel } from '../game/token/community'
 import { maxTreasurySale, treasurySaleQuote, treasurySalesActive } from '../game/token/treasury'
-import type { TokenUtilityModel, VestingPolicy } from '../game/token/types'
+import { founderSaleCooldown, founderSaleQuote, founderSalesActive, founderLifetimeRemaining, maxFounderSale } from '../game/token/founder'
+import { networkEndingProgress } from '../game/token/endings'
+import { founderVestedTokens, liquidityDiscount } from '../game/token/scoring'
+import { TOKEN_FOUNDER_SALE, type TokenUtilityModel, type VestingPolicy } from '../game/token/types'
 import type { GameState } from '../game/types'
 import { FORK_WARNINGS, institutionalRoundsClosed, ipoClosed } from '../game/token/restrictions'
 import { isTokenised, tokenisationOffered } from '../game/token/state'
@@ -291,6 +294,139 @@ function TreasurySalePanel() {
             </Btn>
           </>
         )}
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * ICO brief §42, Slice 7. The founder's own secondary — the only route by which `bankedPayout` is
+ * reachable on the token path, and the panel where vesting and the liquidity discount stop being
+ * end-of-run arithmetic and become a decision with a clock on it.
+ */
+function FounderSalePanel() {
+  const game = useStore((s) => s.game)!
+  const sell = useStore((s) => s.sellFounderPosition)
+  const [size, setSize] = useState(0.5)
+  if (!founderSalesActive(game)) return null
+  const t = game.token!
+  const max = maxFounderSale(game)
+  const quote = founderSaleQuote(game, Math.round(max * size))
+  const cooldown = founderSaleCooldown(game)
+  const vested = founderVestedTokens(game)
+  const discount = liquidityDiscount(game)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="Your own position — §42">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
+          <div>
+            <div className="text-[11px] text-mut">Vested and sellable</div>
+            <b className="tnum">{Math.round(vested).toLocaleString()}</b>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Granted</div>
+            <b className="tnum">{Math.round(t.founder.granted).toLocaleString()}</b>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Sold so far</div>
+            <b className="tnum">{Math.round(t.founder.sold).toLocaleString()}</b>
+          </div>
+          <div>
+            <div className="text-[11px] text-mut">Banked from sales</div>
+            <b className="tnum text-good">{money(t.founder.realisedProceeds)}</b>
+          </div>
+        </div>
+        {max <= 0 ? (
+          <div className="mt-2.5 text-[13px] text-mut">{quote.reason ?? 'Nothing to sell.'}</div>
+        ) : (
+          <>
+            <div className="mt-3 flex items-baseline justify-between text-[13px]">
+              <span>Sell {Math.round(quote.tokens).toLocaleString()} tokens</span>
+              <b className="tnum">{pct(quote.tokens / Math.max(1, t.supply.circulating), 1)} of the float</b>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round(size * 100)}
+              style={{ ['--fill' as string]: `${size * 100}%` }}
+              onChange={(e) => setSize(Number(e.target.value) / 100)}
+            />
+            <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
+              <div>
+                <div className="text-[11px] text-mut">You bank</div>
+                <b className="tnum text-good">{money(quote.proceeds)}</b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">At the screen price</div>
+                <b className="tnum text-mut">{money(quote.grossDollars)}</b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">Price impact</div>
+                <b className="tnum text-warn">−{pct(quote.priceImpact, 0)}</b>
+              </div>
+              <div>
+                <div className="text-[11px] text-mut">Trust cost</div>
+                <b className="tnum text-warn">−{quote.trustCost.toFixed(0)}</b>
+              </div>
+            </div>
+            <div className="mt-2.5 text-xs leading-relaxed text-mut">
+              <b className="text-ink">This money is yours, not the company's.</b> It lands in your banked payout and survives whatever
+              happens to the company afterwards — the same place a secondary sale lands, which a tokenised founder can never reach.
+              Nothing is issued, so nothing dilutes.
+              <br />
+              You are capped at one sale every {TOKEN_FOUNDER_SALE.cooldownWeeks} weeks and at half your grant across the whole run — currently{' '}
+              <b className="text-ink tnum">{Math.round(founderLifetimeRemaining(t)).toLocaleString()}</b> tokens left under that cap.
+              The binding limit right now is <b className="text-ink">{quote.boundBy}</b>.
+              <br />
+              <b className="text-ink">The real price is the market you sell into.</b> Trust runs depth, sentiment and members; those
+              three run your liquidity discount, currently <b className="text-ink tnum">{pct(discount, 0)}</b> — the fraction of your
+              remaining bag you would actually realise. Selling now is paid for by the price of selling later. The one thing pulling the
+              other way is real: a smaller position is a smaller overhang, and a smaller overhang realises a larger share of itself.
+            </div>
+            <Btn variant="primary" className="mt-3" disabled={!quote.ok || cooldown > 0} onClick={() => sell(quote.tokens)}>
+              Sell for {money(quote.proceeds)}
+            </Btn>
+          </>
+        )}
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * ICO Slice 7, docs/ico-architecture.md §1.4. The `network` ending's gate, shown rather than
+ * hidden — §47's rule applied to an ending: a player must be able to see what they are playing for
+ * and exactly which clause is not met.
+ */
+function NetworkEndingPanel() {
+  const game = useStore((s) => s.game)!
+  const prog = networkEndingProgress(game)
+  if (prog.clauses.length === 0) return null
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="The network ending — what this path is playing for">
+        <div className="flex items-baseline justify-between text-[13px]">
+          <span className="text-mut">Readiness</span>
+          <b className="tnum">{pct(prog.readiness, 0)}</b>
+        </div>
+        <Bar value={prog.readiness * 100} color={prog.reached ? 'var(--color-good)' : undefined} />
+        <div className="mt-3 space-y-1.5">
+          {prog.clauses.map((c) => (
+            <div key={c.id} className="flex items-start gap-2 text-[12.5px]">
+              <span className={c.met ? 'text-good' : 'text-mut'}>{c.met ? '\u2713' : '\u25cb'}</span>
+              <span className={c.met ? 'text-mut' : 'text-ink'}>{c.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2.5 text-xs leading-relaxed text-mut">
+          Tokenising closed the IPO permanently and made an acquisition rarer and cheaper. This is the success state that replaced
+          them, and the only one this path has. Your position clears into the network rather than being dumped into a float you
+          dominate, which is worth a real premium on the token half of your standing — the equity half is unchanged.
+        </div>
       </Panel>
     </div>
   )
@@ -624,6 +760,8 @@ function TokenisationPanel() {
         <CommunityPanel />
         <GovernancePanel />
         <TreasurySalePanel />
+        <FounderSalePanel />
+        <NetworkEndingPanel />
         <IncentivePanel />
       </div>
     )

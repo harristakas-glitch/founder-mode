@@ -145,7 +145,9 @@ export function founderOverhang(t: TokenState, week: number): number {
   const terms = VESTING_TERMS[t.plan.vesting] ?? VESTING_TERMS.standard
   const elapsed = week - t.launchWeek
   if (elapsed < terms.cliffWeeks) return 0
-  const vestedUnsold = Math.max(0, (t.founder.granted - t.founder.sold) * clamp01(elapsed / terms.durationWeeks))
+  // Slice 7: `granted × fraction − sold`, matching the correction on `founderVestedTokens` — see
+  // its header. Identical to what this computed before, for every save written before Slice 7.
+  const vestedUnsold = Math.max(0, t.founder.granted * clamp01(elapsed / terms.durationWeeks) - t.founder.sold)
   return vestedUnsold / Math.max(1, t.supply.circulating)
 }
 
@@ -164,8 +166,15 @@ export function communityConduct(s: GameState): CommunityConduct {
 
   // §33 "founder token sales" / "treasury spending": the community remembers who sold, linearly
   // fading over the same window the sale's own confidence cost uses.
-  const since = s.week - t.treasurySales.lastSaleWeek
-  const saleMemory = t.treasurySales.lastSaleWeek > 0 ? clamp01(1 - since / TOKEN_COMMUNITY.saleMemoryWeeks) : 0
+  //
+  // SLICE 7 folded §42's founder sales into THIS memory rather than adding a second drag. §33 names
+  // both in one breath and the brief for this slice is explicit: the community reads a founder
+  // selling exactly as Slice 5 reads a treasury sale. One memory, one fade window, one coefficient,
+  // whichever sale was more recent — the difference between the two acts is priced where it belongs,
+  // in the immediate confidence hit each one charges (`TOKEN_FOUNDER_SALE.trustCostMax` is larger
+  // than the treasury's, because the community prices the beneficiary, not the act).
+  const lastSale = Math.max(t.treasurySales.lastSaleWeek, t.founder.lastSaleWeek ?? 0)
+  const saleMemory = lastSale > 0 ? clamp01(1 - (s.week - lastSale) / TOKEN_COMMUNITY.saleMemoryWeeks) : 0
 
   // §33 "broken promises", in the one currency this game can measure: growth that was bought and
   // called growth. Reads the same population the §53 warning reads.

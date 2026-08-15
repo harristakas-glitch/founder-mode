@@ -5,9 +5,11 @@ import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
 import { ENDINGS } from '../theme'
 
 
-const ENDING_ORDER: RunRecord['ending'][] = ['unicorn', 'ipo', 'acquired', 'timeup', 'fired', 'bankrupt']
+// ICO Slice 7: `network` sits with the other wins, directly after `unicorn` — it is the token
+// path's only success state, and the path has no IPO and a materially worse acquisition.
+const ENDING_ORDER: RunRecord['ending'][] = ['unicorn', 'network', 'ipo', 'acquired', 'timeup', 'fired', 'bankrupt']
 
-const WIN_ENDINGS = new Set<RunRecord['ending']>(['unicorn', 'ipo', 'acquired'])
+const WIN_ENDINGS = new Set<RunRecord['ending']>(['unicorn', 'network', 'ipo', 'acquired'])
 
 export function Career() {
   const runs = readHall()

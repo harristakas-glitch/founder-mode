@@ -116,6 +116,10 @@ export interface Effects {
     | 'bet-insight' // the active new bet gains PMF and signal
     | 'line-surge' // every launched product line gains users
     | 'lose-mercenary' // a mercenary walks
+    // ICO Slice 7. Take the `network` ending: step back from a network that has cleared its own
+    // bar. A CHOICE and not an automatic terminus — see `offerNetworkEnding` in engine.ts for the
+    // measurement that made it one.
+    | 'network-exit'
 }
 
 export interface Choice {
@@ -193,10 +197,18 @@ export interface HistoryPoint {
 }
 
 export interface GameOver {
-  type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo'
+  /**
+   * `network` is ICO Slice 7 (docs/ico-architecture.md §1.4): the token path's own success state.
+   * ONE type, not five — brief §44 lists five success states and they share this type, told apart
+   * by `tokenEnding`, because five types would mean five entries in `theme.ts`, `store.ts`,
+   * `Career.tsx`, `sound.ts` and the leaderboard whitelist for four cosmetic variants of one score.
+   */
+  type: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo' | 'network'
   week: number
   payout?: number
   detail?: string // the autopsy: what actually emptied the account
+  /** Which of §44's five faces a `network` ending wore. Absent on every other ending. */
+  tokenEnding?: import('./token/types').TokenEndingKind
 }
 
 export interface IpoProcess {

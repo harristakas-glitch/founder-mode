@@ -105,7 +105,9 @@ export type ScreenId =
 export interface RunRecord {
   company: string
   sector: string
-  ending: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo'
+  /** ICO Slice 7 added `network`. Old hall entries never carry it, which is what the reader's
+   *  `ENDINGS[r.ending] ?? …` fallbacks have always been for. */
+  ending: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo' | 'network'
   weeks: number
   score: number // founder payout in $
 }
@@ -150,6 +152,10 @@ function weekSounds(next: GameState) {
         return
       case 'timeup':
         sfx.bell()
+        return
+      // ICO Slice 7. A win, so it gets the win sound — there is no bell to ring on this path.
+      case 'network':
+        sfx.fanfare()
         return
     }
   }
@@ -325,6 +331,8 @@ interface Store {
   setIncentives: (shares: Partial<IncentiveShares>) => void
   /** ICO Slice 4. Sell treasury tokens for company cash — the token path's fundraising. */
   sellTreasury: (tokens: number) => boolean
+  /** ICO Slice 7, brief §42. Sell from your OWN vested position — personal cash, into bankedPayout. */
+  sellFounderPosition: (tokens: number) => boolean
   /** ICO Slice 6. Take a public position on an active proposal — the campaign, priced once. */
   setProposalStance: (proposalId: string, stance: 'support' | 'oppose') => boolean
   /** ICO Slice 6. Tear up a standing mandate — the priced defiance. */
@@ -1196,6 +1204,19 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return false
           const { state, result } = applyJournaled(g, 'sell_treasury', { n: tokens })
+          if (!(result as { ok?: boolean } | undefined)?.ok) return false
+          sfx.cash()
+          set({ game: state })
+          return true
+        },
+
+        // ICO Slice 7, brief §42. The founder's own secondary. Journalled like every other action
+        // that moves money, and unseeded for the same reason the treasury sale is: the quote the
+        // player read is a pure function of state, so opening the panel must not shift the stream.
+        sellFounderPosition: (tokens) => {
+          const g = get().game
+          if (!g) return false
+          const { state, result } = applyJournaled(g, 'sell_founder', { n: tokens })
           if (!(result as { ok?: boolean } | undefined)?.ok) return false
           sfx.cash()
           set({ game: state })

@@ -40,6 +40,7 @@ import {
   repayDebt,
   resolveChoiceOnState,
   sellSecondary,
+  sellFounderTokens,
   sellTokenTreasury,
   setGovernanceStance,
   setTokenIncentives,
@@ -324,6 +325,8 @@ const REPLAY_ACTIONS = {
   },
 
   sell_treasury: (g, p) => ({ result: sellTokenTreasury(g, num(p.n)) }),
+
+  sell_founder: (g, p) => ({ result: sellFounderTokens(g, num(p.n)) }),
 
   proposal_stance: (g, p) => ({
     result: setGovernanceStance(

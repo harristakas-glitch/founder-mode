@@ -55,6 +55,19 @@ export function networkValue(s: GameState | null | undefined): number {
  * The vesting clock starts at the LAUNCH WEEK, which is the single largest reason an early launch
  * is not dominated by a late one: tokenise at week 20 on a standard schedule and you are fully
  * vested by week 72; tokenise at week 80 and you finish the run holding paper you cannot sell.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * SLICE 7 CORRECTION, and it is byte-identical for every run written before this slice.
+ *
+ * This read `(granted − sold) × fraction`, which subtracts a sale at the vesting fraction rather
+ * than in full: sell 100 tokens at half-vested and your sellable balance falls by 50, so the pool
+ * partially REGENERATES and a founder could sell more tokens than they were ever granted. It was
+ * unreachable until now — Slices 1–6 have no way to make `sold` non-zero, so `(granted − 0) × f`
+ * and `granted × f − 0` are the same expression — and Slice 7 is the slice that makes it reachable,
+ * so it is the slice that has to fix it.
+ *
+ * The right reading of a vesting schedule: `granted × fraction` is what has VESTED TO DATE, and
+ * what you already sold comes off that in full.
  */
 export function founderVestedTokens(s: GameState | null | undefined): number {
   const t = s?.token
@@ -63,7 +76,7 @@ export function founderVestedTokens(s: GameState | null | undefined): number {
   const elapsed = s!.week - t.launchWeek
   if (elapsed < terms.cliffWeeks) return 0
   const fraction = clamp01(elapsed / terms.durationWeeks)
-  return Math.max(0, (t.founder.granted - t.founder.sold) * fraction)
+  return Math.max(0, t.founder.granted * fraction - t.founder.sold)
 }
 
 // ---------- the liquidity discount: the token path's exit multiple ----------
@@ -86,12 +99,69 @@ export function founderVestedTokens(s: GameState | null | undefined): number {
 export function liquidityDiscount(s: GameState | null | undefined): number {
   const t = s?.token
   if (!t) return 0
+  return clamp(marketQualityDiscount(s) * (1 - founderExitImpact(s)), 0, TOKEN_SCORING.liquidityDiscountMax)
+}
+
+/**
+ * The FIRST factor of the discount, alone: what the market is worth AS A MARKET. Earned from
+ * depth, utility and engagement — the things a real business produces — and nothing about who is
+ * selling into it.
+ */
+function marketQualityDiscount(s: GameState | null | undefined): number {
+  const t = s?.token
+  if (!t) return 0
   const marketQuality = clamp01(t.market.depth * 0.45 + (t.market.utility / 100) * 0.35 + (t.community.engagement / 100) * 0.2)
-  const base = lerp(TOKEN_SCORING.liquidityDiscountMin, TOKEN_SCORING.liquidityDiscountMax, marketQuality)
-  const circulating = Math.max(1, t.supply.circulating)
-  const share = clamp01(founderVestedTokens(s) / circulating)
-  const exitImpact = clamp01(Math.pow(share, TOKEN_SCORING.exitImpactExponent))
-  return clamp(base * (1 - exitImpact), 0, TOKEN_SCORING.liquidityDiscountMax)
+  return lerp(TOKEN_SCORING.liquidityDiscountMin, TOKEN_SCORING.liquidityDiscountMax, marketQuality)
+}
+
+/** The SECOND factor: 0–1, what it costs YOU SPECIFICALLY to get out, from your share of the float. */
+export function founderExitImpact(s: GameState | null | undefined): number {
+  const t = s?.token
+  if (!t) return 0
+  const share = clamp01(founderVestedTokens(s) / Math.max(1, t.supply.circulating))
+  return clamp01(Math.pow(share, TOKEN_SCORING.exitImpactExponent))
+}
+
+/**
+ * Slice 7. The `network` ending's premium, and the ONLY payout multiplier the token path has.
+ *
+ * `liquidityDiscount` is a product of two factors that mean different things:
+ *
+ *     discount = marketQuality        ← what the market is worth as a market   (EARNED)
+ *              × (1 − exitImpact)     ← what it costs YOU to get out of it     (YOUR SHARE)
+ *
+ * A `network` ending is, by construction, the case where the second factor is no longer the binding
+ * one. Its gate requires $100M+ of sustained network value, real utility, an organic user base, a
+ * community that still trusts you, and a network worth more than the company — a position
+ * distributed into a market that outgrew it rather than dumped into a float it dominates. So the
+ * exit-impact haircut comes off, and nothing else does:
+ *
+ *     premium = 1 / (1 − exitImpact)      capped so the discount never passes liquidityDiscountMax
+ *
+ * Three properties make this a premium the design can defend rather than a number picked to make
+ * the ending feel like something:
+ *
+ *   • It is EARNED, twice. Reaching the gate is earned, and the size of the premium is set by the
+ *     overhang you were carrying — a founder who held a large share of the float had the most to
+ *     lose to slippage and gets the most back; one who never did gets ~1.00×, correctly.
+ *   • It touches the TOKEN LEG ONLY. §1.4's equity leg stays at 1.0× and the disjoint-legs rule
+ *     (docs/ico-architecture.md §1.2) is untouched — there is still no expression in which a dollar
+ *     of token demand and a dollar of enterprise value are the same dollar.
+ *   • It is BOUNDED by `liquidityDiscountMax`, so it cannot manufacture a discount above the one a
+ *     perfect market would already have given.
+ *
+ * `docs/balance-deep-dive.md` measured §1.4's specified payout — `founderStanding` at 1.0× — and
+ * found it worth **$0.00**, because that is exactly what a still-trading token run already scores.
+ * This is the term that stops the ending being ceremony, and it is measured in the report rather
+ * than asserted.
+ */
+export function networkExitPremium(s: GameState | null | undefined): number {
+  const t = s?.token
+  if (!t) return 1
+  const current = liquidityDiscount(s)
+  if (!(current > 0)) return 1
+  const released = Math.min(marketQualityDiscount(s), TOKEN_SCORING.liquidityDiscountMax)
+  return Math.max(1, released / current)
 }
 
 /**
@@ -119,6 +189,12 @@ export interface FounderStandingOpts {
   exitValue?: number
   /** Applied to the EQUITY LEG ONLY. `fired` halves it — being removed does not halve your tokens. */
   equityMultiplier?: number
+  /**
+   * Slice 7. Applied to the TOKEN LEG ONLY, and used by exactly one caller: the `network` ending,
+   * which passes `networkExitPremium(s)`. Symmetric with `equityMultiplier` and disjoint from it,
+   * so the two legs still cannot contaminate each other.
+   */
+  tokenMultiplier?: number
 }
 
 /**
@@ -134,7 +210,7 @@ export interface FounderStandingOpts {
 export function founderStanding(s: GameState, opts: FounderStandingOpts = {}): number {
   const base = opts.exitValue ?? valuation(s)
   const equityLeg = base * s.founderEquity * (opts.equityMultiplier ?? 1)
-  return equityLeg + realisableTokenValue(s) + s.bankedPayout
+  return equityLeg + realisableTokenValue(s) * (opts.tokenMultiplier ?? 1) + s.bankedPayout
 }
 
 // ---------- readouts for the UI and the postmortem ----------
@@ -168,5 +244,5 @@ export function standingBreakdown(s: GameState): TokenStandingBreakdown {
 export function syncFounderVested(s: GameState, t: TokenState): void {
   const terms = VESTING_TERMS[t.plan.vesting] ?? VESTING_TERMS.standard
   const elapsed = s.week - t.launchWeek
-  t.founder.vested = elapsed < terms.cliffWeeks ? 0 : Math.max(0, (t.founder.granted - t.founder.sold) * clamp01(elapsed / terms.durationWeeks))
+  t.founder.vested = elapsed < terms.cliffWeeks ? 0 : Math.max(0, t.founder.granted * clamp01(elapsed / terms.durationWeeks) - t.founder.sold)
 }

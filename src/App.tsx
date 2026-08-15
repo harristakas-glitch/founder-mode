@@ -53,6 +53,10 @@ import { PMF_CAUSAL_CHAIN } from './CareerUI'
 import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
 import { GAME_URL, endingEmoji, sectorAccent } from './theme'
+import { TOKEN_ENDING_FACES } from './game/token/endings'
+import { standingBreakdown, networkExitPremium } from './game/token/scoring'
+import { organicShare } from './game/token/users'
+import type { GameState } from './game/types'
 
 const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -866,6 +870,102 @@ function ResultCta({ label }: { label: string }) {
   )
 }
 
+/**
+ * ICO Slice 7. A tokenised run's ending has to read differently from an equity run's, because it IS
+ * different: the score is two disjoint legs rather than one, most of the company is owned by people
+ * who never signed anything, and the token did something over a hundred weeks that a single closing
+ * number cannot show.
+ *
+ * Everything here is a pure read of the finished save — `standingBreakdown` is the same function the
+ * live dashboard uses, so the postmortem and the run cannot disagree about what the founder is worth.
+ * Renders nothing at all on an institutional run, which is what keeps this invisible to every
+ * traditional ending.
+ */
+function TokenPostmortem() {
+  const game = useStore((s) => s.game)
+  const t = game?.token
+  if (!game || !t) return null
+  const b = standingBreakdown(game)
+  const network = go2Premium(game)
+  const launch = t.market.launchPrice > 0 ? t.market.price / t.market.launchPrice : 0
+  const communityShare = t.supply.total > 0 ? t.supply.circulating / t.supply.total : 0
+  const pct = (v: number) => `${Math.round(v * 100)}%`
+
+  return (
+    <div className="mt-6 rounded-2xl border border-line bg-surface2/50 p-4 text-left">
+      <div className="text-[11px] font-semibold tracking-wide text-mut uppercase">The token run</div>
+
+      <div className="mt-2.5 text-[13px] leading-relaxed text-mut">
+        Your score is two things that were never the same thing. The equity leg is what you still own of the{' '}
+        <b className="text-ink">company</b>; the token leg is what your position in the <b className="text-ink">network</b> could
+        actually be sold for. They are never added to each other before this line.
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-3">
+        <div>
+          <div className="text-lg font-extrabold tnum">{money(b.equityLeg)}</div>
+          <div className="text-[11px] text-mut">Equity leg · {pct(game.founderEquity)} of the company</div>
+        </div>
+        <div>
+          <div className="text-lg font-extrabold tnum">{money(b.tokenLeg * network)}</div>
+          <div className="text-[11px] text-mut">
+            Token leg · {Math.round(b.vestedTokens).toLocaleString()} vested at {pct(b.liquidityDiscount * network)} realisable
+          </div>
+        </div>
+        <div>
+          <div className="text-lg font-extrabold tnum">{money(b.banked)}</div>
+          <div className="text-[11px] text-mut">Banked · already yours, whatever happened</div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <div>
+          <div className="text-lg font-extrabold tnum">{money(b.networkValue)}</div>
+          <div className="text-[11px] text-mut">Network value · price × float, never your money</div>
+        </div>
+        <div>
+          <div className="text-lg font-extrabold tnum">{launch > 0 ? `${launch.toFixed(2)}×` : '—'}</div>
+          <div className="text-[11px] text-mut">The token, against its launch price</div>
+        </div>
+        <div>
+          <div className="text-lg font-extrabold tnum">{t.community.holders.toLocaleString()}</div>
+          <div className="text-[11px] text-mut">Holders · {pct(communityShare)} of supply in the float</div>
+        </div>
+      </div>
+
+      <div className="mt-3.5 text-xs leading-relaxed text-mut">
+        The community ended holding <b className="text-ink">{pct(communityShare)}</b> of everything ever minted, at{' '}
+        <b className="text-ink tnum">{Math.round(t.community.trust)}</b> trust and{' '}
+        <b className="text-ink tnum">{Math.round(t.community.decentralisation)}</b> decentralisation — you kept{' '}
+        <b className="text-ink tnum">{Math.round(t.community.founderInfluence)}</b> of the influence.{' '}
+        <b className="text-ink">{pct(organicShare(game))}</b> of your users arrived on their own rather than being paid to;{' '}
+        real utility closed at <b className="text-ink tnum">{Math.round(t.market.utility)}</b> against speculation of{' '}
+        <b className="text-ink tnum">{Math.round(t.market.speculation)}</b>.
+        {t.founder.sold > 0 && (
+          <>
+            {' '}
+            You sold <b className="text-ink tnum">{Math.round(t.founder.sold).toLocaleString()}</b> of your own tokens along the way,
+            for <b className="text-ink">{money(t.founder.realisedProceeds)}</b> — that money is in the banked column and nothing that
+            happened afterwards could take it back.
+          </>
+        )}
+        {network > 1.001 && (
+          <>
+            {' '}
+            The network ending paid your token leg at a <b className="text-ink tnum">{network.toFixed(2)}×</b> exit premium: reaching
+            it is the statement that your position clears into the market rather than being dumped into a float you dominate.
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The exit premium the ending actually applied — 1 on every ending that is not `network`. */
+function go2Premium(game: GameState): number {
+  return game.gameOver?.type === 'network' ? networkExitPremium(game) : 1
+}
+
 function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame, setScreen } = useStore()
   const dialogRef = useDialog(onClose)
@@ -947,6 +1047,19 @@ function GameOver({ onClose }: { onClose: () => void }) {
             <p className="text-mut">From $200k and an empty office to a ticker symbol. Founder Mode: completed.</p>
           </>
         )}
+        {go.type === 'network' && (
+          <>
+            <h2 className="text-3xl font-extrabold">
+              🕸 {TOKEN_ENDING_FACES[go.tokenEnding ?? 'self_sustaining_protocol'].name}
+            </h2>
+            <p className="mt-3 leading-relaxed text-mut">
+              Week {go.week}: the network {game.companyName} started stopped needing it. Nobody rang a bell and nobody wired you a
+              number — it cleared its own bar and held it for six straight weeks. Your standing:
+            </p>
+            <div className="my-3 text-4xl font-extrabold text-good tnum">{money(go.payout ?? 0)}</div>
+            <p className="text-mut">{go.detail ?? TOKEN_ENDING_FACES[go.tokenEnding ?? 'self_sustaining_protocol'].line}</p>
+          </>
+        )}
         {go.type === 'timeup' && (
           <>
             <h2 className="text-3xl font-extrabold">⏱ Time's up — challenge complete</h2>
@@ -966,6 +1079,8 @@ function GameOver({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
+
+        <TokenPostmortem />
 
         {replay && (
           <div

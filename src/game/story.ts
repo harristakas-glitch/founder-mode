@@ -354,7 +354,16 @@ function addTokenBeats(s: GameState, add: Add): void {
     } else if (type === 'treasury_sale' && numOr(md.proceeds, 0) > 0) {
       add(w, `The treasury sells into its own market — $${Math.round(numOr(md.proceeds, 0)).toLocaleString('en-US')} raised, and the community saw who sold.`, 'neutral', 48)
     } else if (type === 'founder_sale') {
-      add(w, 'You sell from your own position. The chain is public; so is the reaction.', 'neutral', 50)
+      // ICO Slice 7 gave this entry a producer (§42, token/founder.ts); the sentence now quotes it.
+      const proceeds = numOr(md.proceeds, 0)
+      add(
+        w,
+        proceeds > 0
+          ? `You sell from your own position — $${Math.round(proceeds).toLocaleString('en-US')} into your personal account. The chain is public; so is the reaction.`
+          : 'You sell from your own position. The chain is public; so is the reaction.',
+        'neutral',
+        Math.min(70, 50 + importance / 5),
+      )
     } else if (type === 'unlock') {
       add(w, 'A vesting unlock hits the float — supply pressure, on a schedule you chose at launch.', 'neutral', 34)
     } else if (type === 'governance_vote') {
@@ -365,8 +374,16 @@ function addTokenBeats(s: GameState, add: Add): void {
       add(w, `Holders leave in numbers, and they sell on the way out — trust down at ${Math.round(numOr(md.trust, 0))}.`, 'bad', 70)
     } else if (type === 'community_milestone' && str(md.kind) === 'pressure') {
       add(w, 'The community starts asking, loudly, why one person still holds the keys.', 'bad', 44)
+    } else if (type === 'community_milestone' && str(md.kind).startsWith('holders_')) {
+      // ICO Slice 7. The holder milestones the narrative layer records — the community becoming an
+      // institution, in the one unit the game can count.
+      add(w, `${Math.round(numOr(md.holders, 0)).toLocaleString()} people hold the token. Not customers, not investors — an electorate.`, 'good', 44)
     } else if (type === 'utility_milestone') {
       add(w, 'The token is being used for the thing itself — utility, not just a chart.', 'good', 45)
+    } else if (type === 'network_milestone') {
+      // ICO Slice 7. The road to the network ending, marked where it was passed.
+      const nv = numOr(md.networkValue, 0)
+      add(w, `The network passes ${nv >= 1e9 ? `$${(nv / 1e9).toFixed(1)}B` : `$${Math.round(nv / 1e6)}M`} — price times float, decided in public every day.`, 'good', 52)
     }
   }
 }
@@ -397,6 +414,13 @@ const ENDING_TEXT: Record<EndingType, { text: (s: GameState) => string; tone: St
   fired: { text: () => 'The board votes to replace you. You built it, you raised for it, and they showed you the door.', tone: 'bad' },
   ipo: { text: (s) => `${str(s.companyName)} rings the bell. A ticker symbol, confetti on the trading floor.`, tone: 'good' },
   timeup: { text: () => 'The clock runs out — the closing bell of the challenge.', tone: 'neutral' },
+  // ICO Slice 7. The recorded sentence is `gameOver.detail`, written by the ending itself from the
+  // §44 face it wore, so the biography quotes the run rather than re-narrating it — the same rule
+  // the inbox beats above follow.
+  network: {
+    text: (s) => str(s.gameOver?.detail) || `The network ${str(s.companyName)} started outgrew it, and kept running without you holding it together.`,
+    tone: 'good',
+  },
 }
 
 function addEnding(s: GameState, add: Add): void {
