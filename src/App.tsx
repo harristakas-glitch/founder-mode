@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  BookOpen,
   Check,
   ChevronDown,
   ChevronsRight,
@@ -43,6 +44,7 @@ import { Inbox } from './screens/Inbox'
 import { Career } from './screens/Career'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
+import { Story } from './screens/Story'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers } from './runMarkers'
 import { Coach } from './Coach'
@@ -63,6 +65,7 @@ const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolea
   { id: 'market', label: 'Market', icon: Swords },
   { id: 'finance', label: 'Finance', icon: Wallet },
   { id: 'fundraising', label: 'Fundraising', icon: HandCoins },
+  { id: 'story', label: 'Story', icon: BookOpen },
   { id: 'career', label: 'Career', icon: Trophy },
 ]
 
@@ -571,6 +574,12 @@ export default function App() {
               <span className="flex shrink-0 gap-2">
                 <button
                   className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-bold transition-all hover:border-accent"
+                  onClick={() => setScreen('story')}
+                >
+                  Read the story
+                </button>
+                <button
+                  className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-bold transition-all hover:border-accent"
                   onClick={() => setResultsClosed(false)}
                 >
                   View results
@@ -609,6 +618,7 @@ export default function App() {
             {screen === 'career' && <Career />}
             {screen === 'discovery' && <Discovery />}
             {screen === 'cohorts' && <CohortAnalytics />}
+            {screen === 'story' && <Story />}
           </div>
         </main>
 
@@ -856,7 +866,7 @@ function ResultCta({ label }: { label: string }) {
 }
 
 function GameOver({ onClose }: { onClose: () => void }) {
-  const { game, abandonGame } = useStore()
+  const { game, abandonGame, setScreen } = useStore()
   const dialogRef = useDialog(onClose)
   if (!game?.gameOver) return null
   const go = game.gameOver
@@ -993,6 +1003,16 @@ function GameOver({ onClose }: { onClose: () => void }) {
               </span>
             ))}
           </div>
+          {/* the full biography: every recorded beat, chaptered — the chart above is its sketch */}
+          <button
+            className="mt-2.5 w-full rounded-lg border border-line2 px-3 py-2 text-[13px] font-semibold transition-colors hover:border-accent hover:text-ink"
+            onClick={() => {
+              setScreen('story')
+              onClose()
+            }}
+          >
+            📖 Read the story of this company →
+          </button>
         </div>
 
         <div className="mt-6 flex flex-wrap justify-center gap-3">
