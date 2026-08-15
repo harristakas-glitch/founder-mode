@@ -12,15 +12,48 @@ import {
   effectiveTam,
   marketSaturation,
   canConcedePriceWar,
+  hostileRivals,
+  raidMagnitude,
+  rivalMarketShare,
+  rivalRaidLeverage,
+  rivalStance,
   rivalValuation,
   shieldCost,
   valuation,
+  type RivalStance,
 } from '../game/engine'
 import { CONCEDE_USER_SHARE } from '../game/pvp'
 import { hasCapability } from '../game/modes'
 import { SegmentHealth } from '../CareerUI'
 import { hasForfeited, myId } from '../net/online'
 import { useStore } from '../store'
+
+/**
+ * What a rival's posture looks like on the board.
+ *
+ * The whole fairness case for AI rivals using the attack layer rests on this being visible BEFORE
+ * the attack: `rivalAggressionStep` also gives one week of public notice in the inbox, but a
+ * message scrolls away and a badge does not. `title` carries `stance.why` — the same sentence the
+ * attack itself will lead with, so the warning and the blow give one account of one decision.
+ */
+const STANCE_STYLE: Record<string, string> = {
+  calm: 'border-line/60 text-mut',
+  watching: 'border-line text-mut',
+  hostile: 'border-bad/50 bg-bad/10 text-bad',
+  cornered: 'border-warn/50 bg-warn/10 text-warn',
+}
+
+function StanceBadge({ stance }: { stance: RivalStance }) {
+  return (
+    <span
+      title={stance.why}
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${STANCE_STYLE[stance.id] ?? STANCE_STYLE.calm}`}
+    >
+      {stance.attack ? '⚠ ' : ''}
+      {stance.label}
+    </span>
+  )
+}
 
 export function Market() {
   const game = useStore((s) => s.game)!
@@ -48,6 +81,7 @@ export function Market() {
           // still in the match, just not visible on the wire this instant
           absent: !isMe && !!p.absent && !hasForfeited(p),
           gone: !isMe && hasForfeited(p),
+          stance: null as RivalStance | null, // human founders announce themselves by attacking
         }
       })
     : [
@@ -65,6 +99,7 @@ export function Market() {
           pmf: undefined as number | undefined,
           absent: false,
           gone: false,
+          stance: null as RivalStance | null,
         },
       ]
 
@@ -84,6 +119,9 @@ export function Market() {
       pmf: undefined as number | undefined,
       absent: false,
       gone: false,
+      // The same function the simulation acts on, not a second reading of it. If the table says
+      // Hostile, a strike is what the engine is about to roll for; if it says Watching, it is not.
+      stance: r.alive ? rivalStance(game, r) : null,
     })),
   ].sort((a, b) => Number(b.alive) - Number(a.alive) || b.users - a.users)
 
@@ -144,7 +182,10 @@ export function Market() {
                       </span>
                     )}
                   </div>
-                  <span className="shrink-0 text-[13px] font-bold tnum">{r.alive ? money(r.val) : '—'}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {r.stance && r.stance.id !== 'calm' && <StanceBadge stance={r.stance} />}
+                    <span className="text-[13px] font-bold tnum">{r.alive ? money(r.val) : '—'}</span>
+                  </span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
                   <span className="text-mut">Stage</span>
@@ -192,6 +233,7 @@ export function Market() {
                     </>
                   )}
                   <Th right>Est. valuation</Th>
+                  {!online && <Th>Posture</Th>}
                   {!online && <Th>Momentum</Th>}
                 </tr>
               </thead>
@@ -220,6 +262,7 @@ export function Market() {
                       </>
                     )}
                     <Td right>{r.alive ? money(r.val) : '—'}</Td>
+                    {!online && <Td>{r.stance ? <StanceBadge stance={r.stance} /> : <span className="text-mut">—</span>}</Td>}
                     {!online && (
                       <Td className="w-[140px]">
                         {r.alive && (
@@ -238,13 +281,16 @@ export function Market() {
           <div className="mt-3 text-xs leading-relaxed text-mut">
             {online
               ? 'Open books: every founder sees everyone’s cash, revenue, and PMF — this is a knife fight under stadium lights, not a mystery novel. Fallen players show their final payout.'
-              : 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
+              : hasCapability(game, 'rivalAggression')
+                ? 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Posture is not: it is read off the same market position, growth and funding gap the rivals themselves act on, so Hostile means a move is coming and Watching means it is not. Rivals raise rounds, ship launches, come for your users and your people, and sometimes die. Their obituaries are good for you.'
+                : 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
           </div>
         </Panel>
       </div>
 
-      {online && hasCapability(game, 'pvpActions') && <PriceWarBanner />}
+      {hasCapability(game, 'pvpActions') || hasCapability(game, 'rivalAggression') ? <PriceWarBanner /> : null}
       {online && hasCapability(game, 'pvpActions') && <PvpOps />}
+      {!online && hasCapability(game, 'rivalAggression') && <RivalOps />}
       {!online && <Acquisitions />}
     </div>
   )
@@ -334,6 +380,93 @@ function PvpOps() {
                     disabled={!gate.ok || game.cash < cost}
                     title={`${a.blurb} Costs ${money(cost)}.`}
                     onClick={() => attackPlayer(p.id, a.id)}
+                  >
+                    {a.emoji} {a.name} · {money(cost)}
+                  </Btn>
+                )
+              })}
+            </span>
+          </div>
+        ))}
+      </Panel>
+    </div>
+  )
+}
+
+/**
+ * The single-player answer to rivals who attack: the same retainer and the same five operations
+ * Arena has, pointed at AI companies. It exists because the alternative is an attack the player
+ * can watch coming and do nothing about, which is noise rather than difficulty.
+ *
+ * The threat line is quantified deliberately. `raidMagnitude × rivalRaidLeverage` is the exact
+ * expression `rivalAggressionStep` will evaluate, so the number shown is the number that lands —
+ * "they could take ~340 of your users" is a decision, "they are hostile" is a mood.
+ */
+function RivalOps() {
+  const game = useStore((s) => s.game)!
+  const attackRival = useStore((s) => s.attackRival)
+  const buyShield = useStore((s) => s.buyShield)
+  const targets = game.rivals.filter((r) => r.alive)
+  if (targets.length === 0) return null
+  const gate = canAttack(game)
+  const shieldGate = canBuyShield(game)
+  const sCost = shieldCost(game)
+  const shielded = (game.flags.shield ?? 0) > 0
+  const threats = hostileRivals(game)
+
+  return (
+    <div className="mt-3.5">
+      <Panel title="⚔️ Competitive response">
+        <div className="mb-2 text-xs leading-relaxed text-mut">
+          Rivals in this market act on what they can see: how much of the market they hold, how fast you are growing, who out-raised
+          whom. A rival that turns on you is flagged <b>Hostile</b> or <b>Cornered</b> in the table above a full week before their first
+          move — that week is the one to spend the retainer in. Every operation here costs cash, drains your energy, and puts your ops
+          team on a 5-week cooldown.
+        </div>
+        {threats.length > 0 && (
+          <div className="mb-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-xs leading-relaxed text-bad">
+            <b>{threats.map((r) => r.name).join(', ')}</b> {threats.length === 1 ? 'is' : 'are'} coming for you.{' '}
+            {threats
+              .filter((r) => rivalStance(game, r).attack === 'raid')
+              .map((r) => `${r.name} could take ~${num(Math.round(raidMagnitude(game.users) * rivalRaidLeverage(rivalMarketShare(game, r))))} of your users in one campaign.`)
+              .join(' ')}
+          </div>
+        )}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2/50 px-3 py-2.5">
+          <span className="text-[13px]">
+            🛡 <b>Crisis retainer</b>{' '}
+            <span className="text-mut">— silently deflects EVERY attack on you for {SHIELD_WEEKS} weeks. Your rivals can&apos;t see it.</span>
+          </span>
+          {shielded ? (
+            <span className="rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-bold text-good">
+              Active — {game.flags.shield} wk left
+            </span>
+          ) : (
+            <Btn
+              variant={threats.length > 0 ? 'primary' : undefined}
+              disabled={!shieldGate.ok || game.cash < sCost}
+              title={shieldGate.reason}
+              onClick={buyShield}
+            >
+              Retain · {money(sCost)}
+            </Btn>
+          )}
+        </div>
+        {!gate.ok && <div className="mb-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{gate.reason}</div>}
+        {targets.map((r) => (
+          <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
+            <span className="text-[13px]">
+              <b>{r.name}</b> <span className="text-mut">· {num(r.users)} users · {pct(rivalMarketShare(game, r), 1)} of the market</span>
+            </span>
+            <span className="flex flex-wrap gap-2">
+              {ATTACKS.map((a) => {
+                const cost = attackCost(game, a.id)
+                return (
+                  <Btn
+                    key={a.id}
+                    disabled={!gate.ok || game.cash < cost}
+                    title={`${a.blurb} Costs ${money(cost)}.`}
+                    onClick={() => attackRival(r.id, a.id)}
                   >
                     {a.emoji} {a.name} · {money(cost)}
                   </Btn>
