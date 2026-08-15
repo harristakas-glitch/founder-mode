@@ -841,16 +841,28 @@ export function openBoardMeeting(
   const topics = boardMeetingTopics([...readWeekFacts(s), ...extraFacts])
   if (topics.length < BOARD_MEETING_MIN_TOPICS) return null
 
-  // Nothing this week's Dashboard panel already said, and nothing the LAST board meeting said —
-  // the same chairs sitting down every quarter is exactly the case where a repeated sentence
-  // reads as a bug rather than as a person having a consistent view.
+  // TWO TIERS OF EXCLUSION, and the split is load-bearing.
+  //
+  //   HARD — what the other chair has already said in THIS meeting. §47's whole format is two
+  //          voices, so one of them borrowing the other's sentence is not a meeting.
+  //   SOFT — what this week's Dashboard panel said, and what the last meeting said. Preferred,
+  //          never enforced: several (topic, direction) pairs have exactly one grounded context
+  //          fragment, so an enforced ban routinely SILENCED the independent director — the panel
+  //          had used the only retention line that week and the second chair simply did not speak.
+  //          A repeated sentence is a blemish; a missing chair is the feature failing to happen.
   const previous = list(world)
     .filter((i) => i.kind === 'board_meeting')
     .sort((a, b) => b.week - a.week)[0]
-  const spoken: string[] = [
+  const soft: string[] = [
     ...(world.advisorPanel?.week === s.week ? world.advisorPanel.opinions.flatMap((o) => o.fragmentIds) : []),
     ...(previous?.lines.flatMap((l) => l.fragmentIds ?? []) ?? []),
   ]
+  const hard: string[] = []
+  // A topic is spoken for once. §47's example is two chairs on two different items — and
+  // mechanically it is also what keeps the second chair from being silenced: several (topic,
+  // direction) pairs have exactly ONE grounded context fragment, so two chairs converging on the
+  // same item left the second with nothing sayable at all.
+  const spokenTopics: string[] = []
   const lines: InteractionLine[] = []
   const characterIds: CharacterId[] = []
 
@@ -859,27 +871,31 @@ export function openBoardMeeting(
     const character =
       world.characters[spec.id] ?? generateCharacter({ seed, ...spec, createdWeek: spec.createdWeek ?? s.week })
     if (character.status === 'departed') continue
-    const pick = chairPick(chair, topics)
+    const pick = chairPick(chair, topics.filter((t) => !spokenTopics.includes(t.topic)))
     if (!pick) continue
-    const composed = composeNarrative({
-      seed,
-      week: s.week,
-      surface: 'board',
-      beatKey: `board_${chair}`,
-      audience: 'advisor',
-      id: narrativeId(s.week, 'board', chair),
-      character,
-      relationship: hasCapability(s, 'relationships') ? relationshipWith(character, s.week) : undefined,
-      tags: [pick.fact.topic, pick.stance, pick.fact.direction < 0 ? 'bad' : 'good', ...(pick.fact.tags ?? [])],
-      slots: { company: s.companyName, ...pick.fact.slots },
-      memory: null,
-      library: ADVISOR_FRAGMENTS,
-      shapes: ADVISOR_SHAPES,
-      exclude: spoken,
-      capabilities: s.capabilities,
-    })
+    const say = (exclude: readonly string[]) =>
+      composeNarrative({
+        seed,
+        week: s.week,
+        surface: 'board',
+        beatKey: `board_${chair}`,
+        audience: 'advisor',
+        id: narrativeId(s.week, 'board', chair),
+        character,
+        relationship: hasCapability(s, 'relationships') ? relationshipWith(character, s.week) : undefined,
+        tags: [pick.fact.topic, pick.stance, pick.fact.direction < 0 ? 'bad' : 'good', ...(pick.fact.tags ?? [])],
+        slots: { company: s.companyName, ...pick.fact.slots },
+        memory: null,
+        library: ADVISOR_FRAGMENTS,
+        shapes: ADVISOR_SHAPES,
+        exclude,
+        capabilities: s.capabilities,
+      })
+    // Soft first; if the preference leaves nothing sayable, fall back to the hard ban alone.
+    const composed = say([...hard, ...soft]) ?? say(hard)
     if (!composed || !composed.subject) continue
-    spoken.push(...composed.fragmentIds)
+    hard.push(...composed.fragmentIds)
+    spokenTopics.push(pick.fact.topic)
     lines.push({
       characterId: character.id,
       speaker: fullName(character),

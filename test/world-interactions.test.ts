@@ -73,6 +73,7 @@ import {
   chooseInteractionOption,
   customerTags,
   interviewRoster,
+  openConversation,
   openInteractions,
   recentInteractions,
 } from '../src/game/world/interactions'
@@ -300,6 +301,29 @@ console.log('\n— §38-§39: the conversation, and the answer that becomes a co
     const snapshot = JSON.stringify(committed.world)
     chooseInteractionOption(committed, room.id, 'hold')
     ok(JSON.stringify(committed.world) === snapshot, 'a closed room cannot be answered again')
+
+    // A CONVERSATION NEEDS A REAL GRIEVANCE. Same state, same week, same cast — the only thing
+    // that changes below is how the person feels about the founder, and that alone decides
+    // whether there is a room at all. A conversation the game cannot point at a reason for is a
+    // conversation this system is not allowed to invent.
+    const clearGap = (x: GameState) => {
+      x.world!.interactions = x.world!.interactions!.filter((r) => r.kind !== 'conversation')
+      return x
+    }
+    const strained = clearGap(structuredClone(s))
+    ok(!!openConversation(strained, strained.world!, 4242), 'the control: with the cast as it is, a room opens')
+
+    // The grievance is HELD CONSTANT and made unmissable (everyone underpaid and unhappy), so the
+    // only thing that differs from the control is how the cast feels about the founder. Without
+    // that, a contented cast is quiet for the trivial reason that it has no topic, and the
+    // assertion would pass with the strain floor deleted.
+    const contented = clearGap(structuredClone(s))
+    for (const e of contented.employees) e.morale = 40
+    for (const id of Object.keys(contented.world!.characters)) {
+      const c = contented.world!.characters[id]
+      c.relationships = c.relationships.map((r) => ({ ...r, trust: 95, respect: 95, alignment: 95, dependence: 95 }))
+    }
+    ok(!openConversation(contented, contented.world!, 4242), 'a contented cast opens nothing, even with a grievance to raise — strain is the fact, not the calendar')
   }
 }
 
@@ -394,10 +418,10 @@ console.log('\n— §46-§47: the board sits down, and the decision is a commitm
       topics.length >= BOARD_MEETING_MIN_TOPICS && topics.length <= BOARD_MEETING_MAX_TOPICS,
       `§46: ${topics.length} topics on the agenda, all read off the week (${topics.join(', ')})`,
     )
-    ok(room.lines.length >= 1, `§47: the room speaks (${room.lines.map((l) => l.role).join(' / ')})`)
+    ok(room.lines.length === 2, `§47: BOTH chairs speak (${room.lines.map((l) => l.role).join(' / ')})`)
     ok(
-      room.lines.length < 2 || room.lines[0].text !== room.lines[1].text,
-      '§47: two chairs, and they can disagree — neither borrows the other\'s sentence',
+      new Set(room.characterIds).size === 2 && room.lines[0].text !== room.lines[1].text,
+      `§47: two chairs, and they can disagree — neither borrows the other's sentence ("${room.lines[0]?.text.slice(0, 46)}…" vs "${room.lines[1]?.text.slice(0, 46)}…")`,
     )
     ok(room.options.map((o) => o.id).join(',') === 'accelerate,maintain,slow', '§47: Accelerate / Maintain / Slow down')
 
