@@ -1,5 +1,5 @@
 export type Role = 'engineer' | 'designer' | 'marketer' | 'sales'
-export type SectorId = 'saas' | 'social' | 'fintech' | 'devtools' | 'ecommerce'
+export type SectorId = 'saas' | 'social' | 'fintech' | 'devtools' | 'ecommerce' | 'aiml'
 export type FounderKind = 'technical' | 'business'
 export type Stage = 'Pre-seed' | 'Seed' | 'Series A' | 'Series B' | 'Series C'
 

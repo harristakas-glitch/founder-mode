@@ -16,6 +16,7 @@ export const SECTOR_ACCENTS: Record<string, [string, string]> = {
   fintech: ['#34d399', '#2dd4bf'],
   devtools: ['#a78bfa', '#818cf8'],
   ecommerce: ['#fbbf24', '#fb923c'],
+  aiml: ['#22d3ee', '#38bdf8'],
 }
 
 /** Accent pair for a sector id, falling back to the house blue for an unknown one. */

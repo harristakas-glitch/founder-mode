@@ -325,7 +325,7 @@ export function report(name: string, runs: Telemetry[]) {
 // measures, instead of keeping a second copy that can silently drift away from it.
 if (process.argv[1]?.endsWith('balance-probe.ts')) {
   const SEEDS = Array.from({ length: 24 }, (_, i) => 11 * (i + 1))
-  const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
+  const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social', 'aiml']
   const picked = ALL.filter((x) => process.argv.includes(x))
   const SECTORS: SectorId[] = process.argv.includes('all') ? ALL : picked.length ? picked : ['saas', 'social']
   const mode = process.argv[2] ?? 'ladder'

@@ -182,6 +182,38 @@ const SECTOR_SEGMENTS: Record<string, SegmentDef[]> = {
       values: ['enterprise_readiness', 'automation'],
     },
   ],
+  aiml: [
+    {
+      id: 'indie_hackers',
+      name: 'Indie AI Hackers',
+      blurb: 'They sign up with an API key at 2am; the side project dies by June.',
+      base: {
+        needIntensity: 62, willingnessToPay: 22, retentionPotential: 36, acquisitionAccessibility: 86,
+        productRequirement: 36, marketSize: 80, competitiveIntensity: 68, salesCycleWeeks: 1, expansionPotential: 14,
+      },
+      values: ['simplicity', 'performance'],
+    },
+    {
+      id: 'ai_startups',
+      name: 'AI Product Startups',
+      blurb: 'Funded, in a hurry, and their bill grows with their traction.',
+      base: {
+        needIntensity: 72, willingnessToPay: 56, retentionPotential: 68, acquisitionAccessibility: 52,
+        productRequirement: 58, marketSize: 46, competitiveIntensity: 60, salesCycleWeeks: 3, expansionPotential: 70,
+      },
+      values: ['performance', 'reliability'],
+    },
+    {
+      id: 'enterprise_ml',
+      name: 'Enterprise ML Platforms',
+      blurb: 'Security review, procurement, a proof of concept — then a contract that pays for the cluster.',
+      base: {
+        needIntensity: 54, willingnessToPay: 90, retentionPotential: 88, acquisitionAccessibility: 16,
+        productRequirement: 86, marketSize: 18, competitiveIntensity: 42, salesCycleWeeks: 11, expansionPotential: 82,
+      },
+      values: ['enterprise_readiness', 'performance'],
+    },
+  ],
 }
 
 export function segmentsForSector(sector: string): SegmentDef[] {

@@ -74,9 +74,9 @@ const exited = (s: GameState) => !!s.gameOver && !failed(s)
 const founderNet = (s: GameState) => s.gameOver?.payout ?? founderStanding(s)
 
 const SEEDS = Array.from({ length: 16 }, (_, i) => 11 * (i + 1))
-const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
+const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social', 'aiml']
 const LABEL: Record<SectorId, string> = {
-  saas: 'B2B SaaS', devtools: 'Dev Tools', ecommerce: 'E-commerce', fintech: 'Fintech', social: 'Social App',
+  saas: 'B2B SaaS', devtools: 'Dev Tools', ecommerce: 'E-commerce', fintech: 'Fintech', social: 'Social App', aiml: 'AI/ML Infra',
 }
 const WEEKS = 90
 
@@ -238,7 +238,9 @@ const SECTIONS: Record<string, (sectors: SectorId[]) => void> = {
   // `arpuPerCustomer`, so this now reports the post-fix margin.
   econ() {
     console.log('\n=== UNIT ECONOMICS — break-even scale vs reachable scale ===')
-    const reached: Record<SectorId, number> = { saas: 1112, devtools: 2284, ecommerce: 3678, fintech: 1368, social: 12414 }
+    // aiml measured the same way as the rest: the calibrated policy's median users at 90wk from
+    // the `quick` section, run at the sector's shipped constants.
+    const reached: Record<SectorId, number> = { saas: 1112, devtools: 2284, ecommerce: 3678, fintech: 1368, social: 12414, aiml: 1121 }
     console.log('  sector       arpu/customer   users for $6k/wk   reached@90wk    verdict')
     for (const id of ALL) {
       const sec = sectorById(id)

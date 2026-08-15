@@ -72,7 +72,7 @@ const padL = (s: string, n: number) => (s.length >= n ? s : ' '.repeat(n - s.len
 
 const PAIRS = Array.from({ length: 40 }, (_, i) => [11 * (i + 1), 11 * (i + 1) + 7] as const)
 const WEEKS = 40
-const SECTOR: SectorId = (process.argv.find((a) => ['saas', 'devtools', 'ecommerce', 'fintech', 'social'].includes(a)) as SectorId) ?? 'saas'
+const SECTOR: SectorId = (process.argv.find((a) => ['saas', 'devtools', 'ecommerce', 'fintech', 'social', 'aiml'].includes(a)) as SectorId) ?? 'saas'
 const CALIBRATED: Allocation = { features: 36, quality: 27, bugs: 17, research: 20, bet: 0 }
 
 // ---------------------------------------------------------------------------------------------

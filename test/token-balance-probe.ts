@@ -432,7 +432,7 @@ function summarise(name: string, runs: RunResult[]): string {
 }
 
 const SEEDS = Array.from({ length: 24 }, (_, i) => 11 * (i + 1))
-const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
+const ALL: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social', 'aiml']
 const picked = ALL.filter((x) => process.argv.includes(x))
 const SECTORS: SectorId[] = process.argv.includes('all') ? ALL : picked.length ? picked : ALL
 

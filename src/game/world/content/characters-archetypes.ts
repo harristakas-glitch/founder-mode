@@ -236,6 +236,7 @@ export const ENV_BY_SECTOR: Record<SectorId, Partial<Record<PreviousEnvironment,
   fintech: { corporate: 0.6, consulting: 0.4, agency: -0.3 },
   devtools: { university: 0.5, startup: 0.5, agency: -0.4 },
   ecommerce: { agency: 0.4, corporate: 0.2, university: -0.3 },
+  aiml: { university: 0.6, startup: 0.3, corporate: 0.2, agency: -0.4 },
 }
 
 export interface BackgroundProfile {

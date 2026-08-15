@@ -360,6 +360,9 @@ export function defaultUtilityModel(s: GameState): TokenUtilityModel {
       return 'rewards'
     case 'saas':
       return 'product_access'
+    case 'aiml':
+      // The token meters compute: product access is the pattern the sector itself invented.
+      return 'product_access'
   }
 }
 

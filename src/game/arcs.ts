@@ -24,7 +24,7 @@ export interface ArcDef {
   stages: Record<string, ArcStageDef>
 }
 
-const b2b = (s: GameState) => s.sector === 'saas' || s.sector === 'devtools' || s.sector === 'fintech'
+const b2b = (s: GameState) => s.sector === 'saas' || s.sector === 'devtools' || s.sector === 'fintech' || s.sector === 'aiml'
 
 export const ARC_DEFS: ArcDef[] = [
   // ---------- the whale pilot: enterprise sales as a saga ----------

@@ -271,7 +271,7 @@ function report(name: string, runs: GameState[]) {
 }
 
 const SEEDS = Array.from({ length: 24 }, (_, i) => 11 * (i + 1))
-const ALL_SECTORS: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social']
+const ALL_SECTORS: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'social', 'aiml']
 const picked = ALL_SECTORS.filter((x) => process.argv.includes(x))
 const SECTORS: SectorId[] = process.argv.includes('all') ? ALL_SECTORS : picked.length ? picked : ['saas', 'fintech']
 

@@ -61,6 +61,25 @@ export const SECTORS: Sector[] = [
     infraCost: 0.05,
     tam: 8_000_000,
   },
+  {
+    id: 'aiml',
+    name: 'AI/ML Infra',
+    blurb: 'Sell shovels in the gold rush — rich contracts, brutal GPU bills.',
+    // Sector character in the ratios: the best revenue per customer in the game, bought with the
+    // worst serving cost in the game. infraCost/arpu is 8% here against 0.4–0.9% everywhere else —
+    // inference is the one COGS line no other sector has, so a low-PMF AI company loses money on
+    // every user it delights (conversion floor 0.25 × arpu × the product term ≈ the infra bill),
+    // where a low-PMF SaaS company merely earns little. Expensive to serve, lucrative when
+    // retained (churn near SaaS once integrated), boom-bust exposed through the hype machinery
+    // acqBase feeds. acqBase 10 stays under careerAcqScale's knee (10/5 = 2 ≤ 5).
+    arpuPerCustomer: 30,
+    acqBase: 10,
+    viral: 0.03,
+    churn: 0.014,
+    perUserVal: 2000,
+    infraCost: 2.4,
+    tam: 1_400_000,
+  },
 ]
 
 // Never throw on an unknown id: sector ids also arrive from the network and from old saves.
@@ -260,7 +279,7 @@ export const EVENTS: EventDef[] = [
     id: 'enterprise-deal',
     weight: 7,
     minWeek: 12,
-    cond: (s) => (s.sector === 'saas' || s.sector === 'devtools' || s.sector === 'fintech') && s.features > 30,
+    cond: (s) => (s.sector === 'saas' || s.sector === 'devtools' || s.sector === 'fintech' || s.sector === 'aiml') && s.features > 30,
     title: 'Enterprise customer knocking',
     body: () =>
       'A Fortune 500 company wants an annual contract — but demands two custom features and a security audit.',
@@ -745,7 +764,7 @@ export const EVENTS: EventDef[] = [
     id: 'investor-intro',
     weight: 6,
     minWeek: 15,
-    cond: (s) => !!s.board && (s.sector === 'saas' || s.sector === 'fintech' || s.sector === 'devtools'),
+    cond: (s) => !!s.board && (s.sector === 'saas' || s.sector === 'fintech' || s.sector === 'devtools' || s.sector === 'aiml'),
     title: 'A warm intro from the board',
     body: () =>
       'One of your investors walks you into their old employer — a logo big enough to anchor your next sales deck.',
@@ -1218,6 +1237,33 @@ export const EVENTS: EventDef[] = [
         label: 'Refund the stuck orders and move on',
         resultText: 'Cheaper this quarter. The one-star reviews mention "never again" with remarkable consistency.',
         effects: { cash: -40_000, users: -0.1, reputation: -8 },
+      },
+    ],
+  },
+  {
+    id: 'cat-frontier-model',
+    weight: 5,
+    minWeek: 30,
+    cond: (s) => s.sector === 'aiml' && s.users > 1_500,
+    title: '🚨 A frontier lab ships it for free',
+    body: () =>
+      'A frontier lab just open-sourced a model that does most of what your paying customers buy from you. ' +
+      'Your churn dashboard is refreshing itself. The market narrative flipped in one afternoon — this is the AI nightmare: ' +
+      'you are only ever one release away from being a feature.',
+    // P5's rule: every yes costs something. Racing costs cash, the roadmap and the team's tank;
+    // repricing keeps the users but marks down every one of them; doing neither is the churn.
+    choices: (s) => [
+      {
+        label: `Emergency fine-tune sprint — beat the free model on YOUR customers' data ($${Math.round(Math.min(120_000, 30_000 + s.users * 12)).toLocaleString()} in compute)`,
+        resultText:
+          'Two weeks of the whole team living in the eval dashboard. The free model is a demo; yours knows the customer. Most stay — exhausted is the new shipped.',
+        effects: { cash: -Math.round(Math.min(120_000, 30_000 + s.users * 12)), users: -0.04, morale: -8, energy: -10, features: -3, reputation: 4 },
+      },
+      {
+        label: 'Hold the line — sell the SLA, the support and the integration',
+        resultText:
+          'You write the "why serious teams still pay" post. The customers who built on you stay; the ones price-shopping GPUs leave with the free model. Hype follows the frontier lab, not you.',
+        effects: { users: -0.11, hype: -14, reputation: -3 },
       },
     ],
   },

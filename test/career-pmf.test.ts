@@ -51,7 +51,7 @@ const t2 = generateAllTruth(4242, 'saas', 'standard')
 ok(JSON.stringify(t1) === JSON.stringify(t2), 'same seed → identical segment truth')
 const t3 = generateAllTruth(9999, 'saas', 'standard')
 ok(JSON.stringify(t1) !== JSON.stringify(t3), 'different seed → different market')
-for (const sector of ['saas', 'social', 'fintech', 'devtools', 'ecommerce']) {
+for (const sector of ['saas', 'social', 'fintech', 'devtools', 'ecommerce', 'aiml']) {
   const segs = segmentsForSector(sector)
   ok(segs.length === 3, `${sector} has three segments`)
 }

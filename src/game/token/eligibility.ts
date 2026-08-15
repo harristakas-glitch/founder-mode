@@ -37,8 +37,8 @@ const clamp01 = (v: number) => clamp(v, 0, 1)
  * strategy are considered. Brief §2's table, mapped onto the five sectors the game has.
  *
  * This is never a gate. A `low` sector can tokenise and win; it just has to prove more first and
- * clears a smaller network at launch. `medium_high` is unused here and reserved for the
- * marketplace sector §2 describes and the game does not yet have.
+ * clears a smaller network at launch. `medium_high` is AI/ML's rung — well-suited, never the
+ * natural best — matching §2's tier below the community-native sectors.
  */
 export function sectorSuitability(sector: SectorId): SectorSuitability {
   switch (sector) {
@@ -57,6 +57,11 @@ export function sectorSuitability(sector: SectorId): SectorSuitability {
     case 'saas':
       // Traditional enterprise economics genuinely fit better.
       return 'low'
+    case 'aiml':
+      // Compute-credit tokens are a real pattern and the developer audience is there — but the
+      // customers are enterprises buying capacity, not a community seeking ownership. Good, never
+      // the natural best: below devtools/social, above everything institutional.
+      return 'medium_high'
   }
 }
 
@@ -269,6 +274,7 @@ const SECTOR_TAM: Record<SectorId, number> = {
   fintech: 3_000_000,
   devtools: 900_000,
   ecommerce: 8_000_000,
+  aiml: 1_400_000,
 }
 
 export interface TokenisationBars {

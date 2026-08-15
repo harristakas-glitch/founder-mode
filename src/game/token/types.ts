@@ -813,7 +813,7 @@ export const TOKEN_INCENTIVES = {
   grantUtilityGain: 14,
   /** §15: "especially strong for Developer Tools, protocol-like companies, platform businesses".
    *  A grants programme in a consumer social app funds people nobody asked for. */
-  grantSectorMultiplier: { devtools: 1.35, saas: 1.15, fintech: 1, ecommerce: 0.85, social: 0.7 } as Record<string, number>,
+  grantSectorMultiplier: { devtools: 1.35, aiml: 1.25, saas: 1.15, fintech: 1, ecommerce: 0.85, social: 0.7 } as Record<string, number>,
   /** §15's "some projects may fail", as a deterministic haircut rather than a roll. The tick draws
    *  exactly one number a week and a conditional draw is how draw-order bugs are born. */
   grantSuccessRate: 0.72,
@@ -887,6 +887,10 @@ export const TOKEN_INCENTIVES = {
     fintech: { marketplace_currency: 1, product_access: 0.8, governance: 0.7, rewards: 0.6, ecosystem_incentive: 0.55 },
     ecommerce: { rewards: 1, marketplace_currency: 0.9, product_access: 0.7, ecosystem_incentive: 0.55, governance: 0.5 },
     social: { rewards: 1, governance: 0.8, ecosystem_incentive: 0.65, product_access: 0.6, marketplace_currency: 0.55 },
+    // Compute credits ARE the product: a token that meters inference is the one crypto pattern
+    // this sector invented for itself. Ecosystem grants fit the developer surface; rewards fit
+    // nothing — nobody farms points from a GPU bill.
+    aiml: { product_access: 1, ecosystem_incentive: 0.85, marketplace_currency: 0.7, governance: 0.6, rewards: 0.5 },
   } as Record<string, Record<string, number>>,
   /** Launch-day utility multiplier across the fit range. The best-matched model for a sector scores
    *  1 and is the DEFAULT, so it multiplies by 1 and changes nothing; every other choice starts the
