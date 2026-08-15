@@ -292,6 +292,14 @@ export interface GameState {
    * Read it through `capitalPath(s)`; readers must tolerate undefined.
    */
   token?: import('./token/types').TokenState
+  /**
+   * Replay verification (src/game/replay.ts): the ordered log of player actions this run has
+   * taken, from which the whole run can be re-simulated and its score checked. Present only on
+   * runs that record one (solo runs started after the feature shipped). Absent = legacy save or
+   * arena run = unverifiable, never an error. User-writable localStorage — always re-validated
+   * through `sanitizeJournal`, never trusted.
+   */
+  journal?: import('./replay').JournalEntry[]
   history: HistoryPoint[]
   gameOver: GameOver | null
 }
