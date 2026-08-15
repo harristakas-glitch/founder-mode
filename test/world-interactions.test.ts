@@ -6,62 +6,93 @@
 // simulation fact. The rooms are content, never causes: flipping the three capabilities moves no
 // simulation byte and adds no inbox message.
 //
-// MUTATION LEDGER — each entry was verified by making the named break and watching the named
-// assertion fail, then reverting. An assertion that cannot fail is not a test. First-pass
-// survivors are recorded, because they are the ledger's whole point.
+// NON-VACUITY. Two controls carry the file. "the control: one funded run reaches all three rooms"
+// proves the gating assertions below are not passing because nothing was ever generated; and
+// `npm run bots` is byte-identical to the pre-phase build while 128 of 144 bot runs organically
+// open rooms (141 interviews, 391 conversations — no bot strategy closes a round in 90 weeks, so
+// board meetings are exercised by this file's funded walkthrough instead).
+//
+// MUTATION LEDGER — each entry was verified by making the named break, running this file, and
+// watching the named assertion fail, then reverting. An assertion that cannot fail is not a test.
+// SURVIVORS ARE RECORDED, because they are the ledger's whole point.
 //
 //   1. answerEvidence drops the politeness term (the `stated` block)
-//                                          → "§43: the polite customer overstates" fails (signal
-//                                            56 vs 56 for the blunt one, byte-equal). SURVIVOR
-//                                            NOTE: the first draft asserted only "a polite
-//                                            customer's signal is above 50", which the segment's
-//                                            own willingnessToPay satisfied on its own — the
-//                                            polite-vs-blunt comparison at IDENTICAL truth is
-//                                            what actually pins the bias.
+//                                          → "§43: politeness alone inflates the answer" fails —
+//                                            signal 50 vs 50, byte-equal. SURVIVOR NOTE: the first
+//                                            draft compared the two ends of a GENERATED room raw
+//                                            and read backwards, because the polite customer and
+//                                            the blunt one also differ in price sensitivity and in
+//                                            who can sign. Cloning one person and changing the one
+//                                            field is what actually pins the bias.
 //   2. answerEvidence drops the budget-authority penalty
-//                                          → "§85: budget authority matters" fails.
+//                                          → "§85: budget authority matters" fails: 0.24 vs 0.24.
 //   3. composeAnswer stops passing the customer's profile tags
-//                                          → "§85: the answer reflects the hidden profile" fails —
-//                                            two opposite customers give the same sentence.
-//   4. askQuestion stops recording evidence  → "§45: evidence is structural" fails.
+//                                          → "everybody in the room answers the question that was
+//                                            asked" and "§45: evidence is structural" fail — with
+//                                            no profile tags a customer whose only eligible line is
+//                                            profile-gated composes nothing and says nothing at all.
+//   4. askQuestion stops recording evidence  → "§45: evidence is structural" (0 results) and the
+//                                            persistence round-trip both fail.
 //   5. conversationCandidate's strain floor removed
-//                                          → "a conversation needs a real grievance" fails: a
-//                                            contented cast opens a room.
+//                                          → "a contented cast opens nothing, even with a grievance
+//                                            to raise" fails. SURVIVOR NOTE: the first draft only
+//                                            healed the relationships, and a contented cast has no
+//                                            topic either — it passed with the floor deleted. The
+//                                            grievance has to be held constant (morale forced to 40)
+//                                            for the assertion to be about strain.
 //   6. answerConversation's `commit` stops calling notePromise
-//                                          → "committing in a room IS a promise, with a deadline"
-//                                            and both settlement assertions fail.
+//                                          → "committing in a room IS a promise, with a deadline",
+//                                            the §77 panel row, and all three settlement
+//                                            assertions fail.
 //   7. interactionPromiseVerdict's headcount branch inverted (>= → <)
-//                                          → "the two hires settle kept when headcount grows" and
-//                                            "…broken when it does not" both fail.
-//   8. interactionPromiseVerdict's steadyCourse branch stops reading `pivots`/focus/pricing
+//                                          → "the two hires settle kept…" and "…broken when the
+//                                            deadline arrives" both fail, and the trust comparison
+//                                            between them inverts.
+//   8. interactionPromiseVerdict's steadyCourse verdict forced to 'holding'
 //                                          → "a pivot inside the quarter breaks it EARLY" fails.
+//                                            SURVIVOR NOTE: zeroing only the `pivots` term survives
+//                                            — the career focus/pricing/segment check catches a
+//                                            refocus on its own, which is the point of reading four
+//                                            facts rather than one.
 //   9. answerConversation stops applying relationship facts (feelFacts gutted)
 //                                          → "the three answers land differently on trust" fails:
-//                                            all three read 45.36, byte-equal.
-//  10. boardMeetingTopics drops the per-chair guarantee
-//                                          → "§47: two chairs, and they can disagree" fails on
-//                                            seed 4242 — the independent director has nothing on
-//                                            the agenda it weighs and sits silent.
-//  11. answerBoardMeeting's `accelerate` promise removed
-//                                          → "§47: Accelerate IS a commitment" and its settlement
-//                                            assertions fail.
-//  12. capability gating — RECORDED SURVIVORS: removing the per-kind gate in
-//      `chooseInteractionOption` alone SURVIVES (a frozen ruleset never OPENED a room, so there is
-//      nothing to answer), and removing the gate on `openConversation` alone also survives while
-//      the other two remain. Removing generateInteractions' three gates together → "a frozen
-//      pre-phase ruleset never opens a room" fails. The pair is deliberate defence in depth.
-//  13. sweepStaleInteractions removed        → "an unanswered room goes cold" fails and the open
-//                                            room count grows without bound.
-//  14. enforceInteractionLimit's open-room protection removed (open rooms shed like settled ones)
+//                                            all three read 40.91, byte-equal.
+//  10. the board meeting's second voice. Three separate breaks, three different failures of
+//      "§47: BOTH chairs speak":
+//        a. per-chair topic exclusivity removed → both chairs pick the loudest item, and several
+//           (topic, direction) pairs have exactly ONE grounded context fragment, so the second
+//           chair has nothing left to say.
+//        b. the soft/hard exclusion fallback removed (`?? say(hard)`) → a Dashboard panel that used
+//           the only retention line that week silences the independent director outright.
+//        c. RECORDED SURVIVOR: removing boardMeetingTopics' per-chair agenda guarantee survives on
+//           seed 4242 now that (a) is in place — the top four by severity already contain something
+//           the independent weighs. It is belt-and-braces for the weeks when they do not.
+//  11. answerBoardMeeting's promise creation removed
+//                                          → "§47: Accelerate IS a commitment", "made to the
+//                                            board, carrying the number", and the Slow-down burn
+//                                            assertion all fail.
+//  12. capability gating, verified one gate at a time:
+//        a. `chooseInteractionOption`'s per-kind gate → "a room left open by a since-revoked
+//           capability cannot be answered" fails.
+//        b. generateInteractions' board gate → "proceduralBoardMeetings off removes exactly
+//           board_meeting" fails.
+//        c. generateInteractions' conversation gate → the equivalent conversation assertion fails.
+//      SURVIVOR NOTE: (a) survived the first draft entirely — the old fixture never closed a round,
+//      so "no board meeting with the capability off" was true because no board existed. The funded
+//      control replaced it.
+//  13. sweepStaleInteractions removed        → "an unanswered room goes cold after 8 weeks" fails.
+//  14. the cap's open-room protection removed (open rooms shed like settled ones)
 //                                          → "an open room is never dropped by the cap" fails.
 //  15. persistence normalizeInteraction drops `chosen`
 //                                          → "the rooms survive a JSON round-trip verbatim" fails.
 //  16. the interview roster stored under `who{i}` removed
-//                                          → "§42: the panel is three named people" fails.
-//  17. story.ts addInteractionBeats removed  → both biography assertions fail.
-//  18. `interaction` removed from the replay registry
-//                                          → "a journaled answer replays to the same room" fails
-//                                            (throws 'unknown replay action').
+//                                          → "§42: the panel is three named people" fails (empty).
+//  17. story.ts's addInteractionBeats removed
+//                                          → "the answer becomes a story beat" fails.
+//  18. the `interaction` key renamed in the replay registry
+//                                          → the journal assertion throws 'unknown replay action'
+//                                            (loudly, twice), and replay.test.ts's action-surface
+//                                            ledger goes red alongside it.
 
 import { acceptTermSheet, advanceWeek, newGame, resolveChoiceOnState } from '../src/game/engine'
 import { applyJournaled, replayRun } from '../src/game/replay'
