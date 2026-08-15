@@ -1,44 +1,30 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
-  acceptTermSheet,
-  acquireRival,
   advanceWeek,
   applyAttackIncoming,
   applyAttackOutgoing,
   buyShield,
   capabilitiesFromLegacyRules,
   migrateLegacySave,
-  applyEffects,
   canStartVenture,
-  drawDebt,
   ipoEligible,
-  marketingMax,
-  killVenture,
   newGame,
   applyConcedeGain,
-  concedePriceWar,
   pickHiringWinner,
   type AttackDef,
-  pitchInvestors,
-  pitchTeam,
-  pivot,
-  repayDebt,
   runwayWeeks,
-  resolveChoiceOnState,
-  sellSecondary,
-  startIPO,
-  sellTokenTreasury,
-  setGovernanceStance,
-  defyGovernance,
-  setTokenIncentives,
-  tokeniseCompany,
-  takeVacation,
-  startVenture,
   totalUsers,
   uid,
   valuation,
 } from './game/engine'
+// Replay verification: every simulation-mutating player action goes through `applyJournaled`,
+// which journals the action and applies it via the registry in ./game/replay — the same code a
+// replay executes. The store keeps its guards, sounds and network side effects; it no longer
+// owns any mutation logic of its own, which is what makes the journal's coverage a property of
+// the architecture rather than of discipline.
+import { applyJournaled, sanitizeJournal } from './game/replay'
+import { recordReplayProof } from './net/replayProof'
 import { sfx } from './sound'
 import { checkAchievements } from './game/achievements'
 import { submitDailyScore } from './net/leaderboard'
@@ -55,8 +41,7 @@ function awardAchievements(g: GameState) {
   }
 }
 import { SECTORS, sectorById } from './game/data'
-import { addJournal, canRunExperiment, experimentDef, segmentDef, startExperiment } from './game/career/pmf'
-import { repositionTo } from './game/career/tick'
+import { canRunExperiment } from './game/career/pmf'
 import { migrateLivingWorldSlice } from './game/world/persistence'
 import { migrateTokenSlice } from './game/token/persistence'
 import type { LaunchDraft } from './game/token/launch'
@@ -190,7 +175,15 @@ function recordRun(g: GameState) {
   // Brief §30: leaderboard availability is a CAPABILITY, not a format check. The label is
   // still parsed for the challenge number, but the capability decides whether we submit.
   const daily = g.challenge?.label.match(/^Daily #(\d+)/)
-  if (daily && hasCapability(g, 'leaderboard'))
+  if (daily && hasCapability(g, 'leaderboard')) {
+    // The leaderboard schema has no column for a decision log yet (schema work is out of scope),
+    // so the proof rides locally: the run's journal, header and fingerprint are stored on this
+    // device, marked verifiable, ready for a future submission path that can carry them.
+    try {
+      recordReplayProof(g, Number(daily[1]))
+    } catch {
+      // the proof is decoration on top of the score — it must never break the results screen
+    }
     void submitDailyScore(Number(daily[1]), {
       company: g.companyName,
       score,
@@ -198,6 +191,7 @@ function recordRun(g: GameState) {
       ending: g.gameOver.type,
       display_name: useStore.getState().authUser?.name ?? null,
     })
+  }
 }
 
 // ---------- daily challenge ----------
@@ -218,8 +212,6 @@ export interface NewGameSetup {
   founder: FounderKind
   scenario?: string
 }
-
-const clampSpend = (v: number, max: number) => Math.min(max, Math.max(0, Math.round(v)))
 
 export const MATCH_CAP = 104 // weeks in a capped run (daily & online matches)
 const CATCH_UP_LIMIT = 120 // most weeks we'll ever replay in one go to rejoin a room
@@ -721,12 +713,16 @@ export const useStore = create<Store>()(
             seed: daily ? info.seed : Math.floor(Math.random() * 2 ** 31),
           }
           const rules = resolveGameRules(config)
+          const g = newGame(setup.name || 'Untitled Inc.', sector, setup.founder, {
+            config,
+            challenge: rules.maxTurns ? { label: daily ? `Daily #${info.id}` : 'Capped run', cap: rules.maxTurns } : null,
+            scenario: config.scenario,
+          })
+          // Replay verification: solo runs record their decision log from week 1. Arena games are
+          // built in onStart instead and never journal — peer inputs are not in any local log.
+          g.journal = []
           set({
-            game: newGame(setup.name || 'Untitled Inc.', sector, setup.founder, {
-              config,
-              challenge: rules.maxTurns ? { label: daily ? `Daily #${info.id}` : 'Capped run', cap: rules.maxTurns } : null,
-              scenario: config.scenario,
-            }),
+            game: g,
             online: null,
             screen: 'dashboard',
           })
@@ -742,7 +738,7 @@ export const useStore = create<Store>()(
           if (!game) return
           if (!online) {
             if (game.gameOver) return
-            const next = advanceWeek(game)
+            const { state: next } = applyJournaled(game, 'advance')
             if (next.gameOver) recordRun(next)
             weekSounds(next)
             awardAchievements(next)
@@ -965,59 +961,40 @@ export const useStore = create<Store>()(
             return
           }
 
-          const game = structuredClone(g)
-          game.candidates = game.candidates.filter((x) => x.id !== candidateId)
-          game.offersOut.push(c)
-          game.flash = `Offer sent to ${c.name}. They'll answer when you advance the week — candidates get cold feet when your runway is under ~10 weeks.`
-          set({ game })
+          set({ game: applyJournaled(g, 'send_offer', { i: g.candidates.indexOf(c) }).state })
         },
 
         fire: (employeeId) => {
           const g = get().game
           if (!g) return
-          const e = g.employees.find((x) => x.id === employeeId)
-          if (!e) return
-          const game = structuredClone(g)
-          game.employees = game.employees.filter((x) => x.id !== employeeId)
-          game.cash -= Math.round(e.salary / 12) // one month severance
-          applyEffects(game, { morale: -8 })
-          game.inbox.unshift({
-            id: uid(),
-            week: game.week,
-            kind: 'system',
-            title: `${e.name} was let go`,
-            body: `You paid one month of severance ($${Math.round(e.salary / 12).toLocaleString()}). The team is rattled.`,
-          })
-          set({ game })
+          const i = g.employees.findIndex((x) => x.id === employeeId)
+          if (i < 0) return
+          set({ game: applyJournaled(g, 'fire', { i }).state })
         },
 
         giveRaise: (employeeId) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          const e = game.employees.find((x) => x.id === employeeId)
-          if (!e) return
-          e.salary = Math.round((e.salary * 1.1) / 1000) * 1000
-          e.morale = Math.min(100, e.morale + 12)
-          set({ game })
+          const i = g.employees.findIndex((x) => x.id === employeeId)
+          if (i < 0) return
+          set({ game: applyJournaled(g, 'raise', { i }).state })
         },
 
         doPivot: () => {
           const g = get().game
           if (!g || g.gameOver) return
-          const game = structuredClone(g)
-          pivot(game)
+          const { state } = applyJournaled(g, 'pivot')
           sfx.pivot()
-          set({ game })
+          set({ game: state })
         },
 
         // ---- Career: PMF Discovery 2.0 ----
         concedePriceWar: () => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          const lost = concedePriceWar(game)
-          if (lost <= 0) return
+          const { state: game, result } = applyJournaled(g, 'concede_price_war')
+          const lost = typeof result === 'number' ? result : 0
+          if (lost <= 0) return // nothing conceded: the untouched live state stays, clone and journal entry are discarded
           set({ game })
           void pushState(myNetSummary(game))
           // Credit the founder who started it. In single player there is nobody to tell, and the
@@ -1031,14 +1008,9 @@ export const useStore = create<Store>()(
         setExperimentStanding: (experimentId, standing) => {
           const g = get().game
           if (!g?.career) return
-          const game = structuredClone(g)
-          const exp = game.career!.activeExperiments.find((e) => e.id === experimentId)
-          if (!exp) return
-          exp.standing = standing
-          game.flash = standing
-            ? `${experimentDef(exp.type).name} is now a standing study — it will renew itself while the cash lasts.`
-            : `${experimentDef(exp.type).name} will finish and stop.`
-          set({ game })
+          const i = g.career.activeExperiments.findIndex((e) => e.id === experimentId)
+          if (i < 0) return
+          set({ game: applyJournaled(g, 'experiment_standing', { i, st: standing }).state })
         },
 
         runExperiment: (type, segmentId, standing = false) => {
@@ -1049,144 +1021,99 @@ export const useStore = create<Store>()(
             set({ game: { ...g, flash: `Can't run that experiment — ${gate.reason}.` } })
             return
           }
-          const game = structuredClone(g)
-          const def = experimentDef(type)
-          startExperiment(game.career!, game.week, type, segmentId, uid(), standing)
-          game.cash -= def.cashCost
-          const segName = segmentDef(game.sector, segmentId).name
-          addJournal(game.career!, {
-            week: game.week,
-            category: 'experiment',
-            title: `Started: ${def.name} — ${segName}${standing ? ' (standing)' : ''}`,
-            description: def.blurb,
-            relatedSegmentId: segmentId,
-          })
-          game.flash = `🔬 ${def.name} started on ${segName}. Results in ${def.weeks} weeks — research takes time, which is the point.`
+          const { state } = applyJournaled(g, 'run_experiment', { t: type, s: segmentId, st: standing })
           sfx.week()
-          set({ game })
+          set({ game: state })
         },
 
         setTargetSegment: (segmentId) => {
           const g = get().game
           if (!g?.career || g.career.primaryTargetSegmentId === segmentId) return
-          const game = structuredClone(g)
-          repositionTo(game, segmentId, game.week)
+          const { state } = applyJournaled(g, 'target_segment', { s: segmentId })
           sfx.pivot()
-          set({ game })
+          set({ game: state })
         },
 
         setPricing: (p) => {
           const g = get().game
           if (!g?.career || g.career.pricing === p) return
-          const game = structuredClone(g)
-          const from = game.career!.pricing
-          game.career!.pricing = p
-          addJournal(game.career!, {
-            week: game.week,
-            category: 'pricing',
-            title: `Pricing: ${from} → ${p}`,
-            description:
-              p === 'premium'
-                ? 'Asking for more. Fewer will convert; those who do are worth more — if they stay.'
-                : p === 'low'
-                  ? 'Cheaper to say yes to. More customers, thinner economics.'
-                  : 'Priced at the middle of the market.',
-          })
-          game.flash = `💲 Pricing moved to ${p}. Conversion and retention will re-rate over the next few weeks.`
-          set({ game })
+          set({ game: applyJournaled(g, 'pricing', { v: p }).state })
         },
 
         setProductFocus: (f) => {
           const g = get().game
           if (!g?.career || g.career.focus === f) return
-          const game = structuredClone(g)
-          game.career!.focus = f
-          addJournal(game.career!, {
-            week: game.week,
-            category: 'strategy',
-            title: `Product focus: ${f.replace('_', ' ')}`,
-            description: 'What the roadmap optimises for. Segments value these differently.',
-          })
-          game.flash = `🧭 Product now optimised for ${f.replace('_', ' ')}.`
-          set({ game })
+          set({ game: applyJournaled(g, 'focus', { v: f }).state })
         },
 
         fileIPO: () => {
           const g = get().game
           if (!g || !ipoEligible(g)) return
-          const game = structuredClone(g)
-          startIPO(game)
+          const { state } = applyJournaled(g, 'file_ipo')
           sfx.ominous()
-          set({ game })
+          set({ game: state })
         },
 
         startBet: (sector) => {
           const g = get().game
           if (!g || !canStartVenture(g).ok) return
-          const game = structuredClone(g)
-          startVenture(game, sector)
+          const { state } = applyJournaled(g, 'start_bet', { s: sector })
           sfx.milestone()
-          set({ game })
+          set({ game: state })
         },
 
         shelveBet: (ventureId) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          killVenture(game, ventureId)
-          set({ game })
+          set({ game: applyJournaled(g, 'shelve_bet', { i: g.ventures.findIndex((v) => v.id === ventureId) }).state })
         },
 
         buyRival: (rivalId, method) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          if (acquireRival(game, rivalId, method)) sfx.cash()
+          const i = g.rivals.findIndex((r) => r.id === rivalId)
+          const { state, result } = applyJournaled(g, 'buy_rival', { i, m: method })
+          if (result === true) sfx.cash()
           else sfx.ominous()
-          set({ game })
+          set({ game: state })
         },
 
         takeDebt: (amount) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          drawDebt(game, amount)
+          const { state } = applyJournaled(g, 'take_debt', { n: amount })
           sfx.cash()
-          set({ game })
+          set({ game: state })
         },
 
         payDebt: (amount) => {
           const g = get().game
           if (!g || !g.debt) return
-          const game = structuredClone(g)
-          repayDebt(game, amount)
+          const { state } = applyJournaled(g, 'pay_debt', { n: amount })
           sfx.week()
-          set({ game })
+          set({ game: state })
         },
 
         recharge: () => {
           const g = get().game
           if (!g || g.vacationCooldown > 0) return
-          const game = structuredClone(g)
-          takeVacation(game)
+          const { state } = applyJournaled(g, 'recharge')
           sfx.milestone()
-          set({ game })
+          set({ game: state })
         },
 
         doSecondary: () => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          sellSecondary(game)
+          const { state } = applyJournaled(g, 'secondary')
           sfx.cash()
-          set({ game })
+          set({ game: state })
         },
 
         rallyTeam: (style) => {
           const g = get().game
           if (!g || g.pitchCooldown > 0 || g.employees.length === 0) return
-          const game = structuredClone(g)
-          pitchTeam(game, style)
+          const { state: game } = applyJournaled(g, 'rally', { v: style })
           if (game.rally || game.flash?.includes('landed')) sfx.milestone()
           else sfx.ominous()
           set({ game })
@@ -1195,22 +1122,21 @@ export const useStore = create<Store>()(
         setAllocation: (key, value) => {
           const g = get().game
           if (!g) return
-          set({ game: { ...g, allocation: { ...g.allocation, [key]: value } } })
+          set({ game: applyJournaled(g, 'allocation', { k: key, v: value }).state })
         },
 
         setMarketing: (value) => {
           const g = get().game
           if (!g) return
-          const spend = Number.isFinite(value) ? clampSpend(value, marketingMax(g)) : 0
-          set({ game: { ...g, marketingSpend: spend } })
+          set({ game: applyJournaled(g, 'marketing', { v: value }).state })
         },
 
         resolveChoice: (messageId, choiceIndex) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          const wasOver = !!game.gameOver
-          resolveChoiceOnState(game, messageId, choiceIndex)
+          const wasOver = !!g.gameOver
+          const i = g.inbox.findIndex((m) => m.id === messageId)
+          const { state: game } = applyJournaled(g, 'resolve_choice', { i, c: choiceIndex })
           if (!wasOver && game.gameOver) {
             recordRun(game)
             sfx.cash()
@@ -1223,26 +1149,21 @@ export const useStore = create<Store>()(
         pitch: () => {
           const g = get().game
           if (!g || g.raiseCooldown > 0) return
-          const game = structuredClone(g)
-          const { sheets, message } = pitchInvestors(game)
-          game.termSheets = sheets
-          game.inbox.unshift(message)
-          set({ game })
+          set({ game: applyJournaled(g, 'pitch').state })
         },
 
         accept: (sheetId) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          acceptTermSheet(game, sheetId)
+          const { state } = applyJournaled(g, 'accept_sheet', { i: g.termSheets.findIndex((t) => t.id === sheetId) })
           sfx.cash()
-          set({ game })
+          set({ game: state })
         },
 
         decline: (sheetId) => {
           const g = get().game
           if (!g) return
-          set({ game: { ...g, termSheets: g.termSheets.filter((t) => t.id !== sheetId) } })
+          set({ game: applyJournaled(g, 'decline_sheet', { i: g.termSheets.findIndex((t) => t.id === sheetId) }).state })
         },
 
         // ICO brief §3/§4. The fork. The UI has already required an explicit confirmation; this
@@ -1251,11 +1172,10 @@ export const useStore = create<Store>()(
         tokenise: (draft) => {
           const g = get().game
           if (!g) return false
-          const game = structuredClone(g)
-          const result = tokeniseCompany(game, draft)
-          if (!result.ok) return false
+          const { state, result } = applyJournaled(g, 'tokenise', draft ? { d: draft } : undefined)
+          if (!(result as { ok?: boolean } | undefined)?.ok) return false // refused: clone and journal entry discarded together
           sfx.fanfare()
-          set({ game })
+          set({ game: state })
           return true
         },
 
@@ -1266,9 +1186,7 @@ export const useStore = create<Store>()(
         setIncentives: (shares) => {
           const g = get().game
           if (!g) return
-          const game = structuredClone(g)
-          setTokenIncentives(game, shares)
-          set({ game })
+          set({ game: applyJournaled(g, 'incentives', { s: shares }).state })
         },
 
         // ICO Slice 4, brief §6. The token path's fundraising. Re-checks the capability itself
@@ -1276,10 +1194,10 @@ export const useStore = create<Store>()(
         sellTreasury: (tokens) => {
           const g = get().game
           if (!g) return false
-          const game = structuredClone(g)
-          if (!sellTokenTreasury(game, tokens).ok) return false
+          const { state, result } = applyJournaled(g, 'sell_treasury', { n: tokens })
+          if (!(result as { ok?: boolean } | undefined)?.ok) return false
           sfx.cash()
-          set({ game })
+          set({ game: state })
           return true
         },
 
@@ -1289,9 +1207,10 @@ export const useStore = create<Store>()(
         setProposalStance: (proposalId, stance) => {
           const g = get().game
           if (!g) return false
-          const game = structuredClone(g)
-          if (!setGovernanceStance(game, proposalId, stance).ok) return false
-          set({ game })
+          const i = g.token?.governance.proposals.findIndex((p) => p.id === proposalId) ?? -1
+          const { state, result } = applyJournaled(g, 'proposal_stance', { i, v: stance })
+          if (!(result as { ok?: boolean } | undefined)?.ok) return false
+          set({ game: state })
           return true
         },
 
@@ -1300,9 +1219,10 @@ export const useStore = create<Store>()(
         defyMandate: (proposalId) => {
           const g = get().game
           if (!g) return false
-          const game = structuredClone(g)
-          if (!defyGovernance(game, proposalId).ok) return false
-          set({ game })
+          const i = g.token?.governance.mandates.findIndex((m) => m.proposalId === proposalId) ?? -1
+          const { state, result } = applyJournaled(g, 'defy_mandate', { i })
+          if (!(result as { ok?: boolean } | undefined)?.ok) return false
+          set({ game: state })
           return true
         },
       }
@@ -1359,6 +1279,9 @@ export const useStore = create<Store>()(
           // save needs no write at all. A malformed slice is dropped rather than repaired, exactly
           // as the living world's is, because a half-valid economy must never reach the price model.
           g.token = migrateTokenSlice(g.token)
+          // Replay journal: user-writable localStorage, so its shape is re-validated on every
+          // load. Malformed → absent (the run reads as unverifiable), never a crash.
+          g.journal = sanitizeJournal(g.journal)
         }
         return { ...current, ...p }
       },
