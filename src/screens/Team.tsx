@@ -3,6 +3,7 @@ import { Bar, Btn, Panel, RoleAvatar, SkillRing, TraitChip } from '../components
 import { money, pct } from '../format'
 import { pitchOptions, weeklyPayroll } from '../game/engine'
 import { hasCapability } from '../game/modes'
+import { EmployeeConversations } from '../CareerUI'
 import { useStore } from '../store'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -105,6 +106,12 @@ export function Team() {
           </div>
         )}
       </Panel>
+
+      {/* Living World Phase 8 (§38-§39): somebody has raised something specific, and it wants an
+          answer. Above the all-hands and the roster on purpose — a pitch to the whole company is
+          worth less than the one conversation you have been avoiding. Renders null without the
+          capability, so Quick Play and Arena never see it. */}
+      <EmployeeConversations />
 
       {game.employees.length > 0 && <PitchPanel />}
 

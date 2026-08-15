@@ -23,7 +23,14 @@ import {
 import type { PricingStrategy, ProductFocus, SegmentTruth } from './game/career/types'
 import { hasCapability } from './game/modes'
 import { commitmentLedger, type CommitmentStatus } from './game/world/promises'
+import {
+  INTERVIEW_STALE_HINT,
+  interviewRoster,
+  recentInteractions,
+  reliabilityBand,
+} from './game/world/interactions'
 import type { GameState } from './game/types'
+import type { InteractionKind, StructuredInteraction } from './game/world/types'
 import { useStore } from './store'
 
 /** The causal chain, in one line. Used on the Dashboard and as the topbar PMF tooltip. */
@@ -768,6 +775,200 @@ const COMMITMENT_BADGE: Record<CommitmentStatus, { label: string; cls: string }>
   kept: { label: 'Kept', cls: 'border-good/60 text-good' },
   broken: { label: 'Broken', cls: 'border-warn/60 text-warn' },
   expired: { label: 'Lapsed', cls: 'border-line2 text-mut' },
+}
+
+// ---------------------------------------------------------------------------------------
+// 7. Structured interactions — Living World Phase 8 (§38-§39, §41-§45, §46-§47; UI §74)
+//
+// Three rooms, three surfaces, deliberately not all on the Dashboard: §74 asks for progressive
+// disclosure, so the interview sits beside the study that produced it (Discovery), the
+// conversation sits beside the person having it (Team), and the board meeting sits beside the
+// board's own commitments (Dashboard). Each one renders nothing without its capability.
+//
+// Everything shown was composed once, when the room opened, and persisted (§68). These components
+// only render and dispatch; they never compose, and they never read a hidden number — §42 is
+// explicit that a customer's real willingness to pay stays hidden, so what the interview shows is
+// the reliability BAND of what was heard, never the signal behind it.
+// ---------------------------------------------------------------------------------------
+
+/** The room's own count of what has been said, so the panel headers do not each re-derive it. */
+function useRooms(kind: InteractionKind, limit = 2): StructuredInteraction[] {
+  const game = useStore((s) => s.game)
+  if (!game) return []
+  return recentInteractions(game, kind, limit)
+}
+
+function Speech({ room }: { room: StructuredInteraction }) {
+  if (room.lines.length === 0) return null
+  return (
+    <div className="space-y-2">
+      {room.lines.map((l, i) => (
+        <div key={i}>
+          <div className="text-[11.5px] text-mut">
+            <b className="text-ink">{l.speaker}</b>
+            {l.role ? ` · ${l.role}` : ''}
+          </div>
+          {l.text.split('\n\n').map((para, j) => (
+            <p key={j} className="text-[13px] leading-snug">
+              {para}
+            </p>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Answers({ room }: { room: StructuredInteraction }) {
+  const answer = useStore((s) => s.answerInteraction)
+  if (room.status !== 'open') return null
+  return (
+    <div className="mt-2.5 space-y-1.5">
+      {room.options
+        .filter((o) => !room.chosen.includes(o.id))
+        .map((o) => (
+          <button
+            key={o.id}
+            className="block w-full rounded-xl border border-line2 px-3 py-2 text-left transition-colors hover:border-accent hover:bg-surface2/60"
+            onClick={() => answer(room.id, o.id)}
+          >
+            <span className="text-[13px] font-semibold">{o.label}</span>
+            {o.detail && <span className="block text-[11.5px] leading-snug text-mut">{o.detail}</span>}
+          </button>
+        ))}
+    </div>
+  )
+}
+
+function Outcome({ room }: { room: StructuredInteraction }) {
+  if (!room.outcome) return null
+  return (
+    <div className="mt-2.5 rounded-lg border border-line/60 bg-surface2/40 px-3 py-2 text-[12.5px] leading-snug">{room.outcome}</div>
+  )
+}
+
+/**
+ * §41-§45. The eight questions, a budget that makes choosing between them a decision, and — the
+ * point of the whole thing — what each answer was actually WORTH beside what it said.
+ */
+export function CustomerInterview() {
+  const rooms = useRooms('interview', 2)
+  if (rooms.length === 0) return null
+
+  return (
+    <div className="mt-3.5 space-y-3.5">
+      {rooms.map((room) => {
+        const roster = interviewRoster(room)
+        // §45: the engine produced these; the panel bands them. Grouped per question asked, in the
+        // order the founder asked them, so the ladder from "when did it last happen" (recalled
+        // behaviour) down to "would you pay" (a hypothesis) is visible rather than asserted.
+        const perQuestion = room.chosen.map((qid, i) => {
+          const slice = (room.evidence ?? []).slice(i * roster.length, (i + 1) * roster.length)
+          const avg = slice.length ? slice.reduce((a, e) => a + e.reliability, 0) / slice.length : 0
+          return { qid, label: room.options.find((o) => o.id === qid)?.label ?? qid, band: reliabilityBand(avg) }
+        })
+        const bandTone: Record<string, string> = {
+          anecdote: 'text-bad',
+          weak: 'text-bad',
+          mixed: 'text-warn',
+          solid: 'text-good',
+        }
+        return (
+          <Panel key={room.id} title={room.title}>
+            <div className="text-[12px] text-mut">
+              Week {room.week} · {roster.map((r) => `${r.name} (${r.role})`).join(' · ')}
+            </div>
+            {room.status === 'open' && (
+              <div className="mt-1 text-[12px] text-mut">
+                <b className="text-ink">{room.movesLeft}</b> question{room.movesLeft === 1 ? '' : 's'} left. {INTERVIEW_STALE_HINT}
+              </div>
+            )}
+
+            <div className="mt-2.5 space-y-3">
+              {room.chosen.map((qid) => (
+                <div key={qid}>
+                  <div className="text-[12.5px] font-semibold text-mut">
+                    You: {room.options.find((o) => o.id === qid)?.label}
+                  </div>
+                  <div className="mt-1 space-y-1.5 border-l-2 border-line/60 pl-2.5">
+                    {room.lines
+                      .filter((l) => l.optionId === qid)
+                      .map((l, i) => (
+                        <div key={i}>
+                          <span className="text-[12px] text-mut">{l.speaker}: </span>
+                          <span className="text-[13px] leading-snug">{l.text}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Answers room={room} />
+
+            {perQuestion.length > 0 && (
+              <div className="mt-2.5 border-t border-line/60 pt-2">
+                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.09em] text-mut">What each answer was worth</div>
+                {perQuestion.map((q) => (
+                  <div key={q.qid} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                    <span className="min-w-0 truncate text-mut">{q.label}</span>
+                    <b className={`shrink-0 ${bandTone[q.band]}`}>{q.band}</b>
+                  </div>
+                ))}
+                <div className="mt-1.5 text-[11.5px] leading-snug text-mut">
+                  Recalled behaviour is evidence. Stated intent is a wish with a person attached to it — and somebody who cannot sign a
+                  purchase order cannot tell you whether you have a business.
+                </div>
+              </div>
+            )}
+            <Outcome room={room} />
+          </Panel>
+        )
+      })}
+    </div>
+  )
+}
+
+/** §38-§39. Somebody raises something specific, and you have to say something back. */
+export function EmployeeConversations() {
+  const rooms = useRooms('conversation', 2)
+  if (rooms.length === 0) return null
+  return (
+    <div className="mt-3.5 space-y-3.5">
+      {rooms.map((room) => (
+        <Panel key={room.id} title={room.title}>
+          <div className="mb-2 text-[12px] text-mut">Week {room.week}</div>
+          <Speech room={room} />
+          <Answers room={room} />
+          <Outcome room={room} />
+          {room.status === 'open' && (
+            <div className="mt-2 text-[11.5px] leading-snug text-mut">
+              A commitment here goes on the ledger with a deadline, and it is settled by what the company actually does — not by how you
+              meant it.
+            </div>
+          )}
+        </Panel>
+      ))}
+    </div>
+  )
+}
+
+/** §46-§47. Two chairs, the same week, different weights — and one decision from you. */
+export function BoardMeeting() {
+  const rooms = useRooms('board_meeting', 1)
+  if (rooms.length === 0) return null
+  return (
+    <div className="mt-3.5 space-y-3.5">
+      {rooms.map((room) => (
+        <Panel key={room.id} title={room.title}>
+          <div className="mb-2 text-[12px] text-mut">Week {room.week} · founder decision</div>
+          <Speech room={room} />
+          <Answers room={room} />
+          <Outcome room={room} />
+        </Panel>
+      ))}
+    </div>
+  )
 }
 
 export function Commitments() {

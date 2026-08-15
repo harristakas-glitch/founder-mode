@@ -19,7 +19,7 @@ import {
   totalCustomers,
 } from '../game/career/pmf'
 import type { ExperimentType, SegmentId } from '../game/career/types'
-import { PMF_CAUSAL_CHAIN, PmfBreakdown, SegmentHealth } from '../CareerUI'
+import { CustomerInterview, PMF_CAUSAL_CHAIN, PmfBreakdown, SegmentHealth } from '../CareerUI'
 import { useStore } from '../store'
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -330,6 +330,11 @@ export function Discovery() {
           </div>
         </Panel>
       </div>
+
+      {/* Living World Phase 8 (§41-§45): the human face of the interview study that just landed —
+          eight questions, a budget, and three people with hidden biases. Sits directly under the
+          experiment catalogue that produced it. Renders null without the capability. */}
+      <CustomerInterview />
 
       {/* hypothesis board */}
       <div className="mt-3.5">

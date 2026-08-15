@@ -17,7 +17,8 @@ import {
   valuation,
   weeklyBurn,
 } from '../game/engine'
-import { Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { openInteractions } from '../game/world/interactions'
 import { PMF_LABEL, segmentSnapshots } from '../game/career/pmf'
 import { useStore } from '../store'
 
@@ -116,6 +117,22 @@ function attentionItems(game: ReturnType<typeof useStore.getState>['game']): Att
 
   if (hasPendingDecision(game))
     out.push({ tone: 'bad', text: 'A decision is blocking the week.', action: { label: 'Open Inbox', screen: 'inbox' } })
+  // Living World Phase 8. The rooms live on three different screens (§74's progressive
+  // disclosure), so the strip is what stops an unanswered one going unnoticed — and it names the
+  // ONE that is closest to going cold, because a queue of nudges is not a nudge.
+  for (const room of openInteractions(game.world)) {
+    if (room.kind === 'conversation')
+      out.push({ tone: 'warn', text: `${room.title}.`, action: { label: 'Team', screen: 'team' } })
+    else if (room.kind === 'board_meeting')
+      out.push({ tone: 'warn', text: 'The board is waiting on a decision from you.', action: { label: 'Read the room', screen: 'dashboard' } })
+    else
+      out.push({
+        tone: 'good',
+        text: `${room.movesLeft} interview question${room.movesLeft === 1 ? '' : 's'} left — the calls are still running.`,
+        action: { label: 'Discovery', screen: 'discovery' },
+      })
+    break
+  }
   if (runway !== Infinity && runway < 12)
     out.push({
       tone: 'bad',
@@ -321,6 +338,10 @@ export function Dashboard() {
       {/* Career: the promises ledger (§77) — what you committed to, who heard it, when it lands,
           and whether the numbers say you are on track. Renders null without the capability. */}
       <Commitments />
+
+      {/* Career: the board sits down (§46-§47). Directly under the commitments, because the
+          decision taken here becomes one of them. Renders null without the capability. */}
+      <BoardMeeting />
 
       <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
         <Panel title={`Milestones (${game.milestones.length}/${MILESTONES.length})`}>

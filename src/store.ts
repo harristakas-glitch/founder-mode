@@ -316,6 +316,11 @@ interface Store {
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
+  /**
+   * Living World Phase 8. Answer one structured room: ask an interview question, reply to an
+   * employee, take a board decision. Writes only to `game.world` — no simulation field moves.
+   */
+  answerInteraction: (interactionId: string, optionId: string) => void
   pitch: () => void
   accept: (sheetId: string) => void
   decline: (sheetId: string) => void
@@ -1145,6 +1150,18 @@ export const useStore = create<Store>()(
             if (get().online) void pushState(myNetSummary(game))
           }
           set({ game })
+        },
+
+        // Living World Phase 8 (§38/§41/§46). The guard reads the LIVE state and bails without
+        // mutating — the house rule for journaled actions — so a room that is already closed, or
+        // an option already spent, never grows a journal entry that replays to nothing.
+        answerInteraction: (interactionId, optionId) => {
+          const g = get().game
+          if (!g) return
+          const room = g.world?.interactions?.find((i) => i.id === interactionId)
+          if (!room || room.status !== 'open' || room.movesLeft <= 0) return
+          if (!room.options.some((o) => o.id === optionId) || room.chosen.includes(optionId)) return
+          set({ game: applyJournaled(g, 'interaction', { r: interactionId, o: optionId }).state })
         },
 
         pitch: () => {
