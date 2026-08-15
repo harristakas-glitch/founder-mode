@@ -99,7 +99,13 @@ console.log('— DETERMINISTIC and ORDERED —')
 console.log('— A long Career run tells a real story from every source —')
 
 {
-  const s = played('career', 90, 42)
+  // Played to its ENDING, not to a fixed 90 weeks. The two chapter assertions below both need a
+  // finished run — "The end" is the only beat that carries a chapter marker, so an unfinished run
+  // yields one chapter and no ending — and pinning the horizon at 90 made that a property of the
+  // balance rather than of the narrator. It went red the week aggressive AI rivals kept seed 42
+  // from reaching the acquisition gate inside 90 weeks: a story test failing because the economy
+  // moved is testing the wrong thing. 300 is a bound, not a target; the run ends long before it.
+  const s = played('career', 300, 42)
   const beats = buildStory(s)
   console.log(`    (this career run produced ${beats.length} beats${s.gameOver ? `, ended '${s.gameOver.type}' wk ${s.gameOver.week}` : ''})`)
   ok(beats.length >= 8, `a played career run has a biography (${beats.length} beats), not a stub`)
@@ -111,6 +117,7 @@ console.log('— A long Career run tells a real story from every source —')
   const chapters = storyChapters(beats)
   ok(chapters.length >= 2 && chapters[0].title === 'The first weeks', 'the timeline folds into chapters, opening with the first weeks')
   ok(chapters.reduce((a, c) => a + c.beats.length, 0) === beats.length, 'chaptering loses no beats and invents none')
+  ok(!!s.gameOver, `the fixture run actually finished (${s.gameOver?.type ?? 'STILL RUNNING'} wk ${s.week}) — the two chapter assertions are vacuous otherwise`)
   ok(!!s.gameOver && chapters[chapters.length - 1].title === 'The end', 'a finished run closes with The end')
 }
 

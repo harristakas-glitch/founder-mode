@@ -58,8 +58,17 @@ import type { ExperimentType } from '../src/game/career/types'
 let ids = 0
 const uid = () => `bot${ids++}`
 
+/**
+ * `npm run bots -- no-aggro` replays these three strategies against rivals that only grow, the way
+ * they did before `rivalAggression` shipped. It exists so the before/after in
+ * `docs/balance-baseline.md` §5 is an A/B on one capability inside ONE build rather than a
+ * comparison against numbers printed by an older checkout — the same discipline
+ * `test/rival-pressure-probe.ts` is built on. Absent the flag this is the live game.
+ */
+const AGGRO = !process.argv.includes('no-aggro')
+
 function cfg(seed: number, sector: SectorId) {
-  return { mode: 'career' as const, format: 'standard' as const, sector, seed }
+  return { mode: 'career' as const, format: 'standard' as const, sector, seed, overrides: { rivalAggression: AGGRO } }
 }
 
 function common(s: GameState) {
@@ -275,7 +284,9 @@ const ALL_SECTORS: SectorId[] = ['saas', 'devtools', 'ecommerce', 'fintech', 'so
 const picked = ALL_SECTORS.filter((x) => process.argv.includes(x))
 const SECTORS: SectorId[] = process.argv.includes('all') ? ALL_SECTORS : picked.length ? picked : ['saas', 'fintech']
 
-console.log(`— Career bot strategies · ${SEEDS.length} seeds × 90 weeks · median [worst…best] —`)
+console.log(
+  `— Career bot strategies · ${SEEDS.length} seeds × 90 weeks · median [worst…best] · rivals ${AGGRO ? 'AGGRESSIVE (live game)' : 'passive (pre-rivalAggression baseline)'} —`,
+)
 for (const sector of SECTORS) {
   console.log(`\n${sectorById(sector).name}`)
   report('Careless Growth', SEEDS.map((s) => carelessGrowth(s, sector)))

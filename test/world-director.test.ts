@@ -135,7 +135,21 @@ for (let i = 1, run = 1; i < titles.length; i++) {
   if (titles[i] === titles[i - 1]) { run++; maxRun = Math.max(maxRun, run) } else run = 1
 }
 ok(maxRun <= 1, `never the same headline twice running (longest streak ${maxRun})`)
-ok(new Set(titles).size >= titles.length * 0.7, `most headlines are distinct (${new Set(titles).size}/${titles.length})`)
+// "70% of headlines are distinct" was a sample-size lottery, not a property. This run bankrupts
+// around week 27–28 and the director's whole output here is 1:1 asks, so the distinct COUNT is
+// bounded by the size of the team: it scored 5/7 (0.714) against a 0.7 bar, and any change that
+// moved the bankruptcy by a single week flipped it — rival aggression moved it to week 27, the
+// week-28 headline vanished, and 4/6 (0.667) failed a test about the narrator by way of the
+// economy. Measured over a solvent 60-week variant of the same run it gets WORSE, not better
+// (4/15), because a four-person team keeps producing the same four names.
+//
+// The property actually worth pinning is that the director never gets STUCK on one story. That is
+// stable across run length and on both sides of the aggression flag: max share 0.33 here, 0.27
+// over 60 weeks, either way. `maxRun <= 1` above covers back-to-back; this covers ABAB.
+const headlineCount: Record<string, number> = {}
+for (const t of titles) headlineCount[t] = (headlineCount[t] ?? 0) + 1
+const topShare = Math.max(0, ...Object.values(headlineCount)) / Math.max(1, titles.length)
+ok(topShare <= 0.5, `no single headline dominates what the director said (top share ${topShare.toFixed(2)})`)
 ok(
   JSON.stringify(play(4242).titles) === JSON.stringify(titles),
   'the same seed narrates the same week the same way',

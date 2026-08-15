@@ -62,7 +62,16 @@ import type { ExperimentType, PricingStrategy } from '../src/game/career/types'
 
 let ids = 0
 const uid = () => `b${ids++}`
-const cfg = (seed: number, sector: SectorId) => ({ mode: 'career' as const, format: 'standard' as const, sector, seed })
+/** `npm run balance -- <mode> no-aggro` replays against rivals that only grow — the world as it was
+ *  before the `rivalAggression` capability. Same A/B-in-one-build discipline as career-bots.ts. */
+const AGGRO = !process.argv.includes('no-aggro')
+const cfg = (seed: number, sector: SectorId) => ({
+  mode: 'career' as const,
+  format: 'standard' as const,
+  sector,
+  seed,
+  overrides: { rivalAggression: AGGRO },
+})
 const spend = (s: GameState, want: number) => Math.max(0, Math.min(want, marketingMax(s), s.cash))
 
 export interface Telemetry {

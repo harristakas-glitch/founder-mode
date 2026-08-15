@@ -17,6 +17,12 @@ import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
 import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
+// Rival aggression routes "who and why" through the same living-world record every other company
+// fact uses, rather than inventing a parallel one. `stableCastId` is the replay-stable id the
+// world's own cast reconciliation keys rivals on (world/tick.ts), so the memory attaches to the
+// persona the player already knows by name.
+import { noteCompanyEvent } from './world/memory'
+import { stableCastId } from './world/characters'
 // Tokenisation / ICO — Slice 1, the capital fork. Every one of these reads `capitalPath(s)`, which
 // is `institutional` unless a token slice exists, so a run that never tokenised takes the branch it
 // always took. `founderStanding` is the one that touches every ending: with no token slice its
@@ -2420,8 +2426,20 @@ export function raidMagnitude(victimUsers: number): number {
   return Math.round(Math.max(proportional, Math.min(victimUsers * 0.15, RAID_FLOOR_USERS)))
 }
 
+/**
+ * Who may use the attack layer at all.
+ *
+ * `pvpActions` is Arena's flag — human founders hitting each other. `rivalAggression` earns the
+ * same right for the same reason: the moment AI rivals can come for you, refusing you the shield
+ * and the counter-punch would make their attacks unanswerable, and an attack you cannot answer is
+ * noise rather than difficulty. One predicate, so the offensive and defensive gates cannot drift.
+ */
+function combatEnabled(s: GameState): boolean {
+  return can(s, 'pvpActions') || can(s, 'rivalAggression')
+}
+
 export function canAttack(s: GameState, kind?: AttackDef['id']): { ok: boolean; reason?: string } {
-  if (!can(s, 'pvpActions')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if (!combatEnabled(s)) return { ok: false, reason: 'PvP is disabled in this match' }
   if (kind === 'pricewar' && (s.flags.priceWarCooldown ?? 0) > 0)
     return { ok: false, reason: `Margins still recovering from the last war — ${s.flags.priceWarCooldown} wk` }
   if ((s.flags.attackCooldown ?? 0) > 0) return { ok: false, reason: `Ops team recovering — ${s.flags.attackCooldown} wk` }
@@ -2538,7 +2556,7 @@ export function shieldCost(s: GameState): number {
 }
 
 export function canBuyShield(s: GameState): { ok: boolean; reason?: string } {
-  if (!can(s, 'pvpActions')) return { ok: false, reason: 'PvP is disabled in this match' }
+  if (!combatEnabled(s)) return { ok: false, reason: 'PvP is disabled in this match' }
   if ((s.flags.shield ?? 0) > 0) return { ok: false, reason: `Crisis team already on retainer — ${s.flags.shield} wk left` }
   return { ok: true }
 }
@@ -2552,17 +2570,32 @@ export function buyShield(s: GameState): boolean {
   return true
 }
 
+/**
+ * Options an AI rival's strike carries that a human's never did.
+ *
+ * Both default to the human's behaviour, so an Arena attack arriving off the wire is
+ * byte-for-byte what it was before this existed.
+ */
+export interface IncomingAttackOpts {
+  /** Raid leverage. 1 for a peer; `applyAttackOutgoingInner` computes the same term for the player. */
+  magnitudeScale?: number
+  /** The attacker's stated reason, from `rivalStance`. Appended so the hit is never inexplicable. */
+  why?: string
+}
+
 // The victim's side, applied when the attack broadcast arrives.
-export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom: string) {
+export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom: string, opts: IncomingAttackOpts = {}) {
   const def = ATTACKS.find((a) => a.id === kind)
   if (!def) return // unknown attack kind off the wire
   const fromCompany = String(rawFrom ?? 'A rival').slice(0, 30)
+  const scale = Number.isFinite(opts.magnitudeScale) ? clamp(opts.magnitudeScale!, 0, 3) : 1
   if ((s.flags.shield ?? 0) > 0) {
     // the retainer runs for its full term — it is a duration you bought, not a single charge
     s.inbox.unshift({
       id: uid(),
       week: s.week,
       kind: 'news',
+      meta: { rivalAttack: kind, rivalName: fromCompany, deflected: true },
       title: `🛡 Crisis team deflected ${fromCompany}'s ${def.name.toLowerCase()}`,
       body: `${fromCompany} came at you — and your retainer earned every dollar. The attack fizzled before it touched morale, press, or users. The team is on call for another ${s.flags.shield} week${s.flags.shield === 1 ? '' : 's'}.`,
     })
@@ -2577,30 +2610,67 @@ export function applyAttackIncoming(s: GameState, kind: AttackDef['id'], rawFrom
     delete s.flags.priceWarInitiator // we did not start it, so we take the deeper cut
   }
   if (kind === 'raid') {
-    const lost = raidMagnitude(s.users)
+    const lost = Math.round(raidMagnitude(s.users) * scale)
     if (lost > 0) applyEffects(s, { users: -lost })
     s.flags.lastRaidLost = lost
   }
+  const what =
+    kind === 'hitpiece'
+      ? // The decoy: while the source is still hidden the target sees the STORY, not the hand
+        // behind it. Naming the attacker immediately made a three-week campaign read like every
+        // other instant hit, and made prSourceHidden dead code.
+        prSourceHidden(s)
+        ? `A story about you is running, and it is not going away. Nobody will say who briefed it.`
+        : `${fromCompany} briefed the story about you. It has been running for weeks.`
+      : kind === 'poach'
+        ? `${fromCompany}'s recruiters are calling your team, one by one. Nothing personal — this is the game you're all playing.`
+        : kind === 'smear'
+          ? `Unflattering stories about your company are circulating, and the fingerprints belong to ${fromCompany}. The market notices.`
+          : kind === 'pricewar'
+            ? `${fromCompany} has undercut you across the board. Your revenue is cut for as long as it runs — step out and you keep your margin but lose the customers who stayed for the price.`
+            : `${fromCompany} is running aggressive ads squarely at your users — and some of them are converting.`
   s.inbox.unshift({
     id: uid(),
     week: s.week,
     kind: 'news',
+    meta: { rivalAttack: kind, rivalName: fromCompany },
     title: `${def.emoji} ${fromCompany} hit you: ${def.name.toLowerCase()}`,
-    body:
-      kind === 'hitpiece'
-        ? // The decoy: while the source is still hidden the target sees the STORY, not the hand
-          // behind it. Naming the attacker immediately made a three-week campaign read like every
-          // other instant hit, and made prSourceHidden dead code.
-          prSourceHidden(s)
-          ? `A story about you is running, and it is not going away. Nobody will say who briefed it.`
-          : `${fromCompany} briefed the story about you. It has been running for weeks.`
-        : kind === 'poach'
-        ? `${fromCompany}'s recruiters are calling your team, one by one. Nothing personal — this is the game you're all playing.`
-        : kind === 'smear'
-          ? `Unflattering stories about your company are circulating, and the fingerprints belong to ${fromCompany}. The market notices.`
-          : `${fromCompany} is running aggressive ads squarely at your users — and some of them are converting.`,
+    // The reason first, when there is one. An AI rival's strike is only fair if the sentence that
+    // announces it also says what provoked it — and `rivalStance` is where that sentence comes
+    // from, so the inbox and the rival table give the same account of the same decision.
+    body: opts.why ? `${opts.why}\n\n${what}` : what,
+  })
+  // The living world's record of it: who, why, and how hard. `noteCompanyEvent` is a no-op without
+  // `companyMemory`, and it writes only to `s.world` — narrative interprets facts, never decides
+  // them (world/tick.ts, brief §64).
+  noteCompanyEvent(s, 'major_loss', {
+    importance: kind === 'raid' ? 60 : 45,
+    characterIds: [stableCastId('rival', fromCompany)],
+    metadata: { rival: fromCompany, attack: kind, usersLost: s.flags.lastRaidLost ?? 0 },
   })
   s.flash = `${def.emoji} ${fromCompany} launched a ${def.name.toLowerCase()} against you!`
+}
+
+/**
+ * The counter-punch: the player's own attack, pointed at an AI rival instead of another founder.
+ *
+ * Everything about the attacker's side is `applyAttackOutgoing` — same cost, same cooldown, same
+ * energy, same reputation hit for a smear, same backfire odds for a hit piece. What this adds is
+ * the target actually FEELING it, which in Arena is the other client's job and here is nobody's.
+ * Deliberately not a second attack economy: it is the calibrated one, aimed somewhere new.
+ */
+export function attackRival(s: GameState, kind: AttackDef['id'], rivalId: string): boolean {
+  const r = s.rivals.find((x) => x.id === rivalId && x.alive)
+  if (!r) return false
+  const before = s.users
+  if (!applyAttackOutgoing(s, kind, r.name, r.users)) return false
+  // The other half of the transfer: `applyAttackOutgoing` credited us the users, so they have to
+  // leave someone. Without this a raid mints customers out of nothing.
+  if (kind === 'raid') r.users = Math.max(0, r.users - Math.max(0, s.users - before))
+  if (kind === 'smear') r.momentum *= 0.9
+  if (kind === 'poach') r.product = clamp(r.product - 3, 0, 100)
+  if (kind === 'pricewar') r.momentum *= 0.88
+  return true
 }
 
 // ---------- the all-hands pitch: founder theater, with odds ----------
@@ -2883,6 +2953,298 @@ function boardReview(s: GameState) {
   }
 }
 
+// ---------- rival aggression (capability `rivalAggression`) ----------
+//
+// WHY THIS EXISTS. BACKLOG §4.1: "Late Entrant" won 97% of runs against Standard's 90%, at a
+// median exit of week 165 — oversized rivals occupied TAM and never came for you, so the scenario
+// was longer rather than harder. The whole attack economy already existed and was calibrated
+// against human play (test/arena-duel-probe.ts, test/arena-ffa-probe.ts); AI rivals simply could
+// not reach it. This connects them to it.
+//
+// WHY SITUATIONAL RATHER THAN TIMED. The Arena harnesses measured this and the answer was not
+// close. Blind on-cooldown aggression is a SELF-OWN — the aggressor pays cash, cooldown and
+// energy for damage that does not compound, and loses to a rival who simply builds. Situational
+// aggression is a trade: it pays when the target is worth hitting and costs when it is not. A
+// timer would therefore be both worse play and worse drama — a rival who attacks every N weeks is
+// weather, and weather is what the player already correctly ignores. Every posture below is a
+// reading of state the rival plausibly KNOWS: relative size (market share is public), your growth
+// (press, hiring, usage), the product comparison (the threads write themselves — the existing
+// siphon rule already reads it), how full the market is, and who out-raised whom.
+//
+// WHY IT COSTS THEM. `RIVAL_ATTACK_*_COST` charges a rival momentum and product for every strike,
+// which is the same shape the player's own attacks have (cash, cooldown, energy, reputation). It
+// is what stops the policy being a flat tax on the player: a rival who finds a reason to attack
+// every cooldown falls behind the one who builds, gets overtaken, and eventually posts the
+// "incredible journey" blog post. The pressure is real and it is paid for.
+
+/** A rival's posture toward you. Pure — the rival table and the policy read the SAME function. */
+export type RivalStanceId = 'calm' | 'watching' | 'hostile' | 'cornered'
+
+export interface RivalStance {
+  id: RivalStanceId
+  label: string
+  /** Why, in their terms. The rival table shows this; the inbox message uses it verbatim. */
+  why: string
+  /** The attack this posture reaches for, or null when they are not coming for you. */
+  attack: AttackDef['id'] | null
+}
+
+/** No attack before this week: a company with nothing is not worth a campaign. */
+export const RIVAL_AGGRO_MIN_WEEK = 12
+/** Nor is one below this many users — the raid floor would be most of your company. */
+export const RIVAL_AGGRO_MIN_USERS = 120
+/**
+ * Weeks between one rival's attacks.
+ *
+ * ITERATION 1 shipped 12 and measured 27 landed attacks per 200-week run (24 seeds, B2B SaaS) —
+ * roughly one every seven weeks across three rivals. That is weather, and the player is right to
+ * ignore weather. It is also the exact failure test/pricewar-probe.ts found in the Arena bots,
+ * which sat at war 86% of all weeks until PRICE_WAR_COOLDOWN made a war an episode with a
+ * beginning and an end. Same medicine: half a year between campaigns from any one rival.
+ *
+ * ITERATION 4 made it scale with grip, between these two bounds. Force alone could not separate
+ * the scenarios far enough: "Late Entrant" hands the player $350k against Standard's $200k, and
+ * that runway advantage is worth more bankruptcies-avoided than one harder raid every six months
+ * costs. Frequency is the lever that compounds — a single big hit can be shielded, sustained
+ * pressure has to be out-grown — and it is also the true thing: a company holding a fifth of the
+ * market has the org to keep a campaign running, and one holding 3% runs it and goes back to work.
+ */
+export const RIVAL_AGGRO_COOLDOWN = 26
+export const RIVAL_AGGRO_COOLDOWN_MIN = 14
+/**
+ * Weeks of public notice between a rival turning hostile and their first strike. This is the
+ * fairness contract: an attack you could not have anticipated is noise, not difficulty. The
+ * posture is on the rival table from the moment it changes AND announced in the inbox, so there is
+ * always a week in which the crisis retainer can be bought.
+ */
+export const RIVAL_AGGRO_NOTICE = 1
+/** Chance a hostile rival actually pulls the trigger in an eligible week. */
+export const RIVAL_AGGRO_CHANCE = 0.22
+/** Weekly user growth at which a big incumbent decides you are the problem. */
+export const RIVAL_RAID_GROWTH = 0.02
+/** Product-score lead at which the comparison threads become worth attacking. */
+export const RIVAL_SMEAR_AHEAD = 8
+/** Minimum hype for a smear to be worth briefing: nobody bothers to change a subject nobody raised. */
+export const RIVAL_SMEAR_HYPE = 35
+
+/**
+ * A rival's grip on the market — their users as a share of the effective TAM.
+ *
+ * THIS IS THE VARIABLE THE WHOLE POLICY TURNS ON, and finding it was the measurement that mattered.
+ * The obvious choice, "how many times your size are they", is useless: swept over 24 seeds x 200
+ * weeks x 6 sectors, an AI rival is bigger than the player essentially ALWAYS, and by wildly
+ * sector-dependent amounts — median 8.9x in B2B SaaS but 54x in Fintech, and 45x / 348x in the
+ * same two under Late Entrant. A `ratio >= 2.5` gate is satisfied 92–100% of the time (so it gates
+ * nothing), and a leverage term built on the ratio pins at its cap in every sector (so Standard
+ * gets hit exactly as hard as Late Entrant, which is the defect, restated).
+ *
+ * Share of TAM is normalised by construction — it is a fraction of that sector's own market — and
+ * it separates the scenarios cleanly. Median rival share, same sweep:
+ *
+ *     sector      standard   late
+ *     saas          2.6%     11.8%
+ *     devtools      5.1%     14.8%
+ *     ecommerce     0.9%      6.7%
+ *     fintech       1.7%      9.7%
+ *     social        9.1%     18.5%
+ *     aiml          2.5%     11.2%
+ *
+ * Standard's medians sit at 0.9–9.1% and Late Entrant's at 6.7–18.5%, with far less spread BETWEEN
+ * sectors than the raw ratio had. Social is high in both, which is correct sector character rather
+ * than a bug: a winner-take-all market has entrenched incumbents by design.
+ */
+export function rivalMarketShare(s: GameState, r: Rival): number {
+  return clamp(r.users / Math.max(1, effectiveTam(s)), 0, 1)
+}
+
+/**
+ * Grip at which a rival is entrenched enough to mount a raid worth the name, and the grip at which
+ * they hit hardest. Read straight off the table above: 3% is above Standard's p25 in five of six
+ * sectors and below Late Entrant's p25 in every one, so the same policy makes Standard's rivals
+ * intermittently dangerous and Late Entrant's permanently so. That difference in FREQUENCY, on top
+ * of the difference in force below, is what makes the scenario harder rather than longer.
+ */
+/**
+ * 3% → 5% in iteration 5. At 3% a Standard market's UPPER quartile (saas p75 8.4%) cleared the
+ * bar, so Standard took 9.8 attacks a run to Late Entrant's 11.2 and its median founder net fell
+ * 42% — real collateral on the scenario that was supposed to move only modestly. 5% sits above
+ * five of the six Standard medians (0.9–5.1%; Social's 9.1% is a concentrated market by design and
+ * stays above it) and below every Late Entrant median. It is the line between "there are other
+ * companies here" and "somebody owns this market".
+ */
+export const RIVAL_RAID_SHARE_FLOOR = 0.05
+/** 0.18 → 0.14 → 0.13 across iterations 4 and 5, tracking the floor: at 0.18 the Late Entrant
+ *  medians (6.7–18.5%) sat mid-ramp and the scenario never reached full force. With a 5% floor a
+ *  13% cap puts the Late medians at 0.2–1.0 of the ramp and its median sector near the top, while
+ *  a Standard market mostly never enters the ramp at all. */
+export const RIVAL_RAID_SHARE_CAP = 0.13
+export const RIVAL_RAID_LEVERAGE_MIN = 0.5
+export const RIVAL_RAID_LEVERAGE_MAX = 2
+
+/** Where a rival with this grip sits on the 3%→14% ramp. One definition, used by force and by
+ *  frequency, so the two dials cannot disagree about who counts as entrenched. */
+function rivalGrip(share: number): number {
+  return clamp((share - RIVAL_RAID_SHARE_FLOOR) / (RIVAL_RAID_SHARE_CAP - RIVAL_RAID_SHARE_FLOOR), 0, 1)
+}
+
+/**
+ * How hard a raid from a rival with this grip lands, as a multiplier on `raidMagnitude` (which is
+ * already 10% of your users). Linear from a half-strength nuisance at the 3% floor to a
+ * fifth-of-the-company hit at the cap. Exported so the rival table can warn with the number the
+ * simulation will actually use.
+ */
+export function rivalRaidLeverage(share: number): number {
+  return RIVAL_RAID_LEVERAGE_MIN + (RIVAL_RAID_LEVERAGE_MAX - RIVAL_RAID_LEVERAGE_MIN) * rivalGrip(share)
+}
+
+/** Weeks this rival waits between campaigns. Entrenched incumbents sustain pressure; small ones
+ *  run one and go back to work. Exported so the rival table can say how often to expect them. */
+export function rivalAggroCooldown(share: number): number {
+  return Math.round(RIVAL_AGGRO_COOLDOWN - (RIVAL_AGGRO_COOLDOWN - RIVAL_AGGRO_COOLDOWN_MIN) * rivalGrip(share))
+}
+
+/** What a strike costs the attacker: a week of the growth team pointed at you instead of at users. */
+export const RIVAL_ATTACK_MOMENTUM_COST = 0.94
+export const RIVAL_ATTACK_PRODUCT_COST = 1.6
+/** A price war is the expensive one to run — they are cutting their own prices too. */
+export const RIVAL_WAR_MOMENTUM_COST = 0.88
+
+/**
+ * The rival's read on you. Deterministic, side-effect free, and the ONLY place a posture is
+ * decided — `rivalAggressionStep` acts on it and `Market.tsx` renders it, so what the player is
+ * shown and what drives the rival cannot drift apart.
+ */
+export function rivalStance(s: GameState, r: Rival): RivalStance {
+  const calm: RivalStance = { id: 'calm', label: 'Building', why: 'Heads down on their own product.', attack: null }
+  if (!r.alive || !can(s, 'rivalAggression')) return calm
+
+  const share = rivalMarketShare(s, r)
+  const ahead = productScore(s) - r.product
+  const growth = growthRate(s)
+  const saturation = marketSaturation(s)
+  const visible = s.week >= RIVAL_AGGRO_MIN_WEEK && s.users >= RIVAL_AGGRO_MIN_USERS
+  const watching: RivalStance = visible
+    ? { id: 'watching', label: 'Watching', why: 'They know who you are. Nothing has provoked them yet.', attack: null }
+    : calm
+  if (!visible) return calm
+
+  // 1. The incumbent and the upstart. THE Late Entrant case: they hold a real piece of the market
+  //    and you are growing inside it anyway, which is the only thing a company that entrenched has
+  //    to be afraid of. Both halves are load-bearing — grip alone would fire against a company
+  //    standing still, and growth alone would let a rounding error declare war on you.
+  if (share >= RIVAL_RAID_SHARE_FLOOR && growth >= RIVAL_RAID_GROWTH)
+    return {
+      id: 'hostile',
+      label: 'Hostile',
+      why:
+        `They hold ${(share * 100).toFixed(0)}% of this market and you are growing ${(growth * 100).toFixed(1)}%/wk inside it. ` +
+        `Their growth team has been pointed at your customers.`,
+      attack: 'raid',
+    }
+
+  // 2. Freshly funded. Their round bought recruiters before it bought anything else, and your
+  //    people are the ones taking the calls — the "raised a round" news item, made real.
+  //
+  //    ITERATION 2 tightened both this and the smear below. At `r.stage > yours && heads >= 3` and
+  //    `ahead >= 8 OR hype >= 45` almost every rival was hostile almost always, which is how the
+  //    first pass reached 27 landed attacks a run: a flat tax wearing a posture's clothes. Out-
+  //    raising you by a full TWO rounds, with a team big enough to be worth raiding, is a fact
+  //    about the run rather than the weather.
+  if (r.stage > STAGES.indexOf(s.stage) + 1 && s.employees.length >= 4)
+    return {
+      id: 'hostile',
+      label: 'Hostile',
+      why: 'They out-raised you by two rounds, and the first thing that money bought was recruiters. Your team is taking the calls.',
+      attack: 'poach',
+    }
+
+  // 3. Losing the comparison. Behind on the thing they are benchmarked against, and you are loud
+  //    enough about it to be worth answering — so they go after the story rather than the product.
+  //    AND, not OR: a quiet company that happens to have a better product is not a comms problem.
+  //    No size band, because there is no size at which briefing against someone is impractical.
+  if (ahead >= RIVAL_SMEAR_AHEAD && s.hype >= RIVAL_SMEAR_HYPE)
+    return {
+      id: 'hostile',
+      label: 'Hostile',
+      why: 'You are winning the comparison threads and everybody has noticed. Their comms team would rather change the subject.',
+      attack: 'smear',
+    }
+
+  // 4. Cornered. Too small a piece of the market to raid with, behind on product, and no open
+  //    market left to grow into — so the only lever left is price, and they pull it. LAST, because
+  //    it is the move of a company that has run out of better ones.
+  if (share < RIVAL_RAID_SHARE_FLOOR && ahead >= 0 && saturation >= 0.2)
+    return {
+      id: 'cornered',
+      label: 'Cornered',
+      why: 'A sliver of the market, behind on product, and nowhere left to grow. Price is the only lever they have left.',
+      attack: 'pricewar',
+    }
+
+  return watching
+}
+
+/** Living rivals whose posture is currently pointed at you. Exported for the UI and the harness. */
+export function hostileRivals(s: GameState): Rival[] {
+  return s.rivals.filter((r) => r.alive && rivalStance(s, r).attack !== null)
+}
+
+/**
+ * One rival's aggression, run inside `tickRivals` (and therefore inside the week's seeded stream).
+ *
+ * Draw discipline: this function draws AT MOST ONCE, and only for a rival who is both hostile and
+ * off cooldown. With the capability off it is never called at all, so a run without
+ * `rivalAggression` produces the identical RNG stream it always did — which is what lets the same
+ * build play both sides of the A/B in test/rival-pressure-probe.ts and what keeps the recorded
+ * golden traces meaningful as a baseline.
+ */
+function rivalAggressionStep(s: GameState, r: Rival): void {
+  const stance = rivalStance(s, r)
+
+  if (stance.attack === null) return
+
+  // The notice. First time this rival turns on you, the market is told — and they cannot strike
+  // in the same week they are announced, so there is always a window to buy the retainer.
+  if (r.hostileSince === undefined) {
+    r.hostileSince = s.week
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: `${r.name} has you in their sights`,
+      body:
+        `${stance.why} Whatever they are planning, it is no longer a secret — the trade press has started ` +
+        `asking your comms person for comment. A crisis retainer, a counter-punch, or a cheque for the whole ` +
+        `company are the three answers anyone has ever found.`,
+      meta: { rivalName: r.name },
+    })
+    noteCompanyEvent(s, 'crisis', {
+      importance: 55,
+      characterIds: [stableCastId('rival', r.name)],
+      metadata: { rival: r.name, stance: stance.id, posture: stance.attack },
+    })
+    return
+  }
+  if (s.week < r.hostileSince + RIVAL_AGGRO_NOTICE) return
+  if (s.week < (r.aggroCooldown ?? 0)) return
+
+  if (RNG.next() >= RIVAL_AGGRO_CHANCE) return
+
+  // They pay for it, in the only currency a rival has: the week their growth team spent on you.
+  const share = rivalMarketShare(s, r)
+  r.aggroCooldown = s.week + rivalAggroCooldown(share)
+  r.attacksLaunched = (r.attacksLaunched ?? 0) + 1
+  r.momentum *= stance.attack === 'pricewar' ? RIVAL_WAR_MOMENTUM_COST : RIVAL_ATTACK_MOMENTUM_COST
+  r.product = clamp(r.product - RIVAL_ATTACK_PRODUCT_COST, 0, 100)
+
+  const leverage = rivalRaidLeverage(share)
+  const before = s.users
+  applyAttackIncoming(s, stance.attack, r.name, { magnitudeScale: leverage, why: stance.why })
+  // A raid is a TRANSFER — the users that left are on their side of the board now, which is what
+  // makes surviving one different from surviving a bad week.
+  if (stance.attack === 'raid') r.users += Math.max(0, before - s.users)
+}
+
 // ---------- rivals ----------
 
 function tickRivals(s: GameState, room: number) {
@@ -2937,6 +3299,10 @@ function tickRivals(s: GameState, room: number) {
         body: `${r.name} posted the "an incredible journey" blog post. ${refugees > 0 ? `Some of their orphaned users (${refugees.toLocaleString()}) migrated to you.` : 'One less name in the comparison threads.'}`,
       })
     }
+
+    // Last, and only for a rival still standing: a company that shut down this week does not get
+    // a parting shot. Gated so that a run without the capability draws exactly zero extra times.
+    if (r.alive && can(s, 'rivalAggression')) rivalAggressionStep(s, r)
   }
 }
 

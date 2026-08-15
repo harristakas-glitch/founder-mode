@@ -78,6 +78,16 @@ export interface GameConfig {
 export interface GameCapabilities {
   // ---- implemented today -------------------------------------------------------------
   aiRivals: boolean // AI competitors in your market
+  /**
+   * AI rivals use the attack layer against you, instead of only occupying market share.
+   *
+   * A SECOND flag rather than a widening of `aiRivals` because they answer different questions:
+   * `aiRivals` asks whether there are other companies in your market at all (false in Arena, where
+   * the other founders are), this asks whether those companies fight back. Splitting them is also
+   * what lets `test/rival-pressure-probe.ts` play both worlds out of one build — the A/B that
+   * BACKLOG §4.1's "oversized rivals occupy TAM without ever attacking you" is measured against.
+   */
+  rivalAggression: boolean
   humanRivals: boolean // other players are the competition (Arena)
   storyArcs: boolean // multi-week narrative chains
   oneOnOnes: boolean // employees bring asks to your door
@@ -195,6 +205,7 @@ export interface GameRules {
 // Everything off. Base rules switch on only what they actually provide.
 const NO_CAPABILITIES: GameCapabilities = {
   aiRivals: false,
+  rivalAggression: false,
   humanRivals: false,
   storyArcs: false,
   oneOnOnes: false,
@@ -302,6 +313,11 @@ const QUICK_BASE_RULES: GameRules = {
     companyMemory: true,
     characterMemory: true,
     aiRivals: true,
+    // BACKLOG §4.1. Rivals that only grow are scenery: "Late Entrant" won 97% of runs against
+    // Standard's 90% because rivals 8–14x your size sat on the TAM and never came for you, which
+    // made the scenario longer instead of harder. On wherever `aiRivals` is on — the companies in
+    // your market act, and the player's answer is the shield, the counter-raid, or buying them.
+    rivalAggression: true,
     storyArcs: true,
     oneOnOnes: true,
     catastrophes: true,
