@@ -72,12 +72,12 @@ export const SECTORS: Sector[] = [
     // where a low-PMF SaaS company merely earns little. Expensive to serve, lucrative when
     // retained (churn near SaaS once integrated), boom-bust exposed through the hype machinery
     // acqBase feeds. acqBase 10 stays under careerAcqScale's knee (10/5 = 2 ≤ 5).
-    arpuPerCustomer: 30,
-    acqBase: 10,
+    arpuPerCustomer: 26,
+    acqBase: 7,
     viral: 0.03,
     churn: 0.014,
-    perUserVal: 2000,
-    infraCost: 2.4,
+    perUserVal: 1400,
+    infraCost: 3.4,
     tam: 1_400_000,
   },
 ]

@@ -240,7 +240,7 @@ const SECTIONS: Record<string, (sectors: SectorId[]) => void> = {
     console.log('\n=== UNIT ECONOMICS — break-even scale vs reachable scale ===')
     // aiml measured the same way as the rest: the calibrated policy's median users at 90wk from
     // the `quick` section, run at the sector's shipped constants.
-    const reached: Record<SectorId, number> = { saas: 1112, devtools: 2284, ecommerce: 3678, fintech: 1368, social: 12414, aiml: 1121 }
+    const reached: Record<SectorId, number> = { saas: 1112, devtools: 2284, ecommerce: 3678, fintech: 1368, social: 12414, aiml: 1947 }
     console.log('  sector       arpu/customer   users for $6k/wk   reached@90wk    verdict')
     for (const id of ALL) {
       const sec = sectorById(id)

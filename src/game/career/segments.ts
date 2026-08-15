@@ -208,8 +208,8 @@ const SECTOR_SEGMENTS: Record<string, SegmentDef[]> = {
       name: 'Enterprise ML Platforms',
       blurb: 'Security review, procurement, a proof of concept — then a contract that pays for the cluster.',
       base: {
-        needIntensity: 54, willingnessToPay: 90, retentionPotential: 88, acquisitionAccessibility: 16,
-        productRequirement: 86, marketSize: 18, competitiveIntensity: 42, salesCycleWeeks: 11, expansionPotential: 82,
+        needIntensity: 54, willingnessToPay: 90, retentionPotential: 84, acquisitionAccessibility: 16,
+        productRequirement: 86, marketSize: 18, competitiveIntensity: 42, salesCycleWeeks: 11, expansionPotential: 76,
       },
       values: ['enterprise_readiness', 'performance'],
     },
