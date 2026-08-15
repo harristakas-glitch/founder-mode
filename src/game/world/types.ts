@@ -332,6 +332,94 @@ export interface PromiseRecord {
   resolvedWeek?: number
 }
 
+// ---------- structured interactions (§38-§47, §74) ----------
+
+/**
+ * The three rooms Career puts the founder in (§41 interviews, §38 employee conversations,
+ * §46 board meetings). One record type serves all three because they are the same object:
+ * a scene composed from state, a bounded set of things the founder may say, and a settled
+ * outcome — only the counterparty and the stakes differ.
+ */
+export type InteractionKind = 'interview' | 'conversation' | 'board_meeting'
+
+/**
+ * How the founder moves. 'ask' spends a question and the room answers, leaving it open until the
+ * budget runs out (an interview); 'answer' is one reply that closes the room (a conversation, a
+ * board decision).
+ */
+export type InteractionMode = 'ask' | 'answer'
+
+export type InteractionStatus = 'open' | 'resolved'
+
+/** One thing somebody said. Prose is composed once and persisted (§68) — rooms do not reword. */
+export interface InteractionLine {
+  /** Present when the speaker is a member of the cast. Interview customers are not. */
+  characterId?: CharacterId
+  speaker: string
+  /** 'VP Sales', 'Ops lead, 40-person agency'. Shown beside the name. */
+  role?: string
+  text: string
+  /** Which option produced this line — the question asked, or the answer given. */
+  optionId?: string
+  /**
+   * What this line was built from. Same job as AdvisorOpinion.fragmentIds and self-contained for
+   * the same reason: three people answering four questions in one room must not reach for the
+   * same sentence, and a hard exclusion needs to know what has already been said. Never folded
+   * into `world.narrative.usage` — a customer's turn of phrase must not put the founder's own
+   * team's wording on cooldown.
+   */
+  fragmentIds?: string[]
+}
+
+/** Something the founder may say. Never carries effects: the engine owns what a choice does. */
+export interface InteractionOption {
+  id: string
+  label: string
+  /** The founder's own gloss on what they are actually committing to. */
+  detail?: string
+}
+
+/**
+ * §45. The engine determines evidence directly and the text only represents it conversationally,
+ * so this is produced from the customer's hidden profile — never parsed back out of the prose.
+ * `metric` is a career TruthMetric slug, kept as a string so the world layer does not depend on
+ * the Career subsystem's types.
+ */
+export interface InteractionEvidence {
+  metric: string
+  /** 0–100: what this answer suggests the metric is. Not necessarily the truth (§43). */
+  signal: number
+  /** 0–1: how much this particular answer is worth. Stated preference is cheap. */
+  reliability: number
+}
+
+export interface StructuredInteraction {
+  /** Narrative id (§67): 'w31_board_meeting'. Stable, so a reload never opens the same room twice. */
+  id: string
+  kind: InteractionKind
+  mode: InteractionMode
+  week: number
+  /** What the room is about: 'promotion', 'runway', 'seg:small_teams'. */
+  topic: string
+  /** The room's own heading. */
+  title: string
+  /** Everyone in the room, for the memory and relationship writes a choice produces. */
+  characterIds: CharacterId[]
+  lines: InteractionLine[]
+  options: InteractionOption[]
+  /** Option ids already spent, in order. */
+  chosen: string[]
+  /** Moves the founder has left. Zero closes the room. */
+  movesLeft: number
+  status: InteractionStatus
+  resolvedWeek?: number
+  /** What the choice actually did, composed once at resolution and persisted (§68). */
+  outcome?: string
+  /** The facts the room was built from, and what a later settlement reads back. */
+  facts?: Record<string, string | number>
+  evidence?: InteractionEvidence[]
+}
+
 // ---------- advisors (§28-§33, §76) ----------
 
 /**
@@ -501,6 +589,13 @@ export const LIVING_WORLD_LIMITS = {
   recentPatterns: 30,
   promises: 40,
   advisorOpinions: 6,
+  /**
+   * Rooms kept at once (§38/§41/§46). Small on purpose: each one carries composed prose for every
+   * line spoken in it, so this is the largest per-row cost in the slice. An OPEN room is never
+   * dropped — an unanswered conversation the player never saw would be a silent broken promise —
+   * so the cap sheds settled rooms first, exactly the way the promise ledger does.
+   */
+  interactions: 10,
 } as const
 
 /** Bumped when the slice's shape changes, so in-slice migration never needs a global persist bump. */
@@ -528,6 +623,17 @@ export interface LivingWorldState {
    * bounded by construction. Absent until the advisorOpinions capability first runs.
    */
   advisorPanel?: AdvisorPanelState
+  /**
+   * §38/§41/§46's rooms, open and recently settled. Absent until a structured-interaction
+   * capability first opens one, so a run without them never grows the key.
+   */
+  interactions?: StructuredInteraction[]
+  /**
+   * The week the board last sat down. The board-meeting cadence reads this rather than a modulo on
+   * the week number, because the board does not exist until a round closes and a cadence anchored
+   * on week 0 would seat a meeting the week after the term sheet.
+   */
+  lastBoardMeetingWeek?: number
   /** Guards against a second pass over the same week after a reload — §72. */
   lastGeneratedWeek?: number
   /**

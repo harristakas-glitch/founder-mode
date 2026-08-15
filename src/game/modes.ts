@@ -52,7 +52,8 @@ export interface GameConfig {
 //   founderEnergy, boardReviews, bankDebt, multipleVerticals, ipoEndgame, macroShocks, pvpActions,
 //   sharedHiringPool, leaderboard, detailedPMF, customerResearch, hypothesisBoard,
 //   persistentCharacters, characterMemory, companyMemory, relationships, proceduralNarrative,
-//   advisorOpinions, promises, tokenisation.
+//   advisorOpinions, promises, structuredInterviews, structuredEmployeeConversations,
+//   proceduralBoardMeetings, tokenisation.
 //
 // DESCRIPTIVE (true statements about the experience, but nothing branches on them yet):
 //   humanRivals   — Arena's opponents come from the room's presence list, not this flag.
@@ -134,9 +135,9 @@ export interface GameCapabilities {
   companyMemory: boolean // the company's own notable history, for "since the Series A" comparisons
   relationships: boolean // trust/respect/alignment/dependence, per person
   advisorOpinions: boolean // BUILT (Phase 6). Named advisors argue, with their own biases — Career only
-  structuredInterviews: boolean // customer interviews answered in character
-  structuredEmployeeConversations: boolean // replaces the fixed 1:1 templates
-  proceduralBoardMeetings: boolean // board sessions composed from the board's actual grievances
+  structuredInterviews: boolean // BUILT (Phase 8). §41's eight questions, answered in character — Career only
+  structuredEmployeeConversations: boolean // BUILT (Phase 8). §38's rooms, with a real answer — Career only
+  proceduralBoardMeetings: boolean // BUILT (Phase 8). §46's topics, read off the week — Career only
   promises: boolean // BUILT (Phase 7). Commitments the world holds you to — Career only
   longTermCallbacks: boolean // week 48 remembers week 18
   rivalArchetypes: boolean // rivals have a posture, not just momentum
@@ -386,6 +387,20 @@ const CAREER_BASE_RULES: GameRules = {
     // keeps Arena's off entirely. Mode-table only, per the Slice 5 precedent — an in-flight save
     // keeps the frozen capability set it was created with and simply never grows a ledger.
     promises: true,
+    // Living World Phase 8 (brief §38-§39, §41-§45, §46-§47): the three rooms where the founder
+    // can finally answer back — §41's eight interview questions put to three procedurally
+    // generated customers with hidden biases, §38's employee conversation opened by a genuinely
+    // strained relationship, and §46's board meeting composed from the same week the advisors
+    // read. Every answer lands in `s.world`: trust, memory and — where the answer was actually a
+    // commitment — Phase 7's promise ledger, judged later against a simulation fact.
+    //
+    // Career only. §40 is explicit that Quick Play gets "lightweight reactions" and no deep
+    // conversation chains (that is Phase 10's slice), and §33/§87 keep Arena's narrative
+    // competitive-only. Mode-table only, per the Slice 5 / Phase 7 precedent: an in-flight save
+    // keeps the frozen capability set it was created with and simply never opens a room.
+    structuredInterviews: true,
+    structuredEmployeeConversations: true,
+    proceduralBoardMeetings: true,
     // Career Phase 1 — PMF Discovery 2.0. Segment truth, beliefs, evidence, cohorts.
     detailedPMF: true,
     customerSegments: true,

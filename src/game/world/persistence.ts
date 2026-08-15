@@ -36,6 +36,12 @@ import {
   type CharacterStatus,
   type CompanyMemory,
   type CompanyMemoryType,
+  type InteractionEvidence,
+  type InteractionKind,
+  type InteractionLine,
+  type InteractionMode,
+  type InteractionOption,
+  type InteractionStatus,
   type LivingWorldState,
   type MemoryItem,
   type NarrativeEntry,
@@ -44,6 +50,7 @@ import {
   type PromiseRecord,
   type PromiseStatus,
   type RelationshipState,
+  type StructuredInteraction,
 } from './types'
 
 // ---------- empty state ----------
@@ -109,6 +116,9 @@ export interface PersistedWorld {
   narrative: NarrativeHistory
   /** §68: composed advisor prose is persisted — the panel must not reword itself on reload. */
   advisorPanel?: AdvisorPanelState
+  /** §68 again, and more so: an open room the player has not answered cannot be regenerated. */
+  interactions?: StructuredInteraction[]
+  lastBoardMeetingWeek?: number
   lastGeneratedWeek?: number
   narrativeLastSeen?: Record<string, number>
 }
@@ -192,6 +202,8 @@ export function toPersistedWorld(world: LivingWorldState, rebuild?: CharacterReb
     promises: world.promises,
     narrative: world.narrative,
     advisorPanel: world.advisorPanel,
+    interactions: world.interactions,
+    lastBoardMeetingWeek: world.lastBoardMeetingWeek,
     lastGeneratedWeek: world.lastGeneratedWeek,
     narrativeLastSeen: world.narrativeLastSeen,
   })
@@ -402,6 +414,99 @@ function normalizeAdvisorPanel(raw: unknown): AdvisorPanelState | undefined {
   }
 }
 
+// Same `satisfies` discipline as the status lists above.
+const INTERACTION_KINDS = ['interview', 'conversation', 'board_meeting'] as const satisfies readonly InteractionKind[]
+const INTERACTION_MODES = ['ask', 'answer'] as const satisfies readonly InteractionMode[]
+const INTERACTION_STATUSES = ['open', 'resolved'] as const satisfies readonly InteractionStatus[]
+
+/** Facts are JSON forever: only strings and finite numbers, sorted, so the round-trip is stable. */
+function normalizeFactBag(raw: unknown): Record<string, string | number> | undefined {
+  if (!isObj(raw)) return undefined
+  const out: Record<string, string | number> = {}
+  for (const k of Object.keys(raw).sort()) {
+    const v = raw[k]
+    if (typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v))) out[k] = v
+  }
+  return out
+}
+
+function normalizeInteractionLine(raw: unknown): InteractionLine | null {
+  if (!isObj(raw)) return null
+  const text = str(raw.text)
+  const speaker = str(raw.speaker)
+  // A line with nothing said is not a line. Dropping it is right: the record is what was SAID.
+  if (!text || !speaker) return null
+  const fragmentIds = strings(raw.fragmentIds)
+  return prune({
+    characterId: optStr(raw.characterId),
+    speaker,
+    role: optStr(raw.role),
+    text,
+    optionId: optStr(raw.optionId),
+    fragmentIds: fragmentIds.length ? fragmentIds : undefined,
+  })
+}
+
+function normalizeInteractionOption(raw: unknown): InteractionOption | null {
+  if (!isObj(raw)) return null
+  const id = str(raw.id)
+  const label = str(raw.label)
+  // An option with no label is a button the player cannot read — never guessed at, always dropped.
+  if (!id || !label) return null
+  return prune({ id, label, detail: optStr(raw.detail) })
+}
+
+function normalizeInteractionEvidence(raw: unknown): InteractionEvidence | null {
+  if (!isObj(raw)) return null
+  const metric = str(raw.metric)
+  if (!metric) return null
+  return { metric, signal: clamp(num(raw.signal, 50), 0, 100), reliability: clamp(num(raw.reliability, 0), 0, 1) }
+}
+
+/**
+ * One room, loaded from a user-writable blob. A room with no id, no kind or nothing left to do is
+ * dropped rather than repaired: it can never be rendered honestly, and unlike a promise there is
+ * no obligation hiding inside it that dropping would quietly absolve.
+ */
+function normalizeInteraction(raw: unknown): StructuredInteraction | null {
+  if (!isObj(raw)) return null
+  const id = str(raw.id)
+  const kind = str(raw.kind) as InteractionKind
+  if (!id || !INTERACTION_KINDS.includes(kind)) return null
+  const mode = str(raw.mode, 'answer') as InteractionMode
+  const status = str(raw.status, 'open') as InteractionStatus
+  const options = asArray(raw.options)
+    .map(normalizeInteractionOption)
+    .filter((o): o is InteractionOption => o !== null)
+  const safeStatus = INTERACTION_STATUSES.includes(status) ? status : 'open'
+  // An open room with no options, or with no moves left, is unanswerable. Close it rather than
+  // leaving the player staring at a question with no buttons under it.
+  const resolved = safeStatus === 'resolved' || options.length === 0 || Math.round(num(raw.movesLeft, 1)) <= 0
+  const evidence = asArray(raw.evidence)
+    .map(normalizeInteractionEvidence)
+    .filter((e): e is InteractionEvidence => e !== null)
+  return prune({
+    id,
+    kind,
+    mode: INTERACTION_MODES.includes(mode) ? mode : 'answer',
+    week: Math.max(0, Math.round(num(raw.week, 0))),
+    topic: str(raw.topic, 'unknown'),
+    title: str(raw.title) || 'A conversation',
+    characterIds: strings(raw.characterIds),
+    lines: asArray(raw.lines)
+      .map(normalizeInteractionLine)
+      .filter((l): l is InteractionLine => l !== null),
+    options,
+    chosen: strings(raw.chosen),
+    movesLeft: resolved ? 0 : clamp(Math.round(num(raw.movesLeft, 1)), 0, 12),
+    status: resolved ? ('resolved' as const) : ('open' as const),
+    resolvedWeek: optNum(raw.resolvedWeek),
+    outcome: optStr(raw.outcome),
+    facts: normalizeFactBag(raw.facts),
+    evidence: evidence.length ? evidence : undefined,
+  })
+}
+
 function normalizeNarrativeEntry(raw: unknown): NarrativeEntry | null {
   if (!isObj(raw)) return null
   const id = str(raw.id)
@@ -502,6 +607,12 @@ export function fromPersistedWorld(raw: unknown, rebuild?: CharacterRebuilder): 
       .filter((p): p is PromiseRecord => p !== null),
     narrative: normalizeNarrative(raw.narrative),
     advisorPanel: normalizeAdvisorPanel(raw.advisorPanel),
+    // Absent stays absent: a run that never opened a room must not grow the key, the same trick
+    // `narrativeLastSeen` and career's `pipeline` use.
+    interactions: Array.isArray(raw.interactions)
+      ? raw.interactions.map(normalizeInteraction).filter((i): i is StructuredInteraction => i !== null)
+      : undefined,
+    lastBoardMeetingWeek: optNum(raw.lastBoardMeetingWeek),
     lastGeneratedWeek: optNum(raw.lastGeneratedWeek),
     // Novelty must survive a reload: if it reset, the Director would treat every story as
     // first-time again and the same one could lead week after week — the exact repetition this
@@ -688,6 +799,22 @@ export function enforceLivingWorldLimits(world: LivingWorldState): void {
   if (world.advisorPanel && world.advisorPanel.opinions.length > LIVING_WORLD_LIMITS.advisorOpinions)
     world.advisorPanel.opinions = world.advisorPanel.opinions.slice(0, LIVING_WORLD_LIMITS.advisorOpinions)
 
+  // Rooms shed the same way promises do, and for the same reason: an OPEN one is a question the
+  // player has been asked and has not answered, and deleting it would make the system a liar.
+  if (world.interactions && world.interactions.length > LIVING_WORLD_LIMITS.interactions) {
+    const open = world.interactions.filter((i) => i.status === 'open')
+    const room = Math.max(0, LIVING_WORLD_LIMITS.interactions - open.length)
+    const keep = new Set([
+      ...open.map((i) => i.id),
+      ...world.interactions
+        .filter((i) => i.status !== 'open')
+        .sort((a, b) => (b.resolvedWeek ?? b.week) - (a.resolvedWeek ?? a.week) || (a.id < b.id ? -1 : 1))
+        .slice(0, room)
+        .map((i) => i.id),
+    ])
+    world.interactions = world.interactions.filter((i) => keep.has(i.id))
+  }
+
   const n = world.narrative
   if (n.entries.length > LIVING_WORLD_LIMITS.narrativeEntries)
     n.entries = n.entries.slice(n.entries.length - LIVING_WORLD_LIMITS.narrativeEntries)
@@ -715,12 +842,13 @@ export interface LivingWorldFootprint {
   memories: number
   companyMemory: number
   promises: number
+  interactions: number
   narrativeEntries: number
   overBudget: boolean
 }
 
 // Per-item averages from the persisted shape; used to skip the stringify on the common small case.
-const ROUGH = { character: 240, memory: 130, relationship: 70, companyMemory: 110, promise: 120, narrativeEntry: 140, usageItem: 30, advisorOpinion: 260 }
+const ROUGH = { character: 240, memory: 130, relationship: 70, companyMemory: 110, promise: 120, narrativeEntry: 140, usageItem: 30, advisorOpinion: 260, interactionLine: 190 }
 
 function roughBytes(world: LivingWorldState): number {
   let total = 0
@@ -733,6 +861,10 @@ function roughBytes(world: LivingWorldState): number {
   total += world.companyMemory.length * ROUGH.companyMemory
   total += world.promises.length * ROUGH.promise
   total += (world.advisorPanel?.opinions.length ?? 0) * ROUGH.advisorOpinion
+  // Rooms are priced per LINE, not per room: an interview that ran its full budget carries twelve
+  // spoken sentences and an unanswered board meeting carries two, and averaging those would make
+  // the cheap check wrong exactly where the slice is largest.
+  for (const room of world.interactions ?? []) total += (room.lines.length + 2) * ROUGH.interactionLine
   total += world.narrative.entries.length * ROUGH.narrativeEntry
   const u = world.narrative.usage
   total += (u.recentFragmentIds.length + u.recentTags.length + u.recentPatterns.length) * ROUGH.usageItem
@@ -752,6 +884,7 @@ export function livingWorldFootprint(world: LivingWorldState): LivingWorldFootpr
     memories,
     companyMemory: world.companyMemory.length,
     promises: world.promises.length,
+    interactions: world.interactions?.length ?? 0,
     narrativeEntries: world.narrative.entries.length,
     overBudget: bytes > LIVING_WORLD_BUDGET_BYTES,
   }
@@ -777,6 +910,14 @@ export function compactLivingWorld(world: LivingWorldState, budget = LIVING_WORL
     if (c?.background.bio) delete c.background.bio
   }
   if (livingWorldFootprint(world).bytes <= budget) return true
+
+  // Settled rooms next: the verdict already landed as memory, trust and (where there was one) a
+  // promise record, so what is being shed here is the transcript, not the consequence. Open rooms
+  // are never touched — those are questions still waiting on an answer.
+  if (world.interactions?.some((i) => i.status !== 'open')) {
+    world.interactions = world.interactions.filter((i) => i.status === 'open')
+    if (livingWorldFootprint(world).bytes <= budget) return true
+  }
 
   const half = Math.max(4, Math.floor(LIVING_WORLD_LIMITS.memoriesPerCharacter / 2))
   for (const id of ids) {

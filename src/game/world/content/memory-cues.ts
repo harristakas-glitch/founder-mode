@@ -151,6 +151,14 @@ export const PROMISE_KEYS = {
   compDiscipline: 'promised_comp_discipline',
   /** The cost-of-living adjustment, granted: promised and paid in the same breath. */
   cola: 'promised_cola_adjustment',
+  // Phase 8 — the commitments made in a room rather than in the inbox (§38, §46). Every one of
+  // these settles on a fact the simulation already computes; see settleWeeklyPromises.
+  /** "Nothing changes for a quarter" — judged by whether the strategy actually held still. */
+  steadyCourse: 'promised_steady_course',
+  /** The board meeting's "accelerate": the target, by the next review. */
+  boardPace: 'promised_board_pace',
+  /** The board meeting's "slow down": a smaller weekly burn by the next review. */
+  burnCut: 'promised_burn_cut',
 } as const
 
 /**
@@ -208,6 +216,19 @@ export const MEMORY_CUES: Record<string, MemoryCueDef> = {
   hire_made: { tags: ['hiring', 'headcount'], recalls: [PROMISE_KEYS.headcount] },
   performance_review: { tags: ['recognition', 'promotion'], recallTypes: ['promise', 'recognition', 'rejection'] },
   one_on_one: { tags: ['trust'], recallTypes: ['promise', 'conflict', 'support'] },
+  // Phase 8 (§38): the deeper version of the 1:1 — someone raises a specific thing, and the
+  // answer they got last time is the loudest thing in the room.
+  employee_conversation: {
+    tags: ['trust', 'recognition'],
+    recalls: [PROMISE_KEYS.promotion, PROMISE_KEYS.equity, PROMISE_KEYS.headcount, PROMISE_KEYS.steadyCourse],
+    recallTypes: ['promise', 'rejection', 'conflict', 'support'],
+  },
+  // Phase 8 (§46): the board sits down. Everything ever said to the board is in the room with you.
+  board_meeting: {
+    tags: ['board', 'strategy', 'growth'],
+    recalls: [PROMISE_KEYS.boardGrowth, PROMISE_KEYS.fundingGrowth, PROMISE_KEYS.boardPace, PROMISE_KEYS.burnCut],
+    recallTypes: ['promise', 'conflict'],
+  },
   exit_interview: { tags: ['departure', 'trust'], recallTypes: ['promise', 'betrayal', 'conflict', 'rejection'] },
   postmortem: { tags: ['strategy', 'trust'], recallTypes: ['betrayal', 'promise', 'layoff', 'crisis'] },
 }
