@@ -245,12 +245,15 @@ export function buildInterviewCustomer(
   // Reachability is how easy this segment is to sell to at all, so it is also how likely the
   // person who answered the phone is the person who can say yes.
   const budgetAuthority = rng() < clamp01(0.15 + truth.acquisitionAccessibility / 190)
-  const priceSensitivity = clamp(100 - truth.willingnessToPay + (p.riskTolerance - 50) * -0.2, 0, 100)
-  const innovationAffinity = clamp(p.riskTolerance * 0.6 + p.optimism * 0.4, 0, 100)
-  // Agreeable people give you the answer you want. This is the single most expensive bias in the
-  // game and it is deliberately common (§43).
-  const politenessBias = clamp(100 - p.directness * 0.7 + p.empathy * 0.3, 0, 100)
-  const statusQuoBias = clamp(100 - p.riskTolerance * 0.8 + (100 - truth.needIntensity) * 0.35, 0, 100)
+  // Mostly the segment's own willingness to pay, tilted by temperament: a pessimist reads the same
+  // invoice as more expensive than an optimist does.
+  const priceSensitivity = clamp(100 - truth.willingnessToPay + (50 - p.optimism) * 0.25, 0, 100)
+  const innovationAffinity = clamp(20 + p.riskTolerance * 0.55 + p.optimism * 0.35, 0, 100)
+  // Agreeable people give you the answer you want. The single most expensive bias in the game, and
+  // deliberately the common case (§43) — but it has to SPREAD, or "polite" stops being a property
+  // of a person and becomes a property of customers, and the lesson stops being learnable.
+  const politenessBias = clamp(50 + (60 - p.directness) * 0.8 + (p.empathy - 50) * 0.4, 0, 100)
+  const statusQuoBias = clamp(40 + (55 - p.riskTolerance) * 0.7 + (60 - truth.needIntensity) * 0.4, 0, 100)
   const featureRequestBias = clamp(truth.productRequirement * 0.6 + p.ego * 0.25, 0, 100)
 
   return {
