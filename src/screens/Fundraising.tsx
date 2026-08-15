@@ -60,6 +60,18 @@ function SecondaryPanel() {
             {game.bankedPayout > 0 && (
               <span className="text-good"> Banked so far: {money(game.bankedPayout)}.</span>
             )}
+            {/* BACKLOG 4.2. The numbers are RIGHT and deliberately not changed: 2% sold at a 30%
+                discount is cash worth 1.4% of the company, measured at −24% on final score. That is
+                good design — it is a hedge that survives bankruptcy, not a value play. The defect
+                was that the panel never said so, so a player could take it expecting to come out
+                ahead. Now the trade is on the screen, in the run's own numbers. */}
+            <span className="mt-1.5 block">
+              <b className="text-ink">This is a hedge, not a win.</b> That 2% is worth{' '}
+              <b className="text-ink tnum">{money(valuation(game) * 0.02)}</b> on paper and you are taking{' '}
+              <b className="text-ink tnum">{money(secondaryProceeds(game))}</b> for it — you are paying{' '}
+              <b className="text-ink tnum">{money(valuation(game) * 0.02 - secondaryProceeds(game))}</b> for the certainty. It only pays
+              off if the run ends badly.
+            </span>
           </div>
           {gate.ok ? (
             <Btn variant="primary" onClick={doSecondary}>
