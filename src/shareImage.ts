@@ -181,14 +181,15 @@ export function drawStoryCard(g: GameState): HTMLCanvasElement {
     [num(peakUsers), 'peak users'],
     [payout > 0 ? money(payout) : '—', 'founder payout'],
   ]
+  // baseline sits clear of the footer line, which owns the last 40px of the card
   let sx = 60
   for (const [v, k] of stats) {
     ctx.fillStyle = payout > 0 && k === 'founder payout' ? '#34d399' : '#dce5f5'
     ctx.font = font(38, 800)
-    ctx.fillText(v, sx, 578)
+    ctx.fillText(v, sx, 548)
     ctx.fillStyle = '#8593ab'
     ctx.font = font(19, 600)
-    ctx.fillText(k, sx, 604)
+    ctx.fillText(k, sx, 574)
     sx += Math.max(170, ctx.measureText(v).width + 90)
   }
 
