@@ -74,15 +74,18 @@ What is actually on, resolved from the code:
 | Bank debt · verticals · IPO · macro shocks | ✅ | ✅ | ✅ |
 | PvP attacks · shared hiring pool · seeded shared world | — | — | ✅ |
 | Detailed PMF · customer research · hypothesis board | — | ✅ | — |
-| Relationships (living world) | — | ✅ | — |
+| Relationships · advisor opinions · promises (living world) | — | ✅ | — |
+| Customer interviews · employee conversations · board meetings | — | ✅ | — |
 | Procedural narrative · media · Narrative Director · persistent characters · company memory | ✅ | ✅ | ✅ |
 | Character memory | ✅ | ✅ | — |
 | Leaderboard · single attempt | Daily only | — | — |
 
-Career adds **six** capabilities over Quick Play. Four are enforced — `detailedPMF`,
-`customerResearch`, `hypothesisBoard`, `relationships`. The other two, `customerSegments` and
-`decisionJournal`, are descriptive: the segment model and the journal live inside the Career
-subsystem, so `game.career` existing *is* the switch, and turning either flag off alone does nothing.
+Career adds **eleven** capabilities over Quick Play. Nine are enforced — `detailedPMF`,
+`customerResearch`, `hypothesisBoard`, `relationships`, `advisorOpinions`, `promises`,
+`structuredInterviews`, `structuredEmployeeConversations`, `proceduralBoardMeetings`. The other two,
+`customerSegments` and `decisionJournal`, are descriptive: the segment model and the journal live
+inside the Career subsystem, so `game.career` existing *is* the switch, and turning either flag off
+alone does nothing.
 
 ---
 
@@ -209,33 +212,43 @@ saves, and the test suite asserts it for all three.
 The design brief is [`docs/procedural-living-world-system.md`](docs/procedural-living-world-system.md),
 which lays out **sixteen phases**.
 
-**Built — the brief's phases 1–5**, plus the persistence and regression work that goes with them
-(phases 14–16): shared foundation (persistent characters, company memory), character memory,
-relationships, the procedural composer, the Career dynamic inbox, and the Narrative Director — which
-scores every candidate story each week and decides what deserves to be told, with a wider budget in
-Career than in Quick Play. Media-voiced coverage of company-level facts runs alongside it. Quick Play
-and Arena get the narrative layer (phases 10–11) but not the relationship simulation.
+**Built — the brief's phases 1–8**, plus the persistence and regression work that goes with them
+(phases 14–16):
+
+- **1–5, every mode.** Shared foundation (persistent characters, company memory), character memory,
+  relationships, the procedural composer, the Career dynamic inbox, and the Narrative Director —
+  which scores every candidate story each week and decides what deserves to be told, with a wider
+  budget in Career than in Quick Play. Media-voiced coverage of company-level facts runs alongside
+  it. Quick Play and Arena get the narrative layer (phases 10–11) but not the relationship
+  simulation.
+- **6–8, Career only.** `advisorOpinions` — named people reading the same week through different
+  weights and disagreeing about it on the Dashboard. `promises` — the choices that ARE commitments
+  (defying the board, answering the raise demand, signing a term sheet) tracked against their own
+  deadlines and settled from the simulation's own verdicts. `structuredInterviews`,
+  `structuredEmployeeConversations` and `proceduralBoardMeetings` — the three rooms where the
+  founder answers back: §41's eight questions put to three procedurally generated customers with
+  hidden biases, an employee conversation opened by a genuinely strained relationship, and a board
+  meeting composed from the same week the advisors read. A commitment made in a room joins the
+  promise ledger and is judged later against a simulation fact.
 
 **Not built**, with every corresponding capability `false` in every mode — this is the honest list,
 by system rather than by phase number:
 
-`advisorOpinions` (named advisors who argue) · `promises` (see below) · `structuredInterviews` ·
-`structuredEmployeeConversations` · `proceduralBoardMeetings` · `longTermCallbacks` ·
-`rivalArchetypes` · `rivalNarrative` · `proceduralPostmortem` · `livingWorld` (the umbrella flag).
-Story arcs are still the hand-written six, not state machines.
+`longTermCallbacks` · `rivalArchetypes` · `rivalNarrative` · `proceduralPostmortem` · `livingWorld`
+(the umbrella flag). Story arcs are still the hand-written six, not state machines.
 
-Two things to know before you work in here — both from `docs/architecture-review.md`:
+One thing to know before you work in here — from `docs/architecture-review.md`:
 
-- **`promises` is honoured by real code and is `false` in every mode.** `recordPromise`,
-  `resolvePromise`, `expireDuePromises` and friends in `world/memory.ts` are built, correct and
-  completely unreachable. That is phase 7 waiting, not a bug — but do not assume it runs.
 - **There are two memory-selection engines and only one is live.** `memory.ts` has a scored recall
   system (`resolveCue`, `scoreMemoryRelevance`, `recallMemories`, ~200 lines) that nothing calls;
   `composer.ts`'s simpler `selectMemoryCallback` is the one on the live path. When you next tune
   memory recall you will find the wrong one first, because it is the bigger of the two.
 
-More broadly: `world/**` is ~6,800 lines with 41 exports that occur exactly once (their own
-declaration). Roughly a third of it is reachable today.
+And one rule the subsystem is built around, which phases 7 and 8 both had to learn: **nothing in
+`world/**` may write to `s.inbox`.** The simulation READS inbox windows upstream of seeded draws —
+the 1:1 dedupe scans the first 12 messages, the weekly event picker the first 8 titles — so one
+extra message shifts an RNG draw count and `npm run bots` stops being byte-identical. The living
+world reaches the player through panels, never through mail.
 
 ---
 
@@ -361,8 +374,9 @@ src/
     achievements.ts
     pvp.ts         #   hit piece + price war (the two attacks that cost the attacker)
     career/        #   Career-only PMF discovery: types, segments, pmf, tick
-    world/         #   Living World phases 1–5: characters, memory, relationships,
-                   #   composer, director, persistence, content/
+    world/         #   Living World phases 1–8: characters, memory, relationships,
+                   #   composer, director, advisors, promises, interactions,
+                   #   persistence, content/
   screens/         # one file per screen (Dashboard, Product, Market, Discovery,
                    # Finance, Hiring, Team, Growth, Inbox, Fundraising, Lobby,
                    # NewGame, Career, DailyLeaderboard)
@@ -371,7 +385,7 @@ src/
   theme.ts         # sector accents, ending emoji/labels, GAME_URL — React-free on purpose
   store.ts         # Zustand store: game actions + online match protocol
   App.tsx          # shell: nav, topbar, overlays, result screens
-test/              # seven test suites + four probe harnesses (plain tsx scripts)
+test/              # the suites in `npm test` + the probe harnesses (plain tsx scripts)
 docs/              # design specs and the three review documents
 supabase/          # SQL to run in the Supabase SQL editor
 scripts/           # singlefile.mjs — bundles the game into one HTML file

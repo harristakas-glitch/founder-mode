@@ -73,7 +73,7 @@ import {
   type ConversationAnswer,
   type InterviewQuestion,
 } from './content/interactions'
-import { FOUNDER_ID, LIVING_WORLD_LIMITS } from './types'
+import { FOUNDER_ID } from './types'
 import type {
   Character,
   CharacterId,
@@ -1066,8 +1066,9 @@ export function generateInteractions(
     openConversation(s, world, seed)
 
   if (hasCapability(s, 'proceduralBoardMeetings')) openBoardMeeting(s, world, seed, extraFacts)
-
-  enforceInteractionLimit(world)
+  // The cap itself lives in persistence.ts with every other cap, and tickLivingWorld calls
+  // enforceLivingWorldLimits immediately after this — one implementation, applied on the weekly
+  // step and on every load.
 }
 
 /**
@@ -1093,29 +1094,4 @@ export function sweepStaleInteractions(world: LivingWorldState, week: number): S
     closed.push(room)
   }
   return closed
-}
-
-/**
- * Keep the rooms inside their cap. An OPEN room is never dropped — the player has not answered it
- * yet and silently deleting the question would be the system lying about what it asked — so the
- * settled ones go first, oldest verdict first, exactly the way the promise ledger sheds.
- */
-export function enforceInteractionLimit(world: LivingWorldState): void {
-  const rooms = world.interactions
-  if (!Array.isArray(rooms) || rooms.length <= LIVING_WORLD_LIMITS.interactions) return
-  const open = rooms.filter((i) => i.status === 'open')
-  const room = Math.max(0, LIVING_WORLD_LIMITS.interactions - open.length)
-  const keptSettled = new Set(
-    rooms
-      .filter((i) => i.status !== 'open')
-      .sort((a, b) => (b.resolvedWeek ?? b.week) - (a.resolvedWeek ?? a.week) || (a.id < b.id ? -1 : 1))
-      .slice(0, room)
-      .map((i) => i.id),
-  )
-  world.interactions = rooms.filter((i) => i.status === 'open' || keptSettled.has(i.id))
-  // A runaway (a hand-edited save with fifty open rooms) still has to come down to something.
-  if (world.interactions.length > LIVING_WORLD_LIMITS.interactions * 2)
-    world.interactions = [...world.interactions]
-      .sort((a, b) => b.week - a.week || (a.id < b.id ? -1 : 1))
-      .slice(0, LIVING_WORLD_LIMITS.interactions * 2)
 }
