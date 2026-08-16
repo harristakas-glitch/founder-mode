@@ -36,7 +36,7 @@ PLAY
 
 Quick Play has three **formats** (`src/game/engine.ts:174` for the scenario list):
 
-- **Standard Run** — open-ended, five sectors (B2B SaaS, Social App, Fintech, Dev Tools, E-commerce).
+- **Standard Run** — open-ended, six sectors (B2B SaaS, Social App, Fintech, Dev Tools, E-commerce, AI/ML Infra).
 - **Daily Challenge** — 104 weeks, fixed seed, global leaderboard. "One attempt" is enforced at the
   data layer — unique `(day, player_id)`, keep-the-higher-score — not in the client. Replaying today
   is still allowed, by design.
@@ -98,7 +98,7 @@ Shared by Quick Play and Career unless noted. Arena switches most of the narrati
 | **Product-market fit (Quick Play)** | Every idea has a hidden market resonance. Research reveals it; pivoting rerolls it, with accumulated research improving the odds. **Career replaces this entirely — see below, and note that in Career a pivot has nothing to reroll.** |
 | **Rivals** | Three AI competitors per market, seeded, with their own funding, launches and failures. They take your users when their product is better — or you can acquire them, cash or stock, with rebuff risk. They also **fight back**: a rival who holds a real piece of the market raids a fast-growing upstart, one who out-raised you by two rounds comes for your people, one losing the comparison threads briefs against you, and a cornered one starts a price war. The posture is a reading of state they can plausibly see, it is shown on the rival table a week before their first move, and the crisis retainer and counter-punch answer it (`docs/balance-baseline.md` §5). |
 | **Fundraising** | Pre-seed → Series C. Term sheets price off valuation and the funding climate; round sizes chase growth. Down rounds hurt. One emergency bridge exists for a company worth saving — it costs 15% of your remaining stake, and there is no second one. |
-| **The board** | Investor money brings a growth target. First review 12 weeks after the round, then every 10. Pass on user growth, revenue growth, or (from Series B, at a >15% net margin) real profitability. A near miss is a warning; a real miss is a strike. **The ultimatum fires on the second strike** — submit to layoffs or defy the board and bet your job on the next review. |
+| **The board** | Investor money brings a growth target. First review 12 weeks after the round, then every 10. Pass on user growth, revenue growth, or (from Series B, at a >15% net margin) real profitability. A near miss is a warning; a real miss is a strike. **The ultimatum fires on the third strike** — submit to layoffs or defy the board and bet your job on the next review. |
 | **Macro economy** | A market index, central-bank rate and inflation tick weekly, driving the funding climate, pricing your debt and inflating salaries. Oil shocks, rate cuts, rallies, crashes. |
 | **Bank debt** | Borrow up to half your ARR, capped at $10M, at rate + spread, no dilution — against a revenue covenant stated up front. |
 | **Team** | Employees have skill, morale, salary and a trait: **10x** (×1.7 output, only rolls on skill ≥ 8), **Mercenary** (×1.15, and walks at morale 55 rather than 32), **Craftsman** (×1.1 and quietly kills bugs), **Culture carrier** (lifts morale weekly), **Drama magnet** (drains it). Offers can be declined, notice periods apply, recruiters take 15% of first-year salary. |
@@ -110,8 +110,10 @@ Shared by Quick Play and Career unless noted. Arena switches most of the narrati
 | **Founder energy** | A 0–100 tank. Founder *actions* drain it — pivot −12, investor pitch −10, filing the S-1 −10, all-hands −8, M&A −8, board ultimatum −5, PvP attack −4 — and low energy weakens everything you touch. Dropping to 5 forces a burnout week. (See Known limitations: cash stress does **not** erode it, despite the comment above the formula.) |
 | **One-on-ones** | Employees bring asks to your door — promotions, remote work, side projects, sabbaticals — with consequences targeted at that person. |
 | **Catastrophes** | Late-game, sector-flavoured: the fintech breach, the social algorithm change, the e-commerce logistics meltdown, the dev-tools CVE. |
-| **Secondary sales** | From Series B: 2% of the company at a 30% discount, banked into your final payout however the run ends. Once per stage. |
+| **Secondary sales** | From Series B: 2% of the company at a 30% discount, banked into your final payout however the run ends. Once per stage. The panel states the trade in your own numbers — 2% of the company for cash worth 1.4% of it — because it is a hedge that survives bankruptcy, not a value play (−24% on final score if the run goes well). |
 | **Events & achievements** | A 66-card event deck — every option shows its price — and 26 cross-run achievement badges. |
+| **Verifiable runs** | Every simulation-mutating action is journalled, and `replayRun` re-executes the log through the *same registry functions* live play uses — so coverage is architectural, not a discipline someone has to remember. A 90-week run journals to ~4.3 KB. The results screen reports `verified` / `desync` / `no decision log`, and a test proves the honesty property: an unjournalled mutation makes verification go **red**, never silently green. |
+| **The run biography** | A chaptered Story screen assembled from what the run already recorded — inbox, company memory, promises, the Career journal, the token ledger, the ending — in the game's own voice. A pure read: building it 100× leaves the state byte-identical and draws from no RNG stream. Shares as a 1200×630 card off the same lazy canvas the results card uses. |
 
 ---
 
@@ -249,6 +251,45 @@ And one rule the subsystem is built around, which phases 7 and 8 both had to lea
 the 1:1 dedupe scans the first 12 messages, the weekly event picker the first 8 titles — so one
 extra message shifts an RNG draw count and `npm run bots` stops being byte-identical. The living
 world reaches the player through panels, never through mail.
+
+---
+
+## Tokenisation: the other capital path
+
+`src/game/token/` — Career only, behind seven capabilities. The design brief is
+[`docs/tokenisation-ico.md`](docs/tokenisation-ico.md); the contract every slice was built against
+is [`docs/ico-architecture.md`](docs/ico-architecture.md). **All seven slices are shipped.**
+
+Once a company has a real community it can stop raising equity and launch a token instead. The fork
+is **irreversible** and it closes the institutional path permanently — no more rounds, no IPO. What
+opens in return is a second economy with its own capital, its own counterparty and its own endings.
+
+| Slice | What it added |
+|---|---|
+| **1 · The fork** | Eligibility read off the run's own numbers, sector suitability, the launch terms preview, and the one rule the whole feature hangs on: `valuation()` never absorbs token market cap. `founderStanding` meets it in two **disjoint legs** — equity × enterprise value, plus the realisable token position — so no dollar is ever counted twice. |
+| **2 · The economy** | Price, supply, treasury, utility, speculation, depth — every reflexive loop shipped with an explicit restoring force, bot-proven against runaway and absorbing states. |
+| **3 · Organic vs incentivised** | Bought users are real users and are **not evidence**. `derivePmfForSegment` sees organic cohorts only — exclusion, not weighting, because any weighting means enough spend still buys Strong PMF. |
+| **4 · Tokenomics & incentives** | The allocation you negotiate inside a band the community sets, and six incentive categories run as standing shares of a weekly token budget. |
+| **5 · The community** | The counterparty. A conduct ledger drags trust for treasury sales, rented growth and the founder's unsold overhang; `founderInfluence` prices how a sale reads; below trust 30 holders leave **and sell on the way out**. |
+| **6 · Governance** | Proposals emerge from that state and **votes resolve from state, never from a roll** — two seeds give different prices and the identical vote. Passed votes bind: budget floors, sale freezes, and a telegraphed community ouster that routes to the existing `fired` ending. |
+| **7 · Endings & founder sales** | The `network` ending, and §42 founder secondaries that finally make `bankedPayout` reachable on this path. |
+
+**Two things measurement changed, and they are worth reading before you touch any of it.**
+
+The token path once beat the traditional one by **1.83×–25.10×** — and won *strictly*: higher floors,
+fewer failures, unicorns where equity runs had none. Three structural fixes closed it, none of them a
+retune: the initial sale now **dilutes** like the round it replaces, incentive intensity is
+denominated in float share rather than dollars (the price re-rated 9.9–90× per run, so a fixed 0.8%
+of float silently bought ninety times more customers late than early), and an early community funds a
+seed rather than the whole book. The band is now **1.07×–2.07×**, and Late Token is the best arm in
+several sectors, so *when* to launch is a real decision.
+
+The `network` ending as originally specified **fired zero times and was worth $0.00** — the $1B gate
+sat above the p99 of ~450 measured runs, and its payout was exactly what a still-trading token run
+already scored. It now gates at $100M with §1.4's anti-bubble clauses kept verbatim and three added
+(six consecutive weeks, network ≥ company, trust ≥ 42), and it is an **offer, not a terminus**: as an
+automatic ending it was a *trap* in 17 of 25 runs it fired in, because the gate closes around week 65
+while the network is usually still compounding.
 
 ---
 
@@ -484,23 +525,39 @@ The game runs fully offline and anonymous without any of this.
 
 ## Balance
 
-Every mechanic ships with headless bot validation. `npm run bots` runs three Career strategies over
-24 seeds × 90 weeks in B2B SaaS and Fintech. Measured on this tree, B2B SaaS:
+Every mechanic ships with headless bot validation. `npm run bots -- all` runs three Career
+strategies over 24 seeds × 90 weeks in all six sectors. Measured on this tree, B2B SaaS:
 
-| Strategy | Alive at wk 90 | Customers (median) | 4wk retention | Revenue/wk | Valuation |
-|---|---|---|---|---|---|
-| **Careless Growth** — spend, never research | 19 / 24 | 363 | 53% | $2,665 | $3.1M |
-| **Disciplined Discovery** — experiment first, scale late | 16 / 24 | 357 | 67% | $8,699 | $12.1M |
-| **Enterprise Bet** — pivot high, price premium, build to the bar | 18 / 24 | 196 | 66% | $5,020 | $6.5M |
+| Strategy | Failed | Exits | Customers (median) | 4wk retention | Revenue/wk | Founder net |
+|---|---|---|---|---|---|---|
+| **Careless Growth** — spend, never research | 0 / 24 | 7 | 509 | 66% | $3,955 | $4.0M |
+| **Disciplined Discovery** — experiment first, scale late | 3 / 24 | 6 | 256 | 76% | $8,182 | **$6.2M** |
+| **Enterprise Bet** — pivot high, price premium, build to the bar | 2 / 24 | 2 | 177 | 72% | $5,414 | $4.3M |
 
-Careless growth survives well *because it barely spends*, keeps the fewest of its customers, and
-never crosses into fit — 22 of its 24 runs top out at *Showing value*. Disciplined discovery reaches
-$2k/wk revenue fastest (median week 18, vs 23 careless and 30 enterprise) and ends ~4× more valuable,
-while surviving the least often: it spends, and spending is what kills companies here.
+Disciplined Discovery is strongest in **all six sectors** — that ordering is the property the harness
+exists to protect, and every balance change since has been checked against it.
 
-Re-run the numbers rather than trusting this table if the economy has been touched — an earlier
-version of it in this file was inflated by a rounding bug in cohort decay that made small cohorts
-report 100% retention forever.
+Two things this table is not. **`failed` is bankruptcy and firing only** — an acquisition is an
+*outcome*, not a death, and reporting `alive = !gameOver` is what once made coasting look like the
+best strategy in the game (it scored 24/24 by never being worth buying). And the milestone column is
+**weeks-to-profitability**, not the old `$2k/wk` bar, which every strategy cleared by week 10 once
+Career's revenue was calibrated and so discriminated nothing.
+
+The harnesses, all of them measure-first:
+
+| Harness | What it answers |
+|---|---|
+| `npm run bots -- all` | the three Career strategies, per sector |
+| `npm run balance -- <mode>` | ladder / unit economics / headcount / pricing / land-grab / margin |
+| `test/deep-balance-probe.ts` | Quick Play: the allocation simplex, founder kinds, inbox choices, the covenant |
+| `test/token-balance-probe.ts` | the capital fork: 18 arms including exploit and counterfactual arms |
+| `test/arena-duel-probe.ts` · `arena-ffa-probe.ts` | 1v1 and 4-player attack balance |
+| `test/exploit-probe.ts` | deliberately degenerate policies, looking for lines that beat real play |
+
+Re-run the numbers rather than trusting any table here if the economy has been touched. An earlier
+version of this one was inflated by a rounding bug that made small cohorts report 100% retention
+forever; a later one was measured before Quick Play's revenue rate was fixed. **Both read as fact at
+the time.**
 
 ---
 
@@ -538,9 +595,13 @@ All of these are verified. None is a plan; they are the state of the thing.
 
 **Leaderboard**
 
-7. **Scores cannot be verified.** Nothing simulates the game server-side, so a modified client can
-   submit a plausible but fabricated score **for itself**. Row-level security cannot fix this at any
-   level of cleverness, and replay validation is blocked by the non-deterministic `uid()` above.
+7. **Scores are verifiable locally, and not yet to anyone else.** This entry used to read "scores
+   cannot be verified… replay validation is blocked by the non-deterministic `uid()`". That is no
+   longer true: the journal keys entities by **index at action time** rather than by id, which
+   sidesteps `uid()` entirely, and `verifyRun` replays a submission and compares an end-state
+   fingerprint. A fabricated score cannot produce a log that replays to it. What is still missing is
+   the schema column to carry the proof to *other* players — an additive change nobody has made, so
+   the leaderboard still displays unverified numbers.
 8. **`display_name` is self-asserted** for signed-out players — on their own row only.
 9. **There is no rate limiting.** The client's inbound token buckets protect the honest player being
    flooded; they do nothing about anyone hitting PostgREST directly with the public key. That needs
@@ -551,19 +612,26 @@ All of these are verified. None is a plan; they are the state of the thing.
 
 **Balance — measured, and deliberately left alone**
 
-11. **`low` pricing is dominated in all five sectors.** Last on founder net by 2–3×, and it does not
-    buy survival to compensate. `revenueMultiplier` is 0.55 / 1.00 / 1.75 while the offsetting price-fit
-    terms are far weaker. Fixing it re-tunes the whole Career economy, so it is an owner decision, not
-    a bug.
+11. **~~`low` pricing is dominated~~ — FIXED, and the diagnosis was the interesting part.** The
+    original measurement compared `low` *while targeting the richest segment* — the lever against the
+    wrong market. Pointed at the price-sensitive archetype every sector has, `low` was already ahead,
+    but that market was itself dominated because its one compensating advantage (headroom) was never
+    collected: `room` sits at 0.97–0.99 all game at both ends. A referral term that pays weekly rather
+    than at a ceiling nobody reaches fixed it. `low` is now first on the price-sensitive tier in 6/6
+    sectors, `market` on the middle tier, `premium` on the high-WTP tier — see
+    `docs/balance-baseline.md` §2.
 12. **Coasting survives more often than playing.** A bot that sets marketing to $0, hires nobody, runs
     no experiments and never raises survived **24/24 seeds in every sector**. Activity carries 4–12×
     the expected founder net, so the risk is paid for — but "the safest line is not to play" is a
     design call that has not been made.
-13. **The Social / E-commerce survival gap is not established as sector character.** E-commerce is the
-    bots overspending (cutting the budget 3× more than doubles survival). Social is *not* — it is
-    payroll, via a bot hiring rule denominated in revenue on a sector with an ARPU of 1.8 vs SaaS's 22.
-    Whether Social is survivable for a good human player on a correct rule is **unanswered**: every
-    strategy in both harnesses shares the same wrong heuristic.
+13. **~~The Social / E-commerce gap~~ — RESOLVED, in two parts.** Social was a harness artifact:
+    zero bankruptcies in 24 seeds under every hiring rule tested, so the "survival gap" was 14
+    acquisitions being counted as deaths. Separately, Social's *acquisition* coefficient was the real
+    outlier — `acqBase/5` reused a Quick Play constant on Career's hundreds-scale cohorts, making a
+    Social dollar buy 24× the customers a SaaS dollar does, which made Social the always-right sector
+    pick AND drove the token gap. `careerAcqScale` now applies a knee above human scale: four sectors
+    return the old value to the bit, Social compresses. E-commerce remains the hardest sector and is
+    left that way deliberately.
 14. **The marketing slider's maximum is fatal in one drag** — $30k/wk at pre-seed against $200k is 6.7
     weeks of runway. 0–1 of 24 seeds survive. The burn is displayed and the player is choosing it, so
     the cap is a stage gate rather than an affordability gate.

@@ -1,6 +1,6 @@
 # Founder Mode — pending work
 
-Everything known-but-unfixed, as of 2026-08-12 (refreshed after the balance campaign; stale entries marked in place). Each item says what it is, why it was left,
+Everything known-but-unfixed, as of 2026-08-15 (refreshed after the feature campaign; closed and stale entries marked in place rather than deleted, so the history of what was believed stays readable). Each item says what it is, why it was left,
 and what "done" looks like — enough to pick up cold.
 
 Sources: a 4-part code review, an in-game balance audit (bot-measured, 20–40 runs per
@@ -112,13 +112,21 @@ format; flagging it so the choice is deliberate rather than accidental.
 Both need mandatory login or an authoritative server. Neither is worth the friction unless the
 leaderboard becomes genuinely competitive.
 
-### 3.1 Client-side score cheating
-Nothing simulates the game server-side, so a modified client can submit a plausible but
-fabricated score for **itself**. The RLS work stops players damaging *other* rows; it cannot
-tell a real run from an invented one.
+### 3.1 Client-side score cheating — HALF SOLVED, and the half that remains is a schema column
+The old text said this was "unfixable without an authoritative server". That was wrong, and the
+determinism work is what made it wrong: a run is exactly reproducible from its config plus its
+ordered action log, so `verifyRun` (src/game/replay.ts) replays a submission and compares an
+end-state fingerprint. A fabricated score cannot produce a journal that replays to it, and the
+journal keys entities by index rather than by `uid()`, so the old blocker does not apply.
 
-**Real fix:** move submission behind a `security definer` RPC keyed on `auth.uid()`, revoke
-anon INSERT/UPDATE, and require login to post a score.
+**What is done:** every simulation-mutating store action journals through the same registry function
+replay uses; the results screen reports verified / desync / legacy; the honesty canary (an
+unjournalled mutation must turn verification red) is tested.
+
+**What is left, and it is small:** `daily_scores` has no column to carry the proof, so a player can
+verify their own run and nobody else can check it. Adding `journal jsonb` + `fingerprint text` is
+additive; the client already builds the proof (`src/net/replayProof.ts`) and stores it locally.
+Until then the leaderboard displays unverified numbers.
 
 ### 3.2 `display_name` is self-asserted for anonymous players
 A signed-out player can type anyone's handle on **their own** row. They cannot touch anyone
@@ -161,12 +169,12 @@ most scenarios, so the headline 97%/90% comparison could only be reproduced on a
 play" bot. That is BACKLOG §2.1's missing clock, not this defect — free play cannot be lost by not
 playing, so a 200-week run resolves on score rather than survival.
 
-### 4.2 Secondary sales are correctly EV-negative but nothing says so
-`secondaryProceeds` = `valuation × 0.02 × 0.7` — you give up 2% of the company for cash worth
-1.4% of it, measured at −24% final score. That's *good design* (it's a hedge that survives
-bankruptcy, not a value play) — **do not change the numbers.** The problem is purely that the
-UI never explains the trade. **Suggested:** a line on the panel — "selling 2% for the cash value
-of 1.4%; this only pays off if the run ends badly."
+### 4.2 Secondary sales are correctly EV-negative but nothing says so — FIXED (copy only)
+The numbers were right and are unchanged: 2% of the company at a 30% discount is cash worth 1.4% of
+it, −24% on final score. That is a hedge that survives bankruptcy, not a value play. The defect was
+that the panel never said so, so a player could take it expecting to come out ahead and learn the
+shape of it at the postmortem. The panel now states the trade in the run's own numbers — paper value,
+cash received, and the difference named as the price of certainty.
 
 ### 4.3 Career strategy spread — RESOLVED: it was the bot, but not the gate we blamed
 Re-measured with `npm run bots` (24 seeds × 90 weeks, deterministic) after the cohort-retention
@@ -335,10 +343,11 @@ type-check `test/` (they are executed through tsx).
 `advanceWeek` reseeds on `(seed, week)` via `mixSeed` (engine.ts), golden traces pin the draw
 order, and dailies replay whole runs. Kept for history only.
 
-### 6.3 The service worker has no update prompt
-Navigations are network-first, so an online launch always gets the newest build — but a user who
-stays on an open tab runs the previous version indefinitely with no nudge. A "new version
-available, reload?" toast would close it.
+### 6.3 The service worker has no update prompt — STALE, and it was already built
+`main.tsx` has carried the banner since `264f37c`. One real gap was closed on top (a worker already
+in `waiting` at page load now announces itself) and the hard-coded colours became theme variables.
+Verified live: byte-changed `sw.js`, called `reg.update()`, banner appeared, Reload activated the new
+worker and evicted the old cache.
 
 ### 6.4 Commit hygiene when agents run in parallel
 Two commits (`f33eaed`, `e2c40c0`) mix leaderboard-security changes with an unrelated UI pass,
@@ -378,4 +387,45 @@ covenant, resonance) plus the commit trail `8fbde4e..7c6f734`. What it left open
 - **Optional event content pass** — the audit scorer found option 0 best in 33/40; the free tier
   was priced (energy), the residual ruled deliberate. A per-event pass is polish, not correction.
 - **Board ultimatum at 2 strikes vs "of 3" everywhere — FIXED 2026-08-12** (`strikes >= 3`).
+
+---
+
+## 8. Refreshed 2026-08-15 — what the feature campaign closed, and what it left
+
+**Closed since the last refresh** (each measured, not asserted): the tokenisation feature reached
+**7 of 7 slices**; the Living World reached **8 of 16 phases**; a sixth sector (AI/ML Infra) shipped
+through all five calibration gates; replay verification made §3.1 half-solvable; AI rivals now use
+the attack economy, which closed §4.1; `salesCycleWeeks` became load-bearing; the `$2k/wk` bot
+yardstick was replaced with weeks-to-profitability; the 4-player Arena harness closed §4.4's open
+half; the board ultimatum fires on the third strike as everything else already claimed; §4.2's copy
+landed; and CI now runs `npm run build` + `npm test` on every push, with `test/` type-checked.
+
+### 8.1 Still open, ranked by what it costs to leave
+
+1. **The leaderboard proof column** (§3.1's remainder). Additive schema; the client already builds
+   and stores the proof. Until it exists, verification is local-only.
+2. **`supabase/leaderboard-v5.sql` has still never been run** (§1.3) — and the shipped policy is
+   still rejecting 100% of real submissions. It now also carries the `network` ending in its CHECK,
+   so one run covers both. This is the single highest-value owner action in this file.
+3. **Tokenisation in Quick Play** — Slice 7 stopped at the mode boundary deliberately rather than
+   half-wire a second mode. Every token capability is `false` in Quick Play.
+4. **Living World phases 9–16** — `longTermCallbacks`, `rivalArchetypes`, `rivalNarrative`,
+   `proceduralPostmortem`, and the `livingWorld` umbrella flag, all `false` everywhere.
+5. **A clock for free play** (§2.1) — still the product call it always was, and the rival work
+   sharpened the reason: the calibrated policy now never goes bankrupt in any scenario, so win rate
+   is saturated and "harder" can only be measured on founder net. A terminal week would restore it.
+6. **The two memory-selection engines** — `memory.ts`'s scored recall system is still dead code that
+   nothing calls, and it is the larger of the two, so it is what the next person will find first.
+
+### 8.2 Open questions the campaign raised and did not answer
+
+- **E-commerce and Social still lead the token band** (2.5×, 2.8× at last measurement). Both paths
+  behave correctly in isolation — "idle, sale burned" loses in both — so the residue is early capital
+  compounding through sector curves, not the token module.
+- **The Arena shield never quite *earns* its price against rational aggression.** Price-neutral in
+  1v1, positive in ambient 4-player lobbies, a burn in peacetime. Acceptable while attacks are trades
+  rather than dominant, and recorded rather than tuned away.
+- **The `network` ending never fires in B2B SaaS or Fintech** (0/51 and 1/58). Their networks are
+  structurally smaller; left as sector character, but it means two of six sectors have one fewer
+  reachable outcome.
 
