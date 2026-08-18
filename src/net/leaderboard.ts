@@ -19,6 +19,55 @@ export interface DailyScore {
 const TABLE = 'daily_scores'
 const SECRET_KEY = 'founder-mode-score-secret'
 
+/**
+ * Characters no honest company or display name contains and that wreck the table when rendered.
+ * Identical to the peer-string filter in online.ts and deliberately kept in sync with it: the
+ * presence path was hardened against bidi overrides and this one, which reaches strictly MORE
+ * people, was not. A leaderboard row is peer-supplied input like any other — the anon key is
+ * public by design, so anyone can INSERT a row whose `company` reverses every line it lands in,
+ * and every player who opens the daily screen renders it.
+ *
+ * U+200D (ZWJ) survives, as it does on the wire: emoji families are built from it.
+ */
+const UNSAFE_CHARS = new RegExp(
+  '[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200E\\u200F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]',
+  'g',
+)
+
+const clean = (v: unknown, max: number): string => (typeof v === 'string' ? v.replace(UNSAFE_CHARS, '').slice(0, max) : '')
+
+const bounded = (v: unknown, max: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(0, Math.round(v))) : 0
+
+/**
+ * Coerce one row on the way OUT of the database, before React ever sees it.
+ *
+ * Server-side constraints are the right place for this and v5/v6 do bound the lengths — but the
+ * client renders whatever the table holds, including rows written before any given constraint
+ * landed, and a row is not trustworthy just because a policy accepted it. Returns null for a row
+ * that cannot be rendered at all (`player_id` is the React key), never throws.
+ *
+ * Exported for test/net-security.test.ts.
+ */
+export function sanitizeScoreRow(raw: unknown): DailyScore | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const player_id = clean(r.player_id, 64)
+  if (!player_id) return null
+  const display_name = clean(r.display_name, 24)
+  return {
+    player_id,
+    company: clean(r.company, 30),
+    score: bounded(r.score, SCORE_MAX),
+    weeks: bounded(r.weeks, 520),
+    // Not whitelisted against ENDINGS: an ending this client does not know about is a NEWER
+    // client's, and blanking those rows would hide every real score the moment an ending ships.
+    // endingEmoji() already falls back for anything it does not recognise.
+    ending: clean(r.ending, 20),
+    display_name: display_name || null,
+  }
+}
+
 // Proof that we own our leaderboard row. player_id is public (it's in the leaderboard
 // everyone reads), so it cannot authenticate anything — this secret can, because the
 // database column holding it is not readable with the public key. See
@@ -89,13 +138,17 @@ export async function submitDailyScore(
     const row = {
       day: Math.round(day),
       player_id: myId(),
-      company: entry.company.slice(0, 30),
+      // Sanitised on the way IN as well as on the way out. The company name is typed by the
+      // player on the new-game screen and goes straight to a table every other player reads —
+      // this device should not be the one that publishes a bidi override, even though every
+      // reader now strips it.
+      company: clean(entry.company, 30),
       // 1e15 exceeded the database's own ceiling, so any run that somehow scored above 1e12
       // was silently rejected instead of being clamped to something storable.
       score: Math.min(SCORE_MAX, Math.max(0, Math.round(entry.score) || 0)),
       weeks: Math.min(520, Math.max(0, Math.round(entry.weeks) || 0)),
       ending: entry.ending,
-      display_name: entry.display_name ? entry.display_name.slice(0, 24) : null,
+      display_name: entry.display_name ? clean(entry.display_name, 24) || null : null,
       secret: scoreSecret(),
     }
     if (!ENDINGS.has(row.ending)) return warn(`refusing to submit an unknown ending "${row.ending}"`)
@@ -158,7 +211,7 @@ export async function fetchDailyTop(day: number, limit = 10): Promise<DailyScore
       .order('score', { ascending: false })
       .limit(limit)
     if (error || !data) return []
-    return data as DailyScore[]
+    return (data as unknown[]).map(sanitizeScoreRow).filter((r): r is DailyScore => r !== null)
   } catch {
     return []
   }
