@@ -1294,7 +1294,23 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
   const pool = [...INVESTORS]
   const investors: string[] = []
   for (let i = 0; i < n && pool.length > 0; i++) investors.push(pool.splice(Math.floor(RNG.next() * pool.length), 1)[0])
-  const growth = growthRate(s)
+  // The long look, for the same reason `valuation()` takes it — see `VALUATION_WINDOW`. This one is
+  // the sharper hole of the two, because the PLAYER picks the week: pitching is a button, so a spot
+  // metric here is an invitation to buy a month of growth and then press it.
+  //
+  // MEASURED on the spot read, 24 seeds, four weeks at `marketingMax` before pitching at week 40
+  // (best sheet offered, held → pumped, for a median $103k of extra ad spend):
+  //
+  //   saas $1.19M → $2.44M · devtools $1.88M → $3.46M · ecommerce $1.42M → $4.03M
+  //   fintech $1.23M → $3.56M · social $1.65M → $4.67M · aiml $2.07M → $3.80M
+  //
+  // — a 10-28x return on the spend, because `growthAppetite` saturates at 0.3 and four bought weeks
+  // moved SPOT growth from 0.014-0.025 to 0.095-0.159. The pre-money is unchanged, so this is not a
+  // better price; it is a much bigger round at the same price, and capital is the strongest lever
+  // in the game (raising is worth 4-8x on the deep-balance budget sweep). Bought for $103k.
+  //
+  // `offeredVal` is already safe — it is `valuation(s)`, which took the long look in the same pass.
+  const growth = sustainedGrowthRate(s)
   const sheets: TermSheet[] = investors.map((investor) => {
     // Each fund prices you differently around your "fair" valuation; a cold market prices everyone down.
     const climateMult = 1 + 0.35 * s.climate
