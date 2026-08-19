@@ -12,6 +12,7 @@ import assert from 'node:assert'
 const { buildContentSecurityPolicy } = await import('../src/csp')
 const { safeErrorText, MAX_ERROR_TEXT, SAVE_KEYS } = await import('../src/ErrorBoundary')
 const { SUPABASE_URL } = await import('../src/net/config')
+const { POSTHOG_HOST, analyticsConfigured } = await import('../src/analytics/config')
 
 let passed = 0
 const ok = (name: string, fn: () => void) => {
@@ -32,7 +33,7 @@ const directive = (policy: string, name: string): string => {
 
 // The policy actually shipped, built from the actual Supabase URL — not a fixture. A test that
 // asserts against its own copy of the policy proves only that copying works.
-const policy = buildContentSecurityPolicy(SUPABASE_URL)
+const policy = buildContentSecurityPolicy(SUPABASE_URL, POSTHOG_HOST)
 
 console.log('\n--- 1. the policy is well-formed and complete ---')
 await ok('every directive the app relies on is present', () => {
@@ -72,6 +73,20 @@ await ok("'unsafe-inline' appears for style only, never for script", () => {
   assert.ok(directive(policy, 'style-src').includes("'unsafe-inline'"), 'style needs it')
   assert.ok(!directive(policy, 'script-src').includes("'unsafe-inline'"), 'script must not')
 })
+// ADDED WITH PRODUCT ANALYTICS (2026-08). The usual way a site installs PostHog is a snippet that
+// pulls the SDK from a vendor CDN, and the usual way a CSP then "supports" it is by adding that
+// CDN to script-src — at which point this directive is decoration and the policy's whole point is
+// gone. This project installs posthog-js from npm so Vite bundles it into our own JS, and uses the
+// `no-external` build so its optional extensions have no script-injection path either. That is a
+// property worth pinning by NAME, so that the next person who tries the snippet has to delete a
+// test called this rather than quietly widen a source list.
+await ok('no analytics vendor may ever appear in script-src', () => {
+  const script = directive(policy, 'script-src')
+  assert.strictEqual(script, "script-src 'self'")
+  for (const vendor of ['posthog', 'i.posthog.com', 'cdn', 'unpkg', 'jsdelivr']) {
+    assert.ok(!script.includes(vendor), `script-src names ${vendor}: the SDK must be bundled, not fetched`)
+  }
+})
 await ok('the injection sinks are shut: object, frame, base-uri, form-action', () => {
   assert.strictEqual(directive(policy, 'object-src'), "object-src 'none'")
   assert.strictEqual(directive(policy, 'frame-src'), "frame-src 'none'")
@@ -87,6 +102,13 @@ await ok('connect-src reaches Supabase over https — the leaderboard and auth',
 })
 await ok('connect-src reaches Supabase over wss — Realtime, i.e. the whole Arena', () => {
   assert.ok(directive(policy, 'connect-src').includes(`wss://${host}`), directive(policy, 'connect-src'))
+})
+await ok('connect-src reaches the PostHog EU ingest host — the analytics half of the app', () => {
+  // Named unconditionally, even while `analyticsConfigured` is false and nothing ever dials it:
+  // a policy whose shape depends on a feature flag is one nobody can review, and the flag flip
+  // (replacing one placeholder string) must not silently change the security posture too.
+  assert.ok(directive(policy, 'connect-src').includes(new URL(POSTHOG_HOST).origin), directive(policy, 'connect-src'))
+  assert.ok(POSTHOG_HOST.startsWith('https://eu.'), `analytics must stay in the EU, got ${POSTHOG_HOST}`)
 })
 await ok('the app can load its own bundle, stylesheet, worker and manifest', () => {
   assert.ok(directive(policy, 'script-src').includes("'self'"))
@@ -104,11 +126,17 @@ console.log('\n--- 4. the policy follows the Supabase project, rather than being
 // A hard-coded origin is how this breaks silently: migrate the project, and every network call
 // is refused by a policy still naming the old host.
 await ok('a different project URL moves connect-src with it', () => {
-  const other = buildContentSecurityPolicy('https://example-project.supabase.co')
+  const other = buildContentSecurityPolicy('https://example-project.supabase.co', POSTHOG_HOST)
   const c = directive(other, 'connect-src')
   assert.ok(c.includes('https://example-project.supabase.co'), c)
   assert.ok(c.includes('wss://example-project.supabase.co'), c)
   assert.ok(!c.includes(host), 'the real host must not be baked in anywhere')
+})
+await ok('a different analytics host moves connect-src with it too', () => {
+  const other = buildContentSecurityPolicy(SUPABASE_URL, 'https://eu2.i.posthog.example')
+  const c = directive(other, 'connect-src')
+  assert.ok(c.includes('https://eu2.i.posthog.example'), c)
+  assert.ok(!c.includes(new URL(POSTHOG_HOST).origin), 'the real ingest host must not be baked in')
 })
 await ok('an unrelated origin is not reachable under the shipped policy', () => {
   assert.ok(!policy.includes('evil.test'))
@@ -119,7 +147,20 @@ await ok('an unrelated origin is not reachable under the shipped policy', () => 
   for (const wildcard of ['*', 'https:', 'http:', 'ws:', 'wss:', 'data:']) {
     assert.ok(!sources.includes(wildcard), `connect-src is too wide, it allows ${wildcard}`)
   }
-  assert.deepStrictEqual(sources, ["'self'", `https://${host}`, `wss://${host}`])
+  // CHANGED 2026-08, DELIBERATELY, AND THIS IS THE ONLY LINE PRODUCT ANALYTICS WAS ALLOWED TO MOVE.
+  //
+  // The exact-list assertion is the strongest one in this file — it is what kills a mutant that
+  // adds a fourth destination — so widening it is exactly the change that must never happen by
+  // reflex. It gained ONE entry: the PostHog EU ingest origin, which is where events go. It did
+  // not gain a CDN (the SDK is bundled from npm — see the script-src case above), it did not gain
+  // an assets host (the `no-external` build loads no remote asset), and no other directive changed
+  // at all. The list stays exact so that a fifth entry still fails here.
+  assert.deepStrictEqual(sources, ["'self'", `https://${host}`, `wss://${host}`, new URL(POSTHOG_HOST).origin])
+})
+await ok('the game ships with analytics OFF, so the policy is the only trace of it', () => {
+  // If this ever fails it is not a bug in the policy — it means a real project key was committed.
+  // That is a decision, not an accident, and it should be made on purpose: see docs/analytics.md.
+  assert.strictEqual(analyticsConfigured, false, 'a real PostHog key is committed in src/analytics/config.ts')
 })
 
 console.log('\n--- 5. a render crash is recoverable, and does not leak the stack ---')

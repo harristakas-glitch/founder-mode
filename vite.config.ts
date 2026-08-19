@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { SUPABASE_URL } from './src/net/config'
+import { POSTHOG_HOST } from './src/analytics/config'
 import { buildContentSecurityPolicy } from './src/csp'
 
 /**
@@ -13,7 +14,7 @@ import { buildContentSecurityPolicy } from './src/csp'
  * test/csp.test.ts can import and assert against the real thing rather than a copy.
  */
 function contentSecurityPolicy(): Plugin {
-  const policy = buildContentSecurityPolicy(SUPABASE_URL)
+  const policy = buildContentSecurityPolicy(SUPABASE_URL, POSTHOG_HOST)
   return {
     name: 'founder-mode-csp',
     apply: 'build',
