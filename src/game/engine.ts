@@ -573,6 +573,13 @@ export function committedCosts(s: GameState): { due: number; potential: number; 
 export const VALUATION_WINDOW = 13
 
 /**
+ * A MONTH. Every level `valuation()` reads is this month's mean rather than this week's number —
+ * the revenue it annualises, and the user count at each end of the growth comparison. It is also
+ * the convention the thing is named after: a run-rate is a month annualised, not a week.
+ */
+export const VALUATION_SMOOTHING = 4
+
+/**
  * Mean of a per-week series over the `span` weeks ending `back` weeks before the current one.
  *
  * The current week is not in `s.history` until the tick that produced it finishes — `advanceWeek`
@@ -612,9 +619,9 @@ function trailingUsers(s: GameState, span: number, back = 0): number {
  * trend. A one-week step enters this at `1 / (4 × back)` of its weight.
  */
 function smoothedGrowth(s: GameState, back: number): number | null {
-  const then = trailingUsers(s, 4, back)
+  const then = trailingUsers(s, VALUATION_SMOOTHING, back)
   if (then <= 0) return null
-  return clamp((trailingUsers(s, 4) - then) / then / back, -0.5, 0.5)
+  return clamp((trailingUsers(s, VALUATION_SMOOTHING) - then) / then / back, -0.5, 0.5)
 }
 
 /**
@@ -642,8 +649,8 @@ export function sustainedGrowthRate(s: GameState): number {
   // Under a quarter plus the month it is compared against there is no long window to read, and
   // `growthRate` is already the whole of the history. Nothing is exploitable this early either:
   // `valuation` is on its $400k floor and the acquisition trigger wants $8M.
-  if (s.history.length < VALUATION_WINDOW + 4) return growthRate(s)
-  const month = smoothedGrowth(s, 4)
+  if (s.history.length < VALUATION_WINDOW + VALUATION_SMOOTHING) return growthRate(s)
+  const month = smoothedGrowth(s, VALUATION_SMOOTHING)
   const quarter = smoothedGrowth(s, VALUATION_WINDOW)
   if (month === null || quarter === null) return growthRate(s)
   return Math.min(month, quarter)
@@ -651,7 +658,7 @@ export function sustainedGrowthRate(s: GameState): number {
 
 export function valuation(s: GameState): number {
   const sector = sectorById(s.sector)
-  const annualRev = trailingRevenue(s, VALUATION_WINDOW) * 52
+  const annualRev = trailingRevenue(s, VALUATION_SMOOTHING) * 52
   const growth = sustainedGrowthRate(s)
   const multiple = clamp(8 + growth * 150, 5, 25) * (1 + 0.4 * s.climate)
   const revPart = annualRev * multiple
