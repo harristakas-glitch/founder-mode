@@ -35,9 +35,25 @@ async function store(cache, req, res) {
   return res
 }
 
+// `startsWith(origin)` is a string prefix test, not an origin test: https://example.github.io
+// is a prefix of https://example.github.io.evil.test, so a third-party host could be pulled into
+// our cache and served from it. Parse the URL and compare origins — and scope the cache to this
+// app's own directory, because on GitHub Pages the origin is shared with every other project the
+// same account publishes.
+const SCOPE = new URL('./', self.location.href)
+
+function ours(url) {
+  try {
+    const u = new URL(url)
+    return u.origin === SCOPE.origin && u.pathname.startsWith(SCOPE.pathname)
+  } catch {
+    return false
+  }
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request
-  if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return
+  if (req.method !== 'GET' || !ours(req.url)) return
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
       if (req.mode === 'navigate') {
@@ -48,7 +64,10 @@ self.addEventListener('fetch', (e) => {
         }
       }
       const cached = await cache.match(req)
-      if (cached && req.url.includes('/assets/')) return cached // content-hashed: immutable
+      // Cache-first is only safe for content-hashed build output, so match the real asset
+      // directory rather than the substring `/assets/` anywhere in the URL — a query string
+      // was enough to pin an arbitrary response in the cache permanently.
+      if (cached && new URL(req.url).pathname.startsWith(SCOPE.pathname + 'assets/')) return cached
       const network = fetch(req)
         .then((res) => store(cache, req, res))
         .catch(() => cached ?? Response.error())

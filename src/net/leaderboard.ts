@@ -98,6 +98,28 @@ async function getClient(): Promise<SupabaseClient> {
       ({ createClient }) =>
         createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           global: { headers: { 'x-player-secret': secret } },
+          /**
+           * This client is deliberately, permanently ANONYMOUS.
+           *
+           * supabase-js derives its session storage key from the project ref alone
+           * (`sb-<ref>-auth-token`) and persists sessions by default, so the leaderboard client
+           * and the Realtime client in online.ts share one session — and once social login is
+           * switched on (BACKLOG 1.2) this client would silently start sending the signed-in
+           * user's JWT. PostgREST would then run every request as `authenticated` instead of
+           * `anon`, and every RLS policy on daily_scores is written `to anon`: signed-in players
+           * would see an empty leaderboard and be unable to post. That is the same failure mode
+           * as v3 and v4 — a control that blocks attackers and every real user at once — armed
+           * and waiting for an unrelated settings change to trigger it.
+           *
+           * Ownership here is proved by the x-player-secret header, never by a session, so
+           * there is nothing to persist. `detectSessionInUrl` is off for the same reason: only
+           * the auth client should consume the OAuth code from the callback URL, and two
+           * clients racing for it is a coin flip.
+           *
+           * supabase/leaderboard-v6.sql grants the policies to `authenticated` as well, so the
+           * hole is closed from both ends and neither fix depends on the other.
+           */
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         }),
       (e) => {
         clientPromise = null // a failed chunk load retries next call instead of caching the failure

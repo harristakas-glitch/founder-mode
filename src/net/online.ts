@@ -241,10 +241,19 @@ const int = (v: unknown, min: number, max: number): number => Math.min(max, Math
 export function normalizePlayer(raw: unknown, key: string): NetPlayer | null {
   const p = raw as Record<string, unknown>
   if (!p || typeof p !== 'object') return null
-  // a peer cannot impersonate another slot: the presence key is the identity of record
-  if (typeof p.id !== 'string' || p.id !== key) return null
+  // A peer cannot impersonate another slot: the presence key is the identity of record.
+  //
+  // The id is held to the SAME domain as every other id on the wire (`opaqueId`: non-empty,
+  // <= 64 chars, no control/bidi characters, no `|`) and must then equal its key exactly. It
+  // used to be checked against the key and only THEN truncated to 64 — so a 71-character key
+  // passed the check and came back as a 64-character id that was no longer its own key. Two
+  // different keys sharing a 64-char prefix collapsed onto one NetPlayer.id, which defeats the
+  // single guarantee presence offers, duplicates React keys, and — now that the broadcast
+  // roster is built from readPlayers() — would put a forged id into the bid gate.
+  const id = opaqueId(p.id)
+  if (!id || id !== key) return null
   return {
-    id: p.id.slice(0, 64),
+    id,
     company: str(p.company, 30, 'Unknown Inc.') || 'Unknown Inc.',
     founder: p.founder === 'business' ? 'business' : 'technical',
     host: p.host === true,
