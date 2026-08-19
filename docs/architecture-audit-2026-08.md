@@ -242,7 +242,7 @@ Carried from the predecessor review and re-confirmed present:
 - **`pvp.ts`** exports four unused helpers (`PR_DECOY_WEEKS`, `prWeeklyDamage`, `priceWarMultiplier`,
   `marginOf`); small, and adjacent to balance-tuned combat numbers — leave for the combat owner.
 - The `store.ts:572` / `store.ts:388` security one-liners from `docs/security-review.md` remain
-  unapplied; they are the security agent's to land with `leaderboard-v5.sql`. **Not touched** (out of
+  unapplied; they are the security agent's to land with `leaderboard-v6.sql`. **Not touched** (out of
   scope), flagged so they are not lost.
 
 ---

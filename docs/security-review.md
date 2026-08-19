@@ -10,6 +10,13 @@ was *too* strict and had silently disabled a whole feature in production.
 Line references are to commit `fc29bbb` (the vulnerable state). Fixes are described against the files
 as they now stand.
 
+> **Superseded in part — read `security-review-2026-08.md` alongside this.** The 2026-08-19 review
+> consolidated `supabase/` down to a single script, `leaderboard-v6.sql`, and deleted the other five.
+> Every `**Where:**` pointer below into `leaderboard.sql`, `leaderboard-hardening.sql` or
+> `leaderboard-secure.sql` is therefore archaeological: those files describe the vulnerable state and
+> live only in git history now (`git log -- supabase/`). Nothing below is retracted; the fixes it
+> describes all landed in what is now v6.
+
 ---
 
 ## Summary
@@ -59,7 +66,7 @@ The table contained 0 rows before this review. This is v3's failure mode repeate
 blocked attackers *and* every legitimate player, and shipped because only the attack direction was
 tested. It is a security finding precisely because a security control caused it.
 
-**Fixed** in `supabase/leaderboard-v5.sql`:
+**Fixed** in `supabase/leaderboard-v6.sql`:
 
 - The static CHECK now bounds `day` to `1 .. 100000` (the real domain, ~270 years of headroom).
 - The anti-junk value moves to a **moving window** in the INSERT policy:
@@ -152,7 +159,7 @@ squatter INSERT (victim's player_id, future day)  -> HTTP 201
 victim's own legitimate upsert for that day       -> HTTP 401  (USING expression)
 ```
 
-**Fixed** in `supabase/leaderboard-v5.sql` §3-4: a `private.player_identity(player_id, secret_hash)`
+**Fixed** in `supabase/leaderboard-v6.sql` §3-4: a `private.player_identity(player_id, secret_hash)`
 table binds each `player_id` to the **first device that used it**, enforced inside the existing
 `SECURITY DEFINER` BEFORE INSERT trigger (which is the only place that sees the plaintext secret).
 A squatter cannot register an id that is already bound — and *any id visible on the leaderboard is
@@ -483,7 +490,7 @@ npm run build                                             # passes
 npm test                                                  # passes
 ```
 
-The live suite writes rows tagged `SECTEST-*` on day 10001; `leaderboard-v5.sql` §0 removes them.
+The live suite writes rows tagged `SECTEST-*` on day 10001; `leaderboard-v6.sql` §0 removes them.
 
 **These suites are not wired into `npm test`** — `test/` and `package.json` are outside my file
 ownership. To land them, move the two files into `test/` and extend the script:
@@ -498,7 +505,7 @@ behind a separate script (`"test:live"`).
 
 ## Deployment order
 
-1. Run `supabase/leaderboard-v5.sql` in the Supabase SQL editor. It is idempotent and **self-testing**:
+1. Run `supabase/leaderboard-v6.sql` in the Supabase SQL editor. It is idempotent and **self-testing**:
    §8 runs the whole attack matrix against the policies it just created — honest insert, honest
    improve, score-lowering, stranger overwrite, stranger delete, squatting, new-player registration,
    the day window, and value bounds — and raises with a list of failures if any case comes out wrong.

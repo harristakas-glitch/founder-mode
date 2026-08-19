@@ -1,12 +1,28 @@
--- Founder Mode — leaderboard security, v6. RUN THIS ONE. It is a superset of leaderboard-v5.sql
--- and supersedes leaderboard.sql, leaderboard-hardening.sql and leaderboard-secure.sql too.
--- Paste into the Supabase SQL editor. Idempotent, and it VERIFIES ITSELF at the bottom: section 9
--- runs the whole attack matrix against the policies it just created — as BOTH database roles —
--- and raises with a list of failures if any case comes out wrong.
+-- Founder Mode — leaderboard security, v6.
 --
--- If you have already run v5, running this is still correct and still necessary: v6 fixes two
--- things v5 got wrong. If you have NOT run v5 (as of the 2026-08-19 review, you had not), run
--- this INSTEAD of v5 and skip v5 entirely.
+-- ============================================================================================
+-- THIS IS THE ONLY SQL FILE IN THIS DIRECTORY. RUN IT. THERE IS NOTHING TO RUN BEFORE IT AND
+-- NOTHING TO RUN AFTER IT.
+--
+-- Supabase dashboard → SQL Editor → New query → paste this whole file → Run.
+--
+-- It creates the table if it does not exist, so it works on a brand-new project AND on the
+-- existing one. It is idempotent: running it twice is harmless. It VERIFIES ITSELF at the
+-- bottom — section 9 runs the whole attack matrix against the policies it just created, as
+-- BOTH database roles, and raises with a list of failures if any case comes out wrong.
+--
+-- SUCCESS LOOKS LIKE: "leaderboard v6 self-test passed: ..." in the notices, and no error.
+-- FAILURE LOOKS LIKE: an exception whose message lists every case that came out wrong. The
+-- self-test's fixture rows are never left behind either way: an exception out of a DO block
+-- rolls the whole block back, and the passing path deletes them explicitly. Send the message
+-- to whoever asked you to run this rather than trying to patch around it.
+--
+-- The 2026-08-19 review deleted leaderboard.sql, leaderboard-hardening.sql,
+-- leaderboard-secure.sql, leaderboard-v5.sql and auth-upgrade.sql. Every one of them was
+-- either superseded by this file or actively harmful to run, and having six scripts in one
+-- directory with no marking of which to run is how the outage below survived for two weeks.
+-- They remain in git history (`git log -- supabase/`) if the story is ever needed.
+-- ============================================================================================
 --
 -- THE STORY SO FAR — this file has a bad habit and it is worth naming:
 --   v2 authenticated with an "x-player-id" header, and player_id is returned by the public
@@ -32,7 +48,32 @@
 
 create extension if not exists pgcrypto;
 
--- --- 0. clear out test/junk rows so the stricter checks below can validate ------------------
+-- --- 0a. the table itself ----------------------------------------------------------------------
+-- Folded in from the deleted leaderboard.sql so this file is genuinely standalone. Without it,
+-- every `alter table` below fails with `relation "public.daily_scores" does not exist` on a fresh
+-- project — which is exactly the trap a header saying "supersedes leaderboard.sql" sets for the
+-- next person, since "superseded" reads as "do not run it" and the table came from there.
+--
+-- On the existing project every clause here is a no-op. The unique constraint is load-bearing and
+-- not decorative: the client's improve path is `insert ... on conflict (day, player_id) do update`,
+-- and ON CONFLICT needs a real unique index on exactly those columns to have anything to conflict
+-- against.
+create table if not exists public.daily_scores (
+  id uuid primary key default gen_random_uuid(),
+  day int not null,
+  player_id text not null,
+  company text not null,
+  score bigint not null,
+  weeks int not null,
+  ending text not null,
+  created_at timestamptz default now(),
+  constraint daily_scores_day_player_unique unique (day, player_id)
+);
+
+create index if not exists daily_scores_day_score_idx
+  on public.daily_scores (day, score desc);
+
+-- --- 0b. clear out test/junk rows so the stricter checks below can validate ------------------
 delete from public.daily_scores
  where day > 100000
     or day <= 0
@@ -64,6 +105,13 @@ delete from public.daily_scores
 -- or submissions start failing again exactly the way they did under v4. Section 9 prints the
 -- number this file computes — compare it to the "Daily #N" the game shows today.
 
+-- The two columns later versions added. These MUST come before the constraint below, which
+-- names them: on the existing project they already exist and this is a no-op, but on a fresh
+-- one the constraint would otherwise fail with `column "display_name" does not exist`. (They
+-- also carry what the deleted auth-upgrade.sql did, which is why that file is gone too.)
+alter table public.daily_scores add column if not exists display_name text;
+alter table public.daily_scores add column if not exists secret text;
+
 alter table public.daily_scores drop constraint if exists daily_scores_sane;
 alter table public.daily_scores
   add constraint daily_scores_sane check (
@@ -84,9 +132,6 @@ begin
 exception when others then
   raise notice 'existing rows left unvalidated (%); new and updated rows are still checked', sqlerrm;
 end $$;
-
-alter table public.daily_scores add column if not exists display_name text;
-alter table public.daily_scores add column if not exists secret text;
 
 -- Table-level grants, deliberately. See the v3 note above: PostgreSQL requires table-level
 -- SELECT for `INSERT ... ON CONFLICT DO UPDATE`, which is what the client's upsert compiles to.

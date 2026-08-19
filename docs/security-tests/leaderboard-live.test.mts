@@ -1,6 +1,6 @@
 // End-to-end tests for src/net/leaderboard.ts against the REAL production Supabase project.
 // Uses day=10001, which the currently-deployed v4 policy accepts, so the honest path is
-// exercisable before leaderboard-v5.sql is applied.
+// exercisable before leaderboard-v6.sql is applied.
 import assert from 'node:assert'
 
 const store = new Map<string, string>()
@@ -136,7 +136,7 @@ console.log('\n--- D. squatting: the live vulnerability, and the v5 recovery ---
   assert.strictEqual(mine[0].company, 'Squatter', 'the victim is locked out of their own id')
   ok('LIVE: the victim is locked out, and the client now logs it instead of failing silently')
 
-  // Simulate what leaderboard-v5.sql returns for this case, and check the client recovers.
+  // Simulate what leaderboard-v6.sql returns for this case, and check the client recovers.
   warnings.length = 0
   const before = myId()
   const realFetch = globalThis.fetch
@@ -190,4 +190,4 @@ console.log('\n--- E. the anon key cannot destroy anything ---')
 }
 
 console.log(`\n${passed} assertions passed`)
-console.log(`\nNOTE: test rows tagged SECTEST-*${tag} remain on day ${DAY}; supabase/leaderboard-v5.sql §0 removes them.\n`)
+console.log(`\nNOTE: test rows tagged SECTEST-*${tag} remain on day ${DAY}; supabase/leaderboard-v6.sql §0 removes them.\n`)

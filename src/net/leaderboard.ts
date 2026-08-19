@@ -1,5 +1,5 @@
 // Global Daily Challenge leaderboard, backed by a single Supabase table
-// (see supabase/leaderboard.sql). Every function is a silent no-op when the
+// (see supabase/leaderboard-v6.sql). Every function is a silent no-op when the
 // Supabase keys in src/net/config.ts are still placeholders, and never throws:
 // the leaderboard is decoration, never something that can break a run.
 
@@ -71,7 +71,7 @@ export function sanitizeScoreRow(raw: unknown): DailyScore | null {
 // Proof that we own our leaderboard row. player_id is public (it's in the leaderboard
 // everyone reads), so it cannot authenticate anything — this secret can, because the
 // database column holding it is not readable with the public key. See
-// supabase/leaderboard-secure.sql.
+// supabase/leaderboard-v6.sql §7.
 function scoreSecret(): string {
   let s = localStorage.getItem(SECRET_KEY)
   if (!s || s.length < 16) {
@@ -134,14 +134,14 @@ async function getClient(): Promise<SupabaseClient> {
  * The only endings the database accepts. Anything else is a bug, not a score.
  *
  * `network` is ICO Slice 7's token ending. It was added here and to the three constraint sites in
- * supabase/leaderboard-v5.sql IN THE SAME COMMIT, because this list mirrors that CHECK — adding it
+ * supabase/leaderboard-v6.sql IN THE SAME COMMIT, because this list mirrors that CHECK — adding it
  * on one side only converts a silent client-side refusal into a silent server-side one. v5 has not
  * been applied yet (BACKLOG 1.3), so the owner's single run now carries the ending with it and no
  * follow-up migration is needed.
  */
 const ENDINGS = new Set(['bankrupt', 'unicorn', 'acquired', 'fired', 'timeup', 'ipo', 'network'])
 
-/** Mirrors the CHECK constraint in supabase/leaderboard-v5.sql. */
+/** Mirrors the CHECK constraint in supabase/leaderboard-v6.sql. */
 const SCORE_MAX = 1e12
 
 /**
@@ -188,7 +188,7 @@ export async function submitDailyScore(
     // the table just stayed empty. Failures stay non-fatal, but they are no longer silent.
     warn(`score submission rejected: ${error.code ?? '?'} ${error.message}`)
 
-    // A player_id is bound to the first device that used it (leaderboard-v5.sql §3). If ours is
+    // A player_id is bound to the first device that used it (leaderboard-v6.sql §3). If ours is
     // bound to someone else's secret — a squatter from before that fix, or a device that lost
     // its secret but kept its id — we can never post again under it. Mint a fresh identity and
     // retry once, but never mid-match: the id is also this device's seat in a room.
