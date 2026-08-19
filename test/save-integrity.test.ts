@@ -106,6 +106,41 @@ for (const [name, game] of [
     assert.strictEqual(useStore.getState().game, null, 'and must not leave a half-built game live')
   })
 }
+// `merge` in src/store.ts fills defaults with `??=` on the persisted object, which tolerates a
+// missing field — EXCEPT for one line, `g.allocation.bet ??= 0`, which dereferences a persisted
+// object before checking it exists. Every other case in this file happens to supply
+// `allocation: {}`, so nothing here covered the one property access that can actually throw.
+//
+// The behaviour is fine and these assertions pin it rather than change it: zustand's persist
+// catches the TypeError itself, so the save is DROPPED and the player lands on a fresh dashboard.
+// That is a degrade, not a crash — which matters, because a throw escaping rehydrate happens at
+// module scope, before React mounts, where the ErrorBoundary added in src/ErrorBoundary.tsx
+// cannot catch it. The result would be a blank page that the service worker re-serves on every
+// reload, with no way back that does not involve devtools.
+console.log('\n--- 2b. the one field `merge` dereferences before it checks ---')
+for (const [name, alloc] of [
+  ['missing', undefined],
+  ['null', null],
+  ['a string', 'nope'],
+  ['a number', 7],
+] as [string, unknown][]) {
+  ok(`allocation ${name} degrades to a fresh start rather than escaping rehydrate`, () => {
+    const r = loadSave(poison((g) => {
+      if (alloc === undefined) delete g.allocation
+      else g.allocation = alloc
+    }))
+    assert.strictEqual(r.threw, null, 'a throw here would blank the page before React mounts')
+    assert.strictEqual(useStore.getState().game, null, 'no half-built game may stay live')
+  })
+}
+ok('...and the honest allocation still loads, sliders intact', () => {
+  const r = loadSave(poison(() => {}))
+  assert.strictEqual(r.merge, 'completed')
+  const a = useStore.getState().game!.allocation
+  assert.ok(a && typeof a === 'object', 'allocation survived')
+  assert.ok(Number.isFinite(a.bet), 'and the field merge defaults is a real number')
+})
+
 ok('a save that is not JSON at all is ignored', () => {
   const r = loadSave('{{{ not json')
   assert.strictEqual(r.threw, null)
