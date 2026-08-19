@@ -14,6 +14,7 @@ import { CONCEPTS } from './concepts'
 import { closeGuide, useGuide } from './guide'
 import { resetLessons, setNotesEnabled } from './progress'
 import { useProgress } from './useOnboarding'
+import { PrivacyControls } from '../analytics/PrivacyControls'
 
 /** Escape to close, Tab trapped inside, focus returned where it came from. */
 function useDialog(onClose: () => void) {
@@ -179,6 +180,12 @@ export function FieldGuide() {
             Show them all again
           </button>
         </div>
+
+        {/* The other "how much does this game know about me" switch, deliberately in the same
+            footer as the notes one. A privacy control filed somewhere else is a privacy control
+            nobody finds — and this row renders nothing at all while analytics is unconfigured,
+            rather than offering a switch for a system that collects nothing. */}
+        <PrivacyControls />
       </div>
     </div>
   )
