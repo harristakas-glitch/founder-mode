@@ -1,12 +1,12 @@
 // The Procedural Living World — memory.
 //
-// Two halves, and the split is the whole design:
+// RECORD — append-only. The simulation has already decided what happened; recording it can
+// never change an outcome, only what someone can bring up later (§64). Company memory, character
+// memory and promises are the three ledgers, each with its own eviction policy below.
 //
-//   RECORD  — append-only. The simulation has already decided what happened; recording it can
-//             never change an outcome, only what someone can bring up later (§64).
-//   RECALL  — a pure scoring query. `scoreMemoryRelevance` is a function of (memory, cue,
-//             character, week) and nothing else: no RNG, no clock, no state lookup. The same
-//             inputs give the same ranking on a replay, on a reload, and inside the bot harness.
+// (A scored RECALL engine — scoreMemoryRelevance / recallMemories and friends — used to live here
+// as well, but the live narrative path selects callbacks through world/composer.ts, so the scoring
+// engine was never wired and has been removed. See docs/architecture-audit-2026-08.md.)
 //
 // Nothing in this file draws randomness. Memory is bookkeeping over facts, so ids are derived
 // from (week, key, collision index) rather than from an injected uid — that also survives a
@@ -40,10 +40,8 @@ import {
 import {
   COMPANY_MEMORY_DEFAULTS,
   ERA_COMPANY_MEMORY,
-  MEMORY_CUES,
   MEMORY_TYPE_DEFAULTS,
   ONCE_ONLY_COMPANY_MEMORY,
-  type MemoryCueDef,
 } from './content/memory-cues'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -51,7 +49,6 @@ const clamp100 = (v: number) => clamp(v, 0, 100)
 const signed100 = (v: number) => clamp(v, -100, 100)
 
 /** Half-lives in weeks. Recency fades faster than importance: what mattered still matters, it just gets quieter. */
-const RECENCY_HALF_LIFE = 40
 const IMPORTANCE_HALF_LIFE = 60
 /** Importance decays into irrelevance but never to zero — a betrayal at week 4 is still findable at week 104. */
 const IMPORTANCE_FLOOR = 0.25
@@ -212,11 +209,6 @@ export function decayedImportance(memory: MemoryItem, currentWeek: number): numb
   return memory.importance * (IMPORTANCE_FLOOR + (1 - IMPORTANCE_FLOOR) * decay)
 }
 
-/** 0–100 freshness. Separate from decayedImportance so §14 can weigh recency and weight apart. */
-export function memoryRecency(memory: MemoryItem, currentWeek: number): number {
-  return 100 * halfLife(currentWeek - memory.week, RECENCY_HALF_LIFE)
-}
-
 /**
  * What survives the cap. Not the same as relevance: relevance answers "does this belong in the
  * message I am writing", retention answers "is this worth still knowing at all".
@@ -241,168 +233,6 @@ export function evictMemories(character: Character, currentWeek: number): number
   const dropped = list.length - ranked.length
   character.memories = ranked.map((r) => r.m)
   return dropped
-}
-
-// ---------- relevance ----------
-
-/**
- * What is happening right now, described semantically. `eventKey` looks up MEMORY_CUES to pull in
- * the pairings that tag overlap alone would miss (§13: external_cto_hired ↔ a leadership promise).
- */
-export interface MemoryCue {
-  eventKey?: string
-  tags?: MemoryTag[]
-  /** summaryKeys this moment specifically dredges up, on top of whatever the cue def lists. */
-  recalls?: string[]
-  recallTypes?: MemoryType[]
-  /** People in the room. A memory about one of them is more relevant than one about a stranger. */
-  involvedIds?: CharacterId[]
-  currentWeek?: number
-}
-
-/** Expand a cue with the content table's entry for its eventKey. Pure; safe to call repeatedly. */
-export function resolveCue(cue: MemoryCue): Required<Pick<MemoryCueDef, 'tags'>> & {
-  recalls: string[]
-  recallTypes: MemoryType[]
-  involvedIds: CharacterId[]
-} {
-  const def = cue.eventKey ? MEMORY_CUES[cue.eventKey] : undefined
-  return {
-    tags: mergeTags(def?.tags ?? [], cue.tags),
-    recalls: [...new Set([...(def?.recalls ?? []), ...(cue.recalls ?? [])])],
-    recallTypes: [...new Set([...(def?.recallTypes ?? []), ...(cue.recallTypes ?? [])])],
-    involvedIds: cue.involvedIds ?? [],
-  }
-}
-
-/** Weights sum to 1 so the base score is already 0–100 before the bonuses. §14's six factors. */
-const W = { importance: 0.26, recency: 0.16, tags: 0.28, emotion: 0.1, unresolved: 0.1, relationship: 0.1 }
-const PAIRING_BONUS = 25
-const TYPE_BONUS = 8
-const INVOLVED_BONUS = 8
-/** An old memory with no tag, pairing or cast connection is not "relevant", it is just old. */
-const UNCONNECTED_PENALTY = 0.3
-
-function tagScore(memoryTags: readonly MemoryTag[], cueTags: readonly MemoryTag[]): number {
-  if (!cueTags.length || !memoryTags.length) return 0
-  let hit = 0
-  for (const t of cueTags) if (memoryTags.includes(t)) hit++
-  const cover = hit / cueTags.length
-  const precision = hit / memoryTags.length
-  return 100 * (0.7 * cover + 0.3 * precision)
-}
-
-/**
- * How charged the rememberer's relationship with the other party is. Not how *good* it is: a
- * memory about someone you distrust is as loud as one about someone you lean on.
- */
-function relationshipScore(character: Character | undefined, memory: MemoryItem): number {
-  const other = memory.actorId ?? memory.targetId ?? FOUNDER_ID
-  const row = character?.relationships?.find((r) => r.characterId === other)
-  if (!row) return 50
-  const charge = clamp100((row.dependence + Math.abs(row.trust - 50) * 2 + Math.abs(row.alignment - 50) * 2) / 3)
-  return clamp100(40 + charge * 0.6)
-}
-
-/**
- * §14. Pure: (memory, cue, character, week) → 0–100. Never reads state, never draws randomness,
- * and never decides anything — it only ranks true facts the simulation already produced.
- */
-export function scoreMemoryRelevance(
-  memory: MemoryItem,
-  cue: MemoryCue,
-  character: Character | undefined,
-  currentWeek: number,
-): number {
-  const c = resolveCue(cue)
-  const tags = tagScore(memory.tags, c.tags)
-  const paired = c.recalls.includes(memory.summaryKey)
-  const typed = c.recallTypes.includes(memory.type)
-  const involved =
-    c.involvedIds.length > 0 &&
-    ((memory.actorId !== undefined && c.involvedIds.includes(memory.actorId)) ||
-      (memory.targetId !== undefined && c.involvedIds.includes(memory.targetId)))
-
-  let score =
-    W.importance * decayedImportance(memory, currentWeek) +
-    W.recency * memoryRecency(memory, currentWeek) +
-    W.tags * tags +
-    W.emotion * Math.abs(memory.emotionalImpact) +
-    W.unresolved * (memory.resolved ? 0 : 100) +
-    W.relationship * relationshipScore(character, memory)
-
-  if (!paired && !typed && !involved && tags <= 0) score *= UNCONNECTED_PENALTY
-  if (paired) score += PAIRING_BONUS
-  if (typed) score += TYPE_BONUS
-  if (involved) score += INVOLVED_BONUS
-  return clamp100(score)
-}
-
-export interface ScoredMemory {
-  memory: MemoryItem
-  score: number
-}
-
-export interface RecallOptions {
-  limit?: number
-  /** Below this, a memory is not worth bringing up. Raise it for a headline, lower it for a postmortem. */
-  minScore?: number
-  types?: MemoryType[]
-  includeResolved?: boolean
-}
-
-/**
- * The composer's query: the most relevant things this character remembers about this moment,
- * best first. Deterministic — ties break on week then id, never on array order.
- */
-export function recallMemories(
-  character: Character | undefined,
-  cue: MemoryCue,
-  currentWeek: number,
-  opts: RecallOptions = {},
-): ScoredMemory[] {
-  if (!character?.memories?.length) return []
-  const { limit = 3, minScore = 25, types, includeResolved = true } = opts
-  const out: ScoredMemory[] = []
-  for (const memory of character.memories) {
-    if (types && !types.includes(memory.type)) continue
-    if (!includeResolved && memory.resolved) continue
-    const score = scoreMemoryRelevance(memory, cue, character, currentWeek)
-    if (score >= minScore) out.push({ memory, score })
-  }
-  out.sort((a, b) => b.score - a.score || b.memory.week - a.memory.week || (a.memory.id < b.memory.id ? -1 : 1))
-  return out.slice(0, Math.max(0, limit))
-}
-
-/** The single loudest memory, or undefined. The common case in a one-sentence callback. */
-export function topMemory(
-  character: Character | undefined,
-  cue: MemoryCue,
-  currentWeek: number,
-  opts: RecallOptions = {},
-): MemoryItem | undefined {
-  return recallMemories(character, cue, currentWeek, { ...opts, limit: 1 })[0]?.memory
-}
-
-/**
- * Whose memory is loudest right now — who the director should let speak. Iterates a sorted key
- * list, because draw order must never be able to change the world.
- */
-export function charactersWithRelevantMemory(
-  world: LivingWorldState,
-  cue: MemoryCue,
-  currentWeek: number,
-  opts: RecallOptions = {},
-): { character: Character; memory: MemoryItem; score: number }[] {
-  const out: { character: Character; memory: MemoryItem; score: number }[] = []
-  for (const id of sortedCharacterIds(world)) {
-    const character = world.characters[id]
-    if (!character || character.status === 'departed') continue
-    const best = recallMemories(character, cue, currentWeek, { ...opts, limit: 1 })[0]
-    if (best) out.push({ character, memory: best.memory, score: best.score })
-  }
-  out.sort((a, b) => b.score - a.score || (a.character.id < b.character.id ? -1 : 1))
-  return out
 }
 
 /** Sorted so every iteration over the cast is order-stable regardless of insertion history. */
@@ -539,33 +369,6 @@ export function companyRecord(
     if (!out || v > out.best) out = { best: v, memory: m }
   }
   return out
-}
-
-/** Company-side relevance. Same shape as the character query, minus the personal dimensions. */
-export function scoreCompanyMemoryRelevance(memory: CompanyMemory, cue: MemoryCue, currentWeek: number): number {
-  const c = resolveCue(cue)
-  const tags = tagScore(COMPANY_MEMORY_DEFAULTS[memory.type]?.tags ?? [], c.tags)
-  const imp = memory.importance * (IMPORTANCE_FLOOR + (1 - IMPORTANCE_FLOOR) * halfLife(currentWeek - memory.week, IMPORTANCE_HALF_LIFE))
-  let score = 0.45 * imp + 0.2 * (100 * halfLife(currentWeek - memory.week, RECENCY_HALF_LIFE)) + 0.35 * tags
-  if (tags <= 0) score *= UNCONNECTED_PENALTY
-  return clamp100(score)
-}
-
-export function recallCompanyMemories(
-  world: LivingWorldState,
-  cue: MemoryCue,
-  currentWeek: number,
-  opts: { limit?: number; minScore?: number; types?: CompanyMemoryType[] } = {},
-): { memory: CompanyMemory; score: number }[] {
-  const { limit = 3, minScore = 25, types } = opts
-  const out: { memory: CompanyMemory; score: number }[] = []
-  for (const memory of world.companyMemory ?? []) {
-    if (types && !types.includes(memory.type)) continue
-    const score = scoreCompanyMemoryRelevance(memory, cue, currentWeek)
-    if (score >= minScore) out.push({ memory, score })
-  }
-  out.sort((a, b) => b.score - a.score || b.memory.week - a.memory.week || (a.memory.id < b.memory.id ? -1 : 1))
-  return out.slice(0, Math.max(0, limit))
 }
 
 // ---------- promises ----------
