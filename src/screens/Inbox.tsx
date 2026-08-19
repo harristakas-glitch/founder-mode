@@ -1,6 +1,7 @@
 import { Inbox as InboxIcon } from 'lucide-react'
 import { Btn, EmptyState } from '../components'
 import { useStore } from '../store'
+import { DecisionLens } from '../onboarding/DecisionLens'
 
 export function Inbox() {
   const game = useStore((s) => s.game)!
@@ -58,6 +59,7 @@ export function Inbox() {
               </div>
               <div className={`mt-0.5 font-bold ${needsYou ? '' : 'text-ink/90'}`}>{m.title}</div>
               <div className="mt-1 text-[13px] leading-relaxed text-mut">{m.body}</div>
+              {needsYou && <DecisionLens message={m} />}
               {needsYou && m.choices && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {m.choices.map((c, i) => (
@@ -68,6 +70,7 @@ export function Inbox() {
                 </div>
               )}
               {m.resolved && m.resultText && <div className="mt-2 text-[13px] italic text-good">→ {m.resultText}</div>}
+              {m.resolved && <DecisionLens message={m} />}
             </div>
           )
         })}

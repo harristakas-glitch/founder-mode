@@ -22,7 +22,8 @@
 // Reads `game.inbox` and nothing else. Writes nothing.
 
 import { useStore } from '../store'
-import type { Choice, Effects, Message } from '../game/types'
+import { valuation } from '../game/engine'
+import type { Choice, Effects, GameState, Message } from '../game/types'
 import { money } from '../format'
 import { openGuide } from './guide'
 import { useProgress } from './useOnboarding'
@@ -57,6 +58,21 @@ const AXIS_META: Record<keyof Omit<Effects, 'special'>, { label: string; term?: 
   pmf: { label: 'PMF', term: 'pmf' },
 }
 
+/**
+ * The specials that take a slice of the company, and how much — mirroring `applyEffects`, where
+ * both are RELATIVE cuts of what the founder still holds rather than absolute points.
+ *
+ * This is the one place the lens converts a percentage into money. The audit case that demanded it:
+ * the week-6 accelerator asks for 7% and the player is looking at a valuation in the header, but
+ * nothing on the screen connects the two, so "7%" lands as a word rather than a price. After the
+ * fact — the choice already locked, nothing spoiled — naming what it cost at today's valuation is
+ * the difference between a coin flip and a lesson about dilution.
+ */
+const EQUITY_SPECIAL: Partial<Record<NonNullable<Effects['special']>, number>> = {
+  accelerator: 0.07,
+  angel: 0.08,
+}
+
 /** What each `special` actually does, in one phrase. Kept in step with `applyEffects`. */
 const SPECIAL_LABEL: Record<NonNullable<Effects['special']>, string> = {
   acquired: 'ends the run — the company is sold',
@@ -77,6 +93,21 @@ const SPECIAL_LABEL: Record<NonNullable<Effects['special']>, string> = {
   'line-surge': 'every launched product line gains users',
   'lose-mercenary': 'a mercenary hire leaves',
   'network-exit': 'ends the run — you step back and hand over the network',
+}
+
+/**
+ * What a relative equity cut was worth, in money, at today's valuation.
+ *
+ * Deliberately approximate and said so: it is priced at the CURRENT valuation, not the one at the
+ * moment of the deal, because the honest question a founder asks later is "what is that slice worth
+ * now". Returns null rather than guessing when the company has no meaningful valuation yet.
+ */
+function equityCost(g: GameState, special: NonNullable<Effects['special']>): string | null {
+  const share = EQUITY_SPECIAL[special]
+  if (share === undefined) return null
+  const val = valuation(g)
+  if (!Number.isFinite(val) || val <= 0) return null
+  return `${Math.round(share * 100)}% of the company — about ${money(val * share)} at today's ${money(val)} valuation`
 }
 
 function axesOf(fx: Effects, signed: boolean): Axis[] {
@@ -144,18 +175,33 @@ export function DecisionLens({ message }: { message: Message }) {
     const taken = takenChoice(message)
     if (!taken) return null
     const axes = axesOf(taken.effects, true)
-    if (axes.length === 0)
+    const equity = taken.effects.special ? equityCost(game, taken.effects.special) : null
+    if (axes.length === 0 && !equity)
       return (
         <div className="mt-1.5 text-[12px] text-mut">
           What it did: <b className="text-ink">nothing measurable</b> — declining was free this time.
         </div>
       )
     return (
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">What it did</span>
-        {axes.map((a) => (
-          <Chip key={a.key} a={a} signed />
-        ))}
+      <div className="mt-1.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">What it did</span>
+          {axes.map((a) => (
+            <Chip key={a.key} a={a} signed />
+          ))}
+        </div>
+        {equity && (
+          <div className="mt-1 text-[12px] leading-snug text-mut">
+            <button
+              onClick={() => openGuide('dilution')}
+              className="underline decoration-dotted underline-offset-2 transition-colors hover:text-ink"
+              title="What is this? — opens the field guide"
+            >
+              Dilution
+            </button>
+            : <b className="text-ink">{equity}</b>. That share is gone for good — it does not come back when the company grows.
+          </div>
+        )}
       </div>
     )
   }

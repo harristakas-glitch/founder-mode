@@ -19,6 +19,7 @@ import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
 import { MATCH_CAP, dailyInfo, readHall, useStore } from '../store'
 import { DailyLeaderboard } from './DailyLeaderboard'
+import { FirstRunBriefingNote, FirstRunPath, recommendedMode } from '../onboarding/FirstRun'
 import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
@@ -322,6 +323,14 @@ export function NewGame() {
                             Early access
                           </span>
                         )}
+                        {recommendedMode(m) && (
+                          <span
+                            className="rounded-full border px-2 py-0.5 text-[10px] font-bold"
+                            style={{ borderColor: `${c}66`, color: c, background: `${c}14` }}
+                          >
+                            Start here
+                          </span>
+                        )}
                       </span>
                       <span className="mt-3.5 block text-[20px] font-extrabold tracking-tight">{meta.name}</span>
                       <span className="mt-1 block text-[14px] font-bold" style={{ color: c }}>
@@ -339,6 +348,14 @@ export function NewGame() {
                 )
               })}
             </div>
+
+            <FirstRunPath
+              onTakeIt={() => {
+                setExperience('quick')
+                setFormat('standard')
+                setSector('saas')
+              }}
+            />
 
             {/* Daily stays one tap away without becoming a fourth pillar. */}
             <button
@@ -497,6 +514,8 @@ export function NewGame() {
                     </div>
                   </Step>
                 )}
+
+                <FirstRunBriefingNote mode={experience === 'career' ? 'career' : 'quick'} />
 
                 {/* sticky, so the way into the game stays on screen however far down
                     the option list the player has scrolled */}

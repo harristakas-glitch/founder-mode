@@ -135,6 +135,35 @@ export const CONCEPTS: Concept[] = [
     goto: { screen: 'product', label: 'Shift focus' },
   },
 
+  // ---------- the demand signal (Quick Play's central hidden mechanic) ----------
+  {
+    id: 'demand-unknown',
+    screen: 'product',
+    only: 'quick',
+    priority: 91,
+    when: (f) => f.demand === 'unknown' && f.week >= 2,
+    title: 'You cannot read the market yet',
+    body: (f) =>
+      `The demand gauge on this screen is ${Math.min(100, Math.round((f.researchSignal / 14) * 100))}% of the way to saying anything at all. Until it fills, whether this idea is any good is genuinely unknown — not hidden behind a low number, simply not measured. User research is the only thing that fills it, and every week you build features first is a week you are betting blind.`,
+    terms: ['idea-quality', 'focus'],
+  },
+  {
+    id: 'demand-known',
+    screen: 'any',
+    only: 'quick',
+    priority: 87,
+    when: (f) => f.demand !== 'unknown',
+    title: 'The market has answered',
+    body: (f) =>
+      f.demand === 'strong'
+        ? 'Your research says demand is STRONG. That is the expensive question settled — stop buying more of the answer and start exploiting it: features and quality for the product, marketing for the growth.'
+        : f.demand === 'weak'
+          ? 'Your research says demand is WEAK, and no amount of execution fixes a market that does not want the thing. A pivot is the instrument for exactly this: it costs cash, energy and most of your progress, but the research you have already done carries over as a permanent bonus to the next idea’s roll, so pivoting informed beats pivoting early.'
+          : 'Your research says demand is MIXED — a real business, not a great one. More research narrows the band but will not change the answer much from here, so this is a judgement call about time. The runway is the clock.',
+    terms: ['idea-quality', 'pmf'],
+    goto: { screen: 'product', label: 'Product' },
+  },
+
   // ---------- people ----------
   {
     id: 'hiring-fee',
@@ -144,7 +173,7 @@ export const CONCEPTS: Concept[] = [
     when: () => true,
     title: 'The salary is forever. The fee lands once.',
     body: () =>
-      'The fee column is the recruiter’s cut, charged the week they actually start — not when they sign. It is not in your burn and not in your runway. "In pool" is how many weeks before that candidate takes another job instead.',
+      'The fee column is the recruiter’s cut, charged the week they actually start — not when they sign. It is not in your burn and not in your runway. Read the "runway after" figure on each candidate before you send anything: that is the number the hire leaves you with, and hiring past what the company can carry kills more young companies than any rival does. "In pool" is how many weeks before that candidate takes another job instead.',
     terms: ['fee', 'notice', 'runway'],
   },
   {

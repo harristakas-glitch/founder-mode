@@ -6,7 +6,7 @@
 // src/game. `npm run bots` must stay byte-identical with this module present, which it does because
 // no code path here is reachable from the engine at all.
 
-import { runwayWeeks, valuation, weeklyBurn } from '../game/engine'
+import { demandSignal, runwayWeeks, valuation, weeklyBurn } from '../game/engine'
 import { STAGE_THRESHOLDS } from '../game/data'
 import { hasCapability } from '../game/modes'
 import type { GameState } from '../game/types'
@@ -44,6 +44,16 @@ export interface RunFacts {
   marketingSpend: number
   biggestRivalUsers: number
   users: number
+  /** Share of the company still in the founder's hands, 0–1. */
+  founderEquity: number
+  /**
+   * Quick Play only. Accumulated user research on the CURRENT idea, and the qualitative read it
+   * buys. Below 14 points `demand` is 'unknown' and the market is genuinely unreadable — which is
+   * the single mechanic a first-timer most often never discovers, because the gauge that reports
+   * it lives two scrolls down the Product screen.
+   */
+  researchSignal: number
+  demand: 'unknown' | 'weak' | 'mixed' | 'strong'
   /** Career only. Zero/false on every other mode rather than undefined, so predicates stay flat. */
   experimentsRun: number
   evidenceItems: number
@@ -104,6 +114,9 @@ export function readRun(game: GameState, screen: ScreenId): RunFacts {
     marketingSpend: game.marketingSpend,
     biggestRivalUsers: bestRival,
     users: game.users,
+    founderEquity: num(game.founderEquity, 1),
+    researchSignal: num(game.researchSignal),
+    demand: career ? 'unknown' : demandSignal(game),
     experimentsRun: (c?.activeExperiments.length ?? 0) + (c?.journal.filter((j) => j.category === 'experiment').length ?? 0),
     evidenceItems: c?.evidence.length ?? 0,
     targetRetention: num(c?.retentionBySegment?.[target]),

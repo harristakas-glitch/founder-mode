@@ -48,8 +48,8 @@ import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers } from './runMarkers'
-import { Coach } from './Coach'
 import { PMF_CAUSAL_CHAIN } from './CareerUI'
+import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
 import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
 import { GAME_URL, endingEmoji, sectorAccent } from './theme'
@@ -540,6 +540,7 @@ export default function App() {
             )}
             <ChevronDown size={16} className="ml-auto shrink-0 text-mut" />
           </button>
+          <FieldGuideButton />
           <MuteButton />
           <button
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-bad md:h-9 md:w-9"
@@ -556,7 +557,7 @@ export default function App() {
 
         {/* main */}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-24 md:px-6 md:pt-5 md:pb-8">
-          <Coach />
+          <FounderNotes />
           {online && game.gameOver && !matchOver && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
               <span>
