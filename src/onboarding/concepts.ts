@@ -393,6 +393,10 @@ export function conceptsForRun(f: RunFacts): Concept[] {
   return CONCEPTS.filter((c) => !c.only || (c.only === 'career') === f.career)
 }
 
+const BY_ID: Record<string, Concept> = Object.fromEntries(CONCEPTS.map((c) => [c.id, c]))
+
+export const conceptById = (id: string): Concept | undefined => BY_ID[id]
+
 export function conceptOnScreen(c: Concept, screen: ScreenId): boolean {
   if (c.screen === 'any') return true
   return Array.isArray(c.screen) ? c.screen.includes(screen) : c.screen === screen

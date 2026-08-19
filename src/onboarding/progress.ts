@@ -171,16 +171,22 @@ export function weekHasRoom(runId: string, week: number): boolean {
   return p.weekNotes < NOTES_PER_WEEK
 }
 
+/**
+ * Record a lesson as delivered. IDEMPOTENT: a concept already in `seen` re-stamps nothing and,
+ * crucially, does not spend another slot against the weekly cap — the note is marked once on a
+ * dwell timer and again if the player then clicks "Got it", and counting that twice would silence
+ * the next genuine lesson for no reason.
+ */
 export function markSeen(id: string, runId: string, week: number): void {
-  update((p) => {
-    const sameWeek = p.lastNoteRun === runId && p.lastNoteWeek === week
-    return {
-      ...p,
-      seen: { ...p.seen, [id]: Date.now() },
-      lastNoteRun: runId,
-      lastNoteWeek: week,
-      weekNotes: sameWeek ? p.weekNotes + 1 : 1,
-    }
+  const p = readProgress()
+  if (p.seen[id] !== undefined) return
+  const sameWeek = p.lastNoteRun === runId && p.lastNoteWeek === week
+  commit({
+    ...p,
+    seen: { ...p.seen, [id]: Date.now() },
+    lastNoteRun: runId,
+    lastNoteWeek: week,
+    weekNotes: sameWeek ? p.weekNotes + 1 : 1,
   })
 }
 
