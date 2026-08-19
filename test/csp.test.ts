@@ -142,6 +142,11 @@ await ok('a real Error object never contributes its .stack property', () => {
 await ok('an overlong message is truncated rather than flooding the page', () => {
   const text = safeErrorText(new Error('x'.repeat(5000)))
   assert.ok(text.length <= MAX_ERROR_TEXT + 1, `${text.length} > ${MAX_ERROR_TEXT}`)
+  // MUTATION SURVIVOR, first pass: the assertion above measures the output against the very
+  // constant that decides it, so raising MAX_ERROR_TEXT to 100000 moved the goalposts with the
+  // code and the test still passed. A cap is only a cap if something independent pins its size.
+  assert.ok(MAX_ERROR_TEXT <= 1000, `a ${MAX_ERROR_TEXT}-char error is a wall of text, not a message`)
+  assert.ok(MAX_ERROR_TEXT >= 80, 'and too small a cap truncates real messages into uselessness')
 })
 await ok('a thrown non-Error does not crash the boundary itself', () => {
   assert.strictEqual(safeErrorText('just a string'), 'just a string')
