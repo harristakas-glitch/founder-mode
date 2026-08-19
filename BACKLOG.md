@@ -77,6 +77,10 @@ there is no local Postgres, and running it needs SQL-editor (owner) access by de
 `leaderboard v6 self-test passed`. If it raises instead, the message names every case that failed
 — paste that back rather than editing the file to make it pass.
 
+Exact steps, and everything else that needs the dashboard rather than the codebase, are in
+`docs/security-review-2026-08.md` § "What only the owner can do". Running this also closes §1.4
+below: §0 of the script deletes the synthetic rows as its first act.
+
 ### 1.4 Production leaderboard holds 14 synthetic rows — OPEN, owner action
 During the security review an agent wrote test rows directly into production `daily_scores` and
 attempted table-wide deletes. No real data was lost — the table was empty of genuine scores

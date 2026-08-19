@@ -577,14 +577,11 @@ All of these are verified. None is a plan; they are the state of the thing.
 2. **Peers are trusted for their own numbers.** `users`, `val`, `payout` and the open-book intel
    columns are self-reported. The receive path is hardened against crashes, NaN and hangs — not
    against a peer lying about how well it is doing.
-3. **Two security patches from `docs/security-review.md` are still unapplied.** Both are one-liners in
-   `src/store.ts` and both are live today:
-   - `src/store.ts:594` — the incoming-attack rate limit keys on `` `${p.fromId ?? p.fromCompany}` ``.
-     Company names are attacker-chosen, so the fallback is an unlimited-free-hits path.
-   - `src/store.ts:399` — `if (host && p.hostId && p.hostId !== host.id) return null` fails **open**:
-     omit `hostId` and the check is skipped entirely, so any peer in a lobby can start the match with
-     settings of their choosing. (The transport rate-limits `start`, so this is griefing, not
-     mid-match hijacking.)
+3. **The two security patches this list used to call unapplied are applied.** Verified 2026-08-19:
+   the incoming-attack rate limit now keys on `p.fromId` alone and drops a payload carrying no id
+   (an attacker-chosen company name is no longer a rate-limit key), and the host check now fails
+   **closed** — `if (!host || !p.hostId || p.hostId !== host.id) return null`, so omitting `hostId`
+   no longer skips it. See `docs/security-review-2026-08.md` for what is still open.
 4. **There is no two-client Arena test harness.** Everything realtime — presence merge, commit/reveal
    across clients, attack delivery, catch-up, reconnect, forfeit — is verified only by unit tests over
    the validators and by playing. The realtime paths are **not** verified end to end.
@@ -679,7 +676,8 @@ All of these are verified. None is a plan; they are the state of the thing.
     alongside capabilities, and zero cards use them.** Prefer a capability.
 
 Full detail: [`docs/architecture-review.md`](docs/architecture-review.md),
-[`docs/security-review.md`](docs/security-review.md),
+[`docs/security-review-2026-08.md`](docs/security-review-2026-08.md) (latest, and the one that
+lists what only you can do) and its predecessor [`docs/security-review.md`](docs/security-review.md),
 [`docs/gameplay-review.md`](docs/gameplay-review.md), and
 [`BACKLOG.md`](BACKLOG.md) for everything known-but-unfixed with what "done" looks like.
 
