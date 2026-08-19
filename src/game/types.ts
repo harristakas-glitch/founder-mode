@@ -251,6 +251,13 @@ export interface Venture {
   startedWeek: number
 }
 
+/**
+ * The founder's weekly effort split across the product. Exported so probes, tests and UI can name
+ * the shape once instead of re-deriving `GameState['allocation']`. Purely the field's own type —
+ * no behaviour attached.
+ */
+export type Allocation = { features: number; quality: number; bugs: number; research: number; bet: number }
+
 export interface GameState {
   companyName: string
   sector: SectorId
@@ -270,7 +277,7 @@ export interface GameState {
   totalResearch: number // lifetime research across all ideas — improves every future pivot
   pivots: number
   milestones: string[] // achieved milestone ids
-  allocation: { features: number; quality: number; bugs: number; research: number; bet: number }
+  allocation: Allocation
   marketingSpend: number // $/week
   employees: Employee[]
   candidates: Candidate[]
