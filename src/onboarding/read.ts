@@ -107,7 +107,7 @@ export function readRun(game: GameState, screen: ScreenId): RunFacts {
     experimentsRun: (c?.activeExperiments.length ?? 0) + (c?.journal.filter((j) => j.category === 'experiment').length ?? 0),
     evidenceItems: c?.evidence.length ?? 0,
     targetRetention: num(c?.retentionBySegment?.[target]),
-    targetCustomers: c?.cohorts?.filter((x) => x.segmentId === target).reduce((a, x) => a + num(x.customers), 0) ?? 0,
+    targetCustomers: c?.cohorts?.filter((x) => x.segmentId === target).reduce((a, x) => a + num(x.activeCustomers), 0) ?? 0,
     openInterviewMoves: openRooms.filter((r) => r.kind === 'interview').reduce((a, r) => a + num(r.movesLeft), 0),
     openConversation: openRooms.some((r) => r.kind === 'conversation'),
     openBoardRoom: openRooms.some((r) => r.kind === 'board_meeting'),
