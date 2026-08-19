@@ -54,20 +54,32 @@ all**: free projects hard-stop at quota rather than billing, so the protection i
 is confirmed to be on Free and this item is closed as not-applicable — to be REOPENED on any
 upgrade, because that is the moment the exposure becomes real.
 
-### 1.3 leaderboard-v5.sql has not been run — OPEN, owner action
-The security review found the shipped policy has been rejecting **100% of real submissions**:
-`leaderboard-secure.sql` bounds `day` to 10000..40000, but `day` is the daily-challenge counter
-(`dailyInfo()`), which is 7. Verified against production with identical payloads: day 7 → 401,
-day 9999 → 401, day 10000 → 201. The table contained no genuine score.
+### 1.3 leaderboard-v6.sql has not been run — OPEN, owner action, HIGHEST VALUE
+The shipped policy has been rejecting **100% of real submissions** since it went up: it bounds
+`day` to 10000..40000, but `day` is the daily-challenge counter (`dailyInfo()`), which is a small
+number like 7. Verified against production with identical payloads: day 7 → 401, day 9999 → 401,
+day 10000 → 201. The table contains no genuine score. **The global leaderboard has never worked.**
 
-This is the SECOND time a control in this file blocked attackers and every real user at once (v3
-did the same). The rule that would have caught both: assert the attack is blocked AND the
-legitimate path still works, in the same test run.
+This was the SECOND time a control here blocked attackers and every real user at once (v3 did the
+same), and the 2026-08-19 review found a latent THIRD — v5 wrote every policy `to anon` only, so
+enabling social login (§1.2) would have blanked the leaderboard for exactly the players who
+engaged most. The rule that would have caught all three: assert the attack is blocked AND the
+legitimate path still works, in the same run, for every role that can reach the table.
 
-`supabase/leaderboard-v5.sql` is written to be self-testing — it runs its own attack matrix and
-raises on failure. It could not be run from here (only the public anon key is available, no local
-Postgres). **Done when:** the owner runs it against the project and it completes without raising,
-BEFORE the matching client change is deployed.
+**Run `supabase/leaderboard-v6.sql`, and nothing else.** It is now the only SQL file in the repo
+(the 2026-08-19 review deleted the other five — see "Reference — what the SQL files are" below).
+It creates the table as well as securing it, it is idempotent, and it is self-testing: it runs its
+own attack matrix as both `anon` and `authenticated` and raises with a list of failures if any
+case comes out wrong. It could not be run from here — only the public anon key is available and
+there is no local Postgres, and running it needs SQL-editor (owner) access by design.
+
+**Done when:** the owner pastes it into the Supabase SQL editor and it completes printing
+`leaderboard v6 self-test passed`. If it raises instead, the message names every case that failed
+— paste that back rather than editing the file to make it pass.
+
+Exact steps, and everything else that needs the dashboard rather than the codebase, are in
+`docs/security-review-2026-08.md` § "What only the owner can do". Running this also closes §1.4
+below: §0 of the script deletes the synthetic rows as its first act.
 
 ### 1.4 Production leaderboard holds 14 synthetic rows — OPEN, owner action
 During the security review an agent wrote test rows directly into production `daily_scores` and
@@ -358,9 +370,14 @@ forward: when concurrent work is in flight, stage by explicit pathspec, never `-
 
 ## Reference — what the SQL files are
 
-Run **only** `supabase/leaderboard-secure.sql`; it supersedes the other two and is idempotent.
-`leaderboard.sql` (original table) and `leaderboard-hardening.sql` (a superseded attempt whose
-UPDATE policy was defeated in testing) are kept for history.
+There is exactly **one**: `supabase/leaderboard-v6.sql`. Run it. It creates the table as well as
+securing it, so it works on a fresh project and on the existing one, and it is idempotent.
+
+The 2026-08-19 review deleted the other five (`leaderboard.sql`, `leaderboard-hardening.sql`,
+`leaderboard-secure.sql`, `leaderboard-v5.sql`, `auth-upgrade.sql`). Six scripts in one directory,
+with four different documents each naming a different one as "the one to run", is how a policy
+that rejected 100% of real submissions survived for two weeks. They are in git history
+(`git log -- supabase/`) if the story is ever needed.
 
 The security model, briefly: each device stores a random secret in localStorage and sends it as
 a header; the database stores only a **bcrypt hash** of it, so reading the column gains an
@@ -404,7 +421,7 @@ landed; and CI now runs `npm run build` + `npm test` on every push, with `test/`
 
 1. **The leaderboard proof column** (§3.1's remainder). Additive schema; the client already builds
    and stores the proof. Until it exists, verification is local-only.
-2. **`supabase/leaderboard-v5.sql` has still never been run** (§1.3) — and the shipped policy is
+2. **`supabase/leaderboard-v6.sql` has still never been run** (§1.3) — and the shipped policy is
    still rejecting 100% of real submissions. It now also carries the `network` ending in its CHECK,
    so one run covers both. This is the single highest-value owner action in this file.
 3. **Tokenisation in Quick Play** — Slice 7 stopped at the mode boundary deliberately rather than

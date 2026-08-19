@@ -204,15 +204,22 @@ export function getClient(): Promise<SupabaseClient> {
 // Presence is attacker-controlled: any peer can track arbitrary JSON. Everything the rest
 // of the app reads must survive a hostile or buggy client, so it is coerced and bounded here.
 const MAX_USERS = 1e10
+/** Mirrors the engine's own clamp in `applyConcedeGain` — a war cannot move more than this. */
+const MAX_CONCEDE_USERS = 1e7
 const num = (v: unknown, max: number): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, max) : 0)
 
 /**
  * Characters a peer has no legitimate reason to send and that wreck the UI when rendered:
  * C0/C1 controls (newlines that break a one-line label), zero-width padding, and the bidi
  * override/isolate range — U+202E in a company name reverses every line it lands in.
+ * U+2028/U+2029 are here because they are line breaks that are NOT in the C0 range: the first
+ * pass stripped `\n` and left the separator that renders identically in a `pre-wrap` label.
  * U+200D (ZWJ) is deliberately NOT stripped: emoji families are built from it.
  */
-const UNSAFE_CHARS = new RegExp('[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]', 'g')
+const UNSAFE_CHARS = new RegExp(
+  '[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200E\\u200F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]',
+  'g',
+)
 
 const str = (v: unknown, max: number, fallback = ''): string =>
   typeof v === 'string' ? v.replace(UNSAFE_CHARS, '').slice(0, max) : fallback
@@ -234,10 +241,19 @@ const int = (v: unknown, min: number, max: number): number => Math.min(max, Math
 export function normalizePlayer(raw: unknown, key: string): NetPlayer | null {
   const p = raw as Record<string, unknown>
   if (!p || typeof p !== 'object') return null
-  // a peer cannot impersonate another slot: the presence key is the identity of record
-  if (typeof p.id !== 'string' || p.id !== key) return null
+  // A peer cannot impersonate another slot: the presence key is the identity of record.
+  //
+  // The id is held to the SAME domain as every other id on the wire (`opaqueId`: non-empty,
+  // <= 64 chars, no control/bidi characters, no `|`) and must then equal its key exactly. It
+  // used to be checked against the key and only THEN truncated to 64 — so a 71-character key
+  // passed the check and came back as a 64-character id that was no longer its own key. Two
+  // different keys sharing a 64-char prefix collapsed onto one NetPlayer.id, which defeats the
+  // single guarantee presence offers, duplicates React keys, and — now that the broadcast
+  // roster is built from readPlayers() — would put a forged id into the bid gate.
+  const id = opaqueId(p.id)
+  if (!id || id !== key) return null
   return {
-    id: p.id.slice(0, 64),
+    id,
     company: str(p.company, 30, 'Unknown Inc.') || 'Unknown Inc.',
     founder: p.founder === 'business' ? 'business' : 'technical',
     host: p.host === true,
@@ -346,6 +362,9 @@ const LIMITS: Record<string, { perSender: number; global: number; windowMs: numb
   chat: { perSender: 6, global: 24, windowMs: 10_000 },
   emote: { perSender: 10, global: 40, windowMs: 10_000 },
   attack: { perSender: 4, global: 24, windowMs: 60_000 },
+  // A war lasts six weeks and can be conceded once, so two a minute per peer is already
+  // generous; the point is that this path ADDS users to our own persisted save.
+  concede: { perSender: 2, global: 12, windowMs: 60_000 },
   commit: { perSender: 8, global: 48, windowMs: 60_000 },
   reveal: { perSender: 8, global: 48, windowMs: 60_000 },
   start: { perSender: 4, global: 12, windowMs: 60_000 },
@@ -426,16 +445,55 @@ export function validateReveal(raw: unknown, ctx: PeerContext): RevealPayload | 
   }
 }
 
+/**
+ * The receive-side whitelist, and the ONLY place attack kinds are enumerated on the wire.
+ *
+ * It listed three kinds while the game shipped five: `hitpiece` and `pricewar` (engine.ts
+ * `ATTACKS`) are offered against online peers by Market.tsx's PvpOps panel, the attacker paid
+ * for them, and every victim's client silently dropped the packet. That also took the price-war
+ * economy down with it — no `pricewar` ever arrived, so `priceWarFrom` was never set and a
+ * concession had nobody to credit. A whitelist that falls behind the feature it guards deletes
+ * the feature; keep this in sync with `AttackDef['id']`.
+ */
+const ATTACK_KINDS: ReadonlySet<string> = new Set(['poach', 'smear', 'raid', 'hitpiece', 'pricewar'])
+
 export function validateAttack(raw: unknown, ctx: PeerContext): AttackPayload | null {
   const p = (raw ?? {}) as Record<string, unknown>
-  const kind = p.kind
-  if (kind !== 'poach' && kind !== 'smear' && kind !== 'raid') return null
+  // `has` on a Set, not a lookup in an object literal: `kind: '__proto__'` must not match.
+  const kind = typeof p.kind === 'string' && ATTACK_KINDS.has(p.kind) ? (p.kind as AttackPayload['kind']) : null
+  if (!kind) return null
   const targetId = opaqueId(p.targetId)
   // fromId is REQUIRED. The store dedupes incoming attacks with `fromId ?? fromCompany`, so a
   // sender that simply omitted it — or varied it freely — got one extra hit per week per value.
   const fromId = peerId(p.fromId, ctx)
   if (!targetId || !fromId) return null
   return { fromCompany: str(p.fromCompany, 30, 'A rival') || 'A rival', targetId, kind, fromId }
+}
+
+/**
+ * A concession hands the war's initiator the customers the conceder just gave up, so it is the
+ * one broadcast that ADDS value to the receiver's own save. It shipped with a store handler and
+ * a sender but no validator — and therefore no listener in `wire()` either, which is why the
+ * price-war economy never closed the loop in Arena.
+ *
+ * `fromId` is optional here, unlike an attack's: a concession is not rate-limited per-week by
+ * identity, so there is nothing for a missing id to bypass, and older clients do not send one.
+ * When it IS present it is held to the same two rules as everything else — nobody may speak as
+ * me, nobody may speak as an id that is not in the room.
+ */
+export function validateConcede(raw: unknown, ctx: PeerContext): ConcedePayload | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const targetId = opaqueId(p.targetId)
+  if (!targetId) return null
+  if (p.fromId !== undefined && p.fromId !== null && !peerId(p.fromId, ctx)) return null
+  return {
+    fromCompany: str(p.fromCompany, 30, 'A rival') || 'A rival',
+    targetId,
+    // The engine clamps this again (`applyConcedeGain`), but a NaN reaching a persisted
+    // GameState is not something to leave to the last line of defence: this number is added to
+    // the receiver's user count and then written to localStorage.
+    users: int(p.users, 0, MAX_CONCEDE_USERS),
+  }
 }
 
 export function validateChat(raw: unknown): ChatPayload | null {
@@ -480,10 +538,17 @@ function setLink(next: LinkState) {
   onLink?.(next)
 }
 
-/** The identity context every inbound broadcast is judged against, rebuilt per message. */
+/**
+ * The identity context every inbound broadcast is judged against, rebuilt per message.
+ *
+ * Built from `readPlayers()`, NOT from the raw presence keys. Those are two different sets: raw
+ * keys are uncapped and unvalidated, so a peer tracking thousands of them used to get thousands
+ * of accepted bidder identities that never appeared as players — past both the MAX_PLAYERS
+ * ceiling and the self-consistency check that makes a presence key mean anything. The gate must
+ * admit exactly the people the room can see.
+ */
 function peerContext(): PeerContext {
-  const state = channel?.presenceState() ?? {}
-  return { selfId: myState?.id ?? '', roster: new Set(Object.keys(state)) }
+  return { selfId: myState?.id ?? '', roster: new Set(readPlayers().map((p) => p.id)) }
 }
 
 /** Attach every listener this room needs. Called fresh on each (re)join — channels aren't reusable. */
@@ -526,6 +591,9 @@ function wire(ch: RealtimeChannel, handlers: Handlers) {
   on('commit', validateCommit, (p) => p.playerId, (p) => handlers.onCommit?.(p))
   on('reveal', validateReveal, (p) => p.playerId, (p) => handlers.onReveal?.(p))
   on('attack', validateAttack, (p) => p.fromId ?? 'anon', (p) => handlers.onAttack?.(p))
+  // `concede` had a sender (broadcastConcede), a store handler (onConcede) and no listener at
+  // all, so conceding a price war removed the conceder's customers and gave them to nobody.
+  on('concede', validateConcede, (p) => p.fromCompany, (p) => handlers.onConcede?.(p))
 }
 
 /** Tear down whatever channel we currently hold. Safe to call when there isn't one. */

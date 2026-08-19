@@ -569,7 +569,7 @@ replay divergence into a console warning during the first playtest.
 
 **M1.** The security review left two `store.ts` patches explicitly unapplied because that file was
 outside its ownership. They are still unapplied and they are in my scope, but they are security
-changes with their own deployment order (they expect `leaderboard-v5.sql` to land first), so I have
+changes with their own deployment order (they expect `leaderboard-v6.sql` to land first), so I have
 not applied them either — landing half of a sequenced deployment is worse than landing none. Both are
 one-liners:
 

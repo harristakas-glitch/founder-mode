@@ -371,8 +371,8 @@ burns their cooldown. Your rivals don't know you have it.
 - **Simulation**: pure functions in `src/game/engine.ts`, bot-testable headlessly
 - **Multiplayer**: Supabase Realtime channels only — presence + broadcast, no tables, no SQL. Each
   client simulates its own company.
-- **Leaderboard**: one Supabase table. Run **`supabase/leaderboard-v5.sql`** — it supersedes
-  `leaderboard.sql`, `leaderboard-hardening.sql` *and* `leaderboard-secure.sql`.
+- **Leaderboard**: one Supabase table. Run **`supabase/leaderboard-v6.sql`** — it is the only SQL
+  file in the repo, it creates the table as well as securing it, and it is idempotent.
 - **Auth (optional)**: Supabase Auth with Google / X OAuth. Anonymous play is always available.
   The providers are written but **not enabled** on the live project — the buttons error if pressed.
 - **PWA**: installable, offline-capable (service worker, production build only), with an
@@ -479,8 +479,8 @@ against its own copy: five green ✓ lines, zero engine code executed. Another a
 players reported. The habit that prevents this: **when a test needs a number from the source, import
 the number.** If it cannot be imported, that is the finding.
 
-Deploys to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`). Note the workflow
-runs `npm ci && npm run build` — it does **not** run `npm test`. A red suite will still ship.
+Deploys to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`). The workflow runs
+`npm test` before `npm run build`, so a red suite blocks the deploy rather than shipping.
 
 ### Versions and rolling back
 
@@ -504,10 +504,11 @@ The game runs fully offline and anonymous without any of this.
 
 1. Create a free [Supabase](https://supabase.com) project; paste its URL and publishable key into
    `src/net/config.ts`. **Arena works immediately** — realtime channels need no schema.
-2. Run `supabase/leaderboard-v5.sql` in the SQL Editor, and only that one. It is idempotent and
-   self-testing: its last section runs the whole attack matrix against the policies it just created
-   and raises with a list of failures if any case comes out wrong. A successful run prints
-   `leaderboard v5 self-test passed`. Ownership of a row is proved by a per-device secret the
+2. Run `supabase/leaderboard-v6.sql` in the SQL Editor. It is the only SQL file in the repo, it
+   creates the table as well as securing it, and it is idempotent and self-testing: its last
+   section runs the whole attack matrix against the policies it just created — as both database
+   roles — and raises with a list of failures if any case comes out wrong. A successful run prints
+   `leaderboard v6 self-test passed`. Ownership of a row is proved by a per-device secret the
    database stores only as a **bcrypt hash**; each `player_id` is bound to the first device that used
    it; and a trigger makes `player_id`, `day` and the secret immutable and scores monotonic, so even
    a leaked secret can only ever raise that one row's score.
@@ -576,14 +577,11 @@ All of these are verified. None is a plan; they are the state of the thing.
 2. **Peers are trusted for their own numbers.** `users`, `val`, `payout` and the open-book intel
    columns are self-reported. The receive path is hardened against crashes, NaN and hangs — not
    against a peer lying about how well it is doing.
-3. **Two security patches from `docs/security-review.md` are still unapplied.** Both are one-liners in
-   `src/store.ts` and both are live today:
-   - `src/store.ts:594` — the incoming-attack rate limit keys on `` `${p.fromId ?? p.fromCompany}` ``.
-     Company names are attacker-chosen, so the fallback is an unlimited-free-hits path.
-   - `src/store.ts:399` — `if (host && p.hostId && p.hostId !== host.id) return null` fails **open**:
-     omit `hostId` and the check is skipped entirely, so any peer in a lobby can start the match with
-     settings of their choosing. (The transport rate-limits `start`, so this is griefing, not
-     mid-match hijacking.)
+3. **The two security patches this list used to call unapplied are applied.** Verified 2026-08-19:
+   the incoming-attack rate limit now keys on `p.fromId` alone and drops a payload carrying no id
+   (an attacker-chosen company name is no longer a rate-limit key), and the host check now fails
+   **closed** — `if (!host || !p.hostId || p.hostId !== host.id) return null`, so omitting `hostId`
+   no longer skips it. See `docs/security-review-2026-08.md` for what is still open.
 4. **There is no two-client Arena test harness.** Everything realtime — presence merge, commit/reveal
    across clients, attack delivery, catch-up, reconnect, forfeit — is verified only by unit tests over
    the validators and by playing. The realtime paths are **not** verified end to end.
@@ -678,7 +676,8 @@ All of these are verified. None is a plan; they are the state of the thing.
     alongside capabilities, and zero cards use them.** Prefer a capability.
 
 Full detail: [`docs/architecture-review.md`](docs/architecture-review.md),
-[`docs/security-review.md`](docs/security-review.md),
+[`docs/security-review-2026-08.md`](docs/security-review-2026-08.md) (latest, and the one that
+lists what only you can do) and its predecessor [`docs/security-review.md`](docs/security-review.md),
 [`docs/gameplay-review.md`](docs/gameplay-review.md), and
 [`BACKLOG.md`](BACKLOG.md) for everything known-but-unfixed with what "done" looks like.
 
