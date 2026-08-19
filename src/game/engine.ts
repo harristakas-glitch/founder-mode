@@ -54,6 +54,7 @@ import type {
   Employee,
   FounderKind,
   GameState,
+  HistoryPoint,
   Message,
   Rival,
   Role,
@@ -531,10 +532,127 @@ export function committedCosts(s: GameState): { due: number; potential: number; 
 
 // ---------- valuation ----------
 
+/**
+ * A QUARTER. The window every term in `valuation()` is read over.
+ *
+ * THE PROBLEM THIS CONSTANT EXISTS TO FIX. `valuation()` used to be a pure SPOT reading: it
+ * annualised `s.lastRevenue` — one week — by 52, and it took the growth for both of its growth
+ * terms from `growthRate(s)`, the trailing FOUR-week change in `s.users`. Every quantity it read
+ * was one a player can move with one week's cash, and two of the three ways it read them are
+ * multipliers on the WHOLE company rather than on the thing that moved:
+ *
+ *   multiple    = clamp(8 + growth × 150, 5, 25)   — a 5x band, multiplying all revenue
+ *   growthMania = 1 + clamp(growth × 12, 0, 4)     — a 5x band, multiplying all users
+ *
+ * So the marginal value of a marketing dollar scaled with the SIZE of the business rather than
+ * with what the dollar bought, and it peaked at the horizon, because the run ends on a fixed week
+ * and the score is a snapshot of that week (`gameOver.payout ?? founderStanding(s)`).
+ *
+ * MEASURED, this session, by test/endgame-pump-probe.ts — 24 seeds × 90 weeks of Quick Play on the
+ * calibrated policy, deviating to `marketingMax` for the last K weeks and pricing the deviation as
+ * Δ founder standing ÷ Δ marketing dollars:
+ *
+ *     K=1   saas 20.6x · devtools 24.8x · ecommerce 97.4x · fintech 46.8x · social 27.0x · aiml 38.1x
+ *     K=4   saas 21.3x · devtools 26.3x · ecommerce 106.4x · fintech 51.2x · social 26.3x · aiml 43.0x
+ *
+ * One extra week of ad spend at the horizon returned twenty to ninety-seven times its cost. That
+ * is not a strategy, it is a clock exploit: hoard, then dump at the buzzer. Decomposed on
+ * E-commerce at K=1 — $25k bought 152 users, worth $76k in `userPart` and $419k of extra revenue at
+ * the old multiple, and then moved the multiple enough to add **$1.22M to revenue that was already
+ * there**. Three quarters of the return was the re-pricing, not the purchase. The same
+ * decomposition priced a bought user at $12,007 of valuation against a CAC of $126 and the sector's
+ * own `perUserVal` of $350.
+ *
+ * THE FIX IS A DENOMINATION, NOT A COEFFICIENT. Not one number in the model above changes. What
+ * changes is what the numbers are read OVER: a price is a claim about a quarter of trading, not
+ * about the last seven days. `annualRev` becomes 52 × the trailing quarter's mean weekly revenue,
+ * and the growth term becomes the change in the trailing MONTH's mean user count across a quarter.
+ * A single pumped week then enters the growth signal at 1/52 of its old weight and the revenue
+ * level at 1/13, while a company that genuinely compounded for a quarter reads exactly as before.
+ */
+export const VALUATION_WINDOW = 13
+
+/**
+ * Mean of a per-week series over the `span` weeks ending `back` weeks before the current one.
+ *
+ * The current week is not in `s.history` until the tick that produced it finishes — `advanceWeek`
+ * prices acquisition offers before it pushes — so it is taken from the live field when history has
+ * not caught up. Short histories (a new run, a migrated save, the 300-entry cap) read whatever
+ * window exists, which is the same answer the spot reading gave when there was only one week.
+ */
+function trailing(s: GameState, pick: (p: HistoryPoint) => number, live: number, span: number, back: number): number {
+  const h = s.history
+  // `valuation` is called several times a tick and `history` runs to 300 entries, so this indexes
+  // rather than mapping and slicing. `caught` is whether history already holds the current week.
+  const caught = h.length > 0 && h[h.length - 1].week >= s.week
+  const len = h.length + (caught ? 0 : 1)
+  const end = len - back
+  const from = Math.max(0, end - span)
+  if (end <= from) return live
+  let sum = 0
+  for (let i = from; i < end; i++) sum += i < h.length ? pick(h[i]) : live
+  return sum / (end - from)
+}
+
+/** Mean weekly revenue over the `span` weeks ending `back` weeks before the current one. */
+function trailingRevenue(s: GameState, span: number, back = 0): number {
+  return trailing(s, (p) => p.revenue, s.lastRevenue, span, back)
+}
+
+/** `trailingRevenue`'s twin on the user count. */
+function trailingUsers(s: GameState, span: number, back = 0): number {
+  return trailing(s, (p) => p.users, s.users, span, back)
+}
+
+/**
+ * Average weekly growth in the trailing MONTH's mean user count, against the same mean `back` weeks
+ * ago. Both ends are month-means rather than spot counts, which is the whole point: `s.users` takes
+ * step changes that are not growth at all — paid acquisition, a dead rival's refugees, users won
+ * off a PvP raid — and a stock difference read as a rate prices every one of them as a permanent
+ * trend. A one-week step enters this at `1 / (4 × back)` of its weight.
+ */
+function smoothedGrowth(s: GameState, back: number): number | null {
+  const then = trailingUsers(s, 4, back)
+  if (then <= 0) return null
+  return clamp((trailingUsers(s, 4) - then) / then / back, -0.5, 0.5)
+}
+
+/**
+ * Growth the company has HELD — the only kind a multiple is a claim about. See `VALUATION_WINDOW`.
+ *
+ * The WEAKER of month-over-month and quarter-over-quarter. The quarter leg is what stops a bought
+ * month from being extrapolated into a permanent multiple; the month leg is what keeps the
+ * mark-DOWN fast, so a company that has stalled is priced as stalled without waiting a quarter for
+ * the long window to catch up.
+ *
+ * BOTH legs are smoothed, and the first version of this function got that wrong in a way worth
+ * recording. It was `min(growthRate(s), quarterOverQuarter)` — the raw four-week spot rate as the
+ * fast leg. That is exactly backwards: `min` selects the spot rate precisely when the spot rate is
+ * LOW, which is precisely when it is cheapest to buy. Measured on E-commerce, one week at
+ * `marketingMax`: seed 22 went -0.0075 → +0.0076 (the full spot move — the quarter leg never
+ * bound), and seeds 11 and 55 had the pump lift them off a low spot read and onto the quarter,
+ * paying 0.0086 and 0.0041. The quarter window itself only ever moved 0.0011–0.0017, which is what
+ * it was built to do. A guard that stops binding under attack is not a guard.
+ *
+ * Deliberately NOT applied to `growthRate`'s other readers. The board target, the IPO book and the
+ * Dashboard are all asking "are we growing right now", and buying growth with ad spend is a
+ * legitimate way to answer that. Only the people writing a cheque get the long look.
+ */
+export function sustainedGrowthRate(s: GameState): number {
+  // Under a quarter plus the month it is compared against there is no long window to read, and
+  // `growthRate` is already the whole of the history. Nothing is exploitable this early either:
+  // `valuation` is on its $400k floor and the acquisition trigger wants $8M.
+  if (s.history.length < VALUATION_WINDOW + 4) return growthRate(s)
+  const month = smoothedGrowth(s, 4)
+  const quarter = smoothedGrowth(s, VALUATION_WINDOW)
+  if (month === null || quarter === null) return growthRate(s)
+  return Math.min(month, quarter)
+}
+
 export function valuation(s: GameState): number {
   const sector = sectorById(s.sector)
-  const annualRev = s.lastRevenue * 52
-  const growth = growthRate(s)
+  const annualRev = trailingRevenue(s, VALUATION_WINDOW) * 52
+  const growth = sustainedGrowthRate(s)
   const multiple = clamp(8 + growth * 150, 5, 25) * (1 + 0.4 * s.climate)
   const revPart = annualRev * multiple
   // Investors pay up for growth: a fast-growing user base is worth a multiple of a stagnant one.
