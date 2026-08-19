@@ -88,7 +88,9 @@ function playWeek(s: GameState): void {
     if (m.kind !== 'choice' || m.resolved || !m.choices) continue
     resolveChoiceOnState(s, m.id, 0)
   }
-  if (s.raiseCooldown === 0 && runwayWeeks(s) < 20) pitchInvestors(s)
+  // HARNESS RULE (d): `pitchInvestors` returns the sheets, the caller stores them. See the note
+  // in test/career-bots.ts — without this assignment no bot ever raised a round.
+  if (s.raiseCooldown === 0 && runwayWeeks(s) < 20) s.termSheets = pitchInvestors(s).sheets
   if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
   const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
   if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < Math.min(8, 1 + Math.floor(s.lastRevenue / 2500)) && s.candidates.length) {

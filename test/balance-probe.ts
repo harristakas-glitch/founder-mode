@@ -157,7 +157,9 @@ function hireStep(s: GameState, lv: Levers) {
 function common(s: GameState, lv: Levers) {
   clearInbox(s, lv)
   if (lv.raise !== false) {
-    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
+    // HARNESS RULE (d): `pitchInvestors` returns the sheets, the caller stores them. See the note
+    // in test/career-bots.ts — without this assignment no bot ever raised a round.
+    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) s.termSheets = pitchInvestors(s).sheets
     if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
   }
   hireStep(s, lv)

@@ -38,17 +38,28 @@
 
 import {
   acceptTermSheet,
+  acquireRival,
+  acquisitionPrice,
   advanceWeek,
+  availableVentureSectors,
+  canAcquire,
+  canSellSecondary,
+  canStartVenture,
   debtCapacity,
   drawDebt,
   marketingMax,
   newGame,
   pitchInvestors,
+  pitchOptions,
+  pitchTeam,
   repayDebt,
   resolveChoiceOnState,
   runwayWeeks,
+  sellSecondary,
+  startVenture,
+  takeVacation,
 } from '../src/game/engine'
-import { sectorById } from '../src/game/data'
+import { sectorById, STAGES } from '../src/game/data'
 import { founderStanding } from '../src/game/token/scoring'
 import type { FounderKind, GameState, SectorId } from '../src/game/types'
 
@@ -87,7 +98,11 @@ function report(name: string, out: GameState[]): void {
       ` · exits ${out.filter(exited).length}` +
       ` · net ${padL(money(q(net, 0.5)), 8)} [${padL(money(q(net, 0.1)), 7)}…${padL(money(q(net, 0.9)), 8)}]` +
       ` · pmf ${padL(String(Math.round(q(out.map((s) => s.pmf), 0.5))), 3)}` +
-      ` · users ${padL(Math.round(q(out.map((s) => s.users), 0.5)).toLocaleString(), 7)}`,
+      ` · users ${padL(Math.round(q(out.map((s) => s.users), 0.5)).toLocaleString(), 7)}` +
+      // Dilution is the ONLY price institutional capital charges, so a sweep that varies how much
+      // is raised has to show what it cost. `stage` is the ladder the round actually bought.
+      ` · eq ${padL(`${Math.round(q(out.map((s) => s.founderEquity), 0.5) * 100)}%`, 4)}` +
+      ` · ${pad(q(out.map((s) => STAGES.indexOf(s.stage)), 0.5) >= 0 ? STAGES[q(out.map((s) => STAGES.indexOf(s.stage)), 0.5)] : '?', 9)}`,
   )
 }
 
@@ -117,6 +132,25 @@ interface Policy {
   /** Index answered on every inbox choice. `alt` answers 1 (or the last, when binary). */
   choice?: 'first' | 'alt'
   debt?: 'none' | 'repay' | 'hold' | 'spend'
+  /**
+   * The marketing budget RULE, which is the single largest lever a Quick Play player touches.
+   * `pct2` (2% of cash) is the calibrated default every other section runs on; `cap` is what the
+   * Growth slider's maximum actually does, and `docs/gameplay-review.md` finding 4 called it
+   * "fatal in one click" — measured with a harness that could not raise a round.
+   */
+  budget?: 'pct1' | 'pct2' | 'pct5' | 'rev' | 'cap'
+  /** Never raise / raise when thin (default) / raise on every cooldown that clears the bar. */
+  raise?: 'never' | 'thin' | 'always'
+  /** The second product line. `start` takes every bet the gate allows and lets it launch. */
+  venture?: 'never' | 'start'
+  /** Buying rivals: which currency, when the gate opens. */
+  ma?: 'never' | 'cash' | 'stock'
+  /** The all-hands, every time the cooldown is up. `odds` picks the highest shown probability. */
+  pitch?: 'never' | 'vision' | 'numbers' | 'war' | 'odds'
+  /** Founder secondary sales, taken the first week each stage allows one. */
+  secondary?: 'never' | 'always'
+  /** Recharge weeks, taken whenever the cooldown allows. */
+  vacation?: 'never' | 'always'
 }
 
 function play(seed: number, sector: SectorId, p: Policy = {}): GameState {
@@ -131,8 +165,11 @@ function play(seed: number, sector: SectorId, p: Policy = {}): GameState {
       resolveChoiceOnState(s, m.id, p.choice === 'alt' ? Math.min(1, m.choices.length - 1) : 0)
     }
     if (active) {
-      if (s.raiseCooldown === 0 && runwayWeeks(s) < 20) pitchInvestors(s)
-      if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
+      // HARNESS RULE (d): `pitchInvestors` returns the sheets, the caller stores them. See the note
+      // in test/career-bots.ts — without this assignment no bot ever raised a round.
+      const wantsRound = p.raise === 'always' ? true : p.raise === 'never' ? false : runwayWeeks(s) < 20
+      if (s.raiseCooldown === 0 && wantsRound) s.termSheets = pitchInvestors(s).sheets
+      if (s.termSheets.length && p.raise !== 'never') acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
       const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
       if (s.cash / Math.max(1, s.lastExpenses || 5000) > 25 && staff < Math.min(8, 1 + Math.floor(s.lastRevenue / 2500)) && s.candidates.length) {
         // ENGINEERS first. This was marketers-first when the file was written — hype^1.25 was the
@@ -154,10 +191,47 @@ function play(seed: number, sector: SectorId, p: Policy = {}): GameState {
         repayDebt(s, Math.min(s.debt.principal, s.cash - (s.lastExpenses || 3000) * 30))
       }
     }
-    s.allocation = p.alloc ?? CALIBRATED
+    if (active) {
+      // --- the levers no harness had ever pulled -------------------------------------------
+      if (p.venture === 'start' && canStartVenture(s).ok) {
+        const open = availableVentureSectors(s)
+        if (open.length) {
+          startVenture(s, open[0])
+          s.allocation = { ...(p.alloc ?? CALIBRATED), bet: 25 }
+        }
+      }
+      if (p.ma && p.ma !== 'never') {
+        // The cheapest rival the gate will let us have, so the arm is "buy when you can" rather
+        // than "buy the biggest thing you can", which is a different (and much rarer) policy.
+        const target = s.rivals
+          .filter((r) => r.alive && !r.acquired && canAcquire(s, r).ok)
+          .sort((a, b) => acquisitionPrice(s, a) - acquisitionPrice(s, b))[0]
+        if (target && (p.ma === 'stock' || s.cash > acquisitionPrice(s, target) * 1.5)) acquireRival(s, target.id, p.ma)
+      }
+      if (p.pitch && p.pitch !== 'never' && s.pitchCooldown === 0 && s.employees.length > 0) {
+        const opts = pitchOptions(s)
+        const pick = p.pitch === 'odds' ? [...opts].sort((a, b) => b.p - a.p)[0].id : p.pitch
+        pitchTeam(s, pick)
+      }
+      if (p.secondary === 'always' && canSellSecondary(s).ok) sellSecondary(s)
+      if (p.vacation === 'always' && s.vacationCooldown === 0) takeVacation(s)
+    }
+    s.allocation = s.allocation.bet > 0 ? s.allocation : (p.alloc ?? CALIBRATED)
     // `spend` converts the credit line into marketing the week it lands, so the bank has no cash
     // to seize and the shortfall — whatever its size — is charged at the flat 15%.
-    const want = !active ? 0 : p.debt === 'spend' && s.debt ? Math.max(s.cash * 0.02, s.cash * 0.5) : s.cash * 0.02
+    const rule =
+      p.debt === 'spend' && s.debt
+        ? Math.max(s.cash * 0.02, s.cash * 0.5)
+        : p.budget === 'pct1'
+          ? s.cash * 0.01
+          : p.budget === 'pct5'
+            ? s.cash * 0.05
+            : p.budget === 'rev'
+              ? s.lastRevenue
+              : p.budget === 'cap'
+                ? Infinity // the top of the Growth slider — `marketingMax` is the only bound left
+                : s.cash * 0.02
+    const want = !active ? 0 : rule
     s.marketingSpend = Math.max(0, Math.min(want, marketingMax(s), s.cash))
     s = advanceWeek(s)
   }
@@ -217,6 +291,40 @@ const SECTIONS: Record<string, (sectors: SectorId[]) => void> = {
       console.log(`\n${LABEL[sector]}`)
       report('Always first option', sweep(sector, { choice: 'first' }))
       report('Always second option', sweep(sector, { choice: 'alt' }))
+    }
+  },
+
+  // The marketing budget RULE, and the capital that funds it. Every earlier sweep in this file
+  // held the budget at 2% of cash and could not raise a round (harness rule (d)), so the two
+  // levers a Quick Play player actually touches most were both pinned.
+  budget(sectors) {
+    console.log('\n=== MARKETING BUDGET RULE × CAPITAL ===')
+    for (const sector of sectors) {
+      console.log(`\n${LABEL[sector]}`)
+      for (const raise of ['never', 'thin', 'always'] as const) {
+        for (const budget of ['pct1', 'pct2', 'pct5', 'rev', 'cap'] as const) {
+          report(`raise ${raise} · ${budget}`, sweep(sector, { raise, budget }))
+        }
+      }
+    }
+  },
+
+  // Every mechanic a player can click that no harness had ever clicked. One arm per lever, the
+  // reference policy underneath, so a row differs from `baseline` in exactly one decision.
+  levers(sectors) {
+    console.log('\n=== THE UNSWEPT LEVERS ===')
+    for (const sector of sectors) {
+      console.log(`\n${LABEL[sector]}`)
+      report('baseline', sweep(sector, {}))
+      report('venture: start one', sweep(sector, { venture: 'start' }))
+      report('M&A: cash', sweep(sector, { ma: 'cash' }))
+      report('M&A: stock', sweep(sector, { ma: 'stock' }))
+      report('all-hands: vision', sweep(sector, { pitch: 'vision' }))
+      report('all-hands: numbers', sweep(sector, { pitch: 'numbers' }))
+      report('all-hands: war', sweep(sector, { pitch: 'war' }))
+      report('all-hands: best odds', sweep(sector, { pitch: 'odds' }))
+      report('secondary: always', sweep(sector, { secondary: 'always' }))
+      report('vacation: on cooldown', sweep(sector, { vacation: 'always' }))
     }
   },
 

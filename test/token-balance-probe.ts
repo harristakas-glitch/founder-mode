@@ -95,7 +95,10 @@ function common(s: GameState, alwaysRaise = false, takeNetworkExit = false) {
     const isNetworkOffer = m.id.startsWith('token-network-offer-')
     resolveChoiceOnState(s, m.id, isNetworkOffer && takeNetworkExit ? 1 : 0)
   }
-  if (s.raiseCooldown === 0 && (alwaysRaise || s.cash < (s.lastExpenses || 5000) * 25)) pitchInvestors(s)
+  // HARNESS RULE (d): `pitchInvestors` returns the sheets, the caller stores them. See the note
+  // in test/career-bots.ts — without this assignment no bot ever raised a round, which made the
+  // `alwaysRaise` arm of this file measure nothing at all.
+  if (s.raiseCooldown === 0 && (alwaysRaise || s.cash < (s.lastExpenses || 5000) * 25)) s.termSheets = pitchInvestors(s).sheets
   if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
   const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
   const affordable = Math.min(8, 1 + Math.floor(s.lastRevenue / 2500))

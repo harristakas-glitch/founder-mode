@@ -40,7 +40,10 @@ function played(mode: 'quick' | 'career', weeks: number, seed = 4242, sector: Se
   s.allocation = { features: 45, quality: 25, bugs: 10, research: 20, bet: 0 }
   for (let w = 0; w < weeks && !s.gameOver; w++) {
     for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
-    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
+    // HARNESS RULE (d): `pitchInvestors` returns the sheets, the caller stores them. The docstring
+    // above already claimed this loop "takes the biggest sheet"; without this assignment it never
+    // could. See test/career-bots.ts.
+    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) s.termSheets = pitchInvestors(s).sheets
     if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
     const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
     const affordable = Math.min(8, 1 + Math.floor(s.lastRevenue / 2500))

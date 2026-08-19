@@ -73,7 +73,16 @@ function cfg(seed: number, sector: SectorId) {
 
 function common(s: GameState) {
   for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
-  if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) pitchInvestors(s)
+  // HARNESS RULE (d) — `pitchInvestors` RETURNS the term sheets, it does not store them.
+  // `src/game/replay.ts`'s `pitch` action does `g.termSheets = sheets`, and the store goes through
+  // that action. Every bot harness in this repo called `pitchInvestors(s)` for its side effects
+  // and threw the sheets away, so `if (s.termSheets.length)` on the next line was dead: NO BOT HAS
+  // EVER RAISED A ROUND. The consequences ran through every balance document — `s.stage` never
+  // advanced (so `marketingMax` was pinned at the $30k Pre-seed floor all game), `s.board` was
+  // never installed (so `boardReview` could not fire, which is where "zero `fired` endings across
+  // several thousand campaigns" came from), candidate salaries never repriced off the stage, and
+  // dilution only ever happened through emergency bridges. See docs/exploit-hunt-2026-08.md §0.
+  if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) s.termSheets = pitchInvestors(s).sheets
   if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
   const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
   // Hire against what the business can carry, not against a runway number. The earlier

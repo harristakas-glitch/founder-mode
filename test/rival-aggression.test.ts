@@ -122,7 +122,9 @@ function trace(aggression: boolean, weeks: number, seed = 4242): string {
     // visibility floor, so both columns would be trivially identical at any horizon and the
     // divergence assertion below would pass by measuring nothing.
     for (const m of g.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(g, m.id, 0)
-    if (g.raiseCooldown === 0 && runwayWeeks(g) < 20) pitchInvestors(g)
+    // HARNESS RULE (d): `pitchInvestors` returns the sheets, the caller stores them. See
+    // test/career-bots.ts — without this assignment the "played" run never raised a round.
+    if (g.raiseCooldown === 0 && runwayWeeks(g) < 20) g.termSheets = pitchInvestors(g).sheets
     if (g.termSheets.length) acceptTermSheet(g, [...g.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
     g.allocation = { features: 36, quality: 27, bugs: 17, research: 20, bet: 0 }
     g.marketingSpend = Math.max(0, Math.min(g.cash * 0.02, marketingMax(g), g.cash))
