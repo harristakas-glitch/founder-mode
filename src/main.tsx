@@ -1,11 +1,17 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from './ErrorBoundary'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {/* Outside <App/> on purpose: a boundary inside the tree it guards cannot catch a throw
+        from the tree's own root. Without this, any render error left a blank page that the
+        service worker could serve again on reload — see src/ErrorBoundary.tsx. */}
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
 

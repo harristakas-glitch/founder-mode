@@ -107,6 +107,14 @@ export function recordJournal(g: GameState, a: ReplayActionName, p?: JournalPayl
 /** Journal round-tripped through user-writable storage: keep only entries shaped like entries. */
 export function sanitizeJournal(v: unknown): JournalEntry[] | undefined {
   if (!Array.isArray(v)) return undefined
+  // SECURITY (2026-08 review): the writer's ceiling has to be the reader's ceiling too.
+  // `recordJournal` above drops the journal the moment it passes JOURNAL_LIMIT, so no honest
+  // run can ever persist a longer one — but this function accepted any length, and localStorage
+  // is user-writable. Every `advance` entry costs a full simulated week (~1.4ms measured) and
+  // App.tsx replays the whole log synchronously inside a render `useMemo`, so length converts
+  // straight into a frozen tab: 200k entries fit inside the storage quota and cost ~4.5 minutes.
+  // Refusing (rather than truncating) matches what recordJournal already does with an overflow.
+  if (v.length > JOURNAL_LIMIT) return undefined
   const ok = (e: unknown): e is JournalEntry =>
     !!e &&
     typeof e === 'object' &&
