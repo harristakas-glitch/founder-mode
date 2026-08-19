@@ -56,10 +56,8 @@ import {
   valuation,
   type AttackDef,
 } from '../src/game/engine'
-import type { GameState, SectorId } from '../src/game/types'
+import type { Allocation, GameState, SectorId } from '../src/game/types'
 
-// Not a named export — the engine types it inline on GameState.
-type Allocation = GameState['allocation']
 
 const q = (a: number[], p: number) => {
   if (!a.length) return 0

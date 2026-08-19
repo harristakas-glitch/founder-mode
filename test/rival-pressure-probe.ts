@@ -48,9 +48,8 @@ import {
   shieldCost,
 } from '../src/game/engine'
 import { founderStanding } from '../src/game/token/scoring'
-import type { GameState, SectorId } from '../src/game/types'
+import type { Allocation, GameState, SectorId } from '../src/game/types'
 
-type Allocation = GameState['allocation']
 
 // ---------------------------------------------------------------------------------------------
 // reporting
