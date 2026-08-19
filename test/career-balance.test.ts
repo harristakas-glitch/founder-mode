@@ -236,7 +236,7 @@ ok(
 // ---------------------------------------------------------------------------------------------
 console.log('— Raising the marketing cap did not make burning faster a winning strategy —')
 //
-// `marketingMax` now reads what the company can FUND (operating profit plus a treasury slice, both
+// `marketingMax` reads what the company can FUND (operating profit plus a treasury slice, both
 // gated on being profitable) rather than what it raised, so a self-sustaining company can scale
 // spend without a round. The whole risk of that change is this: `balance-baseline.md` §1 measured
 // LTV/CAC by retention band — SaaS 0.28 → 0.33 → 0.68 → 6.28, crossing 1.0 in all five sectors —
@@ -247,22 +247,52 @@ console.log('— Raising the marketing cap did not make burning faster a winning
 // balance-probe goes through `spend()`, which clamps to `marketingMax` and the cash balance. At
 // 1000x the clamp is the only thing binding, so this bot IS "push the slider to the cap, always".
 //
-// Measured on the exploit probe at 24 seeds × 90 weeks, this policy fails 15–22/24 in every sector
-// and returns 2.3–6.2x less than the reference policy — and it is BIT-IDENTICAL with and without
-// the new cap, because a company running that policy is never profitable and so never earns a
-// dollar of headroom over the ladder.
+// WHY THIS BLOCK IS NOW A CONTROLLED A/B, AND WHY IT USED NOT TO NEED TO BE.
+// It used to compare `spendScale: 1000` against the reference policy and assert the reference won
+// by 1.5x, with a note that the two arms were BIT-IDENTICAL with and without the raised cap. That
+// note was the tell. Both arms ran through `common()`, which called `pitchInvestors(s)` and threw
+// away the returned sheets — the engine RETURNS term sheets, the caller stores them — so no bot in
+// this repo had ever closed a round (docs/exploit-hunt-2026-08.md §1). Two arms that can never
+// raise are trivially identical on a cap denominated in the fundraising ladder.
+//
+// With the harness fixed the comparison is confounded, because the two arms no longer differ only
+// in budget: burning to the cap empties the bank, and an empty bank trips `common()`'s raise
+// trigger (`cash < lastExpenses × 25`) far more often. Measured this session, 12 seeds × 60 weeks,
+// the cap arm BEAT the reference in four of six sectors — and every point of that came from the
+// extra rounds, not the extra marketing. Holding the capital policy fixed says so:
+//
+//              ref (raise on) → cap (raise on)      ref (raise OFF) → cap (raise OFF)
+//   saas       $4.7M 0/12     → $12.5M 2/12         $4.6M 1/12      → $2.8M 11/12
+//   fintech    $8.1M 0/12     →  $6.3M 6/12         $5.9M 0/12      → $1.8M 12/12
+//   social    $23.7M 0/12     → $17.6M 4/12        $10.4M 2/12      → $2.1M 12/12
+//   ecommerce $13.2M 0/12     → $22.9M 4/12        $19.6M 1/12      → $3.9M 10/12
+//   devtools   $5.3M 0/12     → $10.2M 5/12         $5.8M 2/12      → $2.7M 10/12
+//   aiml      $12.5M 0/12     → $30.5M 4/12         $5.4M 1/12      → $5.0M  9/12
+//
+// So the property this block exists to pin is intact and the margin is enormous — it just has to
+// be measured with capital held constant. The raise-on columns get the honest claim instead: the
+// cap is a LEVERAGED bet, and it is priced in bankruptcies (0/12 becomes 2-6/12 in every sector).
 for (const sector of ['saas', 'fintech'] as SectorId[]) {
+  // Capital held constant: neither arm raises, so the only difference is the budget rule.
+  // measured: saas $4.6M vs $2.8M · fintech $5.9M vs $1.8M
+  const bootstrapped = run(sector, { raise: false })
+  const bootMaxed = run(sector, { raise: false, spendScale: 1000 })
+  ok(
+    median(bootstrapped.map(founderNet)) > median(bootMaxed.map(founderNet)) * 1.5,
+    `${sector}: at equal capital, spending to the cap every week loses badly — ${M(median(bootMaxed.map(founderNet)))} against ${M(median(bootstrapped.map(founderNet)))}`,
+  )
+  // …and it is not a near miss: it bankrupts the company. measured: saas 11/12, fintech 12/12.
+  ok(
+    bootMaxed.filter(failed).length >= 8,
+    `${sector}: and at equal capital it is fatal, not merely worse (${bootMaxed.filter(failed).length}/12 bankrupt vs ${bootstrapped.filter(failed).length}/12)`,
+  )
+  // Funded, the cap is a leveraged bet rather than a free lunch: it may pay a higher median, but it
+  // must always cost real bankruptcies. measured: saas 2/12 vs 0/12, fintech 6/12 vs 0/12.
   const ref = reference[sector] ?? run(sector)
   const maxed = run(sector, { spendScale: 1000 })
-  const refNet = median(ref.map(founderNet))
-  const maxNet = median(maxed.map(founderNet))
-  ok(
-    refNet > maxNet * 1.5,
-    `${sector}: spending to the cap every week still loses badly — ${M(maxNet)} against the reference policy's ${M(refNet)}`,
-  )
   ok(
     maxed.filter(failed).length > ref.filter(failed).length,
-    `${sector}: and it goes bankrupt more often (${maxed.filter(failed).length}/12 vs ${ref.filter(failed).length}/12) — the cap is a ceiling, not a recommendation`,
+    `${sector}: and funded, it is a leveraged bet — ${maxed.filter(failed).length}/12 bankrupt vs the reference policy's ${ref.filter(failed).length}/12`,
   )
 }
 

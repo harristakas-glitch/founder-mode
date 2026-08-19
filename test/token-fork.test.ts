@@ -677,7 +677,13 @@ ok(
 // Each of the three bounds has to actually BIND somewhere, or it is decoration. Construct one
 // company per bound and check both that it binds and that removing it would raise the number.
 const richThinCrowd = eligible('saas', 42)
-richThinCrowd.lastRevenue = 4_000_000 // an enormous company…
+// An enormous company — and it has to have BEEN one. `valuation()` prices the trailing MONTH's mean
+// weekly revenue rather than the current week (engine.ts `VALUATION_SMOOTHING`), so poking
+// `lastRevenue` alone moves enterprise value by a quarter of what this fixture intends and the
+// VALUATION bound, not the float-depth bound, ends up binding. The fixture has to say "this company
+// has been earning $4M a week", which is what it always meant.
+richThinCrowd.lastRevenue = 4_000_000
+for (const point of richThinCrowd.history.slice(-4)) point.revenue = 4_000_000
 richThinCrowd.users = tokenisationBars(richThinCrowd).minUsers // …with barely a community
 const thinTerms = resolveLaunchTerms(richThinCrowd)
 ok(thinTerms.boundBy === 'float_depth', 'a big company with a thin crowd is bounded by FLOAT DEPTH, not by its valuation')
