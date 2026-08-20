@@ -1,0 +1,316 @@
+<title>One Bright Thing</title>
+<style>
+  :root {
+    --page: #faf9f7; --ink: #17171a; --mut: #6b6b73; --rule: #e2e0dc; --card: #ffffff;
+    --hi: #b4471f;
+    /* product palette — fixed, these are screenshots and do not follow the reader's theme */
+    --p-bg: #080b14; --p-1: #111828; --p-2: #1b2437; --p-3: #27314a;
+    --p-ink: #e8edf9; --p-mut: #96a3bd; --p-line: #26304a; --p-line2: #3a4665;
+    --p-white: #ffffff; --p-warn: #ffc44d; --p-good: #3ddc97; --p-bad: #f2555a;
+    --p-old-accent: #7c9aff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0e0e11; --ink: #edecea; --mut: #9a9aa4; --rule: #2a2a30; --card: #17171b;
+      --hi: #e8703f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0e0e11; --ink: #edecea; --mut: #9a9aa4; --rule: #2a2a30; --card: #17171b;
+    --hi: #e8703f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--page); color: var(--ink); margin: 0;
+    font: 400 16px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 24px 96px; }
+  h1 { font-size: clamp(34px, 6vw, 54px); line-height: 1.04; letter-spacing: -0.03em; margin: 0 0 18px; font-weight: 680; }
+  h2 { font-size: clamp(22px, 3vw, 28px); letter-spacing: -0.02em; margin: 0 0 6px; font-weight: 640; }
+  h3 { font-size: 17px; margin: 0 0 6px; font-weight: 620; letter-spacing: -0.01em; }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  .lede { font-size: 18px; color: var(--mut); max-width: 62ch; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mut); font-weight: 620; }
+  section { margin-top: 64px; }
+  .rule { height: 1px; background: var(--rule); border: 0; margin: 44px 0 0; }
+  .grid { display: grid; gap: 18px; }
+  @media (min-width: 760px) { .g3 { grid-template-columns: repeat(3, 1fr); } .g2 { grid-template-columns: 1fr 1fr; } }
+  .find { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 20px; }
+  .find .n { font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 660; letter-spacing: -0.03em; color: var(--hi); line-height: 1; margin-bottom: 10px; }
+  .find p { font-size: 14px; color: var(--mut); margin: 0; }
+  code { font: 500 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: color-mix(in srgb, var(--mut) 14%, transparent); padding: 1px 5px; border-radius: 4px; }
+
+  /* ---- product mockups: always dark, they are screenshots ---- */
+  .shot { background: var(--p-bg); border: 1px solid var(--p-line); border-radius: 14px; padding: 0; overflow: hidden; color: var(--p-ink); }
+  .shot-cap { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mut); font-weight: 620; margin: 0 0 8px; }
+  .pad { padding: 18px; }
+  .tn { font-variant-numeric: tabular-nums; }
+
+  /* today: sixteen equal boxes */
+  .old { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .old div { background: var(--p-1); border: 1px solid var(--p-line); border-radius: 10px; padding: 10px 11px; }
+  .old .k { font-size: 8.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--p-mut); font-weight: 620; }
+  .old .v { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin-top: 3px; }
+
+  /* proposed */
+  .runway-rule { height: 2px; background: var(--p-2); position: relative; }
+  .runway-rule i { position: absolute; inset: 0 auto 0 0; background: var(--p-warn); display: block; }
+  .hq-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 18px 0; }
+  .hq-co { font-size: 13px; font-weight: 620; }
+  .hq-meta { font-size: 11.5px; color: var(--p-mut); }
+  .hero { padding: 20px 18px 4px; }
+  .hero .lbl { font-size: 10.5px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--p-warn); font-weight: 680; }
+  .hero .fig { font-size: 60px; line-height: 0.98; font-weight: 660; letter-spacing: -0.045em; color: var(--p-white); margin-top: 6px; }
+  .hero .sub { font-size: 13.5px; color: var(--p-mut); margin-top: 8px; max-width: 46ch; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid var(--p-line); border-bottom: 1px solid var(--p-line); margin-top: 18px; }
+  .row4 > div { padding: 12px 18px; border-right: 1px solid var(--p-line); }
+  .row4 > div:last-child { border-right: 0; }
+  .row4 .k { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--p-mut); font-weight: 620; }
+  .row4 .v { font-size: 21px; font-weight: 620; letter-spacing: -0.025em; margin-top: 4px; color: var(--p-ink); }
+  .row4 .d { font-size: 11.5px; margin-top: 2px; color: var(--p-mut); }
+  .up { color: var(--p-good); } .down { color: var(--p-bad); }
+  .att { margin: 16px 18px 0; background: var(--p-3); border: 1px solid var(--p-line2); border-left: 3px solid var(--p-warn); border-radius: 10px; padding: 13px 15px; }
+  .att .t { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--p-warn); font-weight: 700; }
+  .att .h { font-size: 15px; font-weight: 620; margin-top: 5px; }
+  .att .b { font-size: 13px; color: var(--p-mut); margin-top: 3px; }
+  .btn { display: inline-block; margin-top: 11px; background: var(--p-warn); color: #17130a; font-size: 12.5px; font-weight: 700; padding: 7px 13px; border-radius: 8px; }
+  .week { margin: 18px 18px 0; }
+  .week .t { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--p-mut); font-weight: 680; margin-bottom: 7px; }
+  .week ul { list-style: none; margin: 0; padding: 0; }
+  .week li { font-size: 13.5px; padding: 5px 0; border-bottom: 1px solid var(--p-line); display: flex; gap: 9px; }
+  .week li:last-child { border-bottom: 0; }
+  .week .gl { width: 12px; flex: none; text-align: center; font-size: 11px; }
+  .nbs { margin: 18px 18px 0; border-top: 1px solid var(--p-line); padding-top: 14px; }
+  .nbs .t { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--p-mut); font-weight: 680; }
+  .nbs .h { font-size: 14.5px; font-weight: 600; margin-top: 5px; }
+  .nbs .w { font-size: 12.5px; color: var(--p-mut); margin-top: 3px; }
+  .adv { margin: 18px; background: var(--p-good); color: #06231a; text-align: center; font-size: 14.5px; font-weight: 700; padding: 11px; border-radius: 10px; }
+
+  .sw { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13.5px; }
+  .sw:last-child { border-bottom: 0; }
+  .chip { width: 30px; height: 30px; border-radius: 7px; flex: none; border: 1px solid rgba(128,128,128,.28); }
+  .sw .nm { font-weight: 600; min-width: 96px; }
+  .sw .hx { font: 500 12px ui-monospace, Menlo, monospace; color: var(--mut); }
+  .sw .no { color: var(--mut); font-size: 12.5px; margin-left: auto; text-align: right; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mut); font-weight: 640; }
+  .scroll { overflow-x: auto; }
+  .risk { border-left: 3px solid var(--hi); padding-left: 16px; }
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">Founder Mode · design direction · August 2026</p>
+  <h1>Spend light,<br>not colour.</h1>
+  <p class="lede">A review of what we actually ship, and one direction that would make this game look like itself. The elevation work landed — but it landed on a look you have seen a hundred times.</p>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">01 — What we actually ship</p>
+    <h2>Three findings, all checkable</h2>
+    <p>Opened the files rather than trusting an impression. The first one is about work I did this week.</p>
+
+    <div class="grid g3" style="margin-top:22px">
+      <div class="find">
+        <div class="n">3 / 6</div>
+        <h3>The palette is mostly stock</h3>
+        <p><code>--color-good</code> is Tailwind <code>emerald-400</code>. <code>--color-bad</code> is <code>red-400</code>. <code>--color-accent2</code> is <code>violet-400</code>. Half the semantic palette is the framework's defaults, unchanged — a decision nobody made.</p>
+      </div>
+      <div class="find">
+        <div class="n">1</div>
+        <h3>One typeface, for a game made of numbers</h3>
+        <p>The whole product declares a single family: the system UI stack. No display face, no numeric face, no <code>@font-face</code>. There are <strong>160</strong> tabular-figure treatments and not one of them is set in a typeface anybody chose. The game also renders differently for every player — SF Pro, Segoe, Roboto.</p>
+      </div>
+      <div class="find">
+        <div class="n">#2</div>
+        <h3>Cockpit landed on a default</h3>
+        <p>Near-black ground, one bright accent. That is one of the three looks generated design converges on right now. The mechanics are fixed — the ramp is real, contrast passes — but the <em>identity</em> is the one you get by not choosing.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">02 — The direction</p>
+    <h2>One Bright Thing</h2>
+    <p>Every dark dashboard spends a saturated accent everywhere: buttons, links, active states, chart series, focus rings. When the accent is everywhere it stops meaning anything, which is the brief's first rule — <em>if everything is important, nothing is important</em> — expressed in colour.</p>
+    <p>So: <strong>hue carries meaning only</strong> — good, bad, warning, and nothing else. <strong>Light carries importance.</strong> Pure white is rationed to exactly one figure per screen: whatever is closest to ending the run this week. Everything else steps down through the ramp we already built.</p>
+    <p>The planes carry structure. Light carries priority. Hue carries state. Three jobs, three channels, no overlap — and the screen gets a focal point without gaining a single element.</p>
+
+    <div class="grid g2" style="margin-top:26px">
+      <div>
+        <h3 style="margin-bottom:10px">Light is the accent</h3>
+        <div class="sw"><span class="chip" style="background:#ffffff"></span><span class="nm">Focus</span><span class="hx">#FFFFFF</span><span class="no">one figure per screen</span></div>
+        <div class="sw"><span class="chip" style="background:#e8edf9"></span><span class="nm">Ink</span><span class="hx">#E8EDF9</span><span class="no">everything you read</span></div>
+        <div class="sw"><span class="chip" style="background:#96a3bd"></span><span class="nm">Muted</span><span class="hx">#96A3BD</span><span class="no">labels, support</span></div>
+        <div class="sw"><span class="chip" style="background:#27314a"></span><span class="nm">Plane 3</span><span class="hx">#27314A</span><span class="no">L* 20.5</span></div>
+        <div class="sw"><span class="chip" style="background:#1b2437"></span><span class="nm">Plane 2</span><span class="hx">#1B2437</span><span class="no">L* 14.2</span></div>
+        <div class="sw"><span class="chip" style="background:#111828"></span><span class="nm">Plane 1</span><span class="hx">#111828</span><span class="no">L* 8.4</span></div>
+        <div class="sw"><span class="chip" style="background:#080b14"></span><span class="nm">Ground</span><span class="hx">#080B14</span><span class="no">L* 3.1</span></div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:10px">Hue means state, and nothing else</h3>
+        <div class="sw"><span class="chip" style="background:#3ddc97"></span><span class="nm">Good</span><span class="hx">#3DDC97</span><span class="no">was emerald-400</span></div>
+        <div class="sw"><span class="chip" style="background:#f2555a"></span><span class="nm">Bad</span><span class="hx">#F2555A</span><span class="no">was red-400</span></div>
+        <div class="sw"><span class="chip" style="background:#ffc44d"></span><span class="nm">Blocking</span><span class="hx">#FFC44D</span><span class="no">kept — it carries</span></div>
+        <p style="font-size:13.5px;color:var(--mut);margin-top:16px">The periwinkle <code>#7C9AFF</code> is retired as a general accent and survives only as a chart series colour, where a series genuinely needs a hue. Per-sector theming stays: it already rebinds one variable, so it costs nothing and it is the one place a decorative hue earns its keep.</p>
+        <p style="font-size:13.5px;color:var(--mut)">Green and red move off the framework defaults — small shifts, but they stop the two most-seen colours in the game from being the ones every Tailwind site ships.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">03 — The signature</p>
+    <h2>The runway is the top edge</h2>
+    <p>The defining fact of this game is that the money runs out. Right now that fact is a number in a rail, sharing weight with eight others.</p>
+    <p class="risk"><strong>Proposal:</strong> the app's top edge <em>is</em> the runway. A two-pixel rule spanning the full width, lit for the proportion of runway remaining against the longest you have ever held. At 153 weeks you never notice it. At 14 weeks it is a short amber stub across a dark screen, and it is the loudest thing in the product — without adding a card, a badge, or a notification.</p>
+    <p>It costs two pixels of chrome and removes a metric tile. It satisfies <em>never make the player hunt for something urgent</em> and <em>less noise</em> at the same time, which is rare enough to be worth the risk.</p>
+
+    <div style="margin-top:20px">
+      <p class="shot-cap">Week 12 · 153 weeks of runway</p>
+      <div class="shot"><div class="runway-rule"><i style="width:96%"></i></div><div class="pad" style="font-size:12.5px;color:var(--p-mut)">You do not notice it. That is correct — nothing is wrong.</div></div>
+    </div>
+    <div style="margin-top:14px">
+      <p class="shot-cap">Week 61 · 34 weeks</p>
+      <div class="shot"><div class="runway-rule"><i style="width:38%"></i></div><div class="pad" style="font-size:12.5px;color:var(--p-mut)">Now it reads as a measurement. You start glancing at it.</div></div>
+    </div>
+    <div style="margin-top:14px">
+      <p class="shot-cap">Week 88 · 9 weeks</p>
+      <div class="shot"><div class="runway-rule"><i style="width:7%"></i></div><div class="pad" style="font-size:12.5px;color:var(--p-mut)">Impossible to miss from across a room, and no notification was fired.</div></div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">04 — Applied</p>
+    <h2>Founder HQ</h2>
+    <p>The same week, the same data, under both systems.</p>
+
+    <div class="grid g2" style="margin-top:22px; align-items:start">
+      <div>
+        <p class="shot-cap">Today — 16 tiles, no focal point</p>
+        <div class="shot"><div class="pad">
+          <div class="old">
+            <div><div class="k">Cash</div><div class="v tn">$412.8k</div></div>
+            <div><div class="k">Runway</div><div class="v tn">14 wk</div></div>
+            <div><div class="k">Rev /wk</div><div class="v tn">$28.4k</div></div>
+            <div><div class="k">Burn /wk</div><div class="v tn">$41.6k</div></div>
+            <div><div class="k">Net /wk</div><div class="v tn">−$13.2k</div></div>
+            <div><div class="k">Users</div><div class="v tn">18.4k</div></div>
+            <div><div class="k">PMF</div><div class="v tn">54</div></div>
+            <div><div class="k">Valuation</div><div class="v tn">$18.4M</div></div>
+            <div><div class="k">Morale</div><div class="v tn">70</div></div>
+            <div><div class="k">Hype</div><div class="v tn">31</div></div>
+            <div><div class="k">Churn</div><div class="v tn">4.1%</div></div>
+            <div><div class="k">Equity</div><div class="v tn">61.4%</div></div>
+            <div><div class="k">Team</div><div class="v tn">11</div></div>
+            <div><div class="k">Quality</div><div class="v tn">48</div></div>
+            <div><div class="k">Stage</div><div class="v">Series A</div></div>
+            <div><div class="k">Week</div><div class="v tn">27</div></div>
+          </div>
+          <p style="font-size:12px;color:var(--p-mut);margin:14px 0 0">Sixteen figures at one weight. Runway is 14 weeks and it is the fourth tile in the second row.</p>
+        </div></div>
+      </div>
+
+      <div>
+        <p class="shot-cap">Proposed — one bright thing</p>
+        <div class="shot">
+          <div class="runway-rule"><i style="width:11%"></i></div>
+          <div class="hq-head">
+            <span class="hq-co">Northreef</span>
+            <span class="hq-meta tn">Series A · Week 27 · you own 61.4%</span>
+          </div>
+
+          <div class="hero">
+            <div class="lbl">Runway</div>
+            <div class="fig tn">14 weeks</div>
+            <div class="sub">Net is −$13.2k a week. Three ways out: raise, cut burn, or get revenue above burn.</div>
+          </div>
+
+          <div class="row4">
+            <div><div class="k">Revenue</div><div class="v tn">$28.4k</div><div class="d up tn">▲ 8% /wk</div></div>
+            <div><div class="k">Users</div><div class="v tn">18.4k</div><div class="d up tn">▲ 6.9%</div></div>
+            <div><div class="k">Retention</div><div class="v tn">78%</div><div class="d down tn">▼ 3pp</div></div>
+            <div><div class="k">Valuation</div><div class="v tn">$18.4M</div><div class="d up tn">▲ $1.8M</div></div>
+          </div>
+
+          <div class="att">
+            <div class="t">Needs you · expires this week</div>
+            <div class="h">The accelerator wants 7% for $120k</div>
+            <div class="b">That is $1.7M implied — roughly a tenth of your last mark.</div>
+            <span class="btn">Review</span>
+          </div>
+
+          <div class="week">
+            <div class="t">This week</div>
+            <ul>
+              <li><span class="gl down">▼</span><span>Small-team retention weakened, −11%</span></li>
+              <li><span class="gl up">▲</span><span>Pricing experiment finished — willingness to pay confirmed</span></li>
+              <li><span class="gl" style="color:var(--p-mut)">●</span><span>Duskware raised a Series B</span></li>
+            </ul>
+          </div>
+
+          <div class="nbs">
+            <div class="t">Next best step</div>
+            <div class="h">Consider looking at small-team retention.</div>
+            <div class="w">Your newest cohort is retaining 14% worse than the one before it, and small teams are 61% of revenue.</div>
+          </div>
+
+          <div class="adv">Advance Week &nbsp;»</div>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">Twelve of the sixteen figures are gone from the default view — not deleted, moved one tap deeper behind the metric they belong to. What remains answers the brief's five questions in order: how is the company doing, what changed, what needs me, why, and what happens next.</p>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">05 — Typography</p>
+    <h2>Give the numbers a voice</h2>
+    <p>This is the change with the highest identity-per-byte in the whole proposal, and the only one that costs a download.</p>
+    <div class="scroll">
+      <table>
+        <tr><th>Role</th><th>Now</th><th>Proposed</th><th>Why</th></tr>
+        <tr><td><strong>Figures</strong></td><td>System UI, <code>tnum</code></td><td>A self-hosted variable grotesque, tight tracking, tabular by default</td><td>The content of this game <em>is</em> its numbers. They should be the thing with personality, not the thing inheriting it.</td></tr>
+        <tr><td><strong>Prose</strong></td><td>System UI</td><td>Unchanged — system UI</td><td>It reads well, it costs nothing, and it is the right neutral against a characterful numeric face.</td></tr>
+        <tr><td><strong>Data / code</strong></td><td>—</td><td>System monospace</td><td>Seeds, ids, and the replay hash are not prose and should not pretend to be.</td></tr>
+      </table>
+    </div>
+    <p style="margin-top:14px">Self-hosting is compatible with the CSP as it stands — the font comes from our own origin, so <code>font-src 'self'</code> needs no new host and <code>script-src</code> is untouched. A subset of figures, punctuation and Latin is roughly 25–40 kB, against a 954 kB entry chunk. That is the entire cost.</p>
+  </section>
+
+  <hr class="rule">
+
+  <section>
+    <p class="eyebrow">06 — Honestly</p>
+    <h2>What this risks</h2>
+    <div class="grid g2" style="margin-top:18px">
+      <div class="find">
+        <h3>Rationing white needs policing</h3>
+        <p>One bright figure per screen is a rule that decays the moment two people disagree about which figure. It needs to be decided by the engine — the metric closest to ending the run — not by whoever writes the next screen.</p>
+      </div>
+      <div class="find">
+        <h3>The runway rule is not free</h3>
+        <p>It is ambient, and ambient signals are ignorable. It should replace a tile, not sit alongside one, or it is decoration. And it needs a non-colour channel for the same reason every other signal here does.</p>
+      </div>
+      <div class="find">
+        <h3>A font is a permanent dependency</h3>
+        <p>Licensing, subsetting, a FOUT to design around, and 25–40 kB on every first load. Worth it once, if the face is right. Not worth doing twice.</p>
+      </div>
+      <div class="find">
+        <h3>This is identity, not architecture</h3>
+        <p>None of it fixes navigation depth, duplicated metrics, or buried decisions. The UX audit running alongside this is what addresses those, and it matters more.</p>
+      </div>
+    </div>
+  </section>
+
+</div>

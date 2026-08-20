@@ -30,11 +30,29 @@
   --color-line2: #3a4665; /* hover / emphasis hairline */
   --color-ink: #e8edf9; /* 15.1:1 on plane 1 */
   --color-mut: #96a3bd; /* 7.0:1 — lifted from #8593ab, which read as *disabled* at 5.6:1 */
+  /* LIGHT IS THE EMPHASIS CHANNEL, hue is not. Three channels with one job each and no overlap:
+     the planes above carry STRUCTURE, `--color-focus` carries IMPORTANCE, and hue carries STATE.
+     Every dark dashboard spends a saturated accent on buttons, links, active states and charts at
+     once; by the time it is everywhere it means nothing, which is "if everything is important,
+     nothing is important" expressed in colour.
+
+     `--color-focus` is rationed to ONE figure per screen — whichever number is closest to ending
+     the run this week — and it is the only pure white in the product.
+
+     `--color-accent` keeps its INTERACTION job and only that: the focus ring, the slider fill, the
+     active nav rail. Those are not decoration — WCAG 2.4.11 needs a visible focus indicator, and
+     the per-sector rebinding in theme.ts hangs off this variable. Retiring it outright would have
+     cost accessibility to buy a colour scheme. */
+  --color-focus: #ffffff;
   --color-accent: #7c9aff;
   --color-accent2: #a78bfa;
   --color-chart: #6172f3; /* deep series color — validated for the dark chart surface */
-  --color-good: #34d399;
-  --color-bad: #f87171;
+  /* Green and red were Tailwind's `emerald-400` and `red-400` — the framework's defaults,
+     unchanged, which means nobody chose the two most-seen colours in the game. Shifted off stock:
+     the green cools toward teal so it reads as "measured" rather than "success toast", and the red
+     warms so it separates from the amber that means "blocked" rather than "bad". */
+  --color-good: #3ddc97;
+  --color-bad: #f2555a;
   --color-warn: #ffc44d; /* 11.2:1 — the blocking-decision colour, so it has to carry */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 

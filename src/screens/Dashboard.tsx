@@ -194,7 +194,16 @@ function attentionItems(game: ReturnType<typeof useStore.getState>['game']): Att
       text: `The board has issued ${game.board.strikes} strike${game.board.strikes === 1 ? '' : 's'}. Miss the next review and you can be replaced.`,
       action: { label: 'Fundraising', screen: 'fundraising' },
     })
-  return out.slice(0, 3)
+  // SEVERITY FIRST, THEN TRUNCATE. This used to be a bare `slice(0, 3)` over the push order, and
+  // the board-strike item — "miss the next review and you can be replaced" — is pushed LAST. Any
+  // three milder items ahead of it, including a `good` one, silently discarded the only warning
+  // that the player is about to lose the company. The brief's rule is: never make the player hunt
+  // for something urgent; dropping it entirely is worse than hiding it.
+  //
+  // A stable sort keeps the authored order within a tone, so the ranking below is the only thing
+  // that changed — bad before warn before good.
+  const RANK = { bad: 0, warn: 1, good: 2 } as const
+  return [...out].sort((a, b) => RANK[a.tone] - RANK[b.tone]).slice(0, 3)
 }
 
 function AttentionStrip() {

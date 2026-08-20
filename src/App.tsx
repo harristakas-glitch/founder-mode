@@ -404,8 +404,59 @@ export default function App() {
     </button>
   )
 
+  /**
+   * THE RUNWAY IS THE TOP EDGE.
+   *
+   * The defining fact of this game is that the money runs out, and that fact used to be a number
+   * in a rail sharing weight with eight others. Here it is the app's own top edge: two pixels
+   * spanning the full width, lit for the runway remaining.
+   *
+   * At 150 weeks you never notice it, which is correct — nothing is wrong. At nine it is a short
+   * stub across a dark screen and the loudest thing in the product, and NO card, badge or
+   * notification was added to make that happen. It costs two pixels and it replaces a tile.
+   *
+   * Stateless on purpose. The honest reference would be "the longest runway you have ever held",
+   * but that is new persisted state, and per the brief UI changes must not invalidate saves. A
+   * fixed two-year reference needs nothing stored and reads the same on a save from last week.
+   *
+   * Length is the primary channel and it is not a colour, so the signal survives for a player who
+   * cannot separate amber from red; the colour is the secondary encoding, not the message.
+   */
+  const RUNWAY_FULL_WEEKS = 104
+  const runwayFrac = runway === Infinity ? 1 : Math.max(0.015, Math.min(1, runway / RUNWAY_FULL_WEEKS))
+  const runwayCritical = runway !== Infinity && runway < 10
+  const runwayLow = runway !== Infinity && runway < 26
+  const runwayTone = runwayCritical ? 'bg-bad' : runwayLow ? 'bg-warn' : 'bg-line2'
+  // THE TRACK ESCALATES, NOT JUST THE FILL — and this is a correction to the original idea.
+  //
+  // Encoding runway purely as the LIT LENGTH inverts the signal: the worse things get, the shorter
+  // the lit bar, so the most urgent state puts the LEAST ink on the screen. Measured at 1280px, a
+  // five-week runway was a 61px sliver — quieter than a healthy 100% line, which is exactly
+  // backwards.
+  //
+  // So the spent portion carries the alarm and the lit portion carries the measurement. As runway
+  // falls the WHOLE top edge takes on colour (more ink, not less) while the bright segment keeps
+  // shrinking to say how much is actually left. Urgency and precision stop fighting each other.
+  const runwayTrack = runwayCritical ? 'bg-bad/35' : runwayLow ? 'bg-warn/20' : 'bg-surface'
+  const runwayRule = (
+    <div className="pad-top-safe w-full shrink-0 bg-bg">
+      <div
+        className={`relative h-[2px] w-full transition-colors duration-[240ms] ${runwayTrack}`}
+        role="img"
+        aria-label={runway === Infinity ? 'Runway: profitable' : `Runway: ${Math.max(0, Math.floor(runway))} weeks`}
+      >
+        <span
+          className={`absolute inset-y-0 left-0 block transition-[width] duration-[240ms] ${runwayTone}`}
+          style={{ width: `${runwayFrac * 100}%` }}
+        />
+      </div>
+    </div>
+  )
+
   return (
-    <div className="flex h-[100dvh] overflow-hidden">
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
+      {runwayRule}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* sidebar — desktop */}
       <aside className="hidden w-[230px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
         <div className="border-b border-line/60 px-4 py-4">
@@ -535,7 +586,7 @@ export default function App() {
         {/* topbar */}
         {/* `h-[60px]` is the BAR's height; the notch pad is added on top of it rather than eaten
             out of it, or the controls sit half under the Dynamic Island on a modern iPhone. */}
-        <header className="pad-top-safe inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg px-2 md:gap-4 md:px-5">
+        <header className="inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg px-2 md:gap-4 md:px-5">
           <div className="flex h-[60px] min-w-0 flex-1 items-center gap-2 md:gap-4">
           {/* the metric rail scrolls if it must; the soft right edge is the
               affordance, so a value is never chopped off mid-word — desktop only,
@@ -709,6 +760,8 @@ export default function App() {
             </button>
           </nav>
         </div>
+      </div>
+
       </div>
 
       {/* mobile: the full metric sheet, same entries as the desktop rail */}
