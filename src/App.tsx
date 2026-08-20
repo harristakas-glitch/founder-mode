@@ -35,7 +35,6 @@ import { Growth } from './screens/Growth'
 import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
-import { Inbox } from './screens/Inbox'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
@@ -88,10 +87,9 @@ const AREAS: {
   icon: typeof Mail
   screens: { id: ScreenId; label: string; careerOnly?: boolean }[]
 }[] = [
-  { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [
-    { id: 'dashboard', label: 'This week' },
-    { id: 'inbox', label: 'Inbox' },
-  ] },
+  // One screen: the stream merged into the HQ (owner call, after FM26's Portal — messages are a
+  // third of the overview, not a separate page). The 'inbox' ScreenId survives as an alias.
+  { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [{ id: 'dashboard', label: 'This week' }] },
   // Screen order within an area is PRIORITY: the first entry is where the area lands, so it must
   // be the screen with the weekly lever, never the report. Growth (the budget slider you touch
   // most weeks) outranks Rivals (reading); Hiring (send an offer) outranks Team (upkeep); Raise
@@ -730,7 +728,8 @@ export default function App() {
           {siblingTabs}
           <div key={screen} className="rise-in">
             {screen === 'dashboard' && <Dashboard />}
-            {screen === 'inbox' && <Inbox />}
+            {/* 'inbox' aliases to the HQ — the stream lives there now */}
+            {screen === 'inbox' && <Dashboard />}
             {screen === 'team' && <Team />}
             {screen === 'hiring' && <Hiring />}
             {screen === 'product' && <Product />}

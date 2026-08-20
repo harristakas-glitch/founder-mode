@@ -25,6 +25,7 @@ import { attentionRegister, type AttentionItem } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
 import { useState } from 'react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { InboxStream } from './Inbox'
 import { useStore } from '../store'
 
 // ---------------------------------------------------------------------------------------------
@@ -305,6 +306,45 @@ function MetricDrawer({ metric, onClose }: { metric: MetricKey; onClose: () => v
   )
 }
 
+// The horizon — FM26's Portal lesson, and the brief's own §3 UPCOMING section, finally built.
+// The HQ had alarms (the register) but no TIME: nothing said the board sits in three weeks or
+// that an offer dies on Friday. Deadlines the state already knows, nearest first, each a link to
+// where it is acted on. Read-only, at most four, silent when the horizon is clear.
+function Upcoming() {
+  const game = useStore((s) => s.game)!
+  const setScreen = useStore((s) => s.setScreen)
+  const items: { weeks: number; label: string; screen: Parameters<typeof setScreen>[0] }[] = []
+
+  if (game.board) items.push({ weeks: Math.max(0, game.board.nextReview - game.week), label: 'Board review', screen: 'fundraising' })
+  const sheet = [...game.termSheets].sort((a, b) => a.weeksLeft - b.weeksLeft)[0]
+  if (sheet) items.push({ weeks: sheet.weeksLeft, label: `${sheet.investor} offer expires`, screen: 'fundraising' })
+  const cand = [...game.candidates].sort((a, b) => a.weeksLeft - b.weeksLeft)[0]
+  if (cand) items.push({ weeks: cand.weeksLeft, label: `${cand.name} leaves the pool`, screen: 'hiring' })
+  if ((game.flags.priceWar ?? 0) > 0) items.push({ weeks: game.flags.priceWar, label: 'Price war ends', screen: 'market' })
+  if (game.rally) items.push({ weeks: game.rally.weeksLeft, label: 'Rally fades', screen: 'team' })
+  if (game.challenge) items.push({ weeks: Math.max(0, game.challenge.cap - game.week), label: 'The run ends', screen: 'dashboard' })
+
+  const top = items.sort((a, b) => a.weeks - b.weeks).slice(0, 4)
+  if (top.length === 0) return null
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[10px] border border-line/60 bg-surface px-3.5 py-2">
+      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-mut">Upcoming</span>
+      {top.map((i) => (
+        <button
+          key={i.label}
+          onClick={() => setScreen(i.screen)}
+          className="whitespace-nowrap text-[12.5px] text-mut transition-colors hover:text-ink"
+        >
+          <span className={`tnum font-bold ${i.weeks <= 1 ? 'text-warn' : 'text-ink'}`}>
+            {i.weeks === 0 ? 'this wk' : `${i.weeks} wk`}
+          </span>{' '}
+          {i.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------------------------
 export function Dashboard() {
   const game = useStore((s) => s.game)!
@@ -337,6 +377,7 @@ export function Dashboard() {
 
       <Hero />
       <AttentionList />
+      <Upcoming />
 
       {/* Slot order is causal rank, not convention (owner's metrics review, 2026-08-20): fit is
           the number in every compounding formula, the growth RATE is what the board judges — the
@@ -395,6 +436,14 @@ export function Dashboard() {
 
       {/* the Understand step — under the row, one at a time */}
       {openMetric && <MetricDrawer metric={openMetric} onClose={() => setOpenMetric(null)} />}
+
+      {/* The week stream — merged from the old Inbox screen (owner call, after FM26's Portal:
+          messages are a third of the overview, not a separate page). Unresolved decisions first,
+          with their choices; the deep past behind one disclosure. */}
+      <div className="mt-5">
+        <h2 className="mb-2.5 text-[15px] font-semibold">This week</h2>
+        <InboxStream />
+      </div>
 
       {/* Career: the PMF/retention number above is an output — say what it is made of. */}
       <PmfExplainer />
