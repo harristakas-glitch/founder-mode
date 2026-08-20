@@ -36,6 +36,7 @@ import {
   boardEffectiveTarget,
   committedCosts,
   demandSignal,
+  effectiveChurn,
   growthRate,
   productScore,
   runwayWeeks,
@@ -312,7 +313,7 @@ export function attentionRegister(game: GameState): AttentionItem[] {
     }
   }
   const sector = sectorById(game.sector)
-  const churn = sector.churn * Math.min(3, Math.max(0.3, 2.4 - game.pmf / 45 - game.quality / 250 + game.bugs / 200))
+  const churn = effectiveChurn(game)
   if (churn > sector.churn * 1.5 && totalUsers(game) > 100) {
     push({
       id: 'churn',

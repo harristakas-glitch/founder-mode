@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ChevronRight, Copy, DoorOpen, Play, Users } from 'lucide-react'
-import { NESTED } from '../components'
+import { Copy, DoorOpen, Play, Users } from 'lucide-react'
+import { Disclosure, NESTED } from '../components'
 import { SECTORS } from '../game/data'
 import { defaultCapabilities, type CapabilityKey, type GameCapabilities } from '../game/modes'
 import type { SectorId } from '../game/types'
@@ -208,11 +208,7 @@ export function Lobby() {
                 </span>
               )}
             </div>
-            <details className="group mt-2">
-              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md text-[13px] font-semibold text-mut transition-colors outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden">
-                <ChevronRight size={14} className="shrink-0 transition-transform group-open:rotate-90" />
-                Change rules
-              </summary>
+            <Disclosure label="Change rules">
               <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
                 {RULES.map((r) => (
                   <label key={r.key} className={`${NESTED} flex cursor-pointer items-start gap-2.5 px-3 py-2`}>
@@ -223,7 +219,7 @@ export function Lobby() {
                       className="mt-[3px] h-3.5 w-3.5 shrink-0 accent-[var(--color-accent)]"
                     />
                     <span className="min-w-0">
-                      <span className="block text-[12.5px] font-semibold">
+                      <span className="block text-[12.5px] font-semibold text-ink">
                         <span aria-hidden="true">{r.icon}</span> {r.name}
                       </span>
                       <span className="block text-[11.5px] leading-snug text-mut">{r.hint}</span>
@@ -231,7 +227,7 @@ export function Lobby() {
                   </label>
                 ))}
               </div>
-            </details>
+            </Disclosure>
 
             <button
               disabled={online.players.length < 2}

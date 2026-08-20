@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import { Btn, NESTED, Panel, StatCard, Td, Th } from '../components'
+import { Btn, Disclosure, NESTED, Panel, StatCard, Td, Th } from '../components'
 import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
 import {
@@ -28,24 +27,9 @@ import { hasCapability } from '../game/modes'
 import { hasForfeited, myId } from '../net/online'
 import { useStore } from '../store'
 
-/**
- * Context that is one interaction away rather than deleted.
- *
- * `<details>` and not a div with an onClick: it is the only toggle the platform already makes
- * keyboard-reachable and already announces as expanded/collapsed. The summary keeps a touch-sized
- * target for the same reason `Btn` does.
- */
-function More({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <details className="group mt-3">
-      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-[12px] font-semibold text-mut hover:text-ink md:min-h-[28px] [&::-webkit-details-marker]:hidden">
-        <span className="inline-block transition-transform duration-150 group-open:rotate-90">›</span>
-        {label}
-      </summary>
-      <div className="mt-1 text-xs leading-relaxed text-mut">{children}</div>
-    </details>
-  )
-}
+// Context that is one interaction away rather than deleted goes behind the shared <Disclosure>
+// (components.tsx) — the one toggle the platform already makes keyboard-reachable and already
+// announces as expanded/collapsed.
 
 /**
  * What a rival's posture looks like on the board.
@@ -277,13 +261,13 @@ export function Market() {
               </tbody>
             </table>
           </div>
-          <More label="How to read this table">
+          <Disclosure label="How to read this table">
             {online
               ? 'Open books: every founder sees everyone’s cash, revenue, and PMF — this is a knife fight under stadium lights, not a mystery novel. Fallen players show their final payout.'
               : hasCapability(game, 'rivalAggression')
                 ? 'Posture is read off the same market position, growth and funding gap the rivals themselves act on, so Hostile means a move is coming and Watching means it is not. Rivals raise rounds, ship launches, come for your users and your people, and sometimes die. Their obituaries are good for you.'
                 : 'Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
-          </More>
+          </Disclosure>
         </Panel>
       </div>
 
@@ -528,11 +512,11 @@ function Acquisitions() {
             </div>
           )
         })}
-        <More label="What an acquisition actually does">
+        <Disclosure label="What an acquisition actually does">
           Acquire a living rival and ~70% of their users migrate to you, along with their best features — and their bugs. Pay in cash,
           or in stock (dilution). Weak rivals sell; confident ones leak your offer and gloat. Each deal takes ~15 weeks to integrate
           before the next.
-        </More>
+        </Disclosure>
       </Panel>
     </div>
   )

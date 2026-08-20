@@ -699,6 +699,23 @@ export function productScore(s: GameState): number {
   return clamp(s.features * 0.5 + s.quality * 0.5 - s.bugs * bugPenalty, 0, 100)
 }
 
+/**
+ * Effective weekly churn as surfaced to the player — the sector's base churn scaled by a
+ * product-health multiplier, clamped to [0.3, 3]. The drivers: PMF is the dominant retainer
+ * (each point shaves 1/45 off the multiplier), quality helps at 1/250 per point, and bugs hurt
+ * at 1/200 per point. Pure read — no writes, no RNG — and unused by the simulation itself: the
+ * weekly tick's internal churnMult (see the tick, ~line 1755). The constants here MUST match the
+ * tick's — this estimate spent months at the pre-rebalance values (2.4, quality/250, bugs/200),
+ * quietly under-weighting quality 2x and bugs 2.2x against what the simulation actually charges,
+ * so the one screen explaining churn was mis-explaining it. If the tick is rebalanced again,
+ * change this line in the same commit. (Kept as a separate pure function rather than folded into
+ * the tick: the tick's version runs inside the RNG-seeded weekly step and this one must stay
+ * callable from any render without touching simulation state.)
+ */
+export function effectiveChurn(s: GameState): number {
+  return sectorById(s.sector).churn * clamp(2.5 - s.pmf / 45 - s.quality / 120 + s.bugs / 90, 0.3, 3)
+}
+
 // A qualitative read on demand, unlocked by doing user research.
 export function demandSignal(s: GameState): 'unknown' | 'weak' | 'mixed' | 'strong' {
   if (s.researchSignal < 14) return 'unknown'

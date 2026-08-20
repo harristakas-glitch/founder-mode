@@ -2,7 +2,7 @@
 // This screen is the centre of early Career play — it is where you find out that you were
 // wrong about your own market.
 import { useState } from 'react'
-import { Btn, NESTED, Panel } from '../components'
+import { Btn, Disclosure, NESTED, Panel } from '../components'
 import { money } from '../format'
 import {
   EXPERIMENTS,
@@ -346,15 +346,12 @@ export function Discovery() {
           {/* All that survives of the research explainer: the scoreboard above already says what
               PMF is scored on and where the floor sits, but nothing anywhere says who makes a
               result reliable. One interaction away, not on the face of the screen. */}
-          <details className="mt-3">
-            <summary className="cursor-pointer text-[12px] font-semibold text-mut transition-colors hover:text-ink">
-              What makes a study reliable
-            </summary>
+          <Disclosure label="What makes a study reliable" className="mt-3">
             <div className={`mt-1.5 ${NESTED} px-3 py-2 text-[12px] leading-relaxed text-mut`}>
               <b className="text-ink">Designers run studies best</b> — they count triple toward how reliable a result is, marketers 1.5×,
               everyone else once. Product <i>quality</i> also raises reliability; shipping more <i>features</i> does nothing for it.
             </div>
-          </details>
+          </Disclosure>
         </Panel>
       </div>
 

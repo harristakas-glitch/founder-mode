@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Btn, Panel, SkillDots, TraitChip } from '../components'
+import { Btn, Disclosure, Panel, SkillDots, TraitChip } from '../components'
 import { money } from '../format'
 import { recruiterFee, runwayAfterHire } from '../game/engine'
 import { hasCapability } from '../game/modes'
@@ -97,17 +97,17 @@ export function Hiring() {
         // The rules of the shared market are worth one sentence up front and a paragraph on
         // demand. What is gone entirely is how the bid is transported: whether a number travels
         // as a hash is not a decision the player makes on a hiring screen.
-        <details className="mb-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed">
-          <summary className="cursor-pointer font-semibold text-ink marker:text-accent">
-            One market, every founder — sealed offers, one candidate per round
-          </summary>
+        <Disclosure
+          label="One market, every founder — sealed offers, one candidate per round"
+          className="mb-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed"
+        >
           <div className="mt-2 text-mut">
             These five people are the same five your rivals are looking at, and the whole pool is replaced next week. Choose a premium
             over asking without seeing anyone else&apos;s number, and at the end of the round the candidate picks — weighing the money
             against your reputation and how safe your runway looks. Winning a contested hire means paying over the odds, or being
             somewhere worth joining.
           </div>
-        </details>
+        </Disclosure>
       )}
 
       {(game.offersOut.length > 0 || game.pendingHires.length > 0) && (

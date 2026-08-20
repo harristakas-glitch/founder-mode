@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react'
-import { Bar, Btn, NESTED, Panel, RAISED, StatCard } from '../components'
+import { Bar, Btn, Disclosure, NESTED, Panel, RAISED, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
 import {
+  BOARD_TARGETS,
   boardEffectiveTarget,
   canSellSecondary,
   growthRate,
@@ -13,7 +14,9 @@ import {
   revenueGrowthRate,
   secondaryProceeds,
   valuation,
+  weeklyBurn,
 } from '../game/engine'
+import { hasCapability } from '../game/modes'
 import { SUITABILITY_LABEL, runSectorSuitability, tokenisationEligibility } from '../game/token/eligibility'
 import {
   INCENTIVE_CATEGORIES,
@@ -1039,6 +1042,16 @@ function IpoPanel() {
   )
 }
 
+/** One row of the §17 decision block inside a term-sheet card: muted label left, ink value right. */
+function SheetRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-[12.5px] leading-snug">
+      <span className="shrink-0 text-[11px] text-mut">{label}</span>
+      <span className="text-right text-ink">{children}</span>
+    </div>
+  )
+}
+
 export function Fundraising() {
   const game = useStore((s) => s.game)!
   const pitch = useStore((s) => s.pitch)
@@ -1050,6 +1063,9 @@ export function Fundraising() {
   const threshold = STAGE_THRESHOLDS[game.stage]
   const ready = target && val >= threshold
   const tokenised = isTokenised(game)
+  // Gates the board rows of the §17 block: `acceptTermSheet` only installs a board when the
+  // capability is on, and the block must not promise governance the engine will not create.
+  const canBoard = hasCapability(game, 'boardReviews')
   const roundsClosed = institutionalRoundsClosed(game)
   const ipoRestriction = ipoClosed(game)
 
@@ -1138,23 +1154,78 @@ export function Fundraising() {
 
       {/* An offer on the table is a decision with a three-week clock on it; "Start pitching" is a
           decision about whether to spend the next ten weeks. The clock goes first. */}
+      {/* Brief §17: the decision context lives INSIDE the card, beside the Sign button. Every
+          number is the one `acceptTermSheet` will produce — cash += amount, equity *= (1 − sold),
+          board = { BOARD_TARGETS[target], review in 12 wk, strikes wiped } — and runway-after is
+          `runwayWeeks` verbatim (net of revenue) applied to cash + amount, computed inline so
+          nothing here ever writes to the state it is previewing. */}
       {game.termSheets.length > 0 && (
         <div className="mt-3.5">
           <Panel title="Term sheets on the table">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {game.termSheets.map((t) => {
                 const post = t.amount / t.equity
+                const downRound = game.lastPostMoney > 0 && post < game.lastPostMoney
+                const net = weeklyBurn(game) - game.lastRevenue
+                const runwayNow = net <= 0 ? Infinity : game.cash / net
+                const runwayAfter = net <= 0 ? Infinity : (game.cash + t.amount) / net
+                const equityAfter = game.founderEquity * (1 - t.equity)
                 return (
                   <div key={t.id} className="rise-in rounded-xl border border-line bg-surface2 p-4">
-                    <div className="font-bold">{t.investor}</div>
-                    <div className="my-2.5 text-[13px] leading-relaxed text-mut">
-                      Investing <b className="text-ink tnum">{money(t.amount)}</b>
-                      <br />
-                      for <b className="text-ink tnum">{pct(t.equity, 1)}</b> of the company
-                      <br />
-                      <span className="text-xs">
-                        {money(post)} post-money · expires in {t.weeksLeft} wk
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="font-bold">{t.investor}</div>
+                      <span className={`text-[11px] ${t.weeksLeft === 1 ? 'font-semibold text-warn' : 'text-mut'}`}>
+                        expires in {t.weeksLeft} wk
                       </span>
+                    </div>
+                    <div className="my-2.5 grid gap-1.5">
+                      <SheetRow label="You raise">
+                        <b className="tnum text-good">{money(t.amount)}</b> <span className="text-mut">for</span>{' '}
+                        <b className="tnum">{pct(t.equity, 1)}</b>
+                      </SheetRow>
+                      <SheetRow label="Runway">
+                        {net <= 0 ? (
+                          <b>∞ — profitable</b>
+                        ) : (
+                          <>
+                            <span className="tnum text-mut">{Math.max(0, Math.floor(runwayNow))}</span>
+                            <span className="text-mut"> → </span>
+                            <b className="tnum">{Math.floor(runwayAfter)} wk</b>
+                          </>
+                        )}
+                      </SheetRow>
+                      <SheetRow label="Your ownership">
+                        <span className="tnum text-mut">{pct(game.founderEquity, 1)}</span>
+                        <span className="text-mut"> → </span>
+                        <b className="tnum">{pct(equityAfter, 1)}</b>
+                      </SheetRow>
+                      <SheetRow label="Board">
+                        {!canBoard ? (
+                          <span className="text-mut">None in this mode</span>
+                        ) : game.board ? (
+                          <>
+                            Resets for the new stage
+                            {game.board.strikes > 0 && (
+                              <b className="text-good">
+                                {' '}
+                                · {game.board.strikes} strike{game.board.strikes === 1 ? '' : 's'} cleared
+                              </b>
+                            )}
+                          </>
+                        ) : (
+                          'Signing creates it'
+                        )}
+                      </SheetRow>
+                      {canBoard && target && (
+                        <SheetRow label="New expectations">
+                          <b className="tnum">{pct(BOARD_TARGETS[target], 1)}/wk</b>{' '}
+                          <span className="text-mut">growth · review wk {game.week + 12}</span>
+                        </SheetRow>
+                      )}
+                      <SheetRow label="Valuation">
+                        <b className="tnum">{money(post)}</b> <span className="text-mut">post-money</span>
+                        {downRound && <b className="text-bad"> · down round</b>}
+                      </SheetRow>
                     </div>
                     <div className="flex gap-2">
                       <Btn variant="good" onClick={() => accept(t.id)}>
@@ -1168,6 +1239,11 @@ export function Fundraising() {
                 )
               })}
             </div>
+            <Disclosure label="What else signing does" className="mt-3">
+              One signature closes the round: the other sheets come off the table, and investors will not take another pitch for 12
+              weeks. A clean round pays reputation and hype; a down round — priced below your last post-money — costs reputation and
+              morale instead.
+            </Disclosure>
           </Panel>
         </div>
       )}

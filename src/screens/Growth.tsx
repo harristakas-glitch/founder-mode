@@ -1,7 +1,7 @@
-import { Panel, StatCard } from '../components'
+import { Disclosure, Panel, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
-import { estimatedCac, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek } from '../game/engine'
+import { effectiveChurn, estimatedCac, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek } from '../game/engine'
 import { useStore } from '../store'
 
 export function Growth() {
@@ -9,9 +9,9 @@ export function Growth() {
   const setMarketing = useStore((s) => s.setMarketing)
   const sector = sectorById(game.sector)
   const marketers = game.employees.filter((e) => e.role === 'marketer').length
-  // Character-identical to the copy in Dashboard.tsx. `src/game/` exports no churn helper to import,
-  // so the two stay in sync by hand until one is hoisted into the engine.
-  const churnRate = sector.churn * Math.min(3, Math.max(0.3, 2.4 - game.pmf / 45 - game.quality / 250 + game.bugs / 200))
+  // One formula, one home: `effectiveChurn` in src/game/engine.ts — the same call the attention
+  // register makes, so this stat card and the churn warning can never disagree.
+  const churnRate = effectiveChurn(game)
 
   // `marketingMax` is pure — call it once so the title, the slider, the fill and the warning cannot
   // disagree with each other about what this week's cap is.
@@ -80,13 +80,8 @@ export function Growth() {
           </div>
 
           {/* Both explanations are true and neither changes week to week: you read them once, when
-              you first wonder why the cap is the number it is. Native <details> so the toggle is
-              focusable, operable from the keyboard and announced as expanded/collapsed for free. */}
-          <details className="group mt-3 border-t border-line/60 pt-2.5">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold text-mut transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
-              <span aria-hidden className="text-[10px] transition-transform duration-150 group-open:rotate-90">▶</span>
-              How the budget and its cap work
-            </summary>
+              you first wonder why the cap is the number it is. */}
+          <Disclosure label="How the budget and its cap work" className="mt-3 border-t border-line/60 pt-2.5">
             <div className="mt-2 text-xs leading-relaxed text-mut">
               Spend does two things: builds hype (diminishing returns, amplified by marketers) and buys users directly at the CAC above —
               which climbs as the market saturates and falls with PMF. Word of mouth ({pct(sector.viral, 1)}/wk max for {sector.name}) only
@@ -99,7 +94,7 @@ export function Growth() {
               <b className="tnum text-ink">{money(Math.max(0, game.cash) * MARKETING_CAP.treasuryShare)}</b> from the bank. Profit raises it
               without a round; losing money does not raise it at all.
             </div>
-          </details>
+          </Disclosure>
         </Panel>
       </div>
     </div>
