@@ -13,8 +13,8 @@ createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       {/* Mounted OUTSIDE <App/> rather than inside it because App returns early for the start
           screen and the lobby, and a visitor who never starts a run is exactly who "how many
-          people arrive" is about. It renders nothing but the consent prompt, reads the store and
-          never writes it, and is completely inert until src/analytics/config.ts holds a real key. */}
+          people arrive" is about. It renders NOTHING at all — it is a watcher: it reads the store,
+          never writes it, and goes quiet the moment a player unticks the box in the Field Guide. */}
       <AnalyticsLayer />
       <App />
     </ErrorBoundary>

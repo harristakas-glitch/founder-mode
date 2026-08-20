@@ -35,14 +35,10 @@ import {
   runStarted,
   screenOpened,
   runSuspended,
-  runJournalUploaded,
   type Feature,
   type RunProps,
-  type RunStopReason,
 } from './events'
 import { verifyRun } from '../game/replay'
-import { uploadRunJournal } from './runJournal'
-import { ConsentPrompt } from './ConsentPrompt'
 
 function safely(fn: () => void): void {
   try {
@@ -130,13 +126,6 @@ function AnalyticsWatcher() {
   const notesEnabled = useRef<boolean | null>(null)
   const guideSeen = useRef(false)
   const suspendedWeek = useRef(-1)
-  /**
-   * Per-run, in-memory, never persisted and never reused: it exists so two players who abandon the
-   * same daily challenge in week 1 having done nothing do not collide on the journal table's
-   * unique key. It is not an identifier — see runJournal.ts.
-   */
-  const nonce = useRef('')
-  const uploaded = useRef(false)
 
   // Live mirror for the unload handler, which cannot re-read a closure.
   const live = useRef<{ game: GameState | null; screen: ScreenId }>({ game: null, screen })
@@ -180,7 +169,6 @@ function AnalyticsWatcher() {
         if (!prev.game.gameOver) {
           const props = runProps(prev.game, prev.screen)
           runAbandoned(props, { weeks: prev.game.week })
-          void upload(prev.game, 'abandoned', nonce.current, uploaded)
         }
       }
 
@@ -196,8 +184,6 @@ function AnalyticsWatcher() {
         seenWeeks.current = new Set()
         guideSeen.current = false
         suspendedWeek.current = -1
-        nonce.current = makeNonce()
-        uploaded.current = false
         // Only a run that BEGAN while we were watching is a run that was started.
         if (!firstLook) {
           const p = onboardingSnapshot()
@@ -217,7 +203,6 @@ function AnalyticsWatcher() {
           score: game.gameOver.payout ?? 0,
           verified: verifyRun(game).state,
         })
-        void upload(game, 'ended', nonce.current, uploaded)
       }
 
       // The heartbeat — the event that measures the players who never finish anything.
@@ -305,36 +290,6 @@ function AnalyticsWatcher() {
   return null
 }
 
-/** 8 hex characters of `crypto.getRandomValues`, or a clock fallback where crypto is absent. */
-function makeNonce(): string {
-  try {
-    const b = new Uint8Array(4)
-    crypto.getRandomValues(b)
-    return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
-  } catch {
-    return Math.floor(Math.random() * 2 ** 32).toString(16)
-  }
-}
-
-/** Fire-and-forget journal upload, at most once per run. Refusals are reported, never thrown. */
-async function upload(game: GameState, reason: RunStopReason, nonce: string, done: { current: boolean }) {
-  if (done.current) return
-  done.current = true
-  try {
-    const r = await uploadRunJournal(game, reason, nonce)
-    // 'unconfigured' and 'no_consent' are the normal, quiet cases — reporting them would be an
-    // event about a player who has not agreed to events. Everything else is worth seeing.
-    if (!r.sent && (r.reason === 'unconfigured' || r.reason === 'no_consent')) return
-    runJournalUploaded({
-      reason,
-      entries: r.sent ? r.entries : 0,
-      bytes: r.sent ? r.bytes : 0,
-      ok: r.sent,
-    })
-  } catch {
-    // never surfaces to the player
-  }
-}
 
 /**
  * The mount point: one component, rendered next to <App/> in main.tsx so that it survives App's
@@ -342,10 +297,5 @@ async function upload(game: GameState, reason: RunStopReason, nonce: string, don
  * visitor who never starts a run is exactly who question 1 is about).
  */
 export function AnalyticsLayer() {
-  return (
-    <>
-      <AnalyticsWatcher />
-      <ConsentPrompt />
-    </>
-  )
+  return <AnalyticsWatcher />
 }

@@ -9,8 +9,8 @@
 //
 // UNTIL THE PLACEHOLDER IS REPLACED, THE WHOLE ANALYTICS LAYER IS INERT. `analyticsConfigured` is
 // false, so `capture()` returns before it constructs anything, the dynamic `import('posthog-js')`
-// is never reached (posthog-js is therefore never even downloaded, let alone run), the consent
-// prompt never appears, and the run-journal upload refuses with `unconfigured`. There is no
+// is never reached (posthog-js is therefore never even downloaded, let alone run), and nothing is
+// collected at all. There is no
 // network call, no storage write and no third-party code on the honest path. test/analytics.test.ts
 // pins that property rather than trusting this paragraph.
 //
@@ -22,7 +22,7 @@
  * PostHog project API key ("phc_…"). Publishable by design — see the header.
  * Replace the placeholder to switch analytics on; leave it and nothing happens.
  */
-export const POSTHOG_KEY = 'YOUR-POSTHOG-PROJECT-KEY'
+export const POSTHOG_KEY = 'phc_CcRfT6PLSTrZV2aUbfoXg4Z4PJJHXsnKoqHo6VynfdhY'
 
 /**
  * EU ingest host. The owner and the players are in the EU, so the data must not leave it — a US
@@ -39,23 +39,3 @@ export const POSTHOG_HOST = 'https://eu.i.posthog.com'
  * placeholder is the off switch, and it is impossible to half-configure.
  */
 export const analyticsConfigured = !POSTHOG_KEY.includes('YOUR-')
-
-/**
- * Supabase table the run journals are uploaded into (see supabase/run-journals-v1.sql).
- * Not `daily_scores` — that table is the leaderboard, its RLS is written for a different threat
- * model, and mixing a bulk jsonb payload into it would put a storage DoS behind a policy tuned for
- * small scalar rows.
- */
-export const RUN_JOURNAL_TABLE = 'run_journals'
-
-/**
- * Hard ceiling on one uploaded journal payload, in bytes of JSON.
- *
- * Same number as the `pg_column_size(journal) <= 262144` bound in supabase/run-journals-v1.sql,
- * and deliberately so: the writer's ceiling has to be the reader's ceiling. `sanitizeJournal`
- * already refuses anything past JOURNAL_LIMIT entries (20,000) — this is the second axis, because
- * 20,000 short entries and 20,000 fat ones are very different amounts of storage. A payload over
- * the cap is DROPPED, not truncated: a truncated journal replays to a desync and would read as
- * tampering, which is exactly the mistake src/game/replay.ts already refuses to make.
- */
-export const MAX_JOURNAL_BYTES = 262_144

@@ -29,7 +29,17 @@
 //   3. ABSENCE IS NOT CONSENT. Only the exact string 'granted' grants. A missing key, a corrupt
 //      key, an empty string, a truthy object: all of them are 'unset'.
 //
-// The player is asked ONCE, after their first finished run, and never again — see `markAsked`.
+// NOTHING ASKS. The shipped build has no consent prompt: the player is never interrupted, the
+// default is the anonymous middle state, and the only control is the tick box in the Field Guide
+// footer (src/analytics/PrivacyControls.tsx), which moves between 'unset' and 'denied'.
+//
+// 'granted' is therefore UNREACHABLE in the current interface. It is kept, with its tests, because
+// it is exactly what the deferred run-journal upload (BACKLOG.md) would need, and because deleting
+// a working state machine to re-derive it in six months is how the leaderboard ended up with six
+// SQL scripts. `shouldAskConsent`/`markAsked` are the hooks a future prompt would use; nothing
+// calls them today and that is not a bug.
+
+import { useSyncExternalStore } from 'react'
 
 const KEY = 'fm-analytics-consent-v1'
 
@@ -160,4 +170,13 @@ export function markAsked(): void {
 /** Test hook only: drop the memoised record so a fresh read hits storage again. */
 export function resetConsentCache(): void {
   cache = null
+}
+
+/**
+ * Re-render on consent changes. Lives here rather than in a component file because the prompt that
+ * used to own it is gone: the shipped model asks nothing on arrival, so the only consumer is the
+ * off switch in the Field Guide.
+ */
+export function useConsent(): ConsentRecord {
+  return useSyncExternalStore(subscribe, snapshot, snapshot)
 }

@@ -504,10 +504,8 @@ The game runs fully offline and anonymous without any of this.
 
 1. Create a free [Supabase](https://supabase.com) project; paste its URL and publishable key into
    `src/net/config.ts`. **Arena works immediately** — realtime channels need no schema.
-2. Run `supabase/leaderboard-v6.sql` in the SQL Editor. It is the one the leaderboard needs (the
-   only other script, `run-journals-v1.sql`, is optional and belongs to product analytics — see
-   `docs/analytics.md`). It creates the table as well as securing it, and it is idempotent and
-   self-testing: its last
+2. Run `supabase/leaderboard-v6.sql` in the SQL Editor. It is the only SQL file in the repo, it
+   creates the table as well as securing it, and it is idempotent and self-testing: its last
    section runs the whole attack matrix against the policies it just created — as both database
    roles — and raises with a list of failures if any case comes out wrong. A successful run prints
    `leaderboard v6 self-test passed`. Ownership of a row is proved by a per-device secret the

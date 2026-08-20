@@ -66,10 +66,8 @@ enabling social login (§1.2) would have blanked the leaderboard for exactly the
 engaged most. The rule that would have caught all three: assert the attack is blocked AND the
 legitimate path still works, in the same run, for every role that can reach the table.
 
-**Run `supabase/leaderboard-v6.sql`.** It is the one to run for the leaderboard, and it is the
-only one this item needs (the 2026-08-19 review deleted the other five — see "Reference — what the
-SQL files are" below). `supabase/run-journals-v1.sql` was added on 2026-08-20 alongside product
-analytics; it is optional, unrelated, and covered by `docs/analytics.md`.
+**Run `supabase/leaderboard-v6.sql`, and nothing else.** It is now the only SQL file in the repo
+(the 2026-08-19 review deleted the other five — see "Reference — what the SQL files are" below).
 It creates the table as well as securing it, it is idempotent, and it is self-testing: it runs its
 own attack matrix as both `anon` and `authenticated` and raises with a list of failures if any
 case comes out wrong. It could not be run from here — only the public anon key is available and
@@ -113,6 +111,27 @@ race instead of a binary.
 **Why it wasn't done:** the start screen advertises free play as *"Solo vs AI rivals. Pick your
 market, **no time limit**."* Adding a cap contradicts a stated promise, so it's a product call,
 not a bug fix. Alternatives: make it an opt-in "Career mode" toggle, or reword the mode card.
+
+### 2.3 Run-journal upload — built, tested, deliberately not shipped
+The one analytics question no vendor can answer. The game is deterministic and
+`src/game/replay.ts` already records every decision, so a finished run can be uploaded as a
+journal and **replayed exactly** — turning "players quit around week 12" into "here are four
+hundred runs that died in week 12, replay them and watch what they all did".
+
+It exists and it passes its tests: client, Supabase table, RLS, a self-testing SQL script, the
+company name redacted out of the header, a 256 kB payload ceiling enforced on both the writer and
+the reader, and a canary asserting an uploaded journal replays to the **same fingerprint** as the
+run it came from.
+
+**Why it wasn't shipped:** it is a bigger decision than instrumentation. It needs a new Supabase
+table, a real consent prompt — uploading somebody's run genuinely does require asking, unlike an
+anonymous counter — and a retention policy for run data. Shipping analytics did not have to wait
+for those answers.
+
+**Where it is:** branch `worktree-agent-a2853745c13a521f7`, commit `be69eae`, including
+`supabase/run-journals-v1.sql`. The shipped consent model kept its (currently unreachable)
+`granted` state and its tests specifically so this can be picked up without rebuilding the state
+machine underneath it. See `docs/analytics.md`.
 
 ### 2.2 Multiplayer has no jeopardy
 A 52-week Sprint produced **3 bankruptcies per 100 player-runs** — it's a pure score race, with

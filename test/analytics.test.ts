@@ -1,12 +1,13 @@
 // Product analytics: the four claims the feature makes about itself, checked rather than asserted
 // in a document. Run: npx tsx test/analytics.test.ts
 //
-//   1. INERT WHEN UNCONFIGURED — with the placeholder key committed, no client is constructed, no
-//      network call is made, and the vendor module is never even imported.
-//   2. THE CONSENT GATE — no persistent identifier and no journal upload before consent; revoking
-//      stops collection in the same tick, not after a reload; a corrupt consent record is 'unset'.
+//   1. INERT WHEN SWITCHED OFF — with the box unticked, no client is constructed, no network call
+//      is made, and the vendor module is never even imported. This used to be anchored to the
+//      committed placeholder key; a real key ships now, so it is anchored to the off switch.
+//   2. THE CONSENT GATE — no cookie and no person profile by default; revoking stops collection in
+//      the same tick, not after a reload; a corrupt consent record reads as 'unset', never granted.
 //   3. FREE TEXT NEVER LEAVES — the company name (and every other thing a player typed) cannot
-//      reach an event or an uploaded journal, through the real code path.
+//      reach an event, through the real code path.
 //   4. ZERO IMPACT ON THE GAME — reading a run for analytics does not change the run.
 //
 // THE SUITE'S RULE, inherited from test/net-security.test.ts and test/csp.test.ts and not optional
@@ -64,18 +65,17 @@ g.Image = class {
 }
 const netTotal = () => net.fetch + net.xhr + net.beacon + net.image
 
-const { analyticsConfigured, POSTHOG_HOST, POSTHOG_KEY, MAX_JOURNAL_BYTES } = await import('../src/analytics/config')
-const { analyticsActive, capture, clientConstructed, modeConfig } = await import('../src/analytics/client')
+const { analyticsConfigured, POSTHOG_HOST, POSTHOG_KEY } = await import('../src/analytics/config')
+const { activeGate, analyticsActive, capture, clientConstructed, modeConfig } = await import(
+  '../src/analytics/client'
+)
 const consent = await import('../src/analytics/consent')
 const { ANALYTICS_PROPERTIES, sanitizeEventProperties, scrubUrlProperties, stripUrlDetail } = await import(
   '../src/analytics/props'
 )
 const events = await import('../src/analytics/events')
-const { REDACTED_COMPANY, buildJournalPayload, journalUploadAllowed, uploadGate, uploadRunJournal } = await import(
-  '../src/analytics/runJournal'
-)
 const { newGame } = await import('../src/game/engine')
-const { applyJournaled, JOURNAL_LIMIT, replayRun, stateFingerprint, headerOf } = await import('../src/game/replay')
+const { applyJournaled, stateFingerprint } = await import('../src/game/replay')
 const { defaultCapabilities } = await import('../src/game/modes')
 
 let passed = 0
@@ -119,14 +119,30 @@ function playedRun(weeks = 6) {
 }
 
 // ============================================================================================
-console.log('\n--- 1. inert until somebody replaces the placeholder ---')
+console.log('\n--- 1. inert the moment a player says no ---')
 // ============================================================================================
 reset()
 
-await ok('the committed key is a placeholder, so the whole layer is off', () => {
-  assert.ok(POSTHOG_KEY.includes('YOUR-'), 'a real project key has been committed')
-  assert.strictEqual(analyticsConfigured, false)
+// THE ANCHOR MOVED, AND IT IS WORTH SAYING WHY. Every claim in this section used to hold because
+// the committed key was a placeholder — which meant the suite would have passed just as happily
+// with the consent term deleted from the gate. The key is real now, so being off is no longer the
+// default state of the world: it is a thing the player did. These assertions are therefore anchored
+// to the off switch in the Field Guide, which is the version that actually protects anybody.
+await ok('a real project key ships, so "off" now has to be earned rather than assumed', () => {
+  assert.ok(POSTHOG_KEY.startsWith('phc_'), 'the publishable project key should be committed')
+  assert.ok(!POSTHOG_KEY.includes('YOUR-'))
+  assert.strictEqual(analyticsConfigured, true)
+})
+await ok('unticking the box switches the whole layer off, in this tick', () => {
+  consent.setConsent(false)
   assert.strictEqual(analyticsActive(), false)
+})
+await ok('...and BOTH terms of the gate are load-bearing, including the honest path', () => {
+  assert.strictEqual(activeGate(true, false), false, 'the player said no')
+  assert.strictEqual(activeGate(false, true), false, 'no project key, nowhere to send')
+  assert.strictEqual(activeGate(false, false), false)
+  // A gate that never opens is not a privacy control, it is a broken feature.
+  assert.strictEqual(activeGate(true, true), true)
 })
 await ok('the EU host is the one that ships — data must not cross a border by default', () => {
   assert.strictEqual(new URL(POSTHOG_HOST).origin, 'https://eu.i.posthog.com')
@@ -143,8 +159,6 @@ await ok('capturing every event in the module makes ZERO network calls of any ki
   events.featureUsed(run, { feature: 'pivot' })
   events.noteSeen(run, { concept: 'runway' })
   events.notesToggled({ notes_enabled: false })
-  events.consentGrantedEvent()
-  events.runJournalUploaded({ reason: 'ended', entries: 10, bytes: 100, ok: true })
   capture('hand_written_event', { week: 1 })
   // Give any promise chain a turn to run before looking.
   await Promise.resolve()
@@ -154,13 +168,13 @@ await ok('capturing every event in the module makes ZERO network calls of any ki
 await ok('...and never even imports the vendor SDK: the chunk is not merely silent, it is absent', () => {
   assert.strictEqual(clientConstructed(), false, 'posthog-js was loaded while unconfigured')
 })
-await ok('nothing was written to storage either', () => {
-  assert.deepStrictEqual([...mem.keys()], [], `analytics wrote ${[...mem.keys()].join(', ')}`)
-})
-await ok('the journal upload refuses, names the reason, and touches no network', async () => {
-  const r = await uploadRunJournal(playedRun(), 'ended', 'abcd1234')
-  assert.deepStrictEqual(r, { sent: false, reason: 'unconfigured' })
-  assert.strictEqual(netTotal(), 0)
+await ok('nothing was written to storage either, beyond the refusal itself', () => {
+  // The consent record IS on disk here, and it has to be: "no" that does not survive a reload is
+  // not an answer, it is a question asked again tomorrow. What must be absent is everything else —
+  // no distinct id, no session, no queued event, nothing under a posthog key.
+  const keys = [...mem.keys()]
+  assert.deepStrictEqual(keys, ['fm-analytics-consent-v1'], `analytics wrote ${keys.join(', ')}`)
+  assert.ok(!keys.some((k) => k.includes('posthog') || k.includes('ph_')), keys.join(', '))
 })
 // The honest half: none of the above may be true because the module is simply broken.
 await ok('the machinery still WORKS — the same events produce their properties', () => {
@@ -180,11 +194,10 @@ console.log('\n--- 2. the consent gate ---')
 // ============================================================================================
 reset()
 
-await ok('the default is anonymous: collection on, nothing remembered, no upload', () => {
+await ok('the default is anonymous: collection on, no cookie, no profile', () => {
   assert.strictEqual(consent.consentState(), 'unset')
   assert.strictEqual(consent.collectionEnabled(), true, 'the anonymous default is what measures abandonment')
-  assert.strictEqual(consent.consentGranted(), false, 'no persistent id without an explicit yes')
-  assert.strictEqual(journalUploadAllowed(), false)
+  assert.strictEqual(consent.consentGranted(), false, 'no cookie and no profile without an explicit yes')
 })
 await ok('NOTHING is persisted before the player is asked — not even a "we asked" record', () => {
   consent.consentState()
@@ -192,32 +205,30 @@ await ok('NOTHING is persisted before the player is asked — not even a "we ask
   consent.shouldAskConsent()
   assert.deepStrictEqual([...mem.keys()], [], 'reading consent must not create it')
 })
-await ok('granting is the ONLY thing that unlocks an identifier and an upload', () => {
+await ok('granting is still the only thing that would unlock a cookie and a profile', () => {
   consent.setConsent(true)
   assert.strictEqual(consent.consentState(), 'granted')
   assert.strictEqual(consent.consentGranted(), true)
-  // Still false overall here, because the PostHog key is a placeholder — both gates must be open.
-  assert.strictEqual(journalUploadAllowed(), false, 'consent alone must not be enough')
 })
-await ok('...and the upload gate genuinely depends on consent, not just on the key', () => {
-  // Asserted over the gate's inputs rather than the live predicate. The shipped build has a
-  // placeholder key, so the live one is false whatever consent says — and would go on being false
-  // with the consent term deleted, which is the term that matters.
-  assert.strictEqual(uploadGate(true, true, false), false, 'no consent, no upload')
-  assert.strictEqual(uploadGate(true, false, true), false, 'no Supabase project, nowhere to put it')
-  assert.strictEqual(uploadGate(false, true, true), false, 'analytics off means the whole layer is off')
-  // ...and the honest path: with everything open, runs DO upload. A gate that never opens is not
-  // a privacy control, it is a broken feature.
-  assert.strictEqual(uploadGate(true, true, true), true)
-})
-await ok('NO PERSISTENT IDENTIFIER BEFORE CONSENT — the mapping, not a promise about it', () => {
+await ok('NO COOKIE AND NO PROFILE BY DEFAULT — the mapping, not a promise about it', () => {
+  // This assertion changed shape deliberately, and the reason belongs in the file that enforces it.
+  // The anonymous default used to be `persistence: 'memory'`, which writes nothing whatsoever —
+  // and makes RETENTION UNMEASURABLE, because an id that dies with the tab means every returning
+  // player arrives as a stranger. Retention is one of the four questions the feature exists to
+  // answer. So the default now keeps a random number in this browser's own localStorage: no
+  // cookie, no person profile, no account, erased by the off switch. That is the trade, stated
+  // where it can be checked rather than in a paragraph nobody re-reads.
   consent.setAnonymousConsent()
-  assert.deepStrictEqual(modeConfig(), { persistence: 'memory', person_profiles: 'never' },
-    'the anonymous default must write nothing to the device and build no profile')
+  assert.deepStrictEqual(
+    modeConfig(),
+    { persistence: 'localStorage', person_profiles: 'never' },
+    'the anonymous default must set no cookie and build no profile',
+  )
   consent.setConsent(false)
-  assert.deepStrictEqual(modeConfig(), { persistence: 'memory', person_profiles: 'never' })
-  // The honest direction: consent is what buys the identifier, and it must actually buy it, or
-  // retention stays unanswerable and the question was asked for nothing.
+  assert.deepStrictEqual(modeConfig(), { persistence: 'localStorage', person_profiles: 'never' })
+  // The honest direction: 'granted' is what would buy a cookie and a profile. Nothing in the
+  // shipped interface can reach it — there is no prompt — but the mapping stays asserted so that
+  // the deferred run-journal upload (BACKLOG.md) inherits a state machine that still works.
   consent.setConsent(true)
   assert.deepStrictEqual(modeConfig(), { persistence: 'localStorage+cookie', person_profiles: 'always' })
 })
@@ -367,97 +378,7 @@ await ok('an unparseable URL is still cut at the first ? or #', () => {
 })
 
 // ============================================================================================
-console.log('\n--- 4. the uploaded run journal ---')
-// ============================================================================================
-reset()
-
-const run = playedRun(8)
-
-await ok('a real run builds a payload, and it is well under the cap', () => {
-  const built = buildJournalPayload(run, 'ended', 'deadbeef')
-  assert.ok(built.ok, 'a normal 8-week run must be uploadable')
-  assert.ok(built.bytes > 0 && built.bytes < MAX_JOURNAL_BYTES, `${built.bytes} bytes`)
-  assert.strictEqual(built.payload.entries, run.journal!.length)
-  assert.strictEqual(built.payload.sector, 'saas')
-  assert.strictEqual(built.payload.mode, 'quick')
-})
-await ok('the company name is nowhere in the payload — not in the header, not anywhere', () => {
-  const built = buildJournalPayload(run, 'ended', 'deadbeef')
-  assert.ok(built.ok)
-  const json = JSON.stringify(built.payload)
-  assert.ok(!json.includes('Hyperloop'), 'the company name was uploaded')
-  assert.ok(!json.toLowerCase().includes('cats'), json.slice(0, 400))
-  assert.strictEqual((built.payload.header as { companyName: string }).companyName, REDACTED_COMPANY)
-})
-await ok('REDACTING THE NAME DOES NOT BREAK THE REPLAY — the canary on the whole redaction', () => {
-  // If the company name ever starts feeding an outcome, this goes red rather than the uploaded
-  // journals quietly ceasing to reproduce the runs they came from.
-  const built = buildJournalPayload(run, 'ended', 'deadbeef')
-  assert.ok(built.ok)
-  const redacted = replayRun(built.payload.header as ReturnType<typeof headerOf>, built.payload.journal)
-  assert.strictEqual(
-    stateFingerprint(redacted),
-    stateFingerprint(run),
-    'the redacted header replays to a different run — the name now affects the simulation',
-  )
-  assert.strictEqual(built.payload.fingerprint, String(stateFingerprint(run)))
-})
-await ok('building the payload does not touch the run it is given', () => {
-  const before = JSON.stringify(run)
-  const fp = stateFingerprint(run)
-  buildJournalPayload(run, 'abandoned', 'deadbeef')
-  buildJournalPayload(run, 'ended', 'deadbeef')
-  assert.strictEqual(JSON.stringify(run), before, 'analytics mutated the game state')
-  assert.strictEqual(stateFingerprint(run), fp)
-})
-await ok('a run with no journal is refused, and says which problem it is', () => {
-  const arena = playedRun(3)
-  delete arena.journal
-  assert.deepStrictEqual(buildJournalPayload(arena, 'ended', 'x'), { ok: false, reason: 'no_journal' })
-})
-await ok("a journal past the WRITER's ceiling is refused, using the writer's own constant", () => {
-  const fat = playedRun(1)
-  fat.journal = Array.from({ length: JOURNAL_LIMIT + 1 }, () => ({ w: 1, a: 'advance' as const }))
-  assert.deepStrictEqual(buildJournalPayload(fat, 'ended', 'x'), { ok: false, reason: 'too_large' })
-  // exactly at the ceiling is still honest input, and must not be refused for length…
-  const atLimit = playedRun(1)
-  atLimit.journal = Array.from({ length: JOURNAL_LIMIT }, () => ({ w: 1, a: 'advance' as const }))
-  const r = buildJournalPayload(atLimit, 'ended', 'x')
-  // …though 20,000 entries blow the BYTE cap, which is the second axis and the one that protects
-  // storage. Either way it is dropped, never truncated.
-  assert.ok(!r.ok && r.reason === 'too_large', JSON.stringify(r).slice(0, 200))
-})
-await ok('the byte cap bites independently of the entry count', () => {
-  // Well inside JOURNAL_LIMIT (4,000 of 20,000 entries) and under the per-string tripwire, but
-  // roughly 440 KB of JSON — the entry count alone would have waved this straight through.
-  const fat = playedRun(1)
-  fat.journal = Array.from({ length: 4_000 }, () => ({ w: 1, a: 'advance' as const, p: { v: 'x'.repeat(90) } }))
-  assert.ok(fat.journal.length < JOURNAL_LIMIT, 'precondition: the entry cap is NOT what refuses this')
-  const r = buildJournalPayload(fat, 'ended', 'x')
-  assert.ok(!r.ok && r.reason === 'too_large', JSON.stringify(r).slice(0, 200))
-})
-await ok('the free-text tripwire refuses a journal carrying a long string', () => {
-  const sneaky = playedRun(2)
-  sneaky.journal = [{ w: 1, a: 'advance' }, { w: 1, a: 'pivot', p: { note: 'x'.repeat(200) } }]
-  assert.deepStrictEqual(buildJournalPayload(sneaky, 'ended', 'x'), { ok: false, reason: 'unsafe_payload' })
-  // and the honest direction: the payloads the registry actually writes are all short and pass
-  const honest = buildJournalPayload(playedRun(4), 'ended', 'x')
-  assert.ok(honest.ok, 'a real run must not trip the tripwire')
-})
-await ok('the run key is deterministic per run+reason, and the nonce is what separates players', () => {
-  const a = buildJournalPayload(run, 'ended', 'aaaa')
-  const b = buildJournalPayload(run, 'ended', 'aaaa')
-  const c = buildJournalPayload(run, 'abandoned', 'aaaa')
-  const d = buildJournalPayload(run, 'ended', 'bbbb')
-  assert.ok(a.ok && b.ok && c.ok && d.ok)
-  assert.strictEqual(a.payload.run_key, b.payload.run_key, 'a retry must dedupe, not spam')
-  assert.notStrictEqual(a.payload.run_key, c.payload.run_key)
-  assert.notStrictEqual(a.payload.run_key, d.payload.run_key, 'two players must not collide')
-  assert.ok(a.payload.run_key.length <= 96)
-})
-
-// ============================================================================================
-console.log('\n--- 5. weeks, not minutes: the heartbeat cadence ---')
+console.log('\n--- 4. weeks, not minutes: the heartbeat cadence ---')
 // ============================================================================================
 
 await ok('the first five weeks each get a heartbeat — that is where players quit', () => {
@@ -485,7 +406,7 @@ await ok('a run abandoned in week 3 has ALREADY been measured — the point of t
 })
 
 // ============================================================================================
-console.log('\n--- 6. the game is untouched ---')
+console.log('\n--- 5. the game is untouched ---')
 // ============================================================================================
 
 await ok('two identical runs stay identical whether or not analytics reads them', () => {
@@ -493,7 +414,6 @@ await ok('two identical runs stay identical whether or not analytics reads them'
   const b = playedRun(12)
   const fp = stateFingerprint(a)
   events.runEnded({ mode: 'quick', format: 'standard', sector: 'saas', week: a.week }, { ending: 'timeup', weeks: a.week, score: 0, verified: 'verified' })
-  buildJournalPayload(a, 'ended', 'x')
   assert.strictEqual(stateFingerprint(a), fp)
   assert.strictEqual(stateFingerprint(a), stateFingerprint(b))
 })

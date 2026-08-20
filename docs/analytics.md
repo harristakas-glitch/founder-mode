@@ -1,20 +1,24 @@
 # Founder Mode — product analytics
 
-**Added:** 2026-08-20 · **Status:** implemented, **switched off**, one line away from being on.
+**Added:** 2026-08-20 · **Status:** implemented and **live**.
 **Code:** `src/analytics/` · **Tests:** `test/analytics.test.ts`, `test/csp.test.ts`
-**Server side:** `supabase/run-journals-v1.sql`
+**Server side:** none. Events go to PostHog and nowhere else.
 
 ---
 
 ## The one thing to know first
 
-**Nothing is being collected right now.** `src/analytics/config.ts` ships a placeholder key, so the
-whole layer is inert: no network call, no storage write, no consent prompt, and `posthog-js` is
-never even downloaded — the dynamic import is not reached. `test/analytics.test.ts` §1 asserts that
-with real traps on `fetch`, `XMLHttpRequest`, `sendBeacon` and `Image`, all of which must read zero
-after every event in the module has been fired.
+**This is on.** `src/analytics/config.ts` holds a real project key, so events are being sent — no
+cookie, no account, no person profile, and nothing a player typed. **Nobody is asked anything:**
+there is no consent banner. The default is the anonymous middle state and the only control is one
+tick box in the Field Guide footer.
 
-To switch it on, see [Switching it on](#switching-it-on). It is one string.
+The strong claim, and it is tested rather than promised: **untick that box and the vendor SDK is
+never even downloaded.** `test/analytics.test.ts` §1 fires every event in the module with real traps
+on `fetch`, `XMLHttpRequest`, `sendBeacon` and `Image`, and asserts all four read zero and that the
+dynamic `import('posthog-js')` was never reached. That claim used to hold because the committed key
+was a placeholder; the key is real now, so it is anchored to the off switch instead — which is the
+version that protects anybody.
 
 ---
 
@@ -70,8 +74,6 @@ Twelve events. One named function per event in `src/analytics/events.ts` — the
 | `feature_used` | first use of a system, per run | run properties, `feature` | Does anyone pivot / experiment / tokenise / raise / IPO / take debt / acquire / open the guide? |
 | `note_seen` | an onboarding note was delivered | run properties, `concept` | Are the founder's notes read? |
 | `notes_toggled` | the notes switch moves in the Field Guide | `notes_enabled` | Are they switched off? |
-| `analytics_consent_set` | the player says **yes** | `consent: 'granted'` | ops |
-| `run_journal_uploaded` | a journal upload lands or fails | `reason`, `entries`, `bytes`, `ok` | ops — so an empty table can be diagnosed |
 
 "Run properties" throughout: `mode`, `format`, `sector`, `scenario`, `career`, `week`, `screen`,
 `stage`, `employees`, `users`, `cash`, `revenue`, `pmf`, `pivots`, `tokenised`.
@@ -121,48 +123,51 @@ Three states. The record lives under its **own** localStorage key, `fm-analytics
 inside the game save — clearing your game does not silently re-consent you, and a corrupt or absent
 record reads as the *most private* state, never as consent.
 
-| State | What happens | Persistent id? | Journal upload? |
+| State | What happens | Cookie? | Person profile? |
 |---|---|---|---|
-| **`unset`** (default) | Events are sent **anonymously**: `persistence: 'memory'`, `person_profiles: 'never'`. Nothing is written to the device; the id PostHog generates dies with the tab. | No | No |
-| **`granted`** | Persistence moves to localStorage+cookie and person profiles come on. | Yes — a random one, never the leaderboard's | Yes |
-| **`denied`** | Nothing at all. `capture()` returns before a client is constructed. | No | No |
+| **`unset`** (default, and what everybody gets) | Events are sent **anonymously**: `persistence: 'localStorage'`, `person_profiles: 'never'`. A random number is kept in this browser's own storage so a second visit is not counted as a stranger. | No | No |
+| **`denied`** (the tick box, unticked) | Nothing at all. `capture()` returns before a client is constructed, the stored id is cleared, and `posthog-js` is never downloaded. | No | No |
+| **`granted`** | Adds a cookie and person profiles. **Unreachable — nothing in the interface can set it.** Kept, with its tests, because the deferred run-journal upload is what would need it. | Yes | Yes |
 
 ### Why anonymous-by-default, and not silence-by-default
 
 This is the design decision worth arguing about, so here is the argument.
 
-Retention is the only one of the four questions that needs a persistent identifier, and in the EU
-storing an identifier for analytics generally needs consent. Sending anonymous events that store
-nothing on the device does not — there is no terminal-equipment access to consent to.
+If the default were silence, a prompt would be the only source of data — and a prompt is answered by
+the people who bother to answer prompts. Everyone who abandons in week 3, the most important
+population in the dataset and the whole reason `run_progress` exists, would be invisible by
+construction. The layer would measure survivors and report that the game is more engaging than it
+is. That is precisely the failure this instrumentation was built to avoid.
 
-If the default were silence, the consent prompt would be the only source of data, and the prompt is
-only shown to somebody who has **finished a run**. Everyone who abandons in week 3 — the most
-important population in the whole dataset, and the reason `run_progress` exists — would be invisible
-by construction. The layer would measure survivors and report that the game is more engaging than it
-is. That is the exact failure the instrumentation was built to avoid, so the default collects, and
-collects without an identifier.
-
-The honest cost, stated: in anonymous mode PostHog's "unique users" counts **app opens**, not
-people. Treat that number as arrivals, not humans.
+**The device id, and why it exists.** This shipped briefly as `persistence: 'memory'`, which writes
+nothing to the device at all. That is the purest option and it makes **retention unmeasurable**: an
+id that dies with the tab means every returning player arrives as a stranger, and PostHog's "unique
+users" counts app opens rather than people. Retention is one of the four questions this feature was
+built to answer, so a design that cannot answer it is not more private — it is broken with a good
+excuse. A random number in this browser's own localStorage, tied to no account, sent on no other
+request, readable by no other site and erased by the tick box, is the smallest thing that makes the
+question answerable. `test/analytics.test.ts` §2 asserts the mapping: no cookie, no person profile.
 
 ### When the player is asked
 
-**Once, ever, after their first finished run.** Not on arrival: a banner at the door is a toll on a
-game nobody has played yet, it is answered by reflex, and it teaches players to dismiss the
-interface. Somebody who has just finished a run knows what they are being asked about.
+**Never.** There is no prompt, on arrival or anywhere else. A banner at the door is a toll on a game
+nobody has played yet, it is answered by reflex, and it teaches players to dismiss the interface —
+and the thing it would be asking permission for is a random number in their own browser.
 
-Closing the prompt without answering counts as an answer — it means "stop asking me" — so it never
-returns. Anyone who changes their mind uses the Field Guide.
+`shouldAskConsent()` and `markAsked()` still exist in `src/analytics/consent.ts` and nothing calls
+them. That is deliberate: they are the hooks a future prompt would use if the run-journal upload
+(BACKLOG.md) is ever built, since uploading a run genuinely does need asking.
 
 ### How a player opts out
 
-**Field Guide → footer → "Play data".** Two checkboxes, matching the three states above:
+**Field Guide → footer → "Play data".** One checkbox:
 
 - **Anonymous play data — on/off.** Unticking it sets `denied` and **stops collection in the same
   tick**: `analyticsActive()` is consulted on every capture, so the next event is refused before a
   client is even constructed, and the stored id is cleared and the SDK opted out behind it. There is
   no "takes effect on next reload".
-- **Remember this browser.** Ticking it grants; unticking returns to anonymous.
+One box, not two: the model has three states but only two are reachable, and a tick box wired to
+nothing is worse than no tick box.
 
 The row renders nothing at all while the key is a placeholder — a privacy control for a system that
 collects nothing is worse than no control, because it implies collection is happening.
@@ -171,36 +176,30 @@ collects nothing is worse than no control, because it implies collection is happ
 being asked a question it has answered.
 
 **Known limitation:** the Field Guide is only reachable during a run, so the switch is not available
-on the start screen. Consent can only ever be *granted* after a finished run, so nobody can be stuck
-"remembered" without a way back — but a player who wants to disable even the anonymous mode has to
-start a run to do it. Worth moving if anybody asks.
+on the start screen. Nobody can be stuck in a state they cannot leave — `granted` is unreachable, so
+the worst case is anonymous — but a player who wants to switch off even that has to start a run to
+do it. Worth moving to the start screen if anybody asks.
 
 ---
 
-## The run-journal upload
+## The run-journal upload — deferred, not abandoned
 
-The part no vendor can give us. The game is deterministic, and `src/game/replay.ts` records a
-complete, replayable action journal for every solo run — about 4 KB for a 90 weeks. Uploading
-finished and abandoned runs means **any** metric can be computed retroactively, including questions
-nobody has thought of yet, without having instrumented them in advance.
+The part no vendor can give us, and the one piece of the original design that is **not shipped**.
 
-- **Behind the same consent gate.** Granted only.
-- **Goes to the existing Supabase project**, so `connect-src` needed no further change.
-- **Table:** `public.run_journals`, created by `supabase/run-journals-v1.sql`.
-- **The company name is replaced with `redacted`** before upload — and the redacted header replays
-  to the *same fingerprint* as the run it came from, which a test asserts. If the name ever starts
-  feeding an outcome, that test goes red rather than every uploaded journal quietly ceasing to
-  reproduce its own run.
-- **Insert-only for `anon` and `authenticated`**, with a **column-level** grant: no select, no
-  update, no delete, and a client cannot name `id` or `created_at` (so it cannot backdate a row).
-- **Bounded on both axes**: 20,000 entries (`JOURNAL_LIMIT`, the client's own constant, reused
-  rather than re-invented) and 256 KB. Over either, the payload is **dropped, never truncated** — a
-  truncated journal replays to a desync and would read as tampering.
-- Reading it: `select * from private.run_journal_summary limit 50;` in the SQL editor.
+The game is deterministic and `src/game/replay.ts` already records every decision a player makes, so
+a finished run can be uploaded as a journal and replayed exactly — turning "players quit around week
+12" into "here are four hundred runs that died in week 12, replay them and watch what they all did".
+No analytics vendor can offer that, because it needs the simulation.
 
-Nothing prunes old rows. At 4 KB a run this is small for a long time, but it is not self-limiting;
-the script's §7 has the `delete … where created_at < now() - interval '180 days'` when it stops
-being small.
+It was built (client, Supabase schema, RLS, self-test, redaction of the company name, a 256 kB
+payload ceiling matched on both sides) and then deliberately left out of this release, because it
+is a bigger decision than instrumentation: it needs a new Supabase table, a real consent prompt —
+uploading somebody's run genuinely does require asking — and a retention policy for the data.
+
+**It is not lost.** The complete implementation is on branch `worktree-agent-a2853745c13a521f7`,
+commit `be69eae`, along with `supabase/run-journals-v1.sql` and its tests. `BACKLOG.md` carries the
+item. The consent model kept its unreachable `granted` state, and its tests, precisely so that
+picking this up later does not mean rebuilding the state machine underneath it.
 
 ---
 
@@ -223,55 +222,30 @@ dials it, because a policy whose shape depends on a feature flag is one nobody c
 
 ## Switching it on
 
-### 1. The client — one line
+### It is already on
 
-In `src/analytics/config.ts`, replace the placeholder with your project key
-(PostHog → Settings → Project → **Project API Key**, the one starting `phc_`):
-
-```ts
-export const POSTHOG_KEY = 'phc_your_real_key_here'
-```
-
-That is the whole activation. Redeploy. Nothing else in the repo changes, and `analyticsConfigured`
-flips the entire layer on.
+`src/analytics/config.ts` holds the project key. There is nothing to run, nothing to paste and no
+SQL: this feature has no server side. `supabase/leaderboard-v6.sql` remains the only SQL file in the
+repo and is unrelated — see `LEADERBOARD-SETUP.md`.
 
 > The key is publishable by design — it can send events and do nothing else — which is why it lives
 > in plain text next to the Supabase anon key rather than in an env var this repo does not use and
-> GitHub Pages could not read.
+> GitHub Pages could not read. A `phx_` **personal** key is a different thing entirely and must
+> never be committed.
 
-**Use an EU project.** `POSTHOG_HOST` is `https://eu.i.posthog.com` and `test/csp.test.ts` asserts
-it stays in the EU. A US project key pointed at the EU host will simply not work.
+**It is an EU project.** `POSTHOG_HOST` is `https://eu.i.posthog.com` and `test/csp.test.ts` asserts
+it stays in the EU. A US project key pointed at the EU host would simply not work.
 
-### 2. The run-journal table — optional, one paste
-
-Only if you want run journals as well as events. Supabase dashboard → SQL Editor → New query →
-paste **`supabase/run-journals-v1.sql`** → Run.
-
-Success looks like a notice reading:
-
-```
-run_journals v1 self-test passed: anon AND authenticated can upload finished and abandoned runs;
-read/update/delete/backdate/oversize/empty/miscounted/prose all refused; an unknown future sector
-still uploads
-```
-
-Failure raises with a list of exactly which cases came out wrong — send that on rather than editing
-the file until it passes. Either way the self-test leaves no fixture rows behind.
-
-**Order:** `supabase/leaderboard-v6.sql` is still the one to run first and is unrelated to this; see
-`LEADERBOARD-SETUP.md`. Skipping the run-journals script costs nothing — the client's upload refuses
-and the game is unaffected.
-
-### 3. Worth doing in the PostHog project, once
+### Worth doing in the PostHog project, once
 
 - **Set a billing cap.** The anon-key situation applies here too: the ingest key is public, and
   nothing in a client can rate-limit itself. The free tier's event allowance is the real protection
   until it is not.
-- **Optionally enable "cookieless mode"** in project settings and set `cookieless_mode: 'on_reject'`
-  in `src/analytics/client.ts`. It replaces the memory-persistence anonymous mode with a
-  server-side privacy-preserving hash, which counts unique *visitors* honestly instead of counting
-  app opens. It is deliberately not the default because it needs that project setting, and
-  activation was meant to be one line.
+- **Consider "cookieless mode"** in project settings, with `cookieless_mode: 'on_reject'` in
+  `src/analytics/client.ts`. It would replace the localStorage device id with a server-side
+  privacy-preserving hash — the same retention answer with nothing kept on the device at all. Not
+  the default because it needs that project setting switched on first, and because the current
+  mode is already cookieless and profile-free.
 
 ---
 
@@ -279,14 +253,28 @@ and the game is unaffected.
 
 | | Before | After |
 |---|---|---|
-| Entry chunk | 953,351 B (295.9 kB gzip) | 966,960 B (300.6 kB gzip) |
-| `posthog-js` | — | 137.9 kB in **its own** lazily-loaded chunk (45.3 kB gzip), never in the entry bundle and not in the service worker's precache |
+| Entry chunk | 953,351 B (295.9 kB gzip) | 961,784 B (299.0 kB gzip) |
+| `posthog-js` | — | 137,913 B in **its own** lazily-loaded chunk (45.3 kB gzip), never in the entry bundle, and not downloaded at all for a player who has switched it off |
 | `npm run bots` | md5 `8f02371197bf090c1111b76270f3f9c4` | **identical** |
 | `test/csp.test.ts` | 18 assertions | 22 |
-| `test/analytics.test.ts` | — | 41 |
+| `test/analytics.test.ts` | — | 32 |
 
-The +13.6 kB in the entry chunk (+1.4%) is the analytics module itself — the consent record, the
-allowlist, the watcher and the two small UI surfaces. The SDK is not in it.
+The +8.4 kB in the entry chunk (+0.9%) is the analytics module itself — the consent record, the
+allowlist, the watcher and the one UI control. The SDK is not in it. The `slim.no-external` build is
+used deliberately: it is roughly half the size of the default bundle and it is structurally
+incapable of loading a remote script.
+
+**Verified in a browser, not inferred.** Built and served at `localhost:4173`:
+
+- zero CSP violations on a fresh load
+- the SDK initialises with a random UUID `distinct_id`, `$user_state: "anonymous"`, and
+  `document.cookie` **empty**
+- `POST https://eu.i.posthog.com/e/` → **200**
+- with consent set to `denied` and the page reloaded: the SDK chunk is **not downloaded**, there are
+  **zero** requests to posthog, **zero** posthog storage keys, and no cookies
+
+That last one is the claim worth re-checking if anything here is ever refactored: switching it off
+has to stop the download, not merely silence it.
 
 **Analytics reads game state and never writes it.** `git diff main -- src/game/` is empty, the
 golden traces in `test/modes.test.ts` are untouched, and `npm run bots` is byte-identical.

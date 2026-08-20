@@ -1,5 +1,7 @@
-// The PostHog client: lazily constructed, consent-aware, and unable to reach the network until
-// somebody has replaced the placeholder key in ./config.ts.
+// The PostHog client: lazily constructed, consent-aware, and unable to reach the network at all
+// while a player has the Field Guide's "Play data" box unticked. The project key in ./config.ts is
+// real, so being off is no longer the default state of the world — it is something the player did,
+// and this file is what has to honour it.
 //
 // LAZY, AND FOR A MEASURED REASON. The entry chunk was deliberately cut by splitting
 // @supabase/supabase-js out of it (src/net/online.ts, src/net/leaderboard.ts) and the canvas share
@@ -41,21 +43,45 @@ let clientPromise: Promise<PostHog> | null = null
  * record flips to 'denied' the next capture returns here, before the promise is touched.
  */
 export function analyticsActive(): boolean {
-  return analyticsConfigured && collectionEnabled()
+  return activeGate(analyticsConfigured, collectionEnabled())
+}
+
+/**
+ * The gate above, as a pure function of its two inputs, so both terms can be asserted.
+ *
+ * Same reasoning as `uploadGate` had: a predicate whose terms cannot be varied is a predicate whose
+ * terms can silently stop mattering. This one now carries more weight than it used to. Until the
+ * project key was filled in, `analyticsConfigured` was false and EVERY inertness claim in
+ * test/analytics.test.ts held for that one reason — delete the consent term and the suite would
+ * not have noticed. The key is real now, so `collectionEnabled()` is the only thing standing
+ * between a player who has unticked the box and a vendor SDK, and it is asserted on its own here.
+ */
+export function activeGate(configured: boolean, collecting: boolean): boolean {
+  return configured && collecting
 }
 
 /**
  * Two personalities, one library.
  *
- *   anonymous (consent 'unset') — `persistence: 'memory'` writes NOTHING to the device: no cookie,
- *     no localStorage, no sessionStorage. The distinct id posthog generates lives in a variable
- *     and dies with the tab. `person_profiles: 'never'` stamps `$process_person_profile: false` on
- *     every event, so ingestion builds no profile to attach anything to. The cost is honest and
- *     worth stating: PostHog's "unique users" in this mode counts APP OPENS, not people.
+ *   anonymous (consent 'unset') — THE SHIPPED DEFAULT. `persistence: 'localStorage'` keeps a
+ *     random device id in this browser's own storage and NO COOKIE: nothing is sent on any other
+ *     request, nothing is readable by another site, and clearing site data or unticking the box in
+ *     the Field Guide erases it. `person_profiles: 'never'` stamps `$process_person_profile: false`
+ *     on every event, so ingestion builds no profile to attach anything to.
  *
- *   consented (consent 'granted') — persistence moves to localStorage+cookie and person profiles
- *     come on. That is the whole of what consent buys, and it is the only thing that makes the
- *     retention question answerable.
+ *     THE DELIBERATE CHANGE, and the trade it makes. This started as `persistence: 'memory'`, which
+ *     writes nothing at all — the purest option, and it makes RETENTION UNMEASURABLE, because an id
+ *     that dies with the tab means every returning player arrives as a stranger and "unique users"
+ *     counts app opens rather than people. Retention is one of the four questions this feature was
+ *     built to answer, so a design that cannot answer it is not more private, it is broken with a
+ *     good excuse. A random number in this device's own localStorage, tied to no account, no
+ *     cookie and no profile, is the smallest thing that makes the question answerable.
+ *
+ *   consented (consent 'granted') — persistence adds a cookie and person profiles come on. NOT
+ *     REACHABLE IN THE SHIPPED UI: there is no prompt, and the Field Guide offers only on/off. The
+ *     state is kept because the run-journal upload (BACKLOG.md) is what would need it, and because
+ *     deleting a tested state machine to re-derive it later is how the leaderboard got six SQL
+ *     scripts.
  *
  * NOT USED, ON PURPOSE: the leaderboard's `founder-mode-player-id`. It exists because a player
  * opted into a leaderboard; reusing it to key analytics would silently repurpose an identifier the
@@ -67,10 +93,13 @@ export function analyticsActive(): boolean {
  * which this suite cannot do — and an untestable privacy claim is the kind that turns out to be
  * false eighteen months later.
  */
-export function modeConfig(): { persistence: 'memory' | 'localStorage+cookie'; person_profiles: 'never' | 'always' } {
+export function modeConfig(): {
+  persistence: 'localStorage' | 'localStorage+cookie'
+  person_profiles: 'never' | 'always'
+} {
   return consentGranted()
     ? { persistence: 'localStorage+cookie', person_profiles: 'always' }
-    : { persistence: 'memory', person_profiles: 'never' }
+    : { persistence: 'localStorage', person_profiles: 'never' }
 }
 
 function getClient(): Promise<PostHog> | null {
@@ -171,8 +200,10 @@ export function capture(event: string, props?: EventProps, options?: { beacon?: 
  * Has a vendor client ever been constructed in this page?
  *
  * Exported for test/analytics.test.ts, which uses it to assert the strongest form of the inertness
- * property: with the placeholder key in place, no number of captures causes the dynamic
+ * property: with collection switched off, no number of captures causes the dynamic
  * `import('posthog-js')` to be reached at all — the SDK is not merely silent, it is not present.
+ * That anchor moved when the project key was filled in: the claim used to hold because nothing was
+ * configured, and now it holds because the player said no, which is the version that matters.
  */
 export function clientConstructed(): boolean {
   return clientPromise !== null

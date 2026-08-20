@@ -351,12 +351,6 @@ The global leaderboard has never accepted a real score. One paste fixes it.
 3. Press **Run**.
 
 **That is the only SQL file in the repo.** There is nothing to run before it and nothing after it.
-
-> **Amendment, 2026-08-20.** No longer literally true, and left standing rather than rewritten
-> because this review is a record of a date. `supabase/run-journals-v1.sql` was added with product
-> analytics (`docs/analytics.md`). It is optional, it does not touch `daily_scores`, and skipping it
-> costs nothing. The sentence above still holds for everything in *this* section: for the
-> leaderboard, `leaderboard-v6.sql` is the one to run, and it is still the first thing to do.
 It creates the table as well as securing it, so it is correct on a fresh project and on the
 existing one, and it is idempotent — running it twice is harmless.
 

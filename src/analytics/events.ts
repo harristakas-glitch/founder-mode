@@ -172,21 +172,7 @@ export function notesToggled(p: { notes_enabled: boolean }): SentProps {
 
 // ---------- ops ----------
 
-/**
- * The player answered the consent question.
- *
- * Only ever sent on the GRANT path. A refusal is not an occasion to send an event about the
- * refusal — that would be collecting data about someone who has just said no, which is the exact
- * thing they said no to. The 'denied' case is recorded on their own device and nowhere else.
- */
-export function consentGrantedEvent(): SentProps {
-  return capture('analytics_consent_set', { consent: 'granted' })
-}
 
-/** A run journal was uploaded (or refused). Lets an empty table be diagnosed without guessing. */
-export function runJournalUploaded(p: { reason: RunStopReason; entries: number; bytes: number; ok: boolean }): SentProps {
-  return capture('run_journal_uploaded', p)
-}
 
 /**
  * Which weeks get a heartbeat. Exported so test/analytics.test.ts can pin the cadence rather than

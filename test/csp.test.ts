@@ -12,7 +12,7 @@ import assert from 'node:assert'
 const { buildContentSecurityPolicy } = await import('../src/csp')
 const { safeErrorText, MAX_ERROR_TEXT, SAVE_KEYS } = await import('../src/ErrorBoundary')
 const { SUPABASE_URL } = await import('../src/net/config')
-const { POSTHOG_HOST, analyticsConfigured } = await import('../src/analytics/config')
+const { POSTHOG_HOST, POSTHOG_KEY, analyticsConfigured } = await import('../src/analytics/config')
 
 let passed = 0
 const ok = (name: string, fn: () => void) => {
@@ -104,7 +104,7 @@ await ok('connect-src reaches Supabase over wss — Realtime, i.e. the whole Are
   assert.ok(directive(policy, 'connect-src').includes(`wss://${host}`), directive(policy, 'connect-src'))
 })
 await ok('connect-src reaches the PostHog EU ingest host — the analytics half of the app', () => {
-  // Named unconditionally, even while `analyticsConfigured` is false and nothing ever dials it:
+  // Named unconditionally, and now genuinely dialled — see docs/analytics.md:
   // a policy whose shape depends on a feature flag is one nobody can review, and the flag flip
   // (replacing one placeholder string) must not silently change the security posture too.
   assert.ok(directive(policy, 'connect-src').includes(new URL(POSTHOG_HOST).origin), directive(policy, 'connect-src'))
@@ -157,10 +157,20 @@ await ok('an unrelated origin is not reachable under the shipped policy', () => 
   // at all. The list stays exact so that a fifth entry still fails here.
   assert.deepStrictEqual(sources, ["'self'", `https://${host}`, `wss://${host}`, new URL(POSTHOG_HOST).origin])
 })
-await ok('the game ships with analytics OFF, so the policy is the only trace of it', () => {
-  // If this ever fails it is not a bug in the policy — it means a real project key was committed.
-  // That is a decision, not an accident, and it should be made on purpose: see docs/analytics.md.
-  assert.strictEqual(analyticsConfigured, false, 'a real PostHog key is committed in src/analytics/config.ts')
+await ok('the committed key is a PUBLISHABLE project key, never a personal one', () => {
+  // This assertion was inverted on purpose, 2026-08-20. It used to read `analyticsConfigured ===
+  // false` — a tripwire saying "switching analytics on is a decision, make it deliberately". The
+  // decision was made, so the tripwire now guards the thing that is actually dangerous.
+  //
+  // `phc_` is a PROJECT key: publishable, write-only, meant to be readable by every visitor, and
+  // exactly as safe to commit as the Supabase anon key next to it. `phx_` is a PERSONAL API key —
+  // it can READ the whole project and administer it, and committing one to a public repo is a
+  // credential leak, not a configuration choice. They differ by one character and they sit next to
+  // each other in the PostHog UI, which is precisely why a machine checks rather than a human.
+  assert.strictEqual(analyticsConfigured, true, 'analytics is switched on — see docs/analytics.md')
+  assert.ok(POSTHOG_KEY.startsWith('phc_'), 'a PostHog project key starts with phc_')
+  assert.ok(!POSTHOG_KEY.startsWith('phx_'), 'phx_ is a PERSONAL API key and must never be committed')
+  assert.ok(!/\s/.test(POSTHOG_KEY) && POSTHOG_KEY.length > 20, 'malformed key')
 })
 
 console.log('\n--- 5. a render crash is recoverable, and does not leak the stack ---')
