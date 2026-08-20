@@ -11,7 +11,7 @@
 import { Target, X } from 'lucide-react'
 import { Meter } from './components'
 import { demandSignal, pmfLabel } from './game/engine'
-import { PMF_LABEL, segmentSnapshots } from './game/career/pmf'
+import { PMF_LABEL, primaryLossDiagnosis, segmentSnapshots } from './game/career/pmf'
 import { sectorById } from './game/data'
 import { careerActive } from './CareerUI'
 import { openGuide } from './onboarding/guide'
@@ -63,6 +63,41 @@ export function FitPeek({ onClose }: { onClose: () => void }) {
                 <span className="w-10 shrink-0 text-right text-[13px] font-bold tnum">{Math.round(row.score)}</span>
               </div>
             ))}
+            {(() => {
+              // Churn with reasons (simulation-depth §4): the same five terms the weekly keep-rate
+              // multiplies, attributed — so the drawer answers "why are they leaving" and not just
+              // "how many". The share rule is stated in resolveCohortRetentionBreakdown's docblock.
+              const diag = primaryLossDiagnosis({ career: game.career!, sector: game.sector, quality: game.quality, bugs: game.bugs })
+              if (!diag) return null
+              const NAME: Record<string, string> = {
+                segment: 'who this segment is — their own ceiling',
+                product: 'product fit — what you built vs what they need',
+                price: 'price fit — what you charge vs what they bear',
+                bugs: 'reliability — the bugs',
+                novelty: 'novelty — new cohorts churn before they settle',
+              }
+              const order = (Object.entries(diag.breakdown.causes) as [string, number][]).sort((a, b) => b[1] - a[1])
+              return (
+                <div className="mt-1 rounded-lg border border-line/70 bg-surface2 px-3.5 py-2.5">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-mut">Where the churn comes from</div>
+                  <div className="mt-1 text-[13px] leading-snug">
+                    Mostly <b>{NAME[diag.cause].split(' — ')[0]}</b>
+                    <span className="text-mut"> ({Math.round(diag.share * 100)}% of the loss) — {NAME[diag.cause].split(' — ')[1]}.</span>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {order.map(([k, v]) => (
+                      <div key={k} className="flex items-center gap-2 text-[11.5px]">
+                        <span className="w-16 shrink-0 text-mut">{k}</span>
+                        <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-surface3">
+                          <div className="h-full rounded-full bg-accent" style={{ width: `${diag.breakdown.loss > 0 ? Math.max(2, (v / diag.breakdown.loss) * 100) : 0}%` }} />
+                        </div>
+                        <span className="w-8 shrink-0 text-right tnum text-mut">{Math.round((v / diag.breakdown.loss) * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
             <div className="pt-1 text-[12.5px] leading-snug text-mut">
               PMF here is derived, not set: product work raises quality, quality raises fit for the segment you target, fit raises retention — and
               retained customers are the number.

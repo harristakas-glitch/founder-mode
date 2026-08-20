@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { SUPABASE_ANON_KEY, SUPABASE_URL, onlineConfigured } from './config'
 import { inRoom, myId, resetPlayerId } from './online'
+import { storedReplayProofs } from './replayProof'
 
 export interface DailyScore {
   player_id: string
@@ -179,6 +180,23 @@ export async function submitDailyScore(
     // Fetch-compare: only overwrite an existing row with an equal-or-better score.
     const { data: existing } = await db.from(TABLE).select('score').eq('day', day).eq('player_id', row.player_id).maybeSingle()
     if (existing && existing.score > row.score) return
+
+    // The replay proof rides along when this device recorded one for this day (BACKLOG §3.1: the
+    // client has always built it; the schema could not carry it). Verification stays a READER's
+    // act — carrying the journal makes the row auditable by anyone, it proves nothing by itself.
+    // Two-stage insert because the columns land with leaderboard-v7-proof.sql, which the owner
+    // runs on their own schedule: try with the proof; if the schema does not know the columns yet
+    // (PGRST204 / "column ... does not exist"), submit without them exactly as before.
+    const proof = storedReplayProofs().find((pr) => pr.day === row.day && pr.state === 'verified' && pr.journal)
+    if (proof) {
+      const { error: proofErr } = await db
+        .from(TABLE)
+        .upsert({ ...row, fingerprint: String(proof.fingerprint), journal: { header: proof.header, entries: proof.journal } }, { onConflict: 'day,player_id' })
+      if (!proofErr) return
+      if (!/column|PGRST204|schema/i.test(`${proofErr.code} ${proofErr.message}`))
+        return warn(`score submission rejected: ${proofErr.code ?? '?'} ${proofErr.message}`)
+      // schema predates v7 — fall through to the plain row
+    }
 
     const { error } = await db.from(TABLE).upsert(row, { onConflict: 'day,player_id' })
     if (!error) return

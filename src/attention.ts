@@ -44,6 +44,7 @@ import {
   weeklyBurn,
 } from './game/engine'
 import { hasCapability } from './game/modes'
+import { primaryLossDiagnosis } from './game/career/pmf'
 import { openInteractions } from './game/world/interactions'
 import type { GameState } from './game/types'
 import type { ScreenId } from './store'
@@ -274,10 +275,21 @@ export function attentionRegister(game: GameState): AttentionItem[] {
             id: 'pmf-pace',
             type: 'insight',
             title: `PMF is ${Math.round(game.pmf)} and falling behind`,
-            detail:
-              retention > 0
-                ? `It is read off customers who stay, and only ${Math.round(retention * 100)}% of your target segment is still here after four weeks.`
-                : 'Nothing has retained long enough to measure yet. Research moves your beliefs; only paying customers who stay move PMF.',
+            detail: (() => {
+              if (retention <= 0)
+                return 'Nothing has retained long enough to measure yet. Research moves your beliefs; only paying customers who stay move PMF.'
+              // Churn with reasons: name the dominant cause, so the insight is a diagnosis rather
+              // than a restatement of the number the player is already looking at.
+              const diag = primaryLossDiagnosis({ career, sector: game.sector, quality: game.quality, bugs: game.bugs })
+              const CAUSE: Record<string, string> = {
+                segment: 'this segment churns by nature — consider who you target',
+                product: 'they are leaving over product fit',
+                price: 'they are leaving over price',
+                bugs: 'the bugs are driving them out',
+                novelty: 'new cohorts are churning before they settle',
+              }
+              return `Only ${Math.round(retention * 100)}% of your target segment stays four weeks — ${diag ? CAUSE[diag.cause] : 'and the loss has no single cause'}.`
+            })(),
             action: { label: 'Product', screen: 'discovery' },
           }
         : {

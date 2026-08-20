@@ -627,5 +627,47 @@ console.log('— A standing study is a programme that finishes, not a subscripti
   )
 }
 
+// ---- churn with reasons (simulation-depth §4): the attribution must be honest ----------------
+//
+// The plan's own caution: "if the terms are multiplicative, a share of loss is a modelling
+// choice, not a fact. State the decomposition rule ... and make sure the shares sum to the actual
+// loss, or the screen will quietly lie." These cases are that sentence as assertions.
+{
+  const { resolveCohortRetention: keepOf, resolveCohortRetentionBreakdown: breakdownOf } = await import('../src/game/career/pmf')
+  const truths = [
+    { retentionPotential: 20 }, { retentionPotential: 55 }, { retentionPotential: 90 },
+  ] as never[]
+  let checked = 0
+  let worstResidual = 0
+  for (const truth of truths)
+    for (const productFit of [5, 40, 95])
+      for (const priceFit of [10, 60, 100])
+        for (const bugs of [0, 30, 80])
+          for (const weeksSinceAcquired of [0, 2, 6]) {
+            const args = { truth, productFit, priceFit, bugs, weeksSinceAcquired } as never
+            const b = breakdownOf(args)
+            const scalar = keepOf(args)
+            if (b.keep !== scalar) fails.push(`breakdown.keep drifted from the scalar at ${JSON.stringify(args)}`)
+            const sum = Object.values(b.causes).reduce((a, v) => a + v, 0)
+            const residual = Math.abs(sum - b.loss)
+            worstResidual = Math.max(worstResidual, residual)
+            if (residual > 1e-12) fails.push(`shares do not sum to the loss (off by ${residual}) at ${JSON.stringify(args)}`)
+            for (const [k, v] of Object.entries(b.causes)) if (v < 0) fails.push(`negative share ${k}=${v}`)
+            checked++
+          }
+  ok(checked === 243 && worstResidual <= 1e-12, `churn attribution: ${checked}/243 states — breakdown.keep === scalar keep, shares sum to loss exactly (worst residual ${worstResidual.toExponential(1)}), no negative shares`)
+
+  // monotonicity: worsening ONE factor must not shrink its own share
+  const base = { truth: { retentionPotential: 60 } as never, productFit: 60, priceFit: 60, bugs: 20, weeksSinceAcquired: 6 }
+  const before = breakdownOf(base as never)
+  const worse = breakdownOf({ ...base, bugs: 70 } as never)
+  ok(worse.causes.bugs > before.causes.bugs, 'worsening a factor raises its own attributed share (bugs 20 -> 70)')
+
+  // a perfect state attributes nothing
+  const perfect = breakdownOf({ truth: { retentionPotential: 100 } as never, productFit: 100, priceFit: 100, bugs: 0, weeksSinceAcquired: 6 } as never)
+  const perfectSum = Object.values(perfect.causes).reduce((a, v) => a + v, 0)
+  ok(Math.abs(perfectSum - perfect.loss) <= 1e-12, 'the keep ceiling attributes its residue rather than inventing a cause')
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

@@ -114,7 +114,14 @@ sector.
 
 ---
 
-## 4. Churn with reasons
+## 4. Churn with reasons — SHIPPED 2026-08-21
+
+`resolveCohortRetentionBreakdown` + `primaryLossDiagnosis` in career/pmf.ts; attribution rule
+stated in the docblock and enforced by 243-state tests (shares sum to the realised loss to 1e-12,
+monotone, ceiling residue attributed rather than invented). Surfaced in the global fit peek
+("Where the churn comes from", per-cause bars) and the attention register's career insight, which
+now names the dominant cause instead of restating the number. The scalar tick path is byte-for-byte
+untouched — bots identical. Original spec follows.
 
 **The gap.** Retention is a scalar. `resolveCohortRetention` (career/pmf.ts:534) already receives
 `truth`, `productFit`, `priceFit`, `bugs` and `weeksSinceAcquired` and computes each term — it just

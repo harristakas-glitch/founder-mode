@@ -553,6 +553,98 @@ export function resolveCohortRetention(args: {
   return clamp01(Math.min(0.995, base * fit * price * reliability * honeymoon))
 }
 
+/**
+ * Churn with reasons — docs/simulation-depth-plan.md §4, the first of the four depth features.
+ *
+ * `resolveCohortRetention` computes five terms and collapses them into one keep rate before
+ * anyone can see which one dominated. This returns the same keep rate PLUS the attributed share
+ * of the loss per cause, so retention turns from a number you watch into a problem you diagnose —
+ * "we are losing them on price, not on product".
+ *
+ * THE ATTRIBUTION RULE, stated per the plan's own caution ("if the terms are multiplicative, a
+ * share of loss is a modelling choice, not a fact"): each factor's individual drag is what it
+ * alone subtracts from a perfect keep (max(0, 1 − factor)), and the realised loss is split in
+ * proportion to those drags. This is a linearisation — the true product interaction is not
+ * separable — chosen because it is monotone (a worse factor never gets a smaller share), stable,
+ * and sums EXACTLY to the realised loss by construction, which the test suite enforces. Any
+ * clamp residue (the 0.995 keep ceiling) rides with the proportional split rather than being
+ * invented into a sixth cause.
+ *
+ * Causes: `segment` (the segment's own retention ceiling — who they are), `product` (fit of what
+ * you built), `price` (fit of what you charge), `bugs` (reliability), `novelty` (the honeymoon —
+ * cohorts inside the window churn harder just for being new). Token incentive withdrawal is NOT
+ * here: the career retention path carries no incentive term — that effect lives in the token
+ * module's own economy and would be a fabricated cause on this path.
+ *
+ * PURE READ, new export only — `resolveCohortRetention` is byte-for-byte untouched and the weekly
+ * tick still calls the scalar, which is what keeps `npm run bots` identical.
+ */
+export interface RetentionBreakdown {
+  keep: number
+  loss: number
+  causes: { segment: number; product: number; price: number; bugs: number; novelty: number }
+}
+
+export function resolveCohortRetentionBreakdown(args: {
+  truth: SegmentTruth
+  productFit: number
+  priceFit: number
+  bugs: number
+  weeksSinceAcquired: number
+}): RetentionBreakdown {
+  const { truth, productFit, priceFit, bugs, weeksSinceAcquired } = args
+  const keep = resolveCohortRetention(args)
+  const loss = 1 - keep
+  // the same five terms, recomputed with the same expressions — a drift here is a test failure
+  const factors = {
+    segment: 0.925 + (truth.retentionPotential / 100) * 0.07,
+    product: 0.93 + (productFit / 100) * 0.085,
+    price: 0.95 + (priceFit / 100) * 0.058,
+    bugs: 1 - bugs / 900,
+    novelty: weeksSinceAcquired < RETENTION_WINDOW_WEEKS ? 0.985 : 1.004,
+  }
+  const drags = Object.fromEntries(Object.entries(factors).map(([k, f]) => [k, Math.max(0, 1 - f)])) as Record<
+    keyof typeof factors,
+    number
+  >
+  const totalDrag = Object.values(drags).reduce((a, b) => a + b, 0)
+  const causes = { segment: 0, product: 0, price: 0, bugs: 0, novelty: 0 }
+  if (loss > 0 && totalDrag > 0) {
+    for (const k of Object.keys(causes) as (keyof typeof causes)[]) causes[k] = (drags[k] / totalDrag) * loss
+  } else if (loss > 0) {
+    // every factor at or above 1 yet loss exists (the keep ceiling): the ceiling is the segment's
+    causes.segment = loss
+  }
+  return { keep, loss, causes }
+}
+
+/** The dominant loss cause for the PRIMARY target segment, in the settled (post-honeymoon) state —
+ *  the one-line diagnosis the UI and the advisors speak. Null when there is nothing to lose. */
+export function primaryLossDiagnosis(args: {
+  career: CareerPMFState
+  sector: string
+  quality: number
+  /** GameState.bugs — the career state does not carry it, and a diagnosis that assumed zero would
+   *  blame product or price for churn a buggy build is causing. */
+  bugs: number
+}): { cause: keyof RetentionBreakdown['causes']; share: number; breakdown: RetentionBreakdown } | null {
+  const { career, sector, quality, bugs } = args
+  const truth = career.segmentTruth[career.primaryTargetSegmentId]
+  if (!truth) return null
+  const breakdown = resolveCohortRetentionBreakdown({
+    truth,
+    productFit: segmentProductFit(truth, quality, career.focus, sector, career.primaryTargetSegmentId),
+    priceFit: segmentPriceFit(truth, career.pricing),
+    bugs,
+    weeksSinceAcquired: RETENTION_WINDOW_WEEKS,
+  })
+  if (breakdown.loss <= 0) return null
+  const [cause, share] = (Object.entries(breakdown.causes) as [keyof RetentionBreakdown['causes'], number][]).sort(
+    (a, b) => b[1] - a[1],
+  )[0]
+  return { cause, share: share / breakdown.loss, breakdown }
+}
+
 // ---------- derived PMF ----------
 
 export interface SegmentPmf {

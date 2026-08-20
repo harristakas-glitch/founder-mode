@@ -227,10 +227,12 @@ journal keys entities by index rather than by `uid()`, so the old blocker does n
 replay uses; the results screen reports verified / desync / legacy; the honesty canary (an
 unjournalled mutation must turn verification red) is tested.
 
-**What is left, and it is small:** `daily_scores` has no column to carry the proof, so a player can
-verify their own run and nobody else can check it. Adding `journal jsonb` + `fingerprint text` is
-additive; the client already builds the proof (`src/net/replayProof.ts`) and stores it locally.
-Until then the leaderboard displays unverified numbers.
+**Staged 2026-08-21 — one owner action from closed:** `supabase/leaderboard-v7-proof.sql` adds the
+columns (additive, idempotent, size-capped so the journal column cannot become free blob storage;
+run it AFTER v6). The client now attaches the stored proof to every submission when it has a
+verified one, with a schema-tolerant fallback: until v7 runs, submissions land exactly as before.
+Carrying the proof verifies nothing by itself — it makes every row auditable by any reader, which
+is the honest claim. Run v6 then v7 in the same sitting.
 
 ### 3.2 `display_name` is self-asserted for anonymous players
 A signed-out player can type anyone's handle on **their own** row. They cannot touch anyone
