@@ -12,3 +12,9 @@ Founder Mode.html
 
 # agent worktrees
 .claude/worktrees/
+
+# Local env — the PostHog wizard writes VITE_POSTHOG_KEY here. Never commit env files.
+# This repo does not use env vars at all (see src/analytics/config.ts and src/net/config.ts),
+# so anything landing in .env is either wizard residue or a secret. Both stay out.
+.env
+.env.local

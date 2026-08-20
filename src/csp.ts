@@ -27,19 +27,28 @@
  * EVERY SOURCE BELOW EXISTS FOR A NAMED REASON. Do not add one without a reason, and do not widen
  * script-src at all — test/csp.test.ts fails the build if you do.
  */
-export function buildContentSecurityPolicy(supabaseUrl: string): string {
+export function buildContentSecurityPolicy(supabaseUrl: string, analyticsHost: string): string {
   // Realtime dials wss:// on the same host PostgREST uses, so both are derived from the one
   // constant in src/net/config.ts. Deriving rather than retyping means migrating the Supabase
   // project cannot leave this policy pointing at the old host and silently sever every network
   // call the game makes — a failure that would look exactly like "multiplayer is broken".
   const { origin, host } = new URL(supabaseUrl)
+  // Same rule for the analytics ingest host: derived from POSTHOG_HOST in src/analytics/config.ts,
+  // never retyped, so moving region cannot leave the policy naming the old one.
+  const analyticsOrigin = new URL(analyticsHost).origin
 
   return [
     `default-src 'self'`,
 
-    // No CDN, no analytics, no third-party script of any kind. Vite emits one external module and
-    // that is the whole inventory. No 'unsafe-inline', no 'unsafe-eval', no https: wildcard: with
-    // script-src this tight, an injected <script> has nowhere to load from and nothing to run.
+    // No CDN, no third-party script of any kind. Vite emits one external module and that is the
+    // whole inventory. No 'unsafe-inline', no 'unsafe-eval', no https: wildcard: with script-src
+    // this tight, an injected <script> has nowhere to load from and nothing to run.
+    //
+    // THIS DID NOT WIDEN WHEN ANALYTICS ARRIVED, AND THAT WAS THE CONSTRAINT THE FEATURE WAS BUILT
+    // AROUND. posthog-js is an npm dependency bundled into our own JS by Vite, not a snippet
+    // fetched from a vendor — and specifically the `no-external` build, which contains no
+    // script-injection path at all, so its optional extensions cannot try a CDN <script> that this
+    // directive would then refuse. See the header of src/analytics/client.ts.
     `script-src 'self'`,
 
     // Tailwind compiles to an external stylesheet, so 'self' carries the real UI. 'unsafe-inline'
@@ -55,9 +64,18 @@ export function buildContentSecurityPolicy(supabaseUrl: string): string {
     // for the canvas share card.
     `img-src 'self' https: data: blob:`,
 
-    // The only two network peers that exist anywhere in the app: PostgREST and Auth over https,
-    // Realtime over wss. Anything else the app tries to reach is a bug or an exfiltration attempt.
-    `connect-src 'self' ${origin} wss://${host}`,
+    // The only network peers that exist anywhere in the app: PostgREST and Auth over https,
+    // Realtime over wss, and the PostHog EU ingest endpoint. Anything else the app tries to reach
+    // is a bug or an exfiltration attempt.
+    //
+    // The analytics host is named UNCONDITIONALLY, even though the game ships with a placeholder
+    // key and therefore never contacts it. Two reasons, and they are worth the extra source:
+    // a policy that changes shape depending on a feature flag is a policy nobody can review (the
+    // owner would be turning analytics on and silently altering the security posture in the same
+    // edit), and this is a build-time constant either way — a permitted destination nothing ever
+    // connects to costs exactly nothing. `connect-src` is also the ONLY directive analytics
+    // touched; see the note on script-src above for why it needed no others.
+    `connect-src 'self' ${origin} wss://${host} ${analyticsOrigin}`,
 
     // System fonts only — src/index.css declares no @font-face and imports no font service.
     `font-src 'self'`,

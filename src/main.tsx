@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { AnalyticsLayer } from './analytics/Analytics'
 import { ErrorBoundary } from './ErrorBoundary'
 import './index.css'
 
@@ -10,6 +11,11 @@ createRoot(document.getElementById('root')!).render(
         from the tree's own root. Without this, any render error left a blank page that the
         service worker could serve again on reload — see src/ErrorBoundary.tsx. */}
     <ErrorBoundary>
+      {/* Mounted OUTSIDE <App/> rather than inside it because App returns early for the start
+          screen and the lobby, and a visitor who never starts a run is exactly who "how many
+          people arrive" is about. It renders NOTHING at all — it is a watcher: it reads the store,
+          never writes it, and goes quiet the moment a player unticks the box in the Field Guide. */}
+      <AnalyticsLayer />
       <App />
     </ErrorBoundary>
   </StrictMode>,

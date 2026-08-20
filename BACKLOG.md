@@ -112,6 +112,27 @@ race instead of a binary.
 market, **no time limit**."* Adding a cap contradicts a stated promise, so it's a product call,
 not a bug fix. Alternatives: make it an opt-in "Career mode" toggle, or reword the mode card.
 
+### 2.3 Run-journal upload — built, tested, deliberately not shipped
+The one analytics question no vendor can answer. The game is deterministic and
+`src/game/replay.ts` already records every decision, so a finished run can be uploaded as a
+journal and **replayed exactly** — turning "players quit around week 12" into "here are four
+hundred runs that died in week 12, replay them and watch what they all did".
+
+It exists and it passes its tests: client, Supabase table, RLS, a self-testing SQL script, the
+company name redacted out of the header, a 256 kB payload ceiling enforced on both the writer and
+the reader, and a canary asserting an uploaded journal replays to the **same fingerprint** as the
+run it came from.
+
+**Why it wasn't shipped:** it is a bigger decision than instrumentation. It needs a new Supabase
+table, a real consent prompt — uploading somebody's run genuinely does require asking, unlike an
+anonymous counter — and a retention policy for run data. Shipping analytics did not have to wait
+for those answers.
+
+**Where it is:** branch `worktree-agent-a2853745c13a521f7`, commit `be69eae`, including
+`supabase/run-journals-v1.sql`. The shipped consent model kept its (currently unreachable)
+`granted` state and its tests specifically so this can be picked up without rebuilding the state
+machine underneath it. See `docs/analytics.md`.
+
 ### 2.2 Multiplayer has no jeopardy
 A 52-week Sprint produced **3 bankruptcies per 100 player-runs** — it's a pure score race, with
 relative growth as the only real interaction. That may be exactly right for a short competitive
