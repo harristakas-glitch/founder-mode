@@ -58,6 +58,22 @@ import { standingBreakdown, networkExitPremium } from './game/token/scoring'
 import { organicShare } from './game/token/users'
 import type { GameState } from './game/types'
 
+/**
+ * The five destinations that ARE the game on a phone.
+ *
+ * The rail carries thirteen, which is a reasonable desktop sidebar and far too many for a thumb.
+ * Native convention is about five, so the question is not "which five fit" but "which five is the
+ * player actually in every week": read what the world did (dashboard), clear what is blocking the
+ * turn (inbox), then the two dials they turn most (product, growth). Everything else — team,
+ * hiring, market, finance, fundraising, story, career, and the two career-only screens — lives one
+ * tap away behind More, which is a real destination and not a junk drawer: it carries its own
+ * badge when anything inside it is waiting.
+ *
+ * Kept as ids rather than a second copy of the entries, so NAV stays the single source of labels,
+ * icons and badges and these two lists cannot drift apart.
+ */
+const MOBILE_TABS: ScreenId[] = ['dashboard', 'inbox', 'product', 'growth']
+
 const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'inbox', label: 'Inbox', icon: Mail },
@@ -215,7 +231,7 @@ export default function App() {
 
   if (reconnecting)
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-[100dvh] items-center justify-center">
         <div className="animate-pulse rounded-2xl border border-line bg-surface px-8 py-5 text-[15px] font-semibold">
           Reconnecting to your room…
         </div>
@@ -237,9 +253,16 @@ export default function App() {
     (game.flash?.includes('🏆') || game.flash?.startsWith('🏁') || game.flash?.startsWith('🚀') || false) ||
     (!!game.gameOver && ['unicorn', 'ipo', 'acquired'].includes(game.gameOver.type))
 
-  const nav = (
+  // What is waiting behind More, so the tab can say so without naming a number it cannot fit.
+  // Inbox is excluded on purpose: it is its own tab and carries its own count.
+  const moreWaiting = game.termSheets.length + game.candidates.length
+
+  // One renderer, two callers. The desktop rail shows everything; the phone's More sheet shows
+  // everything that is NOT already a tab, because repeating the four tabs inside the sheet they
+  // sit under is how a "More" menu becomes a list of everything and stops meaning anything.
+  const navList = (omit: readonly ScreenId[] = []) => (
     <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-      {NAV.filter((n) => !n.careerOnly || hasCapability(game, 'hypothesisBoard')).map((n) => {
+      {NAV.filter((n) => (!n.careerOnly || hasCapability(game, 'hypothesisBoard')) && !omit.includes(n.id)).map((n) => {
         const Icon = n.icon
         const active = screen === n.id
         return (
@@ -284,6 +307,7 @@ export default function App() {
       })}
     </nav>
   )
+  const nav = navList()
 
   // One source for the metric strip: the desktop rail and the mobile sheet render the same
   // entries, so a stat can never exist in one and not the other.
@@ -381,7 +405,7 @@ export default function App() {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden">
       {/* sidebar — desktop */}
       <aside className="hidden w-[230px] shrink-0 flex-col border-r border-line/60 bg-gradient-to-b from-bg2 to-bg md:flex">
         <div className="border-b border-line/60 px-4 py-4">
@@ -481,8 +505,11 @@ export default function App() {
       {navOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setNavOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-[260px] flex-col border-r border-line bg-bg2 shadow-[var(--elev-3)] rise-in">
-            <div className="flex items-center justify-between border-b border-line/60 px-4 py-4">
+          {/* A bottom sheet, not a left drawer: it opens from the bar the player just touched, and
+              its contents land under the thumb instead of at the far top-left of the screen. */}
+          <aside className="home-in pad-bottom-safe absolute inset-x-0 bottom-0 flex max-h-[80%] flex-col rounded-t-2xl border-t border-line bg-bg2 shadow-[var(--elev-3)]">
+            <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-line2" />
+            <div className="flex items-center justify-between border-b border-line/60 px-4 py-3">
               <div>
                 <div className="text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
                 <div className="text-xs text-mut">
@@ -498,7 +525,7 @@ export default function App() {
                 <X size={18} />
               </button>
             </div>
-            {nav}
+            {navList(MOBILE_TABS)}
           </aside>
         </div>
       )}
@@ -506,14 +533,10 @@ export default function App() {
       {/* right side */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* topbar */}
-        <header className="flex h-[60px] shrink-0 items-center gap-2 border-b border-line/60 bg-bg2/70 px-2 backdrop-blur-md md:gap-4 md:px-5">
-          <button
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:hidden"
-            aria-label="Open menu"
-            onClick={() => setNavOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
+        {/* `h-[60px]` is the BAR's height; the notch pad is added on top of it rather than eaten
+            out of it, or the controls sit half under the Dynamic Island on a modern iPhone. */}
+        <header className="pad-top-safe inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg2/70 px-2 backdrop-blur-md md:gap-4 md:px-5">
+          <div className="flex h-[60px] min-w-0 flex-1 items-center gap-2 md:gap-4">
           {/* the metric rail scrolls if it must; the soft right edge is the
               affordance, so a value is never chopped off mid-word — desktop only,
               phones get the two vitals plus the tap-to-expand sheet below */}
@@ -553,10 +576,11 @@ export default function App() {
           >
             <DoorOpen size={18} />
           </button>
+          </div>
         </header>
 
         {/* main */}
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-24 md:px-6 md:pt-5 md:pb-8">
+        <main className="inset-x-safe min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-[calc(132px+env(safe-area-inset-bottom))] md:px-6 md:pt-5 md:pb-8">
           <FounderNotes />
           {online && game.gameOver && !matchOver && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
@@ -628,9 +652,62 @@ export default function App() {
           </div>
         </main>
 
-        {/* mobile advance */}
-        <div className="fixed inset-x-4 bottom-4 z-30 md:hidden" style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
-          {advanceBtn}
+        {/* ---------- mobile: the action, then the tab bar ----------------------------------
+            Two stacked bars, in that order, because this game has one dominant verb and hiding it
+            behind an icon would be a worse trade than the ~56px the second bar costs. `advanceBtn`
+            is already contextual — it turns amber and routes to the Inbox when a decision is
+            blocking the week — so the action bar is never a dead control the player has to reason
+            about. Both sit above the home indicator via the safe-area pad on the tab bar. */}
+        <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
+          <div className="inset-x-safe bg-gradient-to-t from-bg via-bg/95 to-transparent px-4 pt-6 pb-2">{advanceBtn}</div>
+          <nav
+            aria-label="Sections"
+            className="inset-x-safe pad-bottom-safe flex items-stretch border-t border-line/60 bg-bg2/95 backdrop-blur-md"
+          >
+            {MOBILE_TABS.map((id) => {
+              const item = NAV.find((n) => n.id === id)!
+              const Icon = item.icon
+              const active = screen === id
+              const badge = id === 'inbox' ? unread : 0
+              return (
+                <button
+                  key={id}
+                  onClick={() => setScreen(id)}
+                  aria-current={active ? 'page' : undefined}
+                  className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 pt-1.5 pb-1 text-[10px] font-semibold transition-colors duration-[120ms] ${
+                    active ? 'text-accent' : 'text-mut'
+                  }`}
+                >
+                  <span className="relative">
+                    <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+                    {badge > 0 && (
+                      <span className="absolute -top-1 -right-2 min-w-[15px] rounded-full bg-bad px-1 text-[9px] font-bold leading-[15px] text-bg tnum">
+                        {badge}
+                      </span>
+                    )}
+                  </span>
+                  {item.label}
+                </button>
+              )
+            })}
+            <button
+              onClick={() => setNavOpen(true)}
+              aria-label="More sections"
+              aria-expanded={navOpen}
+              className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 pt-1.5 pb-1 text-[10px] font-semibold transition-colors duration-[120ms] ${
+                navOpen || !MOBILE_TABS.includes(screen) ? 'text-accent' : 'text-mut'
+              }`}
+            >
+              <span className="relative">
+                <Menu size={20} strokeWidth={2} />
+                {/* Term sheets and candidates live behind More on a phone. Without this dot they
+                    would be invisible until the player went looking, which is how a round expires
+                    unnoticed. A dot, not a count — the number is on the row inside. */}
+                {moreWaiting > 0 && <span className="absolute -top-0.5 -right-1.5 h-2 w-2 rounded-full bg-warn" />}
+              </span>
+              More
+            </button>
+          </nav>
         </div>
       </div>
 

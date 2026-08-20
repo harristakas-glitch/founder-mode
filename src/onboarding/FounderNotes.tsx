@@ -34,18 +34,18 @@ function Note() {
     <div
       role="note"
       aria-live="polite"
-      className="rise-in mb-3.5 rounded-2xl border border-line/70 bg-surface/50 pl-0.5"
+      className="rise-in mb-2.5 rounded-2xl border border-line/70 bg-surface/50 pl-0.5 md:mb-3.5"
     >
-      <div className="flex items-start gap-3 rounded-2xl border-l-[3px] border-l-accent2/60 px-4 py-3">
+      <div className="flex items-start gap-2.5 rounded-2xl border-l-[3px] border-l-accent2/60 px-3 py-2.5 md:gap-3 md:px-4 md:py-3">
         <PenLine size={15} className="mt-[3px] shrink-0 text-accent2/80" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-mut">Founder’s notes</span>
             <span className="text-[13.5px] font-bold">{concept.title}</span>
           </div>
-          <p className="mt-1 text-[13px] leading-relaxed text-mut">{body}</p>
+          <p className="mt-1 text-[13px] leading-[1.45] text-mut md:leading-relaxed">{body}</p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 md:mt-2 md:gap-y-1.5">
             {chips.map((t) => (
               <button
                 key={t.id}
@@ -64,7 +64,7 @@ function Note() {
                 {concept.goto.label} →
               </button>
             )}
-            <span className="ml-auto flex items-center gap-3">
+            <span className="ml-auto flex items-center gap-2.5 md:gap-3">
               <button
                 onClick={() => {
                   setNotesEnabled(false)

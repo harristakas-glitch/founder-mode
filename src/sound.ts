@@ -69,6 +69,25 @@ function thump(at = 0): void {
   src.start(t0)
 }
 
+/**
+ * A short haptic tick, where the platform has one.
+ *
+ * Deliberately NOT routed through the mute flag: mute is about sound, and someone who silenced the
+ * game on a train is exactly the person still relying on a physical confirmation that their tap
+ * landed. It follows the OS switch instead — iOS and Android both suppress `vibrate` for a device
+ * in silent mode on their own, which is the setting that actually expresses the intent.
+ *
+ * Unsupported everywhere on desktop Safari and iOS Safari today; the optional call is the whole
+ * fallback, and a game that needs a buzz to be legible would be a broken game.
+ */
+export function haptic(pattern: number | number[] = 8): void {
+  try {
+    navigator.vibrate?.(pattern)
+  } catch {
+    // a browser that throws on a vibrate it does not implement must not take the week with it
+  }
+}
+
 export const sfx = {
   /** soft tick as a week rolls over */
   week(): void {

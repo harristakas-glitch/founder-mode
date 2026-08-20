@@ -47,6 +47,68 @@ body,
   height: 100%;
 }
 
+/* ---------- mobile-native base ----------------------------------------------------------------
+   The manifest asks for `display: standalone`, so on a phone this launches with no browser chrome
+   at all. That raises the bar rather than lowering it: once the address bar is gone, every
+   behaviour that reads as "web page" reads as broken instead. These rules close that gap. */
+
+/* `100%` resolves against a viewport that CHANGES HEIGHT as the mobile browser's chrome slides
+   away on scroll, so a full-height shell measured in `%`/`vh` is wrong at least half the time and
+   jumps at the moment of the transition. `dvh` is the dynamic viewport — the one that is actually
+   on screen right now. Declared after the `%` rule so old engines keep the fallback. */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
+body {
+  /* Kills pull-to-refresh and the rubber-band overscroll. In a browser tab a stray downward drag
+     reloading the page is a nuisance; in a standalone PWA mid-run it looks like the game crashed. */
+  overscroll-behavior: none;
+}
+
+/* Touch has no cursor, so the browser's own guesses about what a press means are all wrong here:
+   a long press on a control offers to select its label or opens the iOS callout menu, and a tap
+   paints a grey box that has nothing to do with our own pressed state. Controls only — prose,
+   inputs and anything the player might legitimately want to copy are deliberately excluded. */
+button,
+[role='button'],
+a,
+nav,
+label {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS zooms the whole page when a field smaller than 16px takes focus, and then does not zoom back
+   out — so one tap on the company-name box leaves the player stranded at 1.4x with the layout cut
+   off. 16px is the threshold, not a preference. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+}
+
+/* Safe areas. `viewport-fit=cover` in index.html opts this app INTO drawing under the notch and the
+   home indicator, on the promise that it handles the insets itself. These are that promise. */
+.pad-top-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pad-bottom-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.inset-x-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 body {
   background: radial-gradient(1400px 700px at 70% -20%, #16203b 0%, var(--color-bg) 55%);
   background-attachment: fixed;

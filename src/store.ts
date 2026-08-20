@@ -26,7 +26,7 @@ import {
 // the architecture rather than of discipline.
 import { applyJournaled, sanitizeJournal } from './game/replay'
 import { recordReplayProof } from './net/replayProof'
-import { sfx } from './sound'
+import { haptic, sfx } from './sound'
 import { checkAchievements } from './game/achievements'
 import { submitDailyScore } from './net/leaderboard'
 import { currentProfile, onAuthChange, signInWith, signOut, type AuthProfile, type AuthProvider } from './net/auth'
@@ -457,6 +457,7 @@ export const useStore = create<Store>()(
         const commit = (g: GameState) => {
           if (g.gameOver) recordRun(g)
           weekSounds(g)
+          haptic(g.gameOver ? [12, 60, 12] : 8)
           awardAchievements(g)
           myReady = false
           myBid = null
@@ -758,6 +759,7 @@ export const useStore = create<Store>()(
             const { state: next } = applyJournaled(game, 'advance')
             if (next.gameOver) recordRun(next)
             weekSounds(next)
+            haptic(next.gameOver ? [12, 60, 12] : 8)
             awardAchievements(next)
             set({ game: next })
             return
