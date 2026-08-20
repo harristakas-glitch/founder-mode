@@ -22,7 +22,7 @@
 import { RAISED, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
-import { growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
+import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
 import { useState } from 'react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
 import { useStore } from '../store'
@@ -31,28 +31,79 @@ import { useStore } from '../store'
 // The hero. Bespoke rather than a StatCard on purpose: the whole Cockpit direction hangs on ONE
 // figure per screen being brighter and bigger than everything else, and this is that figure. The
 // only pure white on the page is here.
+// THE HERO IS THE BINDING CONSTRAINT — the engine decides, not the layout.
+//
+// The first cut put runway here permanently, and the owner's metrics review convicted it: runway
+// is a scoreboard, and at 150 weeks the loudest number on the screen was answering a question
+// nobody had asked, while the actual early game — find fit before the money or the board's
+// patience runs out — sat in a 34px cell. The engine already knows which constraint binds; this
+// asks it, in strict precedence order:
+//
+//   1. the money clock, when it is actually ticking (death)
+//   2. the board's growth bar, when you are under it (fired)
+//   3. the fit clock, while the market has not said yes (the slow death every run starts in)
+//   4. runway as the calm default — when nothing binds, the truthful headline is "nothing binds"
+//
+// The label names the constraint, so the hero also TEACHES what the game currently is. This is
+// the Cockpit spec's own line — "the hero is whatever is closest to killing the run this week" —
+// finally implemented rather than approximated.
 function Hero() {
   const game = useStore((s) => s.game)!
   const runway = runwayWeeks(game)
   const net = game.lastRevenue - weeklyBurn(game)
   const profitable = runway === Infinity
-  const critical = !profitable && runway < 10
+  const career = careerActive(game) ? game.career! : null
 
+  let label: string, figure: string, sentence: string, tone: 'bad' | 'warn' | 'good' | 'mut'
+
+  const growth = growthRate(game)
+  const target = game.board ? boardEffectiveTarget(game) : 0
+  const pmfPace = Math.min(85, game.week * 1.6)
+  const retention = career ? (career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) : 0
+
+  if (!profitable && runway < 26) {
+    label = 'Runway'
+    figure = `${Math.max(0, Math.floor(runway))} weeks`
+    sentence =
+      net < 0
+        ? `${money(game.cash)} in the bank, net ${money(net)} a week. Three ways out: raise, cut burn, or get revenue above burn.`
+        : `${money(game.cash)} in the bank and net is positive — the clock only moves if that changes.`
+    tone = runway < 10 ? 'bad' : 'warn'
+  } else if (game.board && growth < target) {
+    label = 'The board’s bar'
+    figure = `${(growth * 100).toFixed(1)}% /wk`
+    sentence = `They expect ${(target * 100).toFixed(1)}%. Review in week ${game.board.nextReview} — miss it and it becomes a strike${game.board.strikes > 0 ? `, and you already have ${game.board.strikes}` : ''}.`
+    tone = game.board.strikes > 0 ? 'bad' : 'warn'
+  } else if (game.week > 4 && (career ? retention < 0.55 : game.pmf < Math.max(30, pmfPace))) {
+    label = career ? 'The fit clock' : 'The fit clock'
+    figure = career
+      ? retention > 0
+        ? `${Math.round(retention * 100)}% stay`
+        : 'No signal yet'
+      : `PMF ${Math.round(game.pmf)}`
+    sentence = career
+      ? retention > 0
+        ? `${Math.round(retention * 100)}% of your target segment is still here after four weeks. Fit is read off the ones who stay.`
+        : 'Nothing has retained long enough to measure. Only paying customers who stay move the number.'
+      : `Winners find fit by ~week 40 and it is week ${game.week}. The runway is long; the question is whether the market says yes.`
+    tone = 'mut'
+  } else {
+    label = 'Runway'
+    figure = profitable ? 'Profitable' : `${Math.max(0, Math.floor(runway))} weeks`
+    sentence = profitable
+      ? `Revenue covers burn with ${money(net)}/wk to spare. ${money(game.cash)} in the bank.`
+      : `${money(game.cash)} in the bank. Nothing is binding this week — a good week to make a bet.`
+    tone = profitable ? 'good' : 'mut'
+  }
+
+  const labelTone = { bad: 'text-bad', warn: 'text-warn', good: 'text-good', mut: 'text-mut' }[tone]
   return (
     <div className="mb-4">
-      <div className={`text-[10.5px] font-bold uppercase tracking-[0.13em] ${critical ? 'text-bad' : profitable ? 'text-good' : 'text-mut'}`}>
-        Runway
-      </div>
+      <div className={`text-[10.5px] font-bold uppercase tracking-[0.13em] ${labelTone}`}>{label}</div>
       <div className="mt-1 text-[44px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[56px]">
-        {profitable ? 'Profitable' : `${Math.max(0, Math.floor(runway))} weeks`}
+        {figure}
       </div>
-      <div className="mt-2 max-w-[52ch] text-[13.5px] leading-snug text-mut">
-        {profitable
-          ? `Revenue covers burn with ${money(net)}/wk to spare. ${money(game.cash)} in the bank.`
-          : net < 0
-            ? `${money(game.cash)} in the bank, net ${money(net)} a week. Three ways out: raise, cut burn, or get revenue above burn.`
-            : `${money(game.cash)} in the bank and net is positive — the clock only moves if that changes.`}
-      </div>
+      <div className="mt-2 max-w-[52ch] text-[13.5px] leading-snug text-mut">{sentence}</div>
     </div>
   )
 }
@@ -287,27 +338,11 @@ export function Dashboard() {
       <Hero />
       <AttentionList />
 
+      {/* Slot order is causal rank, not convention (owner's metrics review, 2026-08-20): fit is
+          the number in every compounding formula, the growth RATE is what the board judges — the
+          user COUNT is its delta line, demoted from a 34px figure to the small print, because the
+          level moves the ego and the rate moves the outcome. Revenue and People close the row. */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <button type="button" className="text-left" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
-        <StatCard
-          label="Revenue"
-          numeric={game.lastRevenue}
-          format={(n) => `${money(n)}/wk`}
-          trend={revDelta !== 0 ? revDelta : undefined}
-          trendFormat={money}
-          tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
-        />
-        </button>
-        <button type="button" className="text-left" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
-        <StatCard
-          label={game.ventures.some((v) => v.launched) ? 'Users (all lines)' : 'Users'}
-          numeric={totalUsers(game)}
-          format={num}
-          trend={growth !== 0 ? growth : undefined}
-          delta="/wk avg"
-          tone={growth > 0 ? 'up' : growth < 0 ? 'down' : undefined}
-        />
-        </button>
         <button type="button" className="text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
         {career ? (
           <StatCard
@@ -325,6 +360,24 @@ export function Dashboard() {
             tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined}
           />
         )}
+        </button>
+        <button type="button" className="text-left" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
+        <StatCard
+          label="Growth"
+          value={`${growth >= 0 ? '+' : ''}${pct(growth, 1)}/wk`}
+          delta={`${num(totalUsers(game))} user${totalUsers(game) === 1 ? '' : 's'}${game.ventures.some((v) => v.launched) ? ' across lines' : ''}${game.board ? ` · board expects ${pct(boardEffectiveTarget(game), 1)}` : ''}`}
+          tone={game.board ? (growth >= boardEffectiveTarget(game) ? 'up' : 'down') : growth > 0 ? 'up' : growth < 0 ? 'down' : undefined}
+        />
+        </button>
+        <button type="button" className="text-left" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
+        <StatCard
+          label="Revenue"
+          numeric={game.lastRevenue}
+          format={(n) => `${money(n)}/wk`}
+          trend={revDelta !== 0 ? revDelta : undefined}
+          trendFormat={money}
+          tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
+        />
         </button>
         <button type="button" className="text-left" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
         <StatCard
