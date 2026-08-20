@@ -66,8 +66,10 @@ enabling social login (§1.2) would have blanked the leaderboard for exactly the
 engaged most. The rule that would have caught all three: assert the attack is blocked AND the
 legitimate path still works, in the same run, for every role that can reach the table.
 
-**Run `supabase/leaderboard-v6.sql`, and nothing else.** It is now the only SQL file in the repo
-(the 2026-08-19 review deleted the other five — see "Reference — what the SQL files are" below).
+**Run `supabase/leaderboard-v6.sql`.** It is the one to run for the leaderboard, and it is the
+only one this item needs (the 2026-08-19 review deleted the other five — see "Reference — what the
+SQL files are" below). `supabase/run-journals-v1.sql` was added on 2026-08-20 alongside product
+analytics; it is optional, unrelated, and covered by `docs/analytics.md`.
 It creates the table as well as securing it, it is idempotent, and it is self-testing: it runs its
 own attack matrix as both `anon` and `authenticated` and raises with a list of failures if any
 case comes out wrong. It could not be run from here — only the public anon key is available and
