@@ -580,7 +580,7 @@ export default function App() {
         </header>
 
         {/* main */}
-        <main className="inset-x-safe min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-[calc(132px+env(safe-area-inset-bottom))] md:px-6 md:pt-5 md:pb-8">
+        <main id="app-scroll" className="inset-x-safe min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-[calc(132px+env(safe-area-inset-bottom))] md:px-6 md:pt-5 md:pb-8">
           <FounderNotes />
           {online && game.gameOver && !matchOver && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">

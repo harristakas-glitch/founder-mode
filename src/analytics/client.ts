@@ -120,8 +120,29 @@ function getClient(): Promise<PostHog> | null {
           // the part that matters — the one mechanism that could carry a typed company name out
           // of the browser without anybody deciding it should.
           autocapture: false,
-          capture_pageview: false, // one screen, no routing; `app_opened` says it better
-          capture_pageleave: false, // `run_suspended` carries the week, which is the useful half
+          // PAGEVIEWS. Off originally, on the reasoning that one screen with no routing makes
+          // `app_opened` the better event. That reasoning was right about the game and wrong about
+          // the product: PostHog's entire Web Analytics dashboard — visitors, sessions, bounce
+          // rate, session duration — is BUILT on $pageview, so switching it off did not trade a
+          // redundant event for a cleaner stream, it turned off the exact "how many people played,
+          // for how long, and do they come back" report this was installed to get.
+          capture_pageview: true,
+          capture_pageleave: true,
+
+          // SCROLL DEPTH, and the reason it needs a selector rather than just a flag.
+          //
+          // The measurer defaults to `document.documentElement`:
+          //     scrollElement() { if (!this._scrollRoot) return window.document.documentElement …
+          // In a run this app's shell is `h-[100dvh] overflow-hidden` and the content scrolls
+          // inside <main>, so the DOCUMENT never scrolls at all. Left on the default, every
+          // session would report `scrollHeight - clientHeight = 0` — a clean, confident, permanent
+          // 0%, which is worse than no number because it looks like a finding.
+          //
+          // The resolver takes a list and returns the FIRST match, with no fallback to the
+          // document if none hit — so the order here is load-bearing. `#app-scroll` is the in-run
+          // <main>; `html` catches the menu and results screens, which are `min-h-[100dvh]` and do
+          // scroll the window normally.
+          scroll_root_selector: ['#app-scroll', 'html'],
           disable_session_recording: true,
           disable_surveys: true,
           disable_web_experiments: true,
