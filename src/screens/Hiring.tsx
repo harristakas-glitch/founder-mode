@@ -86,7 +86,7 @@ export function Hiring() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Hiring</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Hiring</h1>
       {/* Burn, revenue and runway are in the topbar rail on every screen; repeating them here only
           gave the player a second place they could disagree. The one number this screen owes is
           what a given hire does to the runway. */}

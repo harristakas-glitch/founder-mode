@@ -184,9 +184,10 @@ Tech stack remains exactly the same: React 19 + Tailwind CSS v4 + Zustand + Luci
    other (audit §1.1).
 4. **The hero slot stays dynamic** (binding constraint; runway is its default face) — the owner's
    own metrics review. The sample HQ mock happens to show runway, which is that default.
-5. **Display serif** (from the sample mocks, 4 of 8 use one): screen titles and panel headers set
-   in Instrument Serif 400, self-hosted latin subset. Numbers stay IBM Plex Mono; body stays
-   system. Three voices, one job each.
+5. **Display serif: tried in production and REMOVED the same day** (owner: "old-school
+   calligraphic" — it fought the instrument-panel character). Titles are system sans per §3's own
+   type table (H1 28, H3 16/600). Two voices only: Plex Mono for figures, system for everything
+   else. Do not reintroduce a display face without a fresh owner decision.
 6. **Per-sector accent theming retires.** "Absolute consistency" + purple-as-brand cannot coexist
    with a per-run accent swap. The sector personality now lives in copy and content only.
 7. **No photos.** The sample Hiring mock shows headshot avatars; the game has no photo assets and

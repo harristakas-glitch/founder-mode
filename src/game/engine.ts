@@ -845,6 +845,37 @@ export function paidUsersPerWeek(s: GameState, spend: number): number {
   return spend / (estimatedCac(s) * (1 + spend / 150_000))
 }
 
+/**
+ * The unit economics — CAC, LTV, payback — read straight off what the simulation already charges.
+ *
+ * These exist because the owner's direction is that a startup simulator should TEACH the
+ * vocabulary of one (glossary: cac / ltv / payback), and the honest way to teach a metric is to
+ * derive it from the engine rather than invent it for the dashboard:
+ *
+ *   cac      — `estimatedCac`, the price the tick actually charges per paid user this week.
+ *   ltv      — weekly revenue per user × expected weeks retained, where expected weeks is
+ *              1 / effectiveChurn: the standard geometric-lifetime identity, priced with the same
+ *              churn multiplier the tick uses.
+ *   payback  — cac / weekly revenue per user: how many weeks a bought user takes to repay their
+ *              own acquisition. Infinity before revenue exists, and the UI must say "no revenue
+ *              yet", never render the symbol.
+ *   ratio    — ltv / cac, the health number the trade talks in (3x is the folk threshold).
+ *
+ * ARPU is `sector.arpuPerCustomer` with the same 1-cent floor as `revenuePerUser` in
+ * token/users.ts — mirrored rather than imported because that module imports from this one and
+ * the reverse edge would be a cycle. If the ARPU definition ever changes, change both (the token
+ * module's docblock carries the same note).
+ *
+ * Pure read, no RNG, unused by the simulation itself — the bots trace must not move.
+ */
+export function unitEconomics(s: GameState): { cac: number; ltv: number; paybackWeeks: number; ratio: number } {
+  const arpu = Math.max(0.01, sectorById(s.sector).arpuPerCustomer)
+  const cac = estimatedCac(s)
+  const ltv = arpu / effectiveChurn(s)
+  const paybackWeeks = s.lastRevenue > 0 ? cac / arpu : Infinity
+  return { cac, ltv, paybackWeeks, ratio: ltv / cac }
+}
+
 export function weeklyBurn(s: GameState): number {
   return weeklyPayroll(s) + weeklyOffice(s) + weeklyInfra(s) + s.marketingSpend + weeklyInterest(s)
 }

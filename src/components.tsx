@@ -144,7 +144,7 @@ export function Panel({ title, action, children, className = '' }: { title?: str
               group still here, N weeks after joining": 69 characters, tracked out, in grey, at
               eleven pixels. Uppercase survives in exactly one place now — the metric label in
               StatCard — because that is short by construction. */}
-          <h3 className="font-[family-name:var(--font-display)] text-[19px] leading-none text-ink">{title}</h3>
+          <h3 className="text-[16px] font-semibold text-ink">{title}</h3>
           {action}
         </div>
       )}

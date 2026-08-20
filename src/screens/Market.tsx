@@ -128,7 +128,7 @@ export function Market() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Market</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Market</h1>
       <div className="mb-4 text-[13px] text-mut">
         {sector.name} · addressable market ≈ {num(effectiveTam(game))} users (and growing) · winners take most
       </div>

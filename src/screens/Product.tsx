@@ -200,7 +200,7 @@ export function Product() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Product</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Product</h1>
       <div className="mb-4 text-[13px] text-mut">
         {engineers} engineer{engineers === 1 ? '' : 's'}
         {game.founderKind === 'technical' ? ' + you' : ''} · building things is easy — building the <i>right</i> thing is the game

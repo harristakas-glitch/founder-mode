@@ -219,7 +219,7 @@ export function Finance() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Finance</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Finance</h1>
       <div className="text-[13px] text-mut">Cash is oxygen. Everything else is commentary.</div>
       {/* Cash, runway, revenue and burn were four StatCards here; all four are on the topbar rail
           of every screen, so the rail wins. The one thing the rail cannot carry is what the burn is

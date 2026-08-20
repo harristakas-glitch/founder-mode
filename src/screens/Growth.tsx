@@ -2,8 +2,9 @@ import { AlertTriangle } from 'lucide-react'
 import { Disclosure, Meter, NESTED, Panel } from '../components'
 import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
-import { effectiveChurn, estimatedCac, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek } from '../game/engine'
+import { effectiveChurn, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek, unitEconomics } from '../game/engine'
 import { useStore } from '../store'
+import { openGuide } from '../onboarding/guide'
 
 export function Growth() {
   const game = useStore((s) => s.game)!
@@ -31,10 +32,14 @@ export function Growth() {
   // maximum and a burn that does not match it.
   const sliderValue = Math.min(game.marketingSpend, cap)
   const overCap = game.marketingSpend > cap
+  // Owner direction (2026-08-21): a startup simulator teaches CAC, LTV and payback where they
+  // fit — and they fit HERE, beside the budget that spends them. Engine-true via unitEconomics();
+  // each term opens the field guide, so the numbers onboard the vocabulary instead of assuming it.
+  const econ = unitEconomics(game)
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Growth</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Growth</h1>
       <div className="mb-4 text-[13px] text-mut">
         {sector.name} · {marketers} marketer{marketers === 1 ? '' : 's'}
         {game.founderKind === 'business' ? ' + you' : ''} on the megaphone
@@ -90,14 +95,30 @@ export function Growth() {
                 style={{ ['--fill' as string]: `${(sliderValue / cap) * 100}%` }}
                 onChange={(e) => setMarketing(Number(e.target.value))}
               />
-              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+              <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px]">
+                {/* Each term is a guide link: the strip teaches the vocabulary, not just the number. */}
                 <span>
-                  <span className="text-mut">Est. cost per paid user (CAC):</span> <b className="tnum">{money(estimatedCac(game))}</b>
+                  <button onClick={() => openGuide('cac')} className="text-mut underline decoration-dotted underline-offset-2 hover:text-ink" title="What is CAC? — opens the field guide">CAC</button>{' '}
+                  <b className="tnum">{money(econ.cac)}</b>
                 </span>
                 <span>
-                  <span className="text-mut">≈ paid users this budget buys:</span>{' '}
+                  <button onClick={() => openGuide('ltv')} className="text-mut underline decoration-dotted underline-offset-2 hover:text-ink" title="What is LTV? — opens the field guide">LTV</button>{' '}
+                  <b className="tnum">{money(econ.ltv)}</b>
+                  <span className={`ml-1.5 tnum text-[12px] font-bold ${econ.ratio >= 3 ? 'text-good' : econ.ratio < 1 ? 'text-bad' : 'text-warn'}`}>
+                    {econ.ratio >= 100 ? '99x+' : `${econ.ratio.toFixed(1)}x`} CAC
+                  </span>
+                </span>
+                <span>
+                  <button onClick={() => openGuide('payback')} className="text-mut underline decoration-dotted underline-offset-2 hover:text-ink" title="What is payback? — opens the field guide">Payback</button>{' '}
+                  {Number.isFinite(econ.paybackWeeks) ? (
+                    <b className="tnum">{Math.ceil(econ.paybackWeeks)} wk</b>
+                  ) : (
+                    <b className="text-warn">no revenue yet</b>
+                  )}
+                </span>
+                <span>
+                  <span className="text-mut">≈ this budget buys</span>{' '}
                   <b className="tnum">{num(Math.round(paidUsersPerWeek(game, game.marketingSpend)))}/wk</b>
-                  <span className="text-mut"> (channels fatigue past ~$150k/wk)</span>
                 </span>
               </div>
             </div>

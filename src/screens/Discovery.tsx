@@ -172,7 +172,7 @@ export function Discovery() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Discovery</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Discovery</h1>
       <div className="mb-4 text-[13px] text-mut">
         You don't know your market yet. Research improves what you <i>know</i>; customers prove whether you were <i>right</i>.
       </div>

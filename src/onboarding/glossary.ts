@@ -35,6 +35,27 @@ export const TERM_GROUPS: { id: TermGroup; label: string }[] = [
 export const TERMS: Term[] = [
   // ---- money ----
   {
+    id: 'cac',
+    name: 'CAC (customer acquisition cost)',
+    short: 'What one paid user costs you this week — the price the marketing budget actually pays.',
+    long: 'Rises with market saturation and falls as PMF improves; every extra dollar past ~$150k/wk buys fewer users than the last (channel fatigue). The sim charges this per paid user, so a rising CAC means the same budget quietly buys less.',
+    group: 'money',
+  },
+  {
+    id: 'ltv',
+    name: 'LTV (lifetime value)',
+    short: 'What one user is worth before they churn: weekly revenue per user × how many weeks they stay.',
+    long: 'Expected weeks retained is 1 ÷ your weekly churn, so LTV moves when churn moves — which means PMF, quality and bugs move it. The trade compares it to CAC: below 1× you lose money on every user you buy; 3× is the folk threshold for healthy.',
+    group: 'money',
+  },
+  {
+    id: 'payback',
+    name: 'Payback period',
+    short: 'How many weeks a bought user takes to repay their own acquisition cost.',
+    long: 'CAC ÷ weekly revenue per user. Shorter is safer: a long payback means marketing spend is a loan to your future self, priced in runway. Before revenue exists there is no payback at all — every bought user is pure spend.',
+    group: 'money',
+  },
+  {
     id: 'burn',
     name: 'Burn',
     group: 'money',

@@ -64,9 +64,6 @@
      speaks. Self-hosted from npm; the fallback stack means a blocked font degrades to exactly
      what shipped last week. */
   --font-num: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
-  /* The third voice (v1.1 §5, from the owner's sample mocks): a display serif for screen titles
-     and panel headers only. Numbers speak mono, prose speaks system, headings speak this. */
-  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
 
   /* ---------- motion: one vocabulary, all of it fast and interruptible ----------
      1 = pointer feedback, 2 = state change, 3 = element entering. Nothing over 260ms. */

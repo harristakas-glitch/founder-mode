@@ -1076,7 +1076,7 @@ export function Fundraising() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Fundraising</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Fundraising</h1>
       {/* The equity % was here AND on the "Your stake" card below; the card also says what it is
           worth, so this is the copy that went. */}
       <div className="mb-4 text-[13px] text-mut">{game.stage} · dilution is forever, choose wisely</div>

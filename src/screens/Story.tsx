@@ -78,7 +78,7 @@ export function Story() {
     <div className="mx-auto max-w-[720px]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">The story of {game.companyName}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight">The story of {game.companyName}</h1>
           <div className="mb-4 text-[13px] text-mut">
             {sectorById(game.sector).name} · {ending ? `${e.emoji} ${e.title}, week ${ending.week}` : `week ${game.week}, still being written`}
           </div>

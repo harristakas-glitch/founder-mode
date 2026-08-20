@@ -396,13 +396,13 @@ export default function App() {
               setNavOpen(false)
             }}
             aria-current={active ? 'page' : undefined}
-            className={`relative flex min-h-[44px] w-full items-center gap-2.5 rounded-xl py-2 pr-3 pl-4 text-left text-[14px] transition-colors duration-[120ms] md:min-h-[36px] ${
+            className={`relative flex min-h-[44px] w-full items-center gap-3 rounded-xl py-2 pr-3 pl-4 text-left text-[14px] transition-colors duration-[120ms] md:min-h-[42px] ${
               active ? 'bg-accent/12 font-semibold text-ink shadow-[var(--glow-accent)]' : 'text-mut hover:bg-surface2 hover:text-ink'
             }`}
           >
             {/* a quiet accent rail marks the place; the accent itself stays reserved for actions */}
             {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" />}
-            <Icon size={16} strokeWidth={2.2} className={active ? 'text-accent' : ''} />
+            <Icon size={18} strokeWidth={2} className={active ? 'text-accent' : ''} />
             {a.label}
             {/* ONE badge in the whole nav: the blocking-decision count on HQ. The audit killed the
                 other two — the candidates badge read a constant 5 forever (the engine refills the
@@ -594,18 +594,21 @@ export default function App() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* sidebar — desktop */}
       <aside className="hidden w-[240px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
-        <div className="border-b border-line/60 px-4 py-4">
-          <div className="flex items-center gap-2.5">
-            <Monogram name={game.companyName} />
-            <div className="min-w-0">
-              <div className="truncate text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
-              <div className="text-xs text-mut">
-                {game.stage} · Week {game.week}
-              </div>
+        <div className="border-b border-line/60 px-4 pb-4 pt-5">
+          {/* The mock's company card: monogram centred with a soft brand ring, identity beneath.
+              The sidebar is the one place the game says "this is YOUR company" — it earns the
+              screen's second decorative element (the hero's glow being the first). */}
+          <div className="flex flex-col items-center text-center">
+            <div className="rounded-2xl p-1" style={{ boxShadow: '0 0 0 1px rgb(139 92 246 / 0.35), 0 0 24px rgb(139 92 246 / 0.18)' }}>
+              <Monogram name={game.companyName} size={46} />
+            </div>
+            <div className="mt-2.5 w-full truncate text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
+            <div className="text-xs text-mut">
+              {game.stage} · Week {game.week}
             </div>
           </div>
           {/* Brief §38: a quiet mode indicator — same brand, different experience. */}
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-mut">
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-mut">
             <span className="rounded-full border border-line2 px-1.5 py-px font-semibold">
               {MODE_META[game.config?.mode ?? 'quick'].icon} {MODE_META[game.config?.mode ?? 'quick'].name}
             </span>
@@ -985,7 +988,7 @@ function Stat({ k, tone, title, icon, children }: { k: string; tone?: 'good' | '
   return (
     <div className="shrink-0 leading-tight" title={title}>
       <div className="flex items-center gap-1 text-[10px] font-semibold whitespace-nowrap uppercase tracking-[0.08em] text-mut">{icon && <span className="text-accent/80">{icon}</span>}{k}</div>
-      <div className={`mt-0.5 flex items-baseline whitespace-nowrap text-[15px] font-bold tnum ${cls}`}>{children}</div>
+      <div className={`mt-0.5 flex items-baseline whitespace-nowrap text-[17px] font-bold tnum ${cls}`}>{children}</div>
     </div>
   )
 }

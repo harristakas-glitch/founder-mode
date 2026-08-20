@@ -344,7 +344,7 @@ export function NewGame() {
                           </span>
                         )}
                       </span>
-                      <span className="mt-3.5 block font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">{meta.name}</span>
+                      <span className="mt-3.5 block text-[28px] font-bold tracking-tight">{meta.name}</span>
                       <span className="mt-1 block text-[14px] font-bold" style={{ color: c }}>
                         {meta.promise}
                       </span>

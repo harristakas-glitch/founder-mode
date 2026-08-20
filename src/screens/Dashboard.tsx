@@ -22,7 +22,7 @@
 import { Meter, RAISED, Sparkline, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
-import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
+import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, unitEconomics, weeklyBurn } from '../game/engine'
 import { useState } from 'react'
 import { DollarSign, Target as TargetIcon, TrendingUp as TrendIcon, Users as UsersIcon } from 'lucide-react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
@@ -102,20 +102,19 @@ function Hero() {
 
   const labelTone = { bad: 'text-bad', warn: 'text-warn', good: 'text-good', mut: 'text-mut' }[tone]
   return (
-    <div className="relative mb-3 overflow-hidden md:mb-4">
-      {/* The mock's decoration: faint concentric arcs radiating from behind the figure — the one
-          purely decorative element on the screen, and it belongs to the hero alone. Pure CSS,
-          pointer-transparent, and quiet enough that it reads as depth rather than ornament. */}
+    <div className="relative mb-4 overflow-hidden rounded-xl border border-line bg-surface p-6 shadow-[var(--elev-2)]">
+      {/* The mock's hero is a CARD with the glow living inside it — the screen's one decorative
+          element, radiating from behind the figure. Pointer-transparent, pure CSS. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-20 right-0 hidden h-64 w-64 md:block"
-        style={{ background: 'radial-gradient(closest-side, rgb(139 92 246 / 0.12), rgb(139 92 246 / 0.04) 55%, transparent 75%)' }}
+        className="pointer-events-none absolute -right-10 -top-16 h-72 w-72"
+        style={{ background: 'radial-gradient(closest-side, rgb(139 92 246 / 0.16), rgb(139 92 246 / 0.05) 55%, transparent 75%)' }}
       />
-      <div className={`text-[10.5px] font-bold uppercase tracking-[0.13em] ${labelTone}`}>{label}</div>
-      <div className="mt-1 text-[38px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[56px]">
+      <div className={`text-[11px] font-bold uppercase tracking-[0.13em] ${labelTone}`}>{label}</div>
+      <div className="mt-1.5 text-[42px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[58px]">
         {figure}
       </div>
-      <div className="mt-1.5 line-clamp-2 max-w-[52ch] text-[13px] leading-snug text-mut md:line-clamp-none md:text-[13.5px]">{sentence}</div>
+      <div className="mt-2 line-clamp-2 max-w-[52ch] text-[13px] leading-relaxed text-mut md:line-clamp-none md:text-[13.5px]">{sentence}</div>
     </div>
   )
 }
@@ -256,13 +255,27 @@ function MetricDrawer({ metric, onClose }: { metric: MetricKey; onClose: () => v
   const four = wk(4) ?? wk(h.length - 1)
   const body =
     metric === 'revenue' ? (
-      <>
-        <Fact k="This week">{money(game.lastRevenue)}</Fact>
-        {four && <Fact k="Four weeks ago">{money(four.revenue)}</Fact>}
-        <Fact k="Burn">{money(weeklyBurn(game))}/wk</Fact>
-        <Fact k="Net">{money(game.lastRevenue - weeklyBurn(game))}/wk</Fact>
-        <Analyse label="Finance" screen="finance" />
-      </>
+      (() => {
+        // Owner direction: the sim teaches unit economics. The revenue drawer is the natural
+        // classroom — the glance is the figure, this is what the figure is made of.
+        const econ = unitEconomics(game)
+        return (
+          <>
+            <Fact k="This week">{money(game.lastRevenue)}</Fact>
+            {four && <Fact k="Four weeks ago">{money(four.revenue)}</Fact>}
+            <Fact k="Net vs burn">{money(game.lastRevenue - weeklyBurn(game))}/wk</Fact>
+            <Fact k="CAC">{money(econ.cac)}</Fact>
+            <Fact k="LTV">
+              {money(econ.ltv)}{' '}
+              <span className={econ.ratio >= 3 ? 'text-good' : econ.ratio < 1 ? 'text-bad' : 'text-warn'}>
+                ({econ.ratio >= 100 ? '99x+' : `${econ.ratio.toFixed(1)}x`} CAC)
+              </span>
+            </Fact>
+            <Fact k="Payback">{Number.isFinite(econ.paybackWeeks) ? `${Math.ceil(econ.paybackWeeks)} wk` : 'no revenue yet'}</Fact>
+            <Analyse label="Growth" screen="growth" />
+          </>
+        )
+      })()
     ) : metric === 'users' ? (
       <>
         <Fact k="Now">{num(totalUsers(game))}</Fact>
@@ -472,7 +485,7 @@ export function Dashboard() {
   // are just the wrappers side by side. No duplicated markup, no JS.
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Founder HQ</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Founder HQ</h1>
       <div className="mb-4 text-[13px] text-mut">
         Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
       </div>
@@ -515,7 +528,7 @@ export function Dashboard() {
             icon={<UsersIcon size={13} />}
             label="4-week retention"
             value={retention > 0 ? pct(retention, 0) : '—'}
-            delta={retention > 0 ? 'of your target segment still here' : 'nothing has retained long enough to measure'}
+            delta={retention > 0 ? 'of your target segment still here — fit is read off the ones who stay' : 'No customers retained long enough to measure yet. Talk to users; keep the ones you win.'}
             tone={retention >= 0.7 ? 'up' : retention > 0 && retention < 0.4 ? 'down' : undefined}
           >
             <Meter value={retention * 100} tone={retention >= 0.7 ? 'good' : retention > 0 && retention < 0.4 ? 'bad' : 'accent'} />
@@ -527,7 +540,7 @@ export function Dashboard() {
             label="Product-market fit"
             numeric={game.pmf}
             format={(n) => `${Math.round(n)}/100`}
-            delta={pmfLabel(game.pmf)}
+            delta={game.pmf < 30 ? `${pmfLabel(game.pmf)} — research moves your odds, quality moves the number` : game.pmf < 60 ? `${pmfLabel(game.pmf)} — real interest, not yet a must-have` : `${pmfLabel(game.pmf)} — protect quality while you scale`}
             tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined}
           >
             <Meter value={game.pmf} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'bad' : 'accent'} />
