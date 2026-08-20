@@ -19,15 +19,17 @@
 // milestones → the run record; "Latest news" → the Inbox owns that list; the Benchmarks panel →
 // its verdicts are now register items (see attention.ts), because two functions evaluating the
 // same health into two UI regions is how they drift.
-import { Meter, RAISED, Sparkline, StatCard } from '../components'
+import { Meter, RadialGauge, RAISED, Sparkline, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, unitEconomics, weeklyBurn } from '../game/engine'
 import { useState } from 'react'
 import { DollarSign, Target as TargetIcon, TrendingUp as TrendIcon, Users as UsersIcon } from 'lucide-react'
-import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { BoardMeeting, Commitments, FounderBriefing, PMF_CAUSAL_CHAIN, TeamOpinions, careerActive } from '../CareerUI'
 import { openGuide } from '../onboarding/guide'
 import { myId as myOnlineId } from '../net/online'
+import { PMF_LABEL, segmentSnapshots } from '../game/career/pmf'
+import { sectorById } from '../game/data'
 import { InboxStream } from './Inbox'
 import { useStore } from '../store'
 
@@ -101,20 +103,37 @@ function Hero() {
   }
 
   const labelTone = { bad: 'text-bad', warn: 'text-warn', good: 'text-good', mut: 'text-mut' }[tone]
+  // The mock colours the FIGURE by its tone — green when the constraint is calm, amber and red as
+  // it binds — so the hero's own hue is a reading, not a brand mark. The light-purple focus token
+  // stays for the mut state, where no tone applies.
+  const figureTone = { bad: 'text-bad', warn: 'text-warn', good: 'text-good', mut: 'text-[var(--color-focus)]' }[tone]
+  const calm = attentionRegister(game).filter((i) => !i.id.startsWith('decision:')).length === 0
   return (
     <div className="relative mb-4 overflow-hidden rounded-xl border border-line bg-surface p-6 shadow-[var(--elev-2)]">
-      {/* The mock's hero is a CARD with the glow living inside it — the screen's one decorative
-          element, radiating from behind the figure. Pointer-transparent, pure CSS. */}
+      {/* The mock decorates the hero with a rocket over a starfield. We ship no raster art and the
+          spec bans illustrations, so the sky is rendered as CSS alone: a nebula wash and a handful
+          of box-shadow stars. Squint and it is the same sky. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-10 -top-16 h-72 w-72"
-        style={{ background: 'radial-gradient(closest-side, rgb(139 92 246 / 0.16), rgb(139 92 246 / 0.05) 55%, transparent 75%)' }}
+        className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 md:block"
+        style={{ background: 'radial-gradient(ellipse at 80% 40%, rgb(139 92 246 / 0.18), rgb(59 130 246 / 0.07) 45%, transparent 72%)' }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-24 top-8 hidden h-px w-px rounded-full md:block"
+        style={{ boxShadow: '0 0 2px 1px rgb(241 243 247 / .8), 40px 22px 1px 0 rgb(241 243 247 / .5), 90px -4px 1.5px 0 rgb(241 243 247 / .6), 140px 30px 1px 0 rgb(241 243 247 / .4), 60px 60px 1px 0 rgb(241 243 247 / .35), 170px 8px 1px 0 rgb(241 243 247 / .45)' }}
       />
       <div className={`text-[11px] font-bold uppercase tracking-[0.13em] ${labelTone}`}>{label}</div>
-      <div className="mt-1.5 text-[42px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[58px]">
+      <div className={`mt-1.5 text-[42px] leading-[0.98] font-bold tracking-[-0.04em] tnum md:text-[58px] ${figureTone}`}>
         {figure}
       </div>
       <div className="mt-2 line-clamp-2 max-w-[52ch] text-[13px] leading-relaxed text-mut md:line-clamp-none md:text-[13.5px]">{sentence}</div>
+      {/* the mock folds the all-clear INSIDE the hero card */}
+      {calm && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-good/35 bg-surface2 px-3.5 py-2 text-[13px] text-mut">
+          <span className="text-good">✓</span> Nothing needs you. Good week to make a bet.
+        </div>
+      )}
     </div>
   )
 }
@@ -132,13 +151,8 @@ function AttentionList() {
   // The register still emits decision items for other consumers; this renderer skips them.
   const items = attentionRegister(game).filter((i) => !i.id.startsWith('decision:'))
 
-  if (items.length === 0) {
-    return (
-      <div className="mb-4 rounded-[10px] border border-good/30 bg-surface px-4 py-2.5 text-[13px] text-mut">
-        ✓ Nothing needs you. Good week to make a bet.
-      </div>
-    )
-  }
+  // the calm state renders inside the hero card (the mock's layout); an empty list here is silence
+  if (items.length === 0) return null
 
   const [top, ...rest] = items
   const shown = rest.slice(0, 2)
@@ -433,21 +447,24 @@ function Upcoming() {
   if (game.rally) items.push({ weeks: game.rally.weeksLeft, label: 'Rally fades', screen: 'team' })
   if (game.challenge) items.push({ weeks: Math.max(0, game.challenge.cap - game.week), label: 'The run ends', screen: 'dashboard' })
 
-  const top = items.sort((a, b) => a.weeks - b.weeks).slice(0, 4)
+  const top = items.sort((a, b) => a.weeks - b.weeks).slice(0, 3)
   if (top.length === 0) return null
+  // The mock's grammar: each horizon entry is its own chevron pill row. Full-width buttons stack
+  // on every viewport, which also retires the mobile scroll-lane this block briefly wore.
   return (
-    <div className="mb-4 flex items-center gap-x-4 overflow-x-auto rounded-[10px] border border-line/60 bg-surface px-3.5 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-wrap lg:gap-y-1.5 lg:overflow-visible">
-      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-mut">Upcoming</span>
+    <div className="mb-4 space-y-1.5">
       {top.map((i) => (
         <button
           key={i.label}
           onClick={() => setScreen(i.screen)}
-          className="whitespace-nowrap text-[12.5px] text-mut transition-colors hover:text-ink"
+          className="flex w-full items-center gap-2.5 rounded-lg border border-line/60 bg-surface px-3.5 py-2 text-left transition-colors hover:border-line2"
         >
-          <span className={`tnum font-bold ${i.weeks <= 1 ? 'text-warn' : 'text-ink'}`}>
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-mut">Upcoming</span>
+          <span className={`tnum text-[12.5px] font-bold ${i.weeks <= 1 ? 'text-warn' : 'text-ink'}`}>
             {i.weeks === 0 ? 'this wk' : `${i.weeks} wk`}
-          </span>{' '}
-          {i.label}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-mut">{i.label}</span>
+          <span className="text-mut">›</span>
         </button>
       ))}
     </div>
@@ -457,6 +474,7 @@ function Upcoming() {
 // ---------------------------------------------------------------------------------------------
 export function Dashboard() {
   const game = useStore((s) => s.game)!
+  const setScreen = useStore((s) => s.setScreen)
   const [openMetric, setOpenMetric] = useState<MetricKey | null>(null)
   const toggle = (m: MetricKey) => setOpenMetric((cur) => (cur === m ? null : m))
   const growth = growthRate(game)
@@ -485,7 +503,7 @@ export function Dashboard() {
   // are just the wrappers side by side. No duplicated markup, no JS.
   return (
     <div>
-      <h1 className="text-[28px] font-bold tracking-tight">Founder HQ</h1>
+      <h1 className="text-[28px] font-bold tracking-tight">Weekly Briefing</h1>
       <div className="mb-4 text-[13px] text-mut">
         Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
       </div>
@@ -500,7 +518,7 @@ export function Dashboard() {
           <StreamPeek />
           <div className="order-6"><Upcoming /></div>
           <div id="week-stream" className="order-9 lg:mt-0">
-            <h2 className="mb-2.5 text-[20px] font-semibold">This week</h2>
+            <h2 className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.12em] text-mut">This week timeline</h2>
             <InboxStream />
           </div>
         </div>
@@ -532,6 +550,7 @@ export function Dashboard() {
             tone={retention >= 0.7 ? 'up' : retention > 0 && retention < 0.4 ? 'down' : undefined}
           >
             <Meter value={retention * 100} tone={retention >= 0.7 ? 'good' : retention > 0 && retention < 0.4 ? 'bad' : 'accent'} />
+            <span className="mt-3 block w-full rounded-lg border border-line2 py-1.5 text-center text-[12px] font-bold text-ink">View Retention</span>
           </StatCard>
         ) : (
           <StatCard
@@ -544,6 +563,7 @@ export function Dashboard() {
             tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined}
           >
             <Meter value={game.pmf} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'bad' : 'accent'} />
+            <span className="mt-3 block w-full rounded-lg border border-line2 py-1.5 text-center text-[12px] font-bold text-ink">View Fit</span>
           </StatCard>
         )}
         </button>
@@ -557,6 +577,7 @@ export function Dashboard() {
           tone={game.board ? (growth >= boardEffectiveTarget(game) ? 'up' : 'down') : growth > 0 ? 'up' : growth < 0 ? 'down' : undefined}
         >
           <Sparkline data={game.history.map((x) => x.users)} tone={growth > 0 ? 'good' : growth < 0 ? 'bad' : 'mut'} />
+            <span className="mt-3 block w-full rounded-lg border border-line2 py-1.5 text-center text-[12px] font-bold text-ink">View Growth</span>
         </StatCard>
         </button>
         <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
@@ -571,6 +592,7 @@ export function Dashboard() {
           tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
         >
           <Sparkline data={game.history.map((x) => x.revenue)} tone={game.lastRevenue >= weeklyBurn(game) ? 'good' : 'mut'} />
+            <span className="mt-3 block w-full rounded-lg border border-line2 py-1.5 text-center text-[12px] font-bold text-ink">View Revenue</span>
         </StatCard>
         </button>
         <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
@@ -587,6 +609,7 @@ export function Dashboard() {
           tone={anyAtRisk || game.energy <= 12 ? 'down' : undefined}
         >
           <Meter value={game.energy} tone={game.energy <= 12 ? 'bad' : game.energy <= 35 ? 'warn' : 'good'} />
+            <span className="mt-3 block w-full rounded-lg border border-line2 py-1.5 text-center text-[12px] font-bold text-ink">View People</span>
         </StatCard>
         </button>
       </div>
@@ -597,28 +620,50 @@ export function Dashboard() {
       {/* Career: the PMF/retention number above is an output — say what it is made of; then the
           named reads of the same week. Each renders null without its capability. */}
       <div className="order-10">
-        {!career && (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-5 shadow-[var(--elev-2)]">
-            <TargetIcon size={16} className="shrink-0 text-accent" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">Why PMF is {Math.round(game.pmf)}</div>
-              <div className="mt-0.5 text-[13px] leading-snug text-mut">
-                {game.pmf < 30
-                  ? 'The market has not said yes yet. Research moves your odds; shipped quality moves the number.'
-                  : game.pmf < 60
-                    ? 'Real interest, not yet a must-have. Quality and research push it; bugs and neglect pull it back.'
-                    : 'The market wants this. Growth compounds from here — protect quality while you scale.'}
-              </div>
-            </div>
-            <button
-              onClick={() => openGuide('pmf')}
-              className="shrink-0 rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-bold text-ink transition-colors hover:border-accent"
-            >
-              How PMF works →
-            </button>
+        {/* The mock's WHY-PMF panel: the gauge on the left, the causal chain and the company's own
+            reading on the right, and the two lever chips. Replaces both the old quick-play strip
+            and the separate Career explainer — one panel, both modes, the same truth. */}
+        <div className="mt-4 flex flex-wrap items-start gap-4 rounded-xl border border-line bg-surface p-5 shadow-[var(--elev-2)] md:flex-nowrap">
+          <div className="flex shrink-0 flex-col items-center gap-1">
+            <div className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-accent">Why PMF is {Math.round(game.pmf)}</div>
+            <RadialGauge value={game.pmf} size={64} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'bad' : 'accent'} />
           </div>
-        )}
-        <PmfExplainer />
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] leading-relaxed text-mut">{PMF_CAUSAL_CHAIN}</div>
+            {career && (() => {
+              const rows = segmentSnapshots({ career: game.career!, sector: game.sector, quality: game.quality, sectorTam: sectorById(game.sector).tam })
+              const best = [...rows].sort((a, b) => b.score - a.score)[0]
+              const targeting = rows.find((r) => r.segmentId === game.career!.primaryTargetSegmentId)
+              if (!best) return null
+              return (
+                <div className="mt-2 text-[13px] leading-relaxed text-mut">
+                  The company scores as its best proven segment: <b className="text-ink">{best.name}</b>{' '}
+                  <span className="tnum">({Math.round(best.score)})</span>
+                  {targeting && targeting.segmentId !== best.segmentId && (
+                    <> — you are targeting <b className="text-ink">{targeting.name}</b> ({PMF_LABEL[targeting.status]})</>
+                  )}
+                  .
+                </div>
+              )
+            })()}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {career ? (
+                <>
+                  <button onClick={() => setScreen('discovery')} className="rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-bold text-ink transition-colors hover:border-accent">
+                    Discovery — segments & experiments →
+                  </button>
+                  <button onClick={() => setScreen('product')} className="rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-bold text-ink transition-colors hover:border-accent">
+                    Product — quality & bugs →
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => openGuide('pmf')} className="rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-bold text-ink transition-colors hover:border-accent">
+                  How PMF works →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
         <TeamOpinions />
         <Commitments />
         <div id="board-meeting"><BoardMeeting /></div>

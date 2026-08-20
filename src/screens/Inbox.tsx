@@ -14,17 +14,21 @@ import { DecisionLens } from '../onboarding/DecisionLens'
 export function StreamItem({ m }: { m: ReturnType<typeof useStore.getState>['game'] extends infer G ? (G extends { inbox: (infer M)[] } ? M : never) : never }) {
   const resolveChoice = useStore((s) => s.resolveChoice)
   const needsYou = m.kind === 'choice' && !m.resolved
-  const rail = needsYou ? 'border-l-warn' : m.kind === 'choice' ? 'border-l-good' : m.kind === 'news' ? 'border-l-accent' : 'border-l-line'
+  // The mock's timeline grammar: a rail line down the left with a kind-coloured dot per entry.
+  // The dot doubles the left-border tone the audit's raised/receded rule already set — hue plus
+  // position, never colour alone. A blocking decision still rises a full plane.
+  const dot = needsYou ? 'bg-warn' : m.kind === 'choice' ? 'bg-good' : m.kind === 'news' ? 'bg-accent' : 'bg-line2'
   return (
-    <div
-      className={`rounded-r-[10px] border border-l-[3px] p-4 transition-colors duration-[120ms] ${rail} ${
-        // Audit finding 5's fix, unchanged: a blocking row sits a full plane step above handled
-        // ones — lightness, hue and edge at once, never colour alone.
-        needsYou
-          ? 'border-warn/45 bg-[color-mix(in_srgb,var(--color-warn)_11%,var(--color-surface3))] shadow-[var(--elev-2)]'
-          : 'border-line/60 bg-surface2'
-      }`}
-    >
+    <div className="relative pl-5">
+      <span aria-hidden="true" className="absolute bottom-0 left-[5px] top-0 w-px bg-line/70" />
+      <span aria-hidden="true" className={`absolute left-[2px] top-4 h-[7px] w-[7px] rounded-full ${dot}`} />
+      <div
+        className={`rounded-[10px] border p-4 transition-colors duration-[120ms] ${
+          needsYou
+            ? 'border-warn/45 bg-[color-mix(in_srgb,var(--color-warn)_11%,var(--color-surface3))] shadow-[var(--elev-2)]'
+            : 'border-line/60 bg-surface2'
+        }`}
+      >
       <div className="flex items-center gap-2 text-[11px] text-mut">
         <span className="tnum">Week {m.week}</span>
         {needsYou && <span className="rounded-md bg-warn px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-bg">Decision</span>}
@@ -47,6 +51,7 @@ export function StreamItem({ m }: { m: ReturnType<typeof useStore.getState>['gam
       )}
       {m.resolved && m.resultText && <div className="mt-2 text-[13px] italic text-good">→ {m.resultText}</div>}
       {m.resolved && <DecisionLens message={m} />}
+      </div>
     </div>
   )
 }

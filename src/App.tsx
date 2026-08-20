@@ -21,6 +21,7 @@ import {
   Activity,
   Target,
   TrendingUp,
+  Rocket,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
 import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn, growthRate } from './game/engine'
@@ -42,7 +43,7 @@ import { Fundraising } from './screens/Fundraising'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
-import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
+import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge, RadialGauge, Sparkline } from './components'
 import { runMarkers } from './runMarkers'
 import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
 import { FitPeek } from './FitPeek'
@@ -469,9 +470,17 @@ export default function App() {
       </Stat>
       <Stat k="Runway" icon={<Hourglass size={12} />} tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
         {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
+        {/* the runway series is DERIVED per history point — cash over that week's own net — so the
+            line is honest rather than a relabelled cash chart */}
+        <span className="ml-2 hidden w-16 md:inline-block">
+          <Sparkline data={game.history.map((h) => (h.expenses > h.revenue ? h.cash / (h.expenses - h.revenue) : 104))} tone={runway < 10 ? 'bad' : 'good'} />
+        </span>
       </Stat>
       <Stat k="Net /wk" icon={<Activity size={12} />} tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
         <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
+        <span className="ml-2 hidden w-16 md:inline-block">
+          <Sparkline data={game.history.map((h) => h.revenue - h.expenses)} tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'} />
+        </span>
       </Stat>
       {/* The two DRIVERS join the money clock — owner call, from the causal review: PMF is in
           every compounding formula (word-of-mouth at ^1.5, acquisition, churn's dominant term)
@@ -479,9 +488,16 @@ export default function App() {
           The rail shows the number; the HQ owns its meter, sparkline and drawer. */}
       <Stat k="PMF" icon={<Target size={12} />} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
         <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
+        <span className="ml-0.5 text-[11px] text-mut">/100</span>
+        <span className="ml-2 hidden md:inline-block">
+          <RadialGauge value={game.pmf} size={26} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : 'accent'} />
+        </span>
       </Stat>
       <Stat k="Growth" icon={<TrendingUp size={12} />} tone={growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined}>
         <Ticker value={growthTrend * 100} format={(n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`} />
+        <span className="ml-2 hidden w-16 md:inline-block">
+          <Sparkline data={game.history.map((h) => h.users)} tone={growthTrend > 0 ? 'good' : 'mut'} />
+        </span>
       </Stat>
       {online && secondsLeft !== null && !matchOver && (
         <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
@@ -516,7 +532,26 @@ export default function App() {
   ) : (
     <button
       disabled={advanceDisabled}
-      onClick={advance}
+      onClick={(e) => {
+        // The mock's "Hold Shift to fast forward": a shift-click advances up to five weeks, and it
+        // is AUTOMATION OF THE EXISTING ACTION, not a new mechanic — each week runs through the
+        // same journaled advance() a plain click runs, and the loop stops the moment a decision
+        // blocks the week, the run ends, or the mode is online (a rival's round clock is not ours
+        // to fast-forward). Five keeps a slip of the finger from eating a quarter of the game.
+        if (e.shiftKey && !online) {
+          let hops = 0
+          const step = () => {
+            const g = useStore.getState().game
+            if (!g || g.gameOver || hasPendingDecision(g) || hops >= 5) return
+            hops++
+            advance()
+            setTimeout(step, 90)
+          }
+          step()
+          return
+        }
+        advance()
+      }}
       className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl px-4 text-[15px] font-bold transition-[filter,transform,background-color] duration-[120ms] ${
         advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
@@ -596,21 +631,31 @@ export default function App() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* sidebar — desktop */}
       <aside className="hidden w-[240px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
-        <div className="border-b border-line/60 px-4 pb-4 pt-5">
+        {/* The wordmark row — the mock's brand header, above the player's own company. */}
+        <div className="flex items-center gap-2 border-b border-line/60 px-4 py-3">
+          <Rocket size={18} className="text-accent" />
+          <div className="min-w-0 leading-tight">
+            <div className="text-[13px] font-extrabold uppercase tracking-[0.08em]">Founder Mode</div>
+            <div className="text-[10.5px] text-mut">The startup game.</div>
+          </div>
+        </div>
+        <div className="border-b border-line/60 px-4 pb-4 pt-4">
           {/* The mock's company card: monogram centred with a soft brand ring, identity beneath.
               The sidebar is the one place the game says "this is YOUR company" — it earns the
               screen's second decorative element (the hero's glow being the first). */}
-          <div className="flex flex-col items-center text-center">
+          <div className="flex items-center gap-3">
             <div className="rounded-2xl p-1" style={{ boxShadow: '0 0 0 1px rgb(139 92 246 / 0.35), 0 0 24px rgb(139 92 246 / 0.18)' }}>
-              <Monogram name={game.companyName} size={46} />
+              <Monogram name={game.companyName} size={44} />
             </div>
-            <div className="mt-2.5 w-full truncate text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
-            <div className="text-xs text-mut">
-              {game.stage} · Week {game.week}
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-extrabold tracking-tight">{game.companyName}</div>
+              <div className="text-xs text-mut">
+                {game.stage} · Week {game.week}
+              </div>
             </div>
           </div>
           {/* Brief §38: a quiet mode indicator — same brand, different experience. */}
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-mut">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-mut">
             <span className="rounded-full border border-line2 px-1.5 py-px font-semibold">
               {MODE_META[game.config?.mode ?? 'quick'].icon} {MODE_META[game.config?.mode ?? 'quick'].name}
             </span>
@@ -684,6 +729,11 @@ export default function App() {
           )}
           <div className="mb-2 text-center text-[11px] text-mut">{weekDate(game.week)}</div>
           {advanceBtn}
+          {!online && !game.gameOver && (
+            <div className="mt-1.5 text-center text-[10.5px] text-mut">
+              Hold <kbd className="rounded border border-line2 bg-surface2 px-1 py-px font-semibold">Shift</kbd> to fast forward
+            </div>
+          )}
           {online && myReady && !matchOver && !game.gameOver && (
             <button className="mt-1.5 w-full text-center text-[12px] text-mut hover:text-ink" onClick={cancelReady}>
               Cancel ready

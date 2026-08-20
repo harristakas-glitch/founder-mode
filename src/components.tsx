@@ -280,6 +280,27 @@ export function Sparkline({ data, tone = 'mut' }: { data: number[]; tone?: 'good
   )
 }
 
+/**
+ * A radial gauge: a bounded 0-100 number as a donut, the mock's grammar for PMF. Pure CSS
+ * (conic-gradient), no SVG, no animation — the figure in the middle carries the number and the
+ * arc is its shape. Never colour alone: callers pair it with the printed value.
+ */
+export function RadialGauge({ value, size = 44, tone = 'accent' }: { value: number; size?: number; tone?: 'good' | 'bad' | 'warn' | 'accent' }) {
+  const v = Math.max(0, Math.min(100, value))
+  const col = { good: 'var(--color-good)', bad: 'var(--color-bad)', warn: 'var(--color-warn)', accent: 'var(--color-accent)' }[tone]
+  return (
+    <div
+      aria-hidden="true"
+      className="relative shrink-0 rounded-full"
+      style={{ width: size, height: size, background: `conic-gradient(${col} ${v * 3.6}deg, var(--color-surface3) 0deg)` }}
+    >
+      <div className="absolute inset-[4px] flex items-center justify-center rounded-full bg-surface text-[11px] font-bold tnum">
+        {Math.round(v)}
+      </div>
+    </div>
+  )
+}
+
 /** A meter: a bounded 0-100 number as a bar, so 5/100 LOOKS like 5/100. Never colour alone — the
  *  figure above it carries the number; this is the shape of it. */
 export function Meter({ value, tone = 'accent' }: { value: number; tone?: 'good' | 'bad' | 'warn' | 'accent' }) {
