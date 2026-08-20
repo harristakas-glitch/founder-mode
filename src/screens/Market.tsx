@@ -1,4 +1,5 @@
-import { Btn, Disclosure, NESTED, Panel, StatCard, Td, Th } from '../components'
+import { AlertTriangle, Building2, Clock, DollarSign, Gauge, Shield, Users as UsersIcon } from 'lucide-react'
+import { Btn, Disclosure, NESTED, Panel, RAISED, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
 import {
@@ -31,14 +32,22 @@ import { useStore } from '../store'
 // (components.tsx) — the one toggle the platform already makes keyboard-reachable and already
 // announces as expanded/collapsed.
 
+// Duration / cost / count read as small bordered chips, not prose — the same fact-chip constant
+// Discovery's experiment catalogue established.
+const CHIP = 'inline-flex items-center gap-1 rounded-md border border-line/70 bg-surface2 px-2 py-0.5 text-[11.5px] font-semibold text-mut tnum'
+
+// The cost tag INSIDE an attack button: same bordered-pill shape, no background of its own —
+// it sits on the button's surface2 and a plane never repeats.
+const BTN_CHIP = 'rounded-md border border-line/70 px-1.5 py-px text-[11px] font-semibold text-mut tnum'
+
 /**
  * What a rival's posture looks like on the board.
  *
  * The whole fairness case for AI rivals using the attack layer rests on this being visible BEFORE
  * the attack: `rivalAggressionStep` also gives one week of public notice in the inbox, but a
  * message scrolls away and a badge does not. `title` carries `stance.why` — the same sentence the
- * attack itself will lead with, so the warning and the blow give one account of one decision. On
- * the phone cards there is no hover to carry it, so the sentence is printed under the badge.
+ * attack itself will lead with, so the warning and the blow give one account of one decision.
+ * There is no hover on a touch screen, so the sentence is also printed under the row itself.
  */
 const STANCE_STYLE: Record<string, string> = {
   calm: 'border-line/60 text-mut',
@@ -141,12 +150,14 @@ export function Market() {
       <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
         <StatCard
           label="Market saturation"
+          icon={<Gauge size={13} />}
           value={pct(saturation, 1)}
           delta={saturation > 0.5 ? 'Growth gets harder as the market fills up' : 'Plenty of greenfield left'}
           tone={saturation > 0.5 ? 'down' : 'up'}
         />
         <StatCard
           label="Your market share"
+          icon={<UsersIcon size={13} />}
           value={pct(
             game.users /
               Math.max(1, game.users + otherPlayersUsers + game.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)),
@@ -161,107 +172,65 @@ export function Market() {
 
       <div className="mt-3.5">
         <Panel title="Leaderboard">
-          {/* Phones get cards, same trade as Hiring: in a horizontally scrolling table the
-              right-hand columns (valuation, posture) sit off-screen, invisible unless you
-              notice you can swipe sideways. */}
-          <div className="space-y-2.5 md:hidden">
+          {/* One list at every width — the same trade Hiring made. The desktop table kept valuation
+              and posture in the far-right columns, which is exactly where a phone's horizontal
+              scroller hides them, so phones grew a second card implementation of the same rows.
+              One row grammar now serves both: rank in a nested tile, name with its stage and
+              posture chips, then the two numbers the board exists to compare. */}
+          <div className="space-y-1">
             {rows.map((r, i) => (
               <div
                 key={r.id}
-                className={`rounded-xl border px-3.5 py-3 ${
-                  r.you ? 'border-accent/40 bg-accent/10' : !r.alive ? 'border-line/60 opacity-40' : 'border-line/60 bg-surface2'
+                className={`rounded-lg border px-3 py-2.5 ${
+                  // your own row rides on plane 3, the grammar the Arena standings card already uses
+                  r.you ? 'border-line2 bg-surface3' : !r.alive ? 'border-transparent opacity-40' : 'border-transparent'
                 }`}
               >
-                <div className="flex items-baseline justify-between gap-3">
-                  <div className="min-w-0 text-[13px]">
-                    <span className="text-mut tnum">{r.alive ? `#${i + 1}` : '☠️'}</span> <b>{r.name}</b>
-                    {!r.alive && <span className="text-mut"> · shut down</span>}
-                    {r.alive && r.gone && <span className="text-mut"> · left the match</span>}
-                    {r.alive && r.absent && (
-                      <span className="text-warn" title="We've lost their connection. They're still in the match and still hold their users.">
-                        {' '}
-                        · reconnecting
-                      </span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <div className={`${NESTED} flex h-9 w-9 shrink-0 items-center justify-center text-[13px] font-bold tnum ${r.you ? '' : 'text-mut'}`}>
+                    {r.alive ? i + 1 : '☠️'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+                      <b>{r.name}</b>
+                      {r.alive && <span className={CHIP}>{r.stage}</span>}
+                      {r.stance && r.stance.id !== 'calm' && <StanceBadge stance={r.stance} />}
+                      {!r.alive && <span className="text-[12px] text-mut">shut down</span>}
+                      {r.alive && r.gone && <span className="text-[12px] text-mut">left the match</span>}
+                      {r.alive && r.absent && (
+                        <span
+                          className="text-[12px] text-warn"
+                          title="We've lost their connection. They're still in the match and still hold their users."
+                        >
+                          reconnecting
+                        </span>
+                      )}
+                    </div>
+                    {online && r.alive && r.cash != null && (
+                      <div className="mt-0.5 text-[12px] text-mut tnum">
+                        cash {money(r.cash)} · rev {r.rev != null ? money(r.rev) : '—'}/wk · PMF {r.pmf != null ? Math.round(r.pmf) : '—'}
+                      </div>
                     )}
                   </div>
-                  <span className="flex shrink-0 items-center gap-2">
-                    {r.stance && r.stance.id !== 'calm' && <StanceBadge stance={r.stance} />}
-                    <span className="text-[13px] font-bold tnum">{r.alive ? money(r.val) : '—'}</span>
-                  </span>
+                  <div className="ml-auto flex shrink-0 items-center gap-4 text-right">
+                    <div className="min-w-[56px]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-mut">Users</div>
+                      <div className="text-[13px] font-semibold tnum">{num(r.users)}</div>
+                    </div>
+                    <div className="min-w-[76px]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-mut">Est. valuation</div>
+                      <div className="text-[13px] font-bold tnum">{r.alive || r.val > 0 ? money(r.val) : '—'}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
-                  <span className="text-mut">Stage</span>
-                  <span className="text-right">{r.alive ? r.stage : '—'}</span>
-                  <span className="text-mut">Users</span>
-                  <span className="text-right tnum">{num(r.users)}</span>
-                  {online && (
-                    <>
-                      <span className="text-mut">Cash</span>
-                      <span className="text-right tnum">{r.alive && r.cash != null ? money(r.cash) : '—'}</span>
-                      <span className="text-mut">Rev /wk</span>
-                      <span className="text-right tnum">{r.alive && r.rev != null ? money(r.rev) : '—'}</span>
-                      <span className="text-mut">PMF</span>
-                      <span className="text-right tnum">{r.alive && r.pmf != null ? Math.round(r.pmf) : '—'}</span>
-                    </>
-                  )}
-                </div>
+                {/* the warning in words, at every width — hover carries nothing on a phone */}
                 {r.stance && r.stance.id !== 'calm' && (
-                  <div className="mt-2 text-[12px] leading-snug text-mut">{r.stance.why}</div>
+                  <div className="mt-1 pl-12 text-[12px] leading-snug text-mut">{r.stance.why}</div>
                 )}
               </div>
             ))}
           </div>
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[560px]">
-              <thead>
-                <tr>
-                  <Th>#</Th>
-                  <Th>Company</Th>
-                  <Th>Stage</Th>
-                  <Th right>Users</Th>
-                  {online && (
-                    <>
-                      <Th right>Cash</Th>
-                      <Th right>Rev /wk</Th>
-                      <Th right>PMF</Th>
-                    </>
-                  )}
-                  <Th right>Est. valuation</Th>
-                  {!online && <Th>Posture</Th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.id} className={r.you ? 'bg-accent/10' : !r.alive ? 'opacity-40' : ''}>
-                    <Td>{r.alive ? i + 1 : '—'}</Td>
-                    <Td>
-                      <b>{r.name}</b>
-                      {!r.alive && <span className="text-mut"> · shut down</span>}
-                      {r.alive && r.gone && <span className="text-mut"> · left the match</span>}
-                      {r.alive && r.absent && (
-                        <span className="text-warn" title="We've lost their connection. They're still in the match and still hold their users.">
-                          {' '}
-                          · reconnecting
-                        </span>
-                      )}
-                    </Td>
-                    <Td>{r.alive ? r.stage : '☠️'}</Td>
-                    <Td right>{num(r.users)}</Td>
-                    {online && (
-                      <>
-                        <Td right>{r.alive && r.cash != null ? money(r.cash) : '—'}</Td>
-                        <Td right>{r.alive && r.rev != null ? money(r.rev) : '—'}</Td>
-                        <Td right>{r.alive && r.pmf != null ? Math.round(r.pmf) : '—'}</Td>
-                      </>
-                    )}
-                    <Td right>{r.alive ? money(r.val) : '—'}</Td>
-                    {!online && <Td>{r.stance ? <StanceBadge stance={r.stance} /> : <span className="text-mut">—</span>}</Td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Disclosure label="How to read this table">
+          <Disclosure label="How to read the board">
             {online
               ? 'Open books: every founder sees everyone’s cash, revenue, and PMF — this is a knife fight under stadium lights, not a mystery novel. Fallen players show their final payout.'
               : hasCapability(game, 'rivalAggression')
@@ -287,27 +256,34 @@ function PriceWarBanner() {
   if (weeks <= 0) return null
   const mine = (game.flags.priceWarInitiator ?? 0) === 1
   return (
-    <div className="mt-3.5 rounded-2xl border border-warn/40 bg-warn/[0.06] px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[13px] leading-snug">
-          <b>📉 Price war — {weeks} wk left.</b>{' '}
-          {mine ? (
-            <span className="text-mut">You started it. Your revenue is cut too, until it runs out.</span>
-          ) : (
-            <span className="text-mut">
-              Your revenue is cut while it runs. Step out and prices go back up — but{' '}
-              {Math.round(CONCEDE_USER_SHARE * 100)}% of your customers follow the cheaper option to them.
-            </span>
+    // The iconed-banner grammar Growth's churn banner set: nested icon tile, small-caps label,
+    // the one big tnum figure — here the countdown, because the clock is what makes this a banner.
+    <div className="mt-3.5">
+      <Panel className="border-warn/60">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
+            <div className={`${NESTED} flex h-11 w-11 shrink-0 items-center justify-center`}>
+              <AlertTriangle size={20} className="text-warn" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">Price war</div>
+              <div className="mt-1 text-[34px] leading-[1.05] font-bold tracking-[-0.02em] text-warn tnum">{weeks} wk</div>
+              <div className="mt-1.5 text-[13px] leading-snug text-mut">
+                {mine
+                  ? 'left to run. You started it — your revenue is cut too, until it runs out.'
+                  : `left to run. Your revenue is cut every week it lasts. Step out and prices go back up — but ${Math.round(CONCEDE_USER_SHARE * 100)}% of your customers follow the cheaper option to them.`}
+              </div>
+            </div>
+          </div>
+          {/* Primary, not default: this is a decision with a countdown on it, and it was previously
+              styled identically to the twenty-odd attack buttons further down the page. */}
+          {gate.ok && (
+            <Btn variant="primary" className="shrink-0" onClick={concede}>
+              Concede — raise prices back
+            </Btn>
           )}
-        </span>
-        {/* Primary, not default: this is a decision with a countdown on it, and it was previously
-            styled identically to the twenty-odd attack buttons further down the page. */}
-        {gate.ok && (
-          <Btn variant="primary" className="shrink-0" onClick={concede}>
-            Concede — raise prices back
-          </Btn>
-        )}
-      </div>
+        </div>
+      </Panel>
     </div>
   )
 }
@@ -330,17 +306,31 @@ function CrisisRetainer({ blurb }: { blurb: string }) {
 
   return (
     <div className={`mb-3 ${NESTED} px-3.5 py-3`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[13px] leading-snug">
-          🛡 <b>Crisis retainer</b> <span className="text-mut">— {blurb}</span>
-        </span>
+      <div className="flex flex-wrap items-center gap-3">
+        {/* The strip itself is plane 2, so its icon tile steps up to plane 3 — adjacent planes only. */}
+        <div className={`${RAISED} flex h-10 w-10 shrink-0 items-center justify-center`}>
+          <Shield size={20} className="text-accent" aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-bold">Crisis retainer</div>
+          <div className="mt-0.5 text-[12px] leading-snug text-mut">{blurb}</div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className={CHIP}>
+              <Clock size={16} aria-hidden="true" /> {SHIELD_WEEKS} wk
+            </span>
+            <span className={CHIP}>
+              {/* money() already prints the $, the icon replaces it */}
+              <DollarSign size={16} aria-hidden="true" /> {money(cost).replace('$', '')}
+            </span>
+          </div>
+        </div>
         {shielded ? (
           <span className="shrink-0 rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-bold text-good">
             Active — {game.flags.shield} wk left
           </span>
         ) : (
           <Btn variant="primary" className="shrink-0" disabled={!gate.ok || broke} onClick={buyShield}>
-            Retain · {money(cost)}
+            Retain
           </Btn>
         )}
       </div>
@@ -386,7 +376,7 @@ function PvpOps() {
   return (
     <div className="mt-3.5">
       <Panel title="Dirty tricks — hit the other founders">
-        <CrisisRetainer blurb={`silently deflects the next attack on you. Lasts ${SHIELD_WEEKS} weeks; your rivals can’t see it.`} />
+        <CrisisRetainer blurb="silently deflects the next attack on you — your rivals can’t see it." />
         <div className="mb-2.5 text-xs leading-relaxed text-mut">
           This market has one pot of users and no referee. Each operation costs cash, drains your energy, and puts your ops team on a
           5-week cooldown — and everyone in the room will know it was you. Costs rise with your stage: a bigger company swings a bigger,
@@ -404,7 +394,8 @@ function PvpOps() {
                 const cost = attackCost(game, a.id)
                 return (
                   <Btn key={a.id} disabled={!gate.ok || game.cash < cost} onClick={() => attackPlayer(p.id, a.id)}>
-                    {a.emoji} {a.name} · {money(cost)}
+                    {a.emoji} {a.name}
+                    <span className={BTN_CHIP}>{money(cost)}</span>
                   </Btn>
                 )
               })}
@@ -446,7 +437,7 @@ function RivalOps() {
               .join(' ')}
           </div>
         )}
-        <CrisisRetainer blurb={`silently deflects EVERY attack on you for ${SHIELD_WEEKS} weeks. Your rivals can’t see it.`} />
+        <CrisisRetainer blurb="silently deflects EVERY attack on you while it runs — your rivals can’t see it." />
         <div className="mb-2.5 text-xs leading-relaxed text-mut">
           Rivals in this market act on what they can see: how much of the market they hold, how fast you are growing, who out-raised
           whom. A rival that turns on you is flagged <b>Hostile</b> or <b>Cornered</b> in the table above a full week before their first
@@ -465,7 +456,8 @@ function RivalOps() {
                 const cost = attackCost(game, a.id)
                 return (
                   <Btn key={a.id} disabled={!gate.ok || game.cash < cost} onClick={() => attackRival(r.id, a.id)}>
-                    {a.emoji} {a.name} · {money(cost)}
+                    {a.emoji} {a.name}
+                    <span className={BTN_CHIP}>{money(cost)}</span>
                   </Btn>
                 )
               })}
@@ -492,15 +484,26 @@ function Acquisitions() {
           const price = acquisitionPrice(game, r)
           const stockPct = (price / (val + price)) * 100
           return (
-            <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
-              <span className="text-[13px]">
-                <b>{r.name}</b>{' '}
-                <span className="text-mut">
-                  · {num(r.users)} users · asking <b className="text-ink tnum">{money(price)}</b>
-                </span>
-              </span>
+            // The icon-tile row grammar from Discovery's catalogue: tile, name over its fact
+            // chips, then the actions — the cash offer is the primary one per row.
+            <div key={r.id} className="flex flex-wrap items-center gap-3 border-b border-line/40 py-3 last:border-b-0">
+              <div className={`${NESTED} flex h-10 w-10 shrink-0 items-center justify-center`}>
+                <Building2 size={20} className="text-accent" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1 text-[13px]">
+                <b>{r.name}</b>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <span className={CHIP}>
+                    <UsersIcon size={16} aria-hidden="true" /> {num(r.users)}
+                  </span>
+                  <span className={CHIP}>
+                    {/* money() already prints the $, the icon replaces it */}
+                    <DollarSign size={16} aria-hidden="true" /> {money(price).replace('$', '')} ask
+                  </span>
+                </div>
+              </div>
               {gate.ok ? (
-                <span className="flex gap-2">
+                <span className="flex flex-wrap gap-2">
                   <Btn variant="primary" disabled={game.cash < price} onClick={() => buyRival(r.id, 'cash')}>
                     Cash {game.cash < price ? '(can’t afford)' : ''}
                   </Btn>

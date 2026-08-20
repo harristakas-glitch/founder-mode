@@ -45,6 +45,7 @@ import { Story } from './screens/Story'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers } from './runMarkers'
 import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
+import { FitPeek } from './FitPeek'
 import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
 import { GAME_URL, endingEmoji, sectorAccent } from './theme'
@@ -242,6 +243,7 @@ export default function App() {
   const link = useStore((s) => s.link)
   const emotes = useStore((s) => s.emotes)
   const [navOpen, setNavOpen] = useState(false)
+  const [fitOpen, setFitOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false) // mobile: the full metric sheet
 
   // rejoin the online room this device was in before a refresh; pick up any signed-in session
@@ -752,6 +754,16 @@ export default function App() {
             )}
             <ChevronDown size={16} className="ml-auto shrink-0 text-mut" />
           </button>
+          {/* Spec §5: the PMF breakdown, one click from any screen. Target icon — the same
+              symbol the rail and the HQ card already use for fit. */}
+          <button
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:h-9 md:w-9"
+            aria-label="Product-market fit breakdown"
+            title="Fit — the breakdown, from any screen"
+            onClick={() => setFitOpen(true)}
+          >
+            <Target size={17} />
+          </button>
           <FieldGuideButton />
           <MuteButton />
           <button
@@ -907,6 +919,9 @@ export default function App() {
 
       {/* mobile: the full metric sheet, same entries as the desktop rail */}
       {statsOpen && <MobileStatsSheet onClose={() => setStatsOpen(false)}>{statRail}</MobileStatsSheet>}
+
+      {/* Spec §5: the fit breakdown, globally accessible */}
+      {fitOpen && <FitPeek onClose={() => setFitOpen(false)} />}
 
       {/* Arena: the round reveal (§43) */}
       {reveal && <RoundReveal week={reveal.week} rows={reveal.rows} onClose={() => setReveal(null)} />}

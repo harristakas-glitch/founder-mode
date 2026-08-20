@@ -9,7 +9,23 @@
 // per-sector retheming the game itself does once a run starts, previewed a step early.
 
 import { useState, type CSSProperties, type ReactNode } from 'react'
-import { ArrowLeft, ArrowRight, CalendarDays, Check, Globe, Lock, LogIn, LogOut, Rocket, Trophy } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  Check,
+  Globe,
+  Landmark,
+  Lock,
+  LogIn,
+  LogOut,
+  Rocket,
+  Swords,
+  Trophy,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
+import { Btn, NESTED } from '../components'
 import { SECTORS, sectorById } from '../game/data'
 import { ACHIEVEMENTS, earnedAchievements } from '../game/achievements'
 import { SCENARIOS } from '../game/engine'
@@ -24,6 +40,13 @@ import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
 
+// The fact-chip grammar shared with Discovery/Hiring: a small bordered pill for a count,
+// a duration, a name — metadata, never prose.
+const CHIP = 'inline-flex items-center gap-1 rounded-md border border-line/70 bg-surface2 px-2 py-0.5 text-[11.5px] font-semibold text-mut tnum'
+
+// The icon-tile grammar's lucide face for each experience — the honest glyph equivalent of the
+// emoji identity MODE_META carries (⚡ / 🏛 / ⚔️), which the top-bar pill still wears verbatim.
+const MODE_ICON: Record<GameMode, LucideIcon> = { quick: Zap, career: Landmark, arena: Swords }
 
 // A market's character, read straight off its simulation numbers rather than invented:
 // revenue per user (log — the spread is three orders of magnitude), word of mouth, and
@@ -55,7 +78,13 @@ const FOUNDER_META: Record<FounderKind, { name: string; blurb: string }> = {
 
 const eyebrow = 'text-[10.5px] font-bold uppercase tracking-[0.16em] text-mut'
 
-/** A selectable card. One shape for formats, markets, scenarios and founder types. */
+/**
+ * A selectable card. One shape for formats, markets, scenarios and founder types.
+ *
+ * Built from the plane ramp rather than the old `.opt` translucency: unselected is a plain
+ * plane-1 card, selected is the accent border plus a raise to PLANE 3 — unambiguous at a
+ * glance, and opaque, so the aurora behind the gate can never re-order the depth.
+ */
 function Opt({
   on,
   onClick,
@@ -79,12 +108,20 @@ function Opt({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={on}
-      data-on={on}
-      className="opt flex min-h-[44px] flex-col p-3 pr-9"
+      className={`relative flex min-h-[44px] flex-col rounded-xl border p-5 pr-10 text-left transition-[border-color,background-color,transform] duration-[120ms] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40 ${
+        on
+          ? 'border-[var(--oc,var(--ha))] bg-surface3 shadow-[var(--elev-2)]'
+          : 'border-line bg-surface hover:border-line2 hover:bg-surface2'
+      }`}
       style={accent ? vars({ '--oc': accent }) : undefined}
     >
       {/* a tick, not just a tint — the chosen option is unmistakable at a glance */}
-      <span className="opt-tick absolute top-3 right-3">
+      <span
+        className={`absolute top-3 right-3 flex h-[17px] w-[17px] items-center justify-center rounded-full bg-[var(--oc,var(--ha))] text-bg transition-[opacity,transform] duration-[120ms] ${
+          on ? '' : 'scale-75 opacity-0'
+        }`}
+        aria-hidden="true"
+      >
         <Check size={11} strokeWidth={3.5} />
       </span>
       <span className="text-[14px] font-bold">{title}</span>
@@ -131,11 +168,15 @@ function AchievementGallery() {
   if (earned.size === 0) return null // nothing to brag about yet — keep the first screen clean
   return (
     <div>
-      <div className={`${eyebrow} mb-2`}>
-        Achievements — {earned.size}/{ACHIEVEMENTS.length}
+      <div className={`${eyebrow} mb-2 flex items-center gap-2`}>
+        Achievements
+        {/* the tally is metadata, so it reads as a chip rather than part of the heading */}
+        <span className={CHIP}>
+          {earned.size}/{ACHIEVEMENTS.length}
+        </span>
       </div>
       {/* Earned only. The locked chips were 25 identical "·····" placeholders that carried no
-          information the "{n}/{total}" count above does not already carry, and they buried the
+          information the count chip above does not already carry, and they buried the
           handful the player actually won. */}
       <div className="flex flex-wrap gap-1.5">
         {ACHIEVEMENTS.filter((a) => earned.has(a.id)).map((a) => (
@@ -160,14 +201,19 @@ function HallOfFame() {
       <div className={`${eyebrow} mb-2 flex items-center gap-1.5`}>
         <Trophy size={12} /> Hall of fame — your best runs
       </div>
-      <div className="rounded-xl border border-line/70 bg-surface px-3.5">
+      {/* The leaderboard grammar: rank tile, name, the run's facts as chips, score tnum right. */}
+      <div className="rounded-xl border border-line/70 bg-surface p-5 shadow-[var(--elev-2)]">
         {hall.slice(0, 5).map((r, i) => (
-          <div key={i} className="flex items-center justify-between gap-3 border-b border-line/40 py-2 text-[13px] last:border-b-0">
-            <span className="min-w-0 truncate">
-              {endingEmoji(r.ending)} <b>{r.company}</b>{' '}
-              <span className="text-mut">
-                · {r.sector} · {r.weeks} wks
-              </span>
+          <div key={i} className="flex items-center gap-3 border-b border-line/40 py-2 text-[13px] first:pt-0 last:border-b-0 last:pb-0">
+            <span className={`${NESTED} flex h-8 w-8 shrink-0 items-center justify-center text-[12px] font-bold tnum ${i === 0 ? 'text-ink' : 'text-mut'}`}>
+              {i + 1}
+            </span>
+            <span className="min-w-0 flex-1 truncate">
+              {endingEmoji(r.ending)} <b>{r.company}</b>
+            </span>
+            <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+              <span className={CHIP}>{r.sector}</span>
+              <span className={CHIP}>{r.weeks} wk</span>
             </span>
             <b className={`shrink-0 tnum ${r.score > 0 ? 'text-good' : 'text-mut'}`}>{r.score > 0 ? money(r.score) : '—'}</b>
           </div>
@@ -313,6 +359,7 @@ export function NewGame() {
             <div className="mt-3.5 grid gap-3 md:grid-cols-3">
               {(['quick', 'career', 'arena'] as GameMode[]).map((m, i) => {
                 const meta = MODE_META[m]
+                const Icon = MODE_ICON[m]
                 const [c] = MODE_ACCENTS[m]
                 return (
                   <button
@@ -325,10 +372,10 @@ export function NewGame() {
                     className="mode-card home-in flex flex-col"
                     style={vars({ '--mc': c, '--d': `${130 + i * 70}ms` })}
                   >
-                    <span className="relative flex h-full flex-1 flex-col p-4 sm:p-5">
+                    <span className="relative flex h-full flex-1 flex-col p-6">
                       <span className="flex items-start justify-between gap-2">
-                        <span className="mode-emblem" aria-hidden="true">
-                          {meta.icon}
+                        <span className={`${NESTED} flex h-10 w-10 shrink-0 items-center justify-center`} aria-hidden="true">
+                          <Icon size={20} className="text-accent" />
                         </span>
                         {m === 'career' && (
                           <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] font-bold text-warn">
@@ -344,12 +391,10 @@ export function NewGame() {
                           </span>
                         )}
                       </span>
-                      <span className="mt-3.5 block text-[28px] font-bold tracking-tight">{meta.name}</span>
-                      <span className="mt-1 block text-[14px] font-bold" style={{ color: c }}>
-                        {meta.promise}
-                      </span>
-                      <span className="mt-2 block text-[13px] leading-relaxed text-mut">{meta.blurb}</span>
-                      <span className="mt-auto block pt-5">
+                      <span className="mt-4 block text-[16px] font-bold">{meta.name}</span>
+                      <span className="mt-1 block text-[13.5px] leading-relaxed text-mut">{meta.promise}</span>
+                      <span className="mt-1.5 block text-[12.5px] leading-relaxed text-mut">{meta.blurb}</span>
+                      <span className="mt-auto block pt-6">
                         <span className={`${eyebrow} block`}>{meta.meta}</span>
                         <span className="mt-2 flex items-center gap-1.5 text-[13.5px] font-bold" style={{ color: c }}>
                           {meta.cta} <ArrowRight size={15} />
@@ -368,15 +413,19 @@ export function NewGame() {
                 setExperience('quick')
                 setFormat('daily_challenge')
               }}
-              className="home-in mt-3 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-3.5 text-left transition-colors hover:border-[var(--ha)]/60 hover:bg-surface2"
+              className="home-in mt-3 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3.5 text-left transition-colors hover:border-[var(--ha)]/60 hover:bg-surface2"
               style={vars({ '--d': '340ms' })}
             >
               <span className="flex items-center gap-3">
-                <CalendarDays size={17} className="shrink-0 text-[var(--ha)]" />
+                <span className={`${NESTED} flex h-10 w-10 shrink-0 items-center justify-center`} aria-hidden="true">
+                  <CalendarDays size={20} className="text-[var(--ha)]" />
+                </span>
                 <span>
                   <span className={`${eyebrow} block`}>Today&apos;s challenge</span>
-                  <span className="mt-0.5 block text-[14px] font-bold">
-                    #{daily.id} · {sectorById(daily.sector).name}
+                  {/* the seed's public face (#id) and its locked market, as fact chips */}
+                  <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className={CHIP}>#{daily.id}</span>
+                    <span className={CHIP}>{sectorById(daily.sector).name}</span>
                   </span>
                 </span>
               </span>
@@ -396,7 +445,7 @@ export function NewGame() {
         {experience && (
           <div className="home-in mt-5" style={vars({ '--d': '0ms' })}>
             {experience === 'career' && (
-              <div className="rounded-2xl border border-[var(--ha)]/25 bg-[var(--ha)]/[0.06] p-4">
+              <div className="rounded-xl border border-[var(--ha)]/25 bg-[var(--ha)]/[0.06] p-5">
                 {/* the "Early access" badge is on the Career card on the gate, one click behind
                     this panel — the paragraph below says the same thing in full sentences */}
                 <div className="text-[15px] font-extrabold">{MODE_META.career.promise}</div>
@@ -536,14 +585,15 @@ export function NewGame() {
                 {/* sticky, so the way into the game stays on screen however far down
                     the option list the player has scrolled */}
                 <div className="sticky bottom-3 z-20 mt-8">
-                  <div className="flex items-center gap-3 rounded-2xl border border-[var(--ha)]/25 bg-surface2 p-2 shadow-[var(--elev-3)] backdrop-blur-md">
+                  <div className="flex items-center gap-3 rounded-xl border border-[var(--ha)]/25 bg-surface2 p-2 shadow-[var(--elev-3)] backdrop-blur-md">
                     <div className="ml-2 hidden min-w-0 flex-1 text-[12.5px] text-mut sm:block">
                       <b className="text-ink">{name.trim() || 'Untitled Inc.'}</b> · {sectorById(activeSector).name} ·{' '}
                       {founder === 'technical' ? 'Technical' : 'Business'} founder
                     </div>
-                    <button
-                      type="button"
-                      className="launch-btn flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-6 text-[15.5px] font-bold sm:flex-none"
+                    {/* the storefront's one CTA: primary, at large size */}
+                    <Btn
+                      variant="primary"
+                      className="h-12 flex-1 px-6 sm:flex-none"
                       onClick={() =>
                         startGame({
                           mode: experience === 'career' ? 'career' : 'quick',
@@ -555,9 +605,9 @@ export function NewGame() {
                         })
                       }
                     >
-                      {daily_ ? <CalendarDays size={17} /> : <Rocket size={17} />}
+                      {daily_ ? <CalendarDays size={17} aria-hidden="true" /> : <Rocket size={17} aria-hidden="true" />}
                       {startLabel}
-                    </button>
+                    </Btn>
                   </div>
                 </div>
               </>
@@ -566,7 +616,7 @@ export function NewGame() {
             {/* ---------- Arena ---------- */}
             {experience === 'arena' && (
               <Step n={2} title="Open a room" hint="or join one with a friend's code">
-                <div className="rounded-2xl border border-line bg-surface p-4">
+                <div className="rounded-xl border border-line bg-surface p-5">
                   {!onlineConfigured ? (
                     /* the build-time setup steps that used to live here were a README addressed to
                        whoever deploys the game, printed to a player who cannot act on them */
@@ -577,14 +627,15 @@ export function NewGame() {
                   ) : (
                     <>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <button
-                          type="button"
+                        {/* this screen state's one action, same primary treatment as Start Run */}
+                        <Btn
+                          variant="primary"
                           disabled={connecting}
-                          className="launch-btn flex min-h-[50px] items-center justify-center gap-2 rounded-xl px-4 font-bold shadow-[var(--elev-2)] disabled:opacity-50"
+                          className="h-12 px-4"
                           onClick={() => netAction(() => hostRoom(name.trim(), founder))}
                         >
-                          <Globe size={17} /> {connecting ? 'Connecting…' : 'Create a room'}
-                        </button>
+                          <Globe size={17} aria-hidden="true" /> {connecting ? 'Connecting…' : 'Create a room'}
+                        </Btn>
                         <div className="flex gap-2">
                           <input
                             type="text"
@@ -595,14 +646,13 @@ export function NewGame() {
                             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                             className={`${inputCls} text-center font-mono text-lg tracking-[0.28em] uppercase`}
                           />
-                          <button
-                            type="button"
+                          <Btn
                             disabled={connecting || joinCode.length < 5}
-                            className="min-h-[50px] shrink-0 rounded-xl border border-line bg-surface2 px-5 font-bold transition-colors hover:border-[var(--ha)] disabled:opacity-40"
+                            className="h-12 shrink-0 px-5"
                             onClick={() => netAction(() => joinRoom(joinCode, name.trim(), founder))}
                           >
                             Join
-                          </button>
+                          </Btn>
                         </div>
                       </div>
                     </>

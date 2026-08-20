@@ -66,7 +66,7 @@ export function Btn({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof BTN_VARIANTS }) {
   return (
     <button
-      className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform,opacity] duration-[120ms] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 md:min-h-[34px] ${BTN_VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform,opacity] duration-[120ms] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 md:min-h-[34px] ${BTN_VARIANTS[variant]} ${className}`}
       {...props}
     />
   )

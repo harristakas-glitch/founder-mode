@@ -536,67 +536,8 @@ input[type='range']::-moz-range-thumb {
   transform: translateY(-1px);
 }
 
-.mode-emblem {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  font-size: 22px;
-  line-height: 1;
-  border: 1px solid color-mix(in oklab, var(--mc) 40%, transparent);
-  background: color-mix(in oklab, var(--mc) 14%, transparent);
-}
 
-/* ---------- selectable option (format / market / scenario / founder) ---------- */
-.opt {
-  position: relative;
-  border-radius: 14px;
-  border: 1px solid var(--color-line);
-  background: color-mix(in oklab, var(--color-surface) 78%, transparent);
-  text-align: left;
-  transition:
-    border-color var(--dur-1) var(--e-out),
-    background-color var(--dur-1) var(--e-out),
-    transform var(--dur-1) var(--e-out);
-}
-.opt:hover:not(:disabled) {
-  border-color: var(--color-line2);
-  background: color-mix(in oklab, var(--color-surface2) 70%, transparent);
-}
-.opt:active:not(:disabled) {
-  transform: scale(0.995);
-}
-.opt[data-on='true'] {
-  border-color: color-mix(in oklab, var(--oc, var(--ha)) 70%, transparent);
-  background: color-mix(in oklab, var(--oc, var(--ha)) 13%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--oc, var(--ha)) 22%, transparent);
-}
-.opt:disabled {
-  opacity: 0.38;
-  pointer-events: none;
-}
 
-.opt-tick {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 999px;
-  background: var(--oc, var(--ha));
-  color: var(--color-bg);
-  opacity: 0;
-  transform: scale(0.7);
-  transition:
-    opacity var(--dur-1) var(--e-out),
-    transform var(--dur-1) var(--e-out);
-}
-.opt[data-on='true'] .opt-tick {
-  opacity: 1;
-  transform: none;
-}
 
 /* five-step attribute meter, FM-style: derived from the sector's real numbers */
 .pip {
@@ -609,20 +550,6 @@ input[type='range']::-moz-range-thumb {
   background: var(--oc, var(--ha));
 }
 
-/* ---------- the way in ---------- */
-.launch-btn {
-  background: linear-gradient(160deg, var(--ha), color-mix(in oklab, var(--ha2) 65%, var(--ha)));
-  color: #08101f;
-  transition:
-    filter var(--dur-1) var(--e-out),
-    transform var(--dur-1) var(--e-out);
-}
-.launch-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-.launch-btn:active:not(:disabled) {
-  transform: scale(0.99);
-}
 
 /* ---------- reduced motion: nothing moves, everything still lands ---------- */
 @media (prefers-reduced-motion: reduce) {
@@ -631,9 +558,7 @@ input[type='range']::-moz-range-thumb {
   }
   .mode-card:hover,
   .mode-card:focus-visible,
-  .mode-card:active,
-  .opt:active:not(:disabled),
-  .launch-btn:active:not(:disabled) {
+  .mode-card:active {
     transform: none;
   }
 }

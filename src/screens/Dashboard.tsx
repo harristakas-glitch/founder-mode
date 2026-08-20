@@ -356,7 +356,7 @@ function ArenaStandings() {
   return (
     <div className="mb-4 rounded-[14px] border border-line bg-surface p-4 shadow-[var(--elev-2)]">
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-[15px] font-semibold">Standings</h2>
+        <h2 className="text-[20px] font-semibold">Standings</h2>
         <span className="text-[11.5px] text-mut tnum">
           you are #{myRank} of {rows.length} · week {game.week}
         </span>
@@ -500,7 +500,7 @@ export function Dashboard() {
           <StreamPeek />
           <div className="order-6"><Upcoming /></div>
           <div id="week-stream" className="order-9 lg:mt-0">
-            <h2 className="mb-2.5 text-[15px] font-semibold">This week</h2>
+            <h2 className="mb-2.5 text-[20px] font-semibold">This week</h2>
             <InboxStream />
           </div>
         </div>

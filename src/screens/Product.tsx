@@ -1,3 +1,4 @@
+import { Package as PackageIcon, Sparkles, Bug } from 'lucide-react'
 import { useState } from 'react'
 import { Bar, BarRow, Btn, DemandGauge, Panel } from '../components'
 import { money, num } from '../format'
@@ -244,7 +245,11 @@ export function Product() {
           return (
           <div className="mb-4 last:mb-0" key={key}>
             <div className="mb-1 flex justify-between text-[13px]">
-              <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>
+              <span className={`flex items-center gap-1.5 ${key === 'bet' ? 'font-semibold text-accent2' : ''}`}>
+                {/* the mock's slider chips — each row leads with its icon, hue-matched to its fill */}
+                {key === 'features' && <PackageIcon size={14} className="text-accent" />}
+                {key === 'quality' && <Sparkles size={14} className="text-[var(--color-info)]" />}
+                {key === 'bugs' && <Bug size={14} className="text-warn" />}
                 {key === 'features'
                   ? 'New features'
                   : key === 'quality'
