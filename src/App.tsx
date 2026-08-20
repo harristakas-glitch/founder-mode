@@ -35,8 +35,6 @@ import { Growth } from './screens/Growth'
 import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
-import { careerActive } from './CareerUI'
-import { WeeklyBriefing } from './screens/Briefing'
 import { Inbox } from './screens/Inbox'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
@@ -196,7 +194,6 @@ export default function App() {
     void useStore.getState().initAuth()
   }, [])
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
-  const [briefingWeek, setBriefingWeek] = useState<number | null>(null)
   const [resultsClosed, setResultsClosed] = useState(false) // results overlay dismissed for a last look around
   const [, setClock] = useState(0) // re-render for the round countdown
   const prevWeek = useRef<number | null>(null)
@@ -207,14 +204,13 @@ export default function App() {
       return
     }
     if (prevWeek.current !== null && game.week > prevWeek.current) {
-      // Career gets the weekly briefing (§28) — the resolved week, told rather than dumped.
-      // Quick Play keeps the 950ms sweep because its whole promise is pace, and Arena keeps it
-      // because a modal must never sit on top of the round clock.
-      if (careerActive(game) && !online && !game.gameOver) {
-        setBriefingWeek(game.week)
-        prevWeek.current = game.week
-        return
-      }
+      // Every mode gets the 950ms sweep and nothing more. A briefing MODAL shipped here first —
+      // one story, the deltas, the next step, one Continue — and the owner's verdict after
+      // actually playing it was that a forced click every single week is intrusive, which is the
+      // brief's own rule 37 ("do not constantly block advancement") violated by the feature built
+      // to serve it. It was also redundant by construction: the HQ the player lands on already
+      // leads with the briefing strip, the named top decision and the next best step, so the
+      // modal was narrating a screen the player was about to see anyway. The briefing IS the HQ.
       setWeekFlash(game.week)
       const t = setTimeout(() => setWeekFlash(null), 950)
       prevWeek.current = game.week
@@ -813,9 +809,6 @@ export default function App() {
 
       {/* mobile: the full metric sheet, same entries as the desktop rail */}
       {statsOpen && <MobileStatsSheet onClose={() => setStatsOpen(false)}>{statRail}</MobileStatsSheet>}
-
-      {/* Career: the weekly briefing replaces the sweep (§28) */}
-      {briefingWeek !== null && !game.gameOver && <WeeklyBriefing week={briefingWeek} onClose={() => setBriefingWeek(null)} />}
 
       {/* week transition */}
       {weekFlash && (

@@ -17,7 +17,7 @@ that touched `engine.ts`.
 |---|---|---|
 | Landing (weekly loop) | A Dashboard that could not state a purpose: 16 equal boxes, the "what should I do?" answer at 13.5px against 34px data | **Founder HQ**: one hero (the binding constraint), four causally-ranked metrics, the attention list with the top item raised and named |
 | Being warned | One function ending `slice(0, 3)` over push order — a `good` item could silently discard "you can be replaced". Eleven run-ending events had no route to the player; six had none at all | **The attention register** (`src/attention.ts`): severity is a type, sorted severity-then-deadline, returned unsliced. All eleven events route. Every item names the thing — "Blue Harbor offers $900k for 10%", never "1 decision waiting" |
-| Week resolution (Career) | Everything dumped at once | **The weekly briefing** (§28): one story, four numbers, two "also" lines, the register's top item as next step, one Continue. A week where nothing moved says "A quiet week" and stops |
+| Week resolution (Career) | Everything dumped at once | **The HQ *is* the briefing.** A §28 modal shipped first — one story, the deltas, one Continue — and was removed the same day on owner feedback after real play: a forced click every week is rule 37 violated by the feature built to serve it, and the modal narrated a screen (the HQ) the player was about to land on anyway. The briefing strip, the named top decision and the next step all live on the landing screen instead |
 | Signing a term sheet | "Investing $1.5M for 18%" — consequences discovered after signing | **§17 context beside the Sign button**: runway before → after, ownership before → after, what happens to the board (including that a later sheet resets it and wipes strikes — never stated anywhere before), the bar you'll be held to, down-round flagged on the engine's exact condition |
 | Medium-depth questions | A navigation per answer | **Glance → Understand → Analyse** (§19): click an HQ metric, get a plane-3 drawer with the why and one link deeper |
 
@@ -95,19 +95,18 @@ engine's real 32/55 resign thresholds; the cohort chart unreachable on touch.
 
 ## 6. Mode differentiation
 
-- **Quick Play**: no briefing modal, the 950ms week sweep, career-only screens gated out — its
+- **Quick Play**: the 950ms week sweep, career-only screens gated out — its
   Product area is one screen with no tab chrome. The fit-clock hero uses PMF pace; the drawer
   explains PMF, not retention.
-- **Career**: the briefing, retention-based fit everywhere PMF would mislead, the living-world
+- **Career**: retention-based fit everywhere PMF would mislead, the living-world
   blocks (FounderBriefing, TeamOpinions, Commitments, BoardMeeting) intact and capability-gated.
-- **Arena**: excluded from the briefing (a modal must never sit on the round clock); the round
-  timer rides the slimmed rail. **§42/§43 (standings hierarchy + round reveal) is the one brief
+- **Arena**: the round timer rides the slimmed rail. **§42/§43 (standings hierarchy + round reveal) is the one brief
   item not yet built** — see §8.
 
 ## 7. Components — new and consolidated
 
 New: `attentionRegister`/`nextBestStep` (pure, tested), `AttentionList`, `Hero` (binding
-constraint), `MetricDrawer`, `WeeklyBriefing`, `Disclosure`, `NESTED`/`RAISED` plane exports, the
+constraint), `MetricDrawer`, `Disclosure`, `NESTED`/`RAISED` plane exports, the
 runway top-edge rule. Deleted: `Career.tsx`, Finance's `Explainer`, Market's `More`, the
 Benchmarks panel, `WeekDigest`, two chart panels, one of Hiring's two candidate lists.
 
