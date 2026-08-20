@@ -65,13 +65,13 @@ g.Image = class {
 const netTotal = () => net.fetch + net.xhr + net.beacon + net.image
 
 const { analyticsConfigured, POSTHOG_HOST, POSTHOG_KEY, MAX_JOURNAL_BYTES } = await import('../src/analytics/config')
-const { analyticsActive, capture, clientConstructed } = await import('../src/analytics/client')
+const { analyticsActive, capture, clientConstructed, modeConfig } = await import('../src/analytics/client')
 const consent = await import('../src/analytics/consent')
 const { ANALYTICS_PROPERTIES, sanitizeEventProperties, scrubUrlProperties, stripUrlDetail } = await import(
   '../src/analytics/props'
 )
 const events = await import('../src/analytics/events')
-const { REDACTED_COMPANY, buildJournalPayload, journalUploadAllowed, uploadRunJournal } = await import(
+const { REDACTED_COMPANY, buildJournalPayload, journalUploadAllowed, uploadGate, uploadRunJournal } = await import(
   '../src/analytics/runJournal'
 )
 const { newGame } = await import('../src/game/engine')
@@ -198,6 +198,28 @@ await ok('granting is the ONLY thing that unlocks an identifier and an upload', 
   assert.strictEqual(consent.consentGranted(), true)
   // Still false overall here, because the PostHog key is a placeholder — both gates must be open.
   assert.strictEqual(journalUploadAllowed(), false, 'consent alone must not be enough')
+})
+await ok('...and the upload gate genuinely depends on consent, not just on the key', () => {
+  // Asserted over the gate's inputs rather than the live predicate. The shipped build has a
+  // placeholder key, so the live one is false whatever consent says — and would go on being false
+  // with the consent term deleted, which is the term that matters.
+  assert.strictEqual(uploadGate(true, true, false), false, 'no consent, no upload')
+  assert.strictEqual(uploadGate(true, false, true), false, 'no Supabase project, nowhere to put it')
+  assert.strictEqual(uploadGate(false, true, true), false, 'analytics off means the whole layer is off')
+  // ...and the honest path: with everything open, runs DO upload. A gate that never opens is not
+  // a privacy control, it is a broken feature.
+  assert.strictEqual(uploadGate(true, true, true), true)
+})
+await ok('NO PERSISTENT IDENTIFIER BEFORE CONSENT — the mapping, not a promise about it', () => {
+  consent.setAnonymousConsent()
+  assert.deepStrictEqual(modeConfig(), { persistence: 'memory', person_profiles: 'never' },
+    'the anonymous default must write nothing to the device and build no profile')
+  consent.setConsent(false)
+  assert.deepStrictEqual(modeConfig(), { persistence: 'memory', person_profiles: 'never' })
+  // The honest direction: consent is what buys the identifier, and it must actually buy it, or
+  // retention stays unanswerable and the question was asked for nothing.
+  consent.setConsent(true)
+  assert.deepStrictEqual(modeConfig(), { persistence: 'localStorage+cookie', person_profiles: 'always' })
 })
 await ok('revoking stops collection in the SAME TICK — no reload, no next session', () => {
   consent.setConsent(false)
@@ -486,3 +508,8 @@ if (fails.length > 0) {
   console.error(`\n${fails.length} FAILED:\n  - ${fails.join('\n  - ')}`)
   process.exit(1)
 }
+// Explicit, unlike the rest of the suite. Section 1's whole claim is that the vendor SDK is never
+// constructed — and if that claim ever breaks, the SDK's retry timers and flush intervals sit on
+// the event loop and node never exits. A run that HANGS instead of reporting a failure is the
+// worst of the three outcomes: it looks like an infrastructure problem, not like a red test.
+process.exit(0)

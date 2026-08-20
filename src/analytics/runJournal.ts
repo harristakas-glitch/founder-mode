@@ -86,9 +86,22 @@ export type UploadRefusal =
 
 export type UploadResult = { sent: true; entries: number; bytes: number } | { sent: false; reason: UploadRefusal }
 
-/** Every gate that must be open before a single byte moves. Exported so the tests can pin it. */
+/**
+ * Every gate that must be open before a single byte moves, expressed over its three inputs.
+ *
+ * Split out from `journalUploadAllowed` for one reason, and it is not style: the shipped build has
+ * a placeholder PostHog key, so `analyticsConfigured` is false and the composed predicate is false
+ * whatever consent says. A test against the composed version therefore passes just as happily with
+ * the consent term DELETED — which is the one term that matters. Taking the inputs as arguments
+ * makes the honest path assertable too: all three open, and an upload is allowed.
+ */
+export function uploadGate(configured: boolean, supabaseConfigured: boolean, granted: boolean): boolean {
+  return configured && supabaseConfigured && granted
+}
+
+/** The live gate. */
 export function journalUploadAllowed(): boolean {
-  return analyticsConfigured && onlineConfigured && consentGranted()
+  return uploadGate(analyticsConfigured, onlineConfigured, consentGranted())
 }
 
 /** Depth-bounded scan for a string no journal payload has any business carrying. */

@@ -129,6 +129,7 @@ function AnalyticsWatcher() {
   const seenNotes = useRef<Set<string> | null>(null)
   const notesEnabled = useRef<boolean | null>(null)
   const guideSeen = useRef(false)
+  const suspendedWeek = useRef(-1)
   /**
    * Per-run, in-memory, never persisted and never reused: it exists so two players who abandon the
    * same daily challenge in week 1 having done nothing do not collide on the journal table's
@@ -161,6 +162,16 @@ function AnalyticsWatcher() {
     safely(() => {
       const prev = last.current
       const key = game ? runKey(game) : null
+      // Is this the first thing we have seen this page load? It decides two things, and getting
+      // either wrong quietly corrupts the counts:
+      //   * the store rehydrates a saved run at module scope, BEFORE React mounts, so an in-flight
+      //     run that was resumed must not be reported as a run that was just started;
+      //   * a FINISHED run sits in the save until the player starts another, so `run_ended` must
+      //     not fire again on every reload of the results screen. One lost ending when a tab
+      //     crashes at exactly the wrong moment is a far better trade than a run that counts
+      //     itself six times because somebody left the tab open and kept refreshing.
+      const firstLook = !bootstrapped.current
+      bootstrapped.current = true
 
       // A run left the stage: abandoned if it never reached an ending. Reported from the PREVIOUS
       // state, because the coordinates that matter — the week and the screen they were looking at
@@ -183,11 +194,12 @@ function AnalyticsWatcher() {
         seenScreens.current = new Set()
         seenFeatures.current = new Set()
         seenWeeks.current = new Set()
+        guideSeen.current = false
+        suspendedWeek.current = -1
         nonce.current = makeNonce()
         uploaded.current = false
-        // Only a run that BEGAN while we were watching is a run that was started. On the first
-        // observation of a page load we are looking at whatever the save restored.
-        if (bootstrapped.current) {
+        // Only a run that BEGAN while we were watching is a run that was started.
+        if (!firstLook) {
           const p = onboardingSnapshot()
           runStarted(runProps(game, screen), {
             founder: game.founderKind,
@@ -196,10 +208,9 @@ function AnalyticsWatcher() {
           })
         }
       }
-      bootstrapped.current = true
 
-      // The ending. Emitted from the state that carries it, once.
-      if (game.gameOver && (!prev || !prev.game.gameOver || key !== prev.key)) {
+      // The ending. Emitted from the state that carries it, once, and only if we watched it happen.
+      if (game.gameOver && !firstLook && (!prev || !prev.game.gameOver || key !== prev.key)) {
         runEnded(runProps(game, screen), {
           ending: game.gameOver.type,
           weeks: game.gameOver.week,
@@ -272,6 +283,11 @@ function AnalyticsWatcher() {
       safely(() => {
         const { game: g, screen: s } = live.current
         if (!g || g.gameOver) return
+        // At most one per game-week. Switching tabs half a dozen times inside one week is a
+        // browsing habit, not six abandonments, and paying quota to record it would make the
+        // event less readable as well as more expensive.
+        if (suspendedWeek.current === g.week) return
+        suspendedWeek.current = g.week
         runSuspended(runProps(g, s), { trigger })
       })
     const onHide = () => {

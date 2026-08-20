@@ -61,8 +61,13 @@ export function analyticsActive(): boolean {
  * opted into a leaderboard; reusing it to key analytics would silently repurpose an identifier the
  * player agreed to for something else, which is precisely the move that makes a privacy claim
  * untrue. PostHog mints its own id and the two never meet.
+ *
+ * Exported so test/analytics.test.ts can assert the mapping directly. Without that, "no persistent
+ * identifier before consent" would only be checkable by running the real SDK in a real browser,
+ * which this suite cannot do — and an untestable privacy claim is the kind that turns out to be
+ * false eighteen months later.
  */
-function modeConfig(): { persistence: 'memory' | 'localStorage+cookie'; person_profiles: 'never' | 'always' } {
+export function modeConfig(): { persistence: 'memory' | 'localStorage+cookie'; person_profiles: 'never' | 'always' } {
   return consentGranted()
     ? { persistence: 'localStorage+cookie', person_profiles: 'always' }
     : { persistence: 'memory', person_profiles: 'never' }
