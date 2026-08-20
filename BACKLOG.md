@@ -422,8 +422,10 @@ not re-litigated by a future pass:
   owner's direction instead is **"blogs from famous people"** later — educational content in the
   voice of well-known founders/investors, closer to Living World content authoring than to inbox
   attribution. Park until the content pipeline exists.
-- **Three-column desktop zoning (stream | now | horizon): evaluate later**, after the HQ's
-  content settles. Single column stands for now.
+- **Desktop zoning: DONE same day** — the owner played the single-column HQ and reversed the
+  deferral. Shipped as two zones (FM-style feed column left — horizon + week stream — with the
+  now-zone right), one DOM for both layouts via `display: contents` wrappers. A third column
+  remains possible at 2xl if the feed ever splits.
 
 
 Carried over from the design pass. None are defects; all are real improvements.

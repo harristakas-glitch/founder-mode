@@ -408,6 +408,15 @@ export function Dashboard() {
   const lowest = game.employees.length > 0 ? game.employees.reduce((m, e) => Math.min(m, e.morale), 100) : null
   const anyAtRisk = game.employees.some((e) => e.morale < (e.trait === 'mercenary' ? 55 : 32))
 
+  // THE ZONES — owner call after playing the single-column HQ against FM26's Portal: it needs
+  // columns. Desktop (xl+) splits FM-style — the FEED (the horizon and the week's stream) as a
+  // 380px left column, the NOW (hero, alarms, metrics, the career reads) as the main zone —
+  // while the phone keeps the exact single-column priority order it already had.
+  //
+  // One DOM serves both: the two zone wrappers are `display: contents` below xl, so their
+  // children flatten into the outer flex column and take the mobile order from their `order-N`
+  // classes; at xl the wrappers become real blocks, the order classes go inert, and the columns
+  // are just the wrappers side by side. No duplicated markup, no JS.
   return (
     <div>
       <h1 className="text-[20px] font-extrabold tracking-tight">Founder HQ</h1>
@@ -415,19 +424,29 @@ export function Dashboard() {
         Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
       </div>
 
-      {/* Career: what just happened and why, in prose — before what needs doing about it. */}
-      <FounderBriefing />
+      <div className="flex flex-col xl:flex-row xl:items-start xl:gap-8">
+        {/* the FEED — left on desktop, interleaved by order on the phone */}
+        <div className="contents xl:order-first xl:block xl:w-[380px] xl:shrink-0">
+          <div className="order-5"><Upcoming /></div>
+          <div className="order-8 xl:mt-0">
+            <h2 className="mb-2.5 text-[15px] font-semibold">This week</h2>
+            <InboxStream />
+          </div>
+        </div>
 
-      <Hero />
-      <ArenaStandings />
-      <AttentionList />
-      <Upcoming />
+        {/* the NOW */}
+        <div className="contents xl:block xl:min-w-0 xl:flex-1">
+          {/* Career: what just happened and why, in prose — before what needs doing about it. */}
+          <div className="order-1"><FounderBriefing /></div>
+          <div className="order-2"><Hero /></div>
+          <div className="order-3"><ArenaStandings /></div>
+          <div className="order-4"><AttentionList /></div>
 
       {/* Slot order is causal rank, not convention (owner's metrics review, 2026-08-20): fit is
           the number in every compounding formula, the growth RATE is what the board judges — the
           user COUNT is its delta line, demoted from a 34px figure to the small print, because the
           level moves the ego and the rate moves the outcome. Revenue and People close the row. */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="order-6 grid grid-cols-2 gap-3 xl:grid-cols-2 2xl:grid-cols-4">
         <button type="button" className="text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
         {career ? (
           <StatCard
@@ -479,24 +498,18 @@ export function Dashboard() {
       </div>
 
       {/* the Understand step — under the row, one at a time */}
-      {openMetric && <MetricDrawer metric={openMetric} onClose={() => setOpenMetric(null)} />}
+      <div className="order-7">{openMetric && <MetricDrawer metric={openMetric} onClose={() => setOpenMetric(null)} />}</div>
 
-      {/* The week stream — merged from the old Inbox screen (owner call, after FM26's Portal:
-          messages are a third of the overview, not a separate page). Unresolved decisions first,
-          with their choices; the deep past behind one disclosure. */}
-      <div className="mt-5">
-        <h2 className="mb-2.5 text-[15px] font-semibold">This week</h2>
-        <InboxStream />
+      {/* Career: the PMF/retention number above is an output — say what it is made of; then the
+          named reads of the same week. Each renders null without its capability. */}
+      <div className="order-9">
+        <PmfExplainer />
+        <TeamOpinions />
+        <Commitments />
+        <BoardMeeting />
       </div>
-
-      {/* Career: the PMF/retention number above is an output — say what it is made of. */}
-      <PmfExplainer />
-
-      {/* Career: the same week read by named people with different weights; the promises ledger;
-          the board sitting down. Each renders null without its capability. */}
-      <TeamOpinions />
-      <Commitments />
-      <BoardMeeting />
+        </div>
+      </div>
 
       {/* Deliberately absent, and where it went: cash + valuation StatCards (hero subtext /
           Capital), both history charts (history is not a decision), milestones (the run record),
