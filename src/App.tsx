@@ -393,7 +393,7 @@ export default function App() {
             }}
             aria-current={active ? 'page' : undefined}
             className={`relative flex min-h-[44px] w-full items-center gap-2.5 rounded-xl py-2 pr-3 pl-4 text-left text-[14px] transition-colors duration-[120ms] md:min-h-[36px] ${
-              active ? 'bg-accent/12 font-semibold text-ink' : 'text-mut hover:bg-surface2 hover:text-ink'
+              active ? 'bg-accent/12 font-semibold text-ink shadow-[var(--glow-accent)]' : 'text-mut hover:bg-surface2 hover:text-ink'
             }`}
           >
             {/* a quiet accent rail marks the place; the accent itself stays reserved for actions */}
@@ -514,7 +514,7 @@ export default function App() {
       className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl px-4 text-[15px] font-bold transition-[filter,transform,background-color] duration-[120ms] ${
         advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
-          : 'bg-good text-bg shadow-[var(--elev-2)] hover:brightness-110 active:scale-[0.98]'
+          : 'bg-good text-bg shadow-[var(--glow-good)] hover:brightness-110 active:scale-[0.98]'
       }`}
     >
       {online ? (
@@ -589,7 +589,7 @@ export default function App() {
       {runwayRule}
       <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* sidebar — desktop */}
-      <aside className="hidden w-[230px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
+      <aside className="hidden w-[240px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
         <div className="border-b border-line/60 px-4 py-4">
           <div className="flex items-center gap-2.5">
             <Monogram name={game.companyName} />
@@ -718,7 +718,7 @@ export default function App() {
         {/* `h-[60px]` is the BAR's height; the notch pad is added on top of it rather than eaten
             out of it, or the controls sit half under the Dynamic Island on a modern iPhone. */}
         <header className="inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg px-2 md:gap-4 md:px-5">
-          <div className="flex h-[60px] min-w-0 flex-1 items-center gap-2 md:gap-4">
+          <div className="flex h-[56px] min-w-0 flex-1 items-center gap-2 md:gap-4">
           {/* the metric rail scrolls if it must; the soft right edge is the
               affordance, so a value is never chopped off mid-word — desktop only,
               phones get the two vitals plus the tap-to-expand sheet below */}

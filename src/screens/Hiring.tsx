@@ -84,7 +84,7 @@ export function Hiring() {
 
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Hiring</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Hiring</h1>
       {/* Burn, revenue and runway are in the topbar rail on every screen; repeating them here only
           gave the player a second place they could disagree. The one number this screen owes is
           what a given hire does to the runway. */}
@@ -111,7 +111,7 @@ export function Hiring() {
       )}
 
       {(game.offersOut.length > 0 || game.pendingHires.length > 0) && (
-        <div className="mb-3.5 grid gap-3.5 md:grid-cols-2">
+        <div className="mb-3.5 grid gap-5 md:grid-cols-2">
           {game.offersOut.length > 0 && (
             <Panel title="Offers out — they answer next week">
               {game.offersOut.map((c) => (
@@ -146,7 +146,7 @@ export function Hiring() {
           put the only number that decides anything — runway after — sixth of eight columns, with
           "Send offer" off the right edge of a horizontal scroller on a phone. Two implementations
           of one decision rule had already begun copying each other. */}
-      <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {pool.map((c) => {
           const after = runwayAfterHire(game, c)
           const afterLabel = after === Infinity ? '∞' : `${Math.max(0, Math.floor(after))} wk`

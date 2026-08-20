@@ -430,7 +430,7 @@ export function CohortAnalytics() {
   if (!game || !career)
     return (
       <div>
-        <h1 className="text-[20px] font-extrabold tracking-tight">Cohorts</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Cohorts</h1>
         <div className="mt-3">
           <EmptyState title="Career mode only" hint="Cohort tracking comes with the Career campaign's discovery model." />
         </div>
@@ -451,7 +451,7 @@ export function CohortAnalytics() {
 
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Cohorts</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Cohorts</h1>
       <div className="mb-4 text-[13px] text-mut">
         Everyone who joined in the same week, tracked as a group. This is where retention — and therefore PMF — actually comes from.
       </div>

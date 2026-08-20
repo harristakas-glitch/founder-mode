@@ -104,7 +104,7 @@ export function Td({ children, right, className = '' }: { children?: ReactNode; 
 //
 // Radius is 14px, down from `rounded-2xl` (16px), with nested boxes at 10px: a nested corner has to
 // be visibly tighter than its parent or the nesting disappears.
-const CARD = 'rounded-[14px] border border-line bg-surface shadow-[var(--elev-2)]'
+const CARD = 'rounded-xl border border-line bg-surface shadow-[var(--elev-2)]'
 
 /**
  * THE PLANE RULE. Four surfaces, one job each, and a thing belongs to exactly one of them.
@@ -126,10 +126,10 @@ const CARD = 'rounded-[14px] border border-line bg-surface shadow-[var(--elev-2)
  *   2. NEVER SKIP A STEP, AND NEVER REPEAT ONE. A nested box on `surface` is invisible; a nested
  *      box on `surface3` inside a card on `surface` reads as floating loose. Adjacent only.
  */
-export const NESTED = 'rounded-[10px] border border-line/70 bg-surface2'
+export const NESTED = 'rounded-lg border border-line/70 bg-surface2'
 
 /** Plane 3 — on top of a nested box: a popover, a selected row, the sheet over a screen. */
-export const RAISED = 'rounded-[10px] border border-line2 bg-surface3'
+export const RAISED = 'rounded-lg border border-line2 bg-surface3'
 
 export function Panel({ title, action, children, className = '' }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -141,7 +141,7 @@ export function Panel({ title, action, children, className = '' }: { title?: str
               group still here, N weeks after joining": 69 characters, tracked out, in grey, at
               eleven pixels. Uppercase survives in exactly one place now — the metric label in
               StatCard — because that is short by construction. */}
-          <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
+          <h3 className="font-[family-name:var(--font-display)] text-[19px] leading-none text-ink">{title}</h3>
           {action}
         </div>
       )}
@@ -229,7 +229,7 @@ export function StatCard({
   // stopped carrying any hierarchy at all, so the number now separates from its label by SIZE —
   // 34 against 11 — which is a difference that survives being looked at quickly on a phone.
   return (
-    <div className={`${CARD} flex flex-col p-4 transition-colors duration-[120ms] hover:border-line2 ${className}`}>
+    <div className={`${CARD} flex flex-col p-5 transition-colors duration-[120ms] hover:border-line2 ${className}`}>
       <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">{label}</div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[34px] leading-[1.05] font-bold tracking-[-0.02em] tnum">
         {numeric !== undefined && format ? <Ticker value={numeric} format={format} /> : value}

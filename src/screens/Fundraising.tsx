@@ -89,7 +89,7 @@ function SecondaryPanel() {
     if (game.stage === 'Pre-seed' || game.stage === 'Seed') return null
   }
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="Secondary sale — take money off the table">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-[13px] leading-relaxed text-mut">
@@ -283,7 +283,7 @@ function TreasurySalePanel() {
   const t = game.token!
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="Treasury sale — the round you can still raise">
         {max <= 0 ? (
           <div className="text-[13px] text-mut">
@@ -370,7 +370,7 @@ function FounderSalePanel() {
   const discount = liquidityDiscount(game)
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="Your own position — §42">
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
           <div>
@@ -461,7 +461,7 @@ function NetworkEndingPanel() {
   if (prog.clauses.length === 0) return null
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="The network ending — what this path is playing for">
         <div className="flex items-baseline justify-between text-[13px]">
           <span className="text-mut">Readiness</span>
@@ -497,7 +497,7 @@ function IncentivePanel() {
   const committed = INCENTIVE_CATEGORIES.reduce((a, c) => a + panel.shares[c], 0)
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="Treasury programmes — what the tokens are for">
         <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 text-[13px]">
           <span>
@@ -580,7 +580,7 @@ function CommunityPanel() {
   const trustColor = c.trust < 30 ? 'var(--color-bad)' : c.trust < 50 ? 'var(--color-warn)' : 'var(--color-good)'
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="The community — the people your capital came from">
         <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
           <div>
@@ -666,7 +666,7 @@ function GovernancePanel() {
   const removal = p?.type === 'founder_removal'
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title={removal ? 'A vote to remove you is on the ballot' : 'Governance — the community votes, and the votes bind'}>
         {p ? (
           // Plane 3 for a live question, plus a bad ring when the question is you — a ring and not
@@ -808,7 +808,7 @@ function TokenisationPanel() {
   if (isTokenised(game)) {
     const t = game.token!
     return (
-      <div className="mt-3.5">
+      <div className="mt-6">
         <Panel title="Community capital — this company is a token network">
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
             <div>
@@ -857,7 +857,7 @@ function TokenisationPanel() {
   const suitability = SUITABILITY_LABEL[runSectorSuitability(game)]
 
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="Tokenise the company — the other capital path">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
           <div>
@@ -982,7 +982,7 @@ function IpoPanel() {
   if (game.ipo) {
     const filing = game.ipo.phase === 'filing'
     return (
-      <div className="mt-3.5">
+      <div className="mt-6">
         <Panel title={`Going public — ${filing ? 'S-1 under review' : 'roadshow'}`}>
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
             <div>
@@ -1014,7 +1014,7 @@ function IpoPanel() {
 
   const checks = ipoChecklist(game)
   return (
-    <div className="mt-3.5">
+    <div className="mt-6">
       <Panel title="The final exit — take the company public">
         <div className="grid gap-1.5 sm:grid-cols-2">
           {checks.map((c) => (
@@ -1071,7 +1071,7 @@ export function Fundraising() {
 
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Fundraising</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Fundraising</h1>
       {/* The equity % was here AND on the "Your stake" card below; the card also says what it is
           worth, so this is the copy that went. */}
       <div className="mb-4 text-[13px] text-mut">{game.stage} · dilution is forever, choose wisely</div>
@@ -1085,7 +1085,7 @@ export function Fundraising() {
           a tokenised company still has a board, a stake and term sheets it may not have signed. */}
       {tokenised && <TokenisationPanel />}
 
-      <div className="mt-3.5 grid grid-cols-2 gap-3.5 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-3.5 xl:grid-cols-3">
         <StatCard
           label="Funding climate"
           value={climateLabel(game.climate)}
@@ -1104,7 +1104,7 @@ export function Fundraising() {
       </div>
 
       {game.board && (
-        <div className="mt-3.5">
+        <div className="mt-6">
           <Panel title="Your board">
             <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
               <div>
@@ -1160,7 +1160,7 @@ export function Fundraising() {
           `runwayWeeks` verbatim (net of revenue) applied to cash + amount, computed inline so
           nothing here ever writes to the state it is previewing. */}
       {game.termSheets.length > 0 && (
-        <div className="mt-3.5">
+        <div className="mt-6">
           <Panel title="Term sheets on the table">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {game.termSheets.map((t) => {
@@ -1251,7 +1251,7 @@ export function Fundraising() {
       {/* Not rendered at all once the fork closes it — the reason is one line at the foot instead
           of a card wrapped around a button that will never enable again. */}
       {!roundsClosed.closed && (
-        <div className="mt-3.5">
+        <div className="mt-6">
           <Panel title="Pitch investors">
             <p className="text-[13px] leading-relaxed text-mut">
               A fundraise takes about 10 weeks of founder attention, so you cannot pitch constantly. Term sheets expire 3 weeks after

@@ -462,7 +462,7 @@ export function Dashboard() {
   // are just the wrappers side by side. No duplicated markup, no JS.
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Founder HQ</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Founder HQ</h1>
       <div className="mb-4 text-[13px] text-mut">
         Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
       </div>

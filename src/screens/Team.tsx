@@ -95,7 +95,7 @@ export function Team() {
 
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Team</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Team</h1>
       <div className="mb-4 text-[13px] text-mut">
         {game.employees.length} employees · payroll {money(weeklyPayroll(game))}/wk · a raise is +10% salary, +12 morale
       </div>

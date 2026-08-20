@@ -15,7 +15,7 @@
      Steps are measured in CIE L* — perceptual lightness — not WCAG contrast, which is useless this
      far down the dark end because its +0.05 flare term makes every near-black pair score ~1.1:1.
      ΔL* >= 4 is a step a player can see on a laptop in a lit room; ΔL* <= 2 is a rounding error. */
-  --color-bg: #080b14; /* L* 3.1  — the page. Nothing else lives here. */
+  --color-bg: #080c10; /* L* 3.2 — the page (spec bg-primary, hue-matched). Nothing else lives here. */
   /* NOTE: there is deliberately no separate "chrome" plane. A topbar or sidebar sits BESIDE the
      page rather than on top of it, and you cannot go meaningfully darker than L* 3.1 to make a
      step downward — the old #0d1220 landed at ΔL* 2.54, which by the rule above is a rounding
@@ -23,13 +23,13 @@
      steps below are the only ones that exist. `bg2` is kept only because a few gradients and
      `theme.ts` still name it. */
   --color-bg2: #0d1220;
-  --color-surface: #111828; /* L* 8.4  — plane 1, ΔL* 5.3: the card */
-  --color-surface2: #1b2437; /* L* 14.2 — plane 2, ΔL* 5.9: nested inside a card */
-  --color-surface3: #27314a; /* L* 20.5 — plane 3, ΔL* 6.3: the thing on top of that */
-  --color-line: #26304a; /* hairline on plane 1 */
-  --color-line2: #3a4665; /* hover / emphasis hairline */
-  --color-ink: #e8edf9; /* 15.1:1 on plane 1 */
-  --color-mut: #96a3bd; /* 7.0:1 — lifted from #8593ab, which read as *disabled* at 5.6:1 */
+  --color-surface: #131921; /* L* 8.5  — plane 1, ΔL* 5.3: the card (spec bg-elevated, re-derived ≥4 steps) */
+  --color-surface2: #1d252f; /* L* 14.3 — plane 2, ΔL* 5.8: nested inside a card (spec bg-overlay, re-derived) */
+  --color-surface3: #27323f; /* L* 20.3 — plane 3, ΔL* 6.0: the thing on top of that */
+  --color-line: #1f2430; /* spec border-subtle */
+  --color-line2: #2a3142; /* spec border-strong */
+  --color-ink: #f1f3f7; /* spec text-primary — and the ceiling: pure white is banned (spec §4) */
+  --color-mut: #9ba3b5; /* spec text-secondary — 7.0:1 on plane 1 */
   /* LIGHT IS THE EMPHASIS CHANNEL, hue is not. Three channels with one job each and no overlap:
      the planes above carry STRUCTURE, `--color-focus` carries IMPORTANCE, and hue carries STATE.
      Every dark dashboard spends a saturated accent on buttons, links, active states and charts at
@@ -43,17 +43,18 @@
      active nav rail. Those are not decoration — WCAG 2.4.11 needs a visible focus indicator, and
      the per-sector rebinding in theme.ts hangs off this variable. Retiring it outright would have
      cost accessibility to buy a colour scheme. */
-  --color-focus: #ffffff;
-  --color-accent: #7c9aff;
-  --color-accent2: #a78bfa;
+  --color-focus: #a78bfa; /* v1.1 §2: the one display figure per screen — the emphasis channel in the brand's hue, because #fff is banned */
+  --color-accent: #8b5cf6; /* spec accent-purple — actions and selected states ONLY */
+  --color-accent2: #7c3aed; /* spec accent-purple-hover */
   --color-chart: #6172f3; /* deep series color — validated for the dark chart surface */
   /* Green and red were Tailwind's `emerald-400` and `red-400` — the framework's defaults,
      unchanged, which means nobody chose the two most-seen colours in the game. Shifted off stock:
      the green cools toward teal so it reads as "measured" rather than "success toast", and the red
      warms so it separates from the amber that means "blocked" rather than "bad". */
-  --color-good: #3ddc97;
-  --color-bad: #f2555a;
-  --color-warn: #ffc44d; /* 11.2:1 — the blocking-decision colour, so it has to carry */
+  --color-good: #22c55e; /* spec accent-green — forward progress ONLY */
+  --color-bad: #ef4444; /* spec accent-red */
+  --color-warn: #f59e0b; /* spec accent-amber — still the blocking-decision colour */
+  --color-info: #3b82f6; /* spec accent-blue — informational; also the quality slider's hue */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   /* The one typeface this product owns. The game is made of numbers — 160+ figure sites, every
      one previously rendering in whatever the OS shipped, differently for every player. They now
@@ -63,6 +64,9 @@
      speaks. Self-hosted from npm; the fallback stack means a blocked font degrades to exactly
      what shipped last week. */
   --font-num: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  /* The third voice (v1.1 §5, from the owner's sample mocks): a display serif for screen titles
+     and panel headers only. Numbers speak mono, prose speaks system, headings speak this. */
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
 
   /* ---------- motion: one vocabulary, all of it fast and interruptible ----------
      1 = pointer feedback, 2 = state change, 3 = element entering. Nothing over 260ms. */
@@ -86,6 +90,10 @@
      What reads instead is a 1px LIGHT line along the top edge, the way a real lit surface catches
      the light, with the shadow demoted to a wide soft pool that separates rather than darkens. The
      plane step does the actual work; these two only sharpen its edge. */
+  /* The spec's "subtle game juice": one soft brand glow, spent on exactly two things — the
+     primary action and the selected nav — because a glow on everything is a glow on nothing. */
+  --glow-accent: 0 0 20px rgb(139 92 246 / 0.28);
+  --glow-good: 0 0 20px rgb(34 197 94 / 0.25);
   --elev-1: inset 0 1px 0 rgb(255 255 255 / 0.05);
   --elev-2:
     inset 0 1px 0 rgb(255 255 255 / 0.07), 0 10px 26px -14px rgb(0 0 0 / 0.9);
@@ -252,7 +260,7 @@ input[type='range'] {
   width: 100%;
   height: 6px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--color-accent) var(--fill, 50%), #1c2740 var(--fill, 50%));
+  background: linear-gradient(to right, var(--slider-color, var(--color-accent)) var(--fill, 50%), var(--color-surface2) var(--fill, 50%));
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -261,7 +269,7 @@ input[type='range']::-webkit-slider-thumb {
   height: 18px;
   border-radius: 50%;
   background: #fff;
-  border: 3px solid var(--color-accent);
+  border: 3px solid var(--slider-color, var(--color-accent));
   box-shadow: var(--elev-2);
   cursor: pointer;
   transition: transform var(--dur-1) var(--e-out);
@@ -277,7 +285,7 @@ input[type='range']::-moz-range-thumb {
   height: 18px;
   border-radius: 50%;
   background: #fff;
-  border: 3px solid var(--color-accent);
+  border: 3px solid var(--slider-color, var(--color-accent));
   cursor: pointer;
 }
 

@@ -200,7 +200,7 @@ export function Product() {
 
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Product</h1>
+      <h1 className="font-[family-name:var(--font-display)] text-[28px] font-normal leading-none tracking-normal">Product</h1>
       <div className="mb-4 text-[13px] text-mut">
         {engineers} engineer{engineers === 1 ? '' : 's'}
         {game.founderKind === 'technical' ? ' + you' : ''} · building things is easy — building the <i>right</i> thing is the game
@@ -262,7 +262,15 @@ export function Product() {
               min={0}
               max={rest > 0 ? 90 : 100}
               value={share}
-              style={{ ['--fill' as string]: `${share}%` }}
+              style={{
+                ['--fill' as string]: `${share}%`,
+                // Spec §5: the three effort sliders are colour-coded — features purple, polish
+                // blue, bugs amber — so a glance at the thumbs reads the allocation without the
+                // labels. The percentages still carry the numbers; the hue is a second channel,
+                // never the only one.
+                ['--slider-color' as string]:
+                  key === 'quality' ? 'var(--color-info)' : key === 'bugs' ? 'var(--color-warn)' : 'var(--color-accent)',
+              }}
               onChange={(e) => {
                 const p = Number(e.target.value)
                 const raw = rest <= 0 ? p : Math.round((rest * Math.min(90, p)) / (100 - Math.min(90, p)))

@@ -9,14 +9,21 @@
 
 import type { GameOver } from './game/types'
 
-/** Each market gets its own accent identity — the whole UI subtly rethemes per run. */
+/**
+ * RETIRED per the redesign system (v1.1 §6, 2026-08-20): every sector now carries the brand
+ * purple. "Absolute consistency" and purple-as-brand cannot coexist with a per-run accent swap —
+ * six accent identities was six answers to a question the design system now answers once. The
+ * table keeps its shape so every consumer (`applyTheme`, share images, mode chips) works
+ * unchanged; sector personality lives in copy and content, where it always did the real work.
+ */
+const BRAND: [string, string] = ['#8b5cf6', '#7c3aed']
 export const SECTOR_ACCENTS: Record<string, [string, string]> = {
-  saas: ['#7c9aff', '#a78bfa'],
-  social: ['#f472b6', '#fb7185'],
-  fintech: ['#34d399', '#2dd4bf'],
-  devtools: ['#a78bfa', '#818cf8'],
-  ecommerce: ['#fbbf24', '#fb923c'],
-  aiml: ['#22d3ee', '#38bdf8'],
+  saas: BRAND,
+  social: BRAND,
+  fintech: BRAND,
+  devtools: BRAND,
+  ecommerce: BRAND,
+  aiml: BRAND,
 }
 
 /** Accent pair for a sector id, falling back to the house blue for an unknown one. */
