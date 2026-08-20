@@ -26,7 +26,7 @@ import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, we
 import { useState } from 'react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
 import { myId as myOnlineId } from '../net/online'
-import { InboxStream } from './Inbox'
+import { InboxStream, StreamItem } from './Inbox'
 import { useStore } from '../store'
 
 // ---------------------------------------------------------------------------------------------
@@ -116,9 +116,15 @@ function Hero() {
 function AttentionList() {
   const game = useStore((s) => s.game)!
   const setScreen = useStore((s) => s.setScreen)
-  const items = attentionRegister(game)
+  // Blocking decisions render as their OWN cards, choices inline — the owner's play-testing found
+  // the same decision on screen twice (as an alarm here and again in the stream) with an alarm
+  // button that navigated to the screen the player was already on. One fact, one card, actionable
+  // where it is announced. The register still carries decision items for every other consumer;
+  // this renderer simply gives them the stream card instead of an alarm row.
+  const unresolved = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved)
+  const items = attentionRegister(game).filter((i) => !i.id.startsWith('decision:'))
 
-  if (items.length === 0) {
+  if (items.length === 0 && unresolved.length === 0) {
     return (
       <div className="mb-4 rounded-[10px] border border-good/30 bg-surface px-4 py-2.5 text-[13px] text-mut">
         ✓ Nothing needs you. Good week to make a bet.
@@ -126,6 +132,13 @@ function AttentionList() {
     )
   }
 
+  const decisions = unresolved.length > 0 && (
+    <div className="mb-2 space-y-2">
+      {unresolved.map((m) => (
+        <StreamItem key={m.id} m={m} />
+      ))}
+    </div>
+  )
   const [top, ...rest] = items
   const shown = rest.slice(0, 2)
   const folded = rest.slice(2)
@@ -144,7 +157,12 @@ function AttentionList() {
         className={`shrink-0 rounded-lg px-2.5 py-1 text-[12px] font-bold transition-[filter] hover:brightness-110 ${
           prominent ? 'bg-warn text-bg' : 'border border-line2 text-ink'
         }`}
-        onClick={() => setScreen(it.action!.screen)}
+        onClick={() => {
+          setScreen(it.action!.screen)
+          // An anchored action targets a region; when that region is on the current screen the
+          // navigation is a no-op, and the scroll is the whole gesture.
+          if (it.action!.anchor) setTimeout(() => document.getElementById(it.action!.anchor!)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+        }}
       >
         {it.action.label} →
       </button>
@@ -152,6 +170,9 @@ function AttentionList() {
 
   return (
     <div className="mb-4">
+      {decisions}
+      {items.length === 0 ? null : (
+      <>
       {/* The top item is the screen's second-loudest element after the hero — a full plane step
           above the rows below it, the same raised-vs-receded grammar the Inbox uses. */}
       <div
@@ -200,6 +221,8 @@ function AttentionList() {
             </div>
           ))}
         </details>
+      )}
+      </>
       )}
     </div>
   )
@@ -400,7 +423,7 @@ function Upcoming() {
   const top = items.sort((a, b) => a.weeks - b.weeks).slice(0, 4)
   if (top.length === 0) return null
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-[10px] border border-line/60 bg-surface px-3.5 py-2">
+    <div className="mb-4 flex items-center gap-x-4 overflow-x-auto rounded-[10px] border border-line/60 bg-surface px-3.5 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-wrap lg:gap-y-1.5 lg:overflow-visible">
       <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-mut">Upcoming</span>
       {top.map((i) => (
         <button
@@ -484,8 +507,8 @@ export function Dashboard() {
           the number in every compounding formula, the growth RATE is what the board judges — the
           user COUNT is its delta line, demoted from a 34px figure to the small print, because the
           level moves the ego and the rate moves the outcome. Revenue and People close the row. */}
-      <div className="order-7 grid grid-cols-2 gap-3 2xl:grid-cols-4">
-        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
+      <div className="order-7 -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0 2xl:grid-cols-4">
+        <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
         {career ? (
           <StatCard
             className="h-full"
@@ -509,7 +532,7 @@ export function Dashboard() {
           </StatCard>
         )}
         </button>
-        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
+        <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
         <StatCard
           className="h-full"
           label="Growth"
@@ -520,7 +543,7 @@ export function Dashboard() {
           <Sparkline data={game.history.map((x) => x.users)} tone={growth > 0 ? 'good' : growth < 0 ? 'bad' : 'mut'} />
         </StatCard>
         </button>
-        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
+        <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
         <StatCard
           className="h-full"
           label="Revenue"
@@ -533,7 +556,7 @@ export function Dashboard() {
           <Sparkline data={game.history.map((x) => x.revenue)} tone={game.lastRevenue >= weeklyBurn(game) ? 'good' : 'mut'} />
         </StatCard>
         </button>
-        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
+        <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
         <StatCard
           className="h-full"
           label="People"
@@ -559,7 +582,7 @@ export function Dashboard() {
         <PmfExplainer />
         <TeamOpinions />
         <Commitments />
-        <BoardMeeting />
+        <div id="board-meeting"><BoardMeeting /></div>
       </div>
         </div>
       </div>

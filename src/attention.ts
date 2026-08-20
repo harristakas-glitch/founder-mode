@@ -66,8 +66,10 @@ export interface AttentionItem {
   detail?: string
   /** Weeks until it is too late. Absent = no deadline. 0 = this week. Breaks ties within a type. */
   deadline?: number
-  /** Where the player goes to act. Absent = there is nothing to do but know. */
-  action?: { label: string; screen: ScreenId }
+  /** Where the player goes to act. Absent = there is nothing to do but know. `anchor` names an
+   *  element id on that screen — the renderer scrolls to it, which is what makes the action real
+   *  when its target screen is the one the player is already on. */
+  action?: { label: string; screen: ScreenId; anchor?: string }
 }
 
 const money = (n: number) =>
@@ -234,7 +236,7 @@ export function attentionRegister(game: GameState): AttentionItem[] {
     if (room.kind === 'conversation') {
       push({ id: `room:${room.id}`, type: 'decision', title: room.title, detail: 'A conversation is open and goes cold if it waits.', action: { label: 'People', screen: 'team' } })
     } else if (room.kind === 'board_meeting') {
-      push({ id: `room:${room.id}`, type: 'decision', title: 'The board is waiting on you', detail: 'The meeting is open on the HQ — the decision taken there becomes a commitment.', action: { label: 'HQ', screen: 'dashboard' } })
+      push({ id: `room:${room.id}`, type: 'decision', title: 'The board is waiting on you', detail: 'The meeting is open below — the decision taken there becomes a commitment.', action: { label: 'Open the meeting', screen: 'dashboard', anchor: 'board-meeting' } })
     } else {
       push({
         id: `room:${room.id}`,

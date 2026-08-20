@@ -112,6 +112,10 @@ function equityCost(g: GameState, special: NonNullable<Effects['special']>): str
 
 function axesOf(fx: Effects, signed: boolean): Axis[] {
   const out: Axis[] = []
+  // The save is user-writable localStorage, and the module's own rule is that malformed data
+  // degrades to silence, never to a crash. A choice with no effects ledger simply has no axes —
+  // found the hard way: a hand-injected test message took the whole HQ down with it.
+  if (!fx || typeof fx !== 'object') return out
   for (const [k, meta] of Object.entries(AXIS_META) as [keyof typeof AXIS_META, (typeof AXIS_META)[keyof typeof AXIS_META]][]) {
     const v = fx[k]
     if (typeof v !== 'number' || v === 0) continue

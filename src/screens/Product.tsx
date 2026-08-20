@@ -228,7 +228,20 @@ export function Product() {
             ...(career ? [] : (['research'] as const)),
             ...(hasBet ? (['bet'] as const) : []),
           ] as const
-        ).map((key) => (
+        ).map((key) => {
+          // THE THUMB AND THE LABEL MUST BE THE SAME NUMBER. They were not: the label showed the
+          // normalized share (a[key]/sum) while the thumb was bound to the raw weight (a[key]) —
+          // so dragging one slider changed the sum, every OTHER row's percentage recomputed, and
+          // every other thumb sat still, visibly contradicting its own label (owner bug report,
+          // with screenshot). Both now render the share. Dragging to share p solves for the raw
+          // weight that produces p with the other weights unchanged — raw = rest·p/(100−p) — so
+          // one action still writes one key and the replay journal keeps its shape. The share is
+          // capped at 90% while other buckets hold anything, which bounds the solved weight at
+          // 9× the rest; the way to give one bucket everything is to zero the others, which
+          // drags cleanly to 0%.
+          const rest = sum - a[key]
+          const share = Math.round((a[key] / sum) * 100)
+          return (
           <div className="mb-4 last:mb-0" key={key}>
             <div className="mb-1 flex justify-between text-[13px]">
               <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>
@@ -242,18 +255,23 @@ export function Product() {
                         ? 'User research'
                         : 'New bet (tiger team)'}
               </span>
-              <span className="font-bold tnum">{Math.round((a[key] / sum) * 100)}%</span>
+              <span className="font-bold tnum">{share}%</span>
             </div>
             <input
               type="range"
               min={0}
-              max={100}
-              value={a[key]}
-              style={{ ['--fill' as string]: `${a[key]}%` }}
-              onChange={(e) => setAllocation(key, Number(e.target.value))}
+              max={rest > 0 ? 90 : 100}
+              value={share}
+              style={{ ['--fill' as string]: `${share}%` }}
+              onChange={(e) => {
+                const p = Number(e.target.value)
+                const raw = rest <= 0 ? p : Math.round((rest * Math.min(90, p)) / (100 - Math.min(90, p)))
+                setAllocation(key, raw)
+              }}
             />
           </div>
-        ))}
+          )
+        })}
         <div className="mt-2 text-xs leading-relaxed text-mut">
           Features attract users. Quality retains them. Bugs strangle both.
           {career ? '' : ' Research finds out what the market actually wants — without it, you are building in the dark.'}

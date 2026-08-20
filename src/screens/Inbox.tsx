@@ -11,7 +11,7 @@ import { Btn, Disclosure, EmptyState } from '../components'
 import { useStore } from '../store'
 import { DecisionLens } from '../onboarding/DecisionLens'
 
-function Item({ m }: { m: ReturnType<typeof useStore.getState>['game'] extends infer G ? (G extends { inbox: (infer M)[] } ? M : never) : never }) {
+export function StreamItem({ m }: { m: ReturnType<typeof useStore.getState>['game'] extends infer G ? (G extends { inbox: (infer M)[] } ? M : never) : never }) {
   const resolveChoice = useStore((s) => s.resolveChoice)
   const needsYou = m.kind === 'choice' && !m.resolved
   const rail = needsYou ? 'border-l-warn' : m.kind === 'choice' ? 'border-l-good' : m.kind === 'news' ? 'border-l-accent' : 'border-l-line'
@@ -35,7 +35,11 @@ function Item({ m }: { m: ReturnType<typeof useStore.getState>['game'] extends i
       {needsYou && m.choices && (
         <div className="mt-3 flex flex-wrap gap-2">
           {m.choices.map((c, i) => (
-            <Btn key={i} onClick={() => resolveChoice(m.id, i)}>
+            // A choice label can be a full sentence ("Counter-offer: +25% salary, $13k signing
+            // sweetener for Ingrid Kowalski") and Btn is built for short verbs — its baked-in
+            // nowrap sent long labels straight through the card wall. Wrap, left-align, and cap
+            // at the card's width; the min-height keeps the touch target when it stays one line.
+            <Btn key={i} className="h-auto max-w-full !whitespace-normal py-2 text-left" onClick={() => resolveChoice(m.id, i)}>
               {c.label}
             </Btn>
           ))}
@@ -47,10 +51,16 @@ function Item({ m }: { m: ReturnType<typeof useStore.getState>['game'] extends i
   )
 }
 
-/** The stream: everything unresolved first, then the recent past, the rest one disclosure away. */
+/**
+ * The stream: the SETTLED record — recent past first, the rest one disclosure away.
+ *
+ * Unresolved decisions are deliberately NOT here. They render once, at the top of the HQ's
+ * attention area, with their choices inline — the owner's play-testing found the same decision
+ * card appearing twice on one screen (as an alarm up top and again here), and an alarm whose
+ * button navigates to the screen you are already on. One fact, one card, actionable in place.
+ */
 export function InboxStream({ recent = 6 }: { recent?: number }) {
   const game = useStore((s) => s.game)!
-  const unresolved = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved)
   const settled = game.inbox.filter((m) => !(m.kind === 'choice' && !m.resolved))
   const shown = settled.slice(0, recent)
   // The history is unbounded (the engine trims nothing); the fold is capped so a 100-week run
@@ -68,17 +78,14 @@ export function InboxStream({ recent = 6 }: { recent?: number }) {
 
   return (
     <div className="max-w-[820px] space-y-2.5">
-      {unresolved.map((m) => (
-        <Item key={m.id} m={m} />
-      ))}
       {shown.map((m) => (
-        <Item key={m.id} m={m} />
+        <StreamItem key={m.id} m={m} />
       ))}
       {folded.length > 0 && (
         <Disclosure label={`Earlier weeks (${folded.length}${settled.length > recent + 40 ? '+' : ''})`}>
           <div className="space-y-2.5">
             {folded.map((m) => (
-              <Item key={m.id} m={m} />
+              <StreamItem key={m.id} m={m} />
             ))}
           </div>
         </Disclosure>
