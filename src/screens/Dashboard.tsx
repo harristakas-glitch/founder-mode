@@ -19,10 +19,11 @@
 // milestones → the run record; "Latest news" → the Inbox owns that list; the Benchmarks panel →
 // its verdicts are now register items (see attention.ts), because two functions evaluating the
 // same health into two UI regions is how they drift.
-import { StatCard } from '../components'
+import { RAISED, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
 import { growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
+import { useState } from 'react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
 import { useStore } from '../store'
 
@@ -152,8 +153,112 @@ function AttentionList() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Glance -> Understand -> Analyse (brief §19). The StatCard is the glance; clicking it opens this
+// — one small card of "why", on plane 3, with a single link deeper. Only the ANALYSE step leaves
+// the screen, which is the whole point: medium-depth answers stop costing a navigation.
+type MetricKey = 'revenue' | 'users' | 'fit' | 'people'
+
+function MetricDrawer({ metric, onClose }: { metric: MetricKey; onClose: () => void }) {
+  const game = useStore((s) => s.game)!
+  const setScreen = useStore((s) => s.setScreen)
+  const h = game.history
+  const wk = (n: number) => (h.length > n ? h[h.length - 1 - n] : null)
+  const career = careerActive(game) ? game.career! : null
+
+  const Fact = ({ k, children }: { k: string; children: React.ReactNode }) => (
+    <div className="flex items-baseline justify-between gap-3 py-1 text-[13px]">
+      <span className="text-mut">{k}</span>
+      <span className="tnum text-right font-semibold">{children}</span>
+    </div>
+  )
+  const Analyse = ({ label, screen }: { label: string; screen: Parameters<typeof setScreen>[0] }) => (
+    <button
+      onClick={() => setScreen(screen)}
+      className="mt-2 rounded-lg border border-line2 px-2.5 py-1 text-[12px] font-bold text-ink transition-colors hover:border-accent"
+    >
+      {label} →
+    </button>
+  )
+
+  const four = wk(4) ?? wk(h.length - 1)
+  const body =
+    metric === 'revenue' ? (
+      <>
+        <Fact k="This week">{money(game.lastRevenue)}</Fact>
+        {four && <Fact k="Four weeks ago">{money(four.revenue)}</Fact>}
+        <Fact k="Burn">{money(weeklyBurn(game))}/wk</Fact>
+        <Fact k="Net">{money(game.lastRevenue - weeklyBurn(game))}/wk</Fact>
+        <Analyse label="Finance" screen="finance" />
+      </>
+    ) : metric === 'users' ? (
+      <>
+        <Fact k="Now">{num(totalUsers(game))}</Fact>
+        {four && <Fact k="Four weeks ago">{num(four.users)}</Fact>}
+        <Fact k="Growth">{pct(growthRate(game), 1)}/wk average</Fact>
+        <Analyse label="Market" screen="market" />
+      </>
+    ) : metric === 'fit' ? (
+      career ? (
+        <>
+          <Fact k="4-week retention">{(career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) > 0 ? pct(career.retentionBySegment[career.primaryTargetSegmentId] ?? 0, 0) : '—'}</Fact>
+          <div className="py-1 text-[12.5px] leading-snug text-mut">
+            PMF here is derived from customers who stay. Research moves your beliefs; only retained customers move the number.
+          </div>
+          <Analyse label="Discovery" screen="discovery" />
+        </>
+      ) : (
+        <>
+          <Fact k="PMF">{Math.round(game.pmf)}/100</Fact>
+          {four && <Fact k="Four weeks ago">{Math.round(four.pmf)}/100</Fact>}
+          <div className="py-1 text-[12.5px] leading-snug text-mut">
+            Driven by research, product quality and whether the market wants the idea at all.
+          </div>
+          <Analyse label="Product" screen="product" />
+        </>
+      )
+    ) : (
+      <>
+        {game.employees.length === 0 ? (
+          <div className="py-1 text-[12.5px] leading-snug text-mut">No employees yet — everything ships at the speed of your own energy.</div>
+        ) : (
+          [...game.employees]
+            .sort((a, b) => a.morale - b.morale)
+            .slice(0, 3)
+            .map((e) => (
+              <Fact key={e.id} k={e.name}>
+                <span className={e.morale < (e.trait === 'mercenary' ? 55 : 32) ? 'text-bad' : e.morale < 50 ? 'text-warn' : ''}>
+                  morale {Math.round(e.morale)}
+                </span>
+              </Fact>
+            ))
+        )}
+        <Fact k="Your energy">
+          <span className={game.energy <= 12 ? 'text-bad' : ''}>{Math.round(game.energy)}/100</span>
+        </Fact>
+        <Analyse label="People" screen="team" />
+      </>
+    )
+
+  return (
+    <div className={`${RAISED} mt-2 px-4 py-2.5`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-mut">
+          {metric === 'fit' ? (career ? 'Retention' : 'PMF') : metric}
+        </span>
+        <button onClick={onClose} aria-label="Close" className="-mr-1 rounded-md px-1.5 text-[12px] text-mut hover:text-ink">
+          ✕
+        </button>
+      </div>
+      {body}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------------------------
 export function Dashboard() {
   const game = useStore((s) => s.game)!
+  const [openMetric, setOpenMetric] = useState<MetricKey | null>(null)
+  const toggle = (m: MetricKey) => setOpenMetric((cur) => (cur === m ? null : m))
   const growth = growthRate(game)
   const career = careerActive(game) ? game.career! : null
   const retention = career ? (career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) : 0
@@ -183,6 +288,7 @@ export function Dashboard() {
       <AttentionList />
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <button type="button" className="text-left" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
         <StatCard
           label="Revenue"
           numeric={game.lastRevenue}
@@ -191,6 +297,8 @@ export function Dashboard() {
           trendFormat={money}
           tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
         />
+        </button>
+        <button type="button" className="text-left" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
         <StatCard
           label={game.ventures.some((v) => v.launched) ? 'Users (all lines)' : 'Users'}
           numeric={totalUsers(game)}
@@ -199,6 +307,8 @@ export function Dashboard() {
           delta="/wk avg"
           tone={growth > 0 ? 'up' : growth < 0 ? 'down' : undefined}
         />
+        </button>
+        <button type="button" className="text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
         {career ? (
           <StatCard
             label="4-week retention"
@@ -215,6 +325,8 @@ export function Dashboard() {
             tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined}
           />
         )}
+        </button>
+        <button type="button" className="text-left" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
         <StatCard
           label="People"
           value={game.employees.length === 0 ? 'Just you' : `${game.employees.length}`}
@@ -225,7 +337,11 @@ export function Dashboard() {
           }
           tone={anyAtRisk || game.energy <= 12 ? 'down' : undefined}
         />
+        </button>
       </div>
+
+      {/* the Understand step — under the row, one at a time */}
+      {openMetric && <MetricDrawer metric={openMetric} onClose={() => setOpenMetric(null)} />}
 
       {/* Career: the PMF/retention number above is an output — say what it is made of. */}
       <PmfExplainer />

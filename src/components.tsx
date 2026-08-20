@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TRAITS } from './game/data'
 import type { TraitId } from './game/types'
@@ -146,6 +147,25 @@ export function Panel({ title, action, children, className = '' }: { title?: str
       )}
       {children}
     </div>
+  )
+}
+
+/**
+ * The one disclosure. Progressive-disclosure prose ("what this means", "how the cap works") goes
+ * behind THIS, not behind a hand-rolled <details> — the removal pass left nine screens each with
+ * their own inline pattern inside a week, which is precisely the one-rule-N-implementations drift
+ * the audit catalogued. Native <details>/<summary>, so it is focusable, toggles on Enter/Space and
+ * announces its state to a screen reader without a line of JS.
+ */
+export function Disclosure({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <details className={`group mt-2 ${className}`}>
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12px] font-semibold text-mut transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={13} className="transition-transform duration-[120ms] group-open:rotate-90" aria-hidden="true" />
+        {label}
+      </summary>
+      <div className="mt-1.5 pl-[18.5px] text-[12.5px] leading-relaxed text-mut">{children}</div>
+    </details>
   )
 }
 

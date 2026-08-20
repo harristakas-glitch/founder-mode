@@ -35,6 +35,8 @@ import { Growth } from './screens/Growth'
 import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
+import { careerActive } from './CareerUI'
+import { WeeklyBriefing } from './screens/Briefing'
 import { Inbox } from './screens/Inbox'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
@@ -92,9 +94,14 @@ const AREAS: {
     { id: 'dashboard', label: 'This week' },
     { id: 'inbox', label: 'Inbox' },
   ] },
+  // Screen order within an area is PRIORITY: the first entry is where the area lands, so it must
+  // be the screen with the weekly lever, never the report. Growth (the budget slider you touch
+  // most weeks) outranks Rivals (reading); Hiring (send an offer) outranks Team (upkeep); Raise
+  // (term sheets, board, votes — the decisions) outranks Finance (~90% report by the audit's own
+  // measure). Owner call, 2026-08-20.
   { id: 'market', label: 'Market', icon: Swords, screens: [
-    { id: 'market', label: 'Rivals' },
     { id: 'growth', label: 'Growth' },
+    { id: 'market', label: 'Rivals' },
   ] },
   { id: 'product', label: 'Product', icon: Package, screens: [
     { id: 'product', label: 'Build' },
@@ -102,12 +109,12 @@ const AREAS: {
     { id: 'cohorts', label: 'Cohorts', careerOnly: true },
   ] },
   { id: 'people', label: 'People', icon: Users, screens: [
-    { id: 'team', label: 'Team' },
     { id: 'hiring', label: 'Hiring' },
+    { id: 'team', label: 'Team' },
   ] },
   { id: 'capital', label: 'Capital', icon: HandCoins, screens: [
-    { id: 'finance', label: 'Finance' },
     { id: 'fundraising', label: 'Raise' },
+    { id: 'finance', label: 'Finance' },
   ] },
   { id: 'company', label: 'Company', icon: BookOpen, screens: [
     { id: 'story', label: 'Story' },
@@ -189,6 +196,7 @@ export default function App() {
     void useStore.getState().initAuth()
   }, [])
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
+  const [briefingWeek, setBriefingWeek] = useState<number | null>(null)
   const [resultsClosed, setResultsClosed] = useState(false) // results overlay dismissed for a last look around
   const [, setClock] = useState(0) // re-render for the round countdown
   const prevWeek = useRef<number | null>(null)
@@ -199,6 +207,14 @@ export default function App() {
       return
     }
     if (prevWeek.current !== null && game.week > prevWeek.current) {
+      // Career gets the weekly briefing (§28) — the resolved week, told rather than dumped.
+      // Quick Play keeps the 950ms sweep because its whole promise is pace, and Arena keeps it
+      // because a modal must never sit on top of the round clock.
+      if (careerActive(game) && !online && !game.gameOver) {
+        setBriefingWeek(game.week)
+        prevWeek.current = game.week
+        return
+      }
       setWeekFlash(game.week)
       const t = setTimeout(() => setWeekFlash(null), 950)
       prevWeek.current = game.week
@@ -327,19 +343,27 @@ export default function App() {
   // more than one screen this run, so Quick Play's Product area (one screen) shows no chrome.
   const activeArea = areaOf(screen)
   const siblings = activeArea ? eligible(activeArea) : []
+  // Every tab is visibly a CONTROL: a bordered pill on plane 1, with the active one raised to
+  // plane 3 — the plane rule's own grammar for "selected". The first cut rendered inactive tabs as
+  // bare muted text, and the owner's verdict was that players could not see them at all. A tab you
+  // cannot see is a destination that does not exist.
   const siblingTabs = siblings.length > 1 && (
-    <div className="mb-3.5 flex flex-wrap gap-1.5">
+    <div className="mb-4 flex flex-wrap gap-2">
       {siblings.map((sc) => (
         <button
           key={sc.id}
           onClick={() => setScreen(sc.id)}
           aria-current={screen === sc.id ? 'page' : undefined}
-          className={`rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors duration-[120ms] ${
-            screen === sc.id ? 'bg-surface2 text-ink' : 'text-mut hover:text-ink'
+          className={`min-h-[38px] rounded-[10px] border px-4 text-[13px] font-semibold transition-colors duration-[120ms] ${
+            screen === sc.id
+              ? 'border-line2 bg-surface3 text-ink shadow-[var(--elev-1)]'
+              : 'border-line bg-surface text-mut hover:border-line2 hover:text-ink'
           }`}
         >
           {sc.label}
-          {sc.id === 'inbox' && unread > 0 && <span className="ml-1.5 tnum text-bad">{unread}</span>}
+          {sc.id === 'inbox' && unread > 0 && (
+            <span className="ml-1.5 rounded-full bg-bad px-1.5 text-[10px] font-bold leading-[15px] text-bg tnum">{unread}</span>
+          )}
         </button>
       ))}
     </div>
@@ -789,6 +813,9 @@ export default function App() {
 
       {/* mobile: the full metric sheet, same entries as the desktop rail */}
       {statsOpen && <MobileStatsSheet onClose={() => setStatsOpen(false)}>{statRail}</MobileStatsSheet>}
+
+      {/* Career: the weekly briefing replaces the sweep (§28) */}
+      {briefingWeek !== null && !game.gameOver && <WeeklyBriefing week={briefingWeek} onClose={() => setBriefingWeek(null)} />}
 
       {/* week transition */}
       {weekFlash && (
