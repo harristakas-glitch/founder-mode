@@ -195,6 +195,15 @@ per-event rate limiting, and validated wire payloads.
 
 ---
 
+### 2.4 Arena §42/§43 first live render — VERIFIED 2026-08-21
+Two real clients (separate origins for separate identities), one live Supabase room (A9RVW),
+three rounds played. Standings rendered on both match HQs (rank, share, raised own-row, the round
+clock, the match cap in Upcoming); the round reveal rendered on week commit with rows frozen,
+share %, per-round deltas and tap-to-dismiss. One field note: the Arena advance button reads
+"Ready — end my week", which is why naive automation aimed at "Advance Week" misses it.
+
+---
+
 ### 2.2 Multiplayer has no jeopardy
 A 52-week Sprint produced **3 bankruptcies per 100 player-runs** — it's a pure score race, with
 relative growth as the only real interaction. That may be exactly right for a short competitive
