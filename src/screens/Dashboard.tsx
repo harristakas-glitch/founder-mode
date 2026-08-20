@@ -424,18 +424,18 @@ export function Dashboard() {
         Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
       </div>
 
-      <div className="flex flex-col xl:flex-row xl:items-start xl:gap-8">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6 xl:gap-8">
         {/* the FEED — left on desktop, interleaved by order on the phone */}
-        <div className="contents xl:order-first xl:block xl:w-[380px] xl:shrink-0">
+        <div className="contents lg:order-first lg:block lg:w-[320px] lg:shrink-0 xl:w-[380px]">
           <div className="order-5"><Upcoming /></div>
-          <div className="order-8 xl:mt-0">
+          <div className="order-8 lg:mt-0">
             <h2 className="mb-2.5 text-[15px] font-semibold">This week</h2>
             <InboxStream />
           </div>
         </div>
 
         {/* the NOW */}
-        <div className="contents xl:block xl:min-w-0 xl:flex-1">
+        <div className="contents lg:block lg:min-w-0 lg:flex-1">
           {/* Career: what just happened and why, in prose — before what needs doing about it. */}
           <div className="order-1"><FounderBriefing /></div>
           <div className="order-2"><Hero /></div>
@@ -446,7 +446,7 @@ export function Dashboard() {
           the number in every compounding formula, the growth RATE is what the board judges — the
           user COUNT is its delta line, demoted from a 34px figure to the small print, because the
           level moves the ego and the rate moves the outcome. Revenue and People close the row. */}
-      <div className="order-6 grid grid-cols-2 gap-3 xl:grid-cols-2 2xl:grid-cols-4">
+      <div className="order-6 grid grid-cols-2 gap-3 2xl:grid-cols-4">
         <button type="button" className="text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
         {career ? (
           <StatCard
