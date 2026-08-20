@@ -100,8 +100,10 @@ engine's real 32/55 resign thresholds; the cohort chart unreachable on touch.
   explains PMF, not retention.
 - **Career**: retention-based fit everywhere PMF would mislead, the living-world
   blocks (FounderBriefing, TeamOpinions, Commitments, BoardMeeting) intact and capability-gated.
-- **Arena**: the round timer rides the slimmed rail. **§42/§43 (standings hierarchy + round reveal) is the one brief
-  item not yet built** — see §8.
+- **Arena**: standings ON the HQ (§42 — owner call: Arena only; single player keeps them on
+  Rivals), and the round reveal (§43): standings by users with per-round deltas from a
+  client-local snapshot, the biggest mover named, auto-dismissing in 3.4s and closing on any tap —
+  it never gates anything, the ready flag is on the wire before it renders. No new wire traffic.
 
 ## 7. Components — new and consolidated
 
@@ -119,6 +121,12 @@ to the pre-work baseline** (md5 `8f02371…`), including the commit that added a
 `engine.ts`. Verified in-browser at 1280×860 and 375×812 at each phase; save compatibility
 exercised by carrying one Career save across every change in this document.
 
-**Open: Arena §42–§43.** The standings hierarchy and round reveal need a session-local snapshot of
-the previous round's presence data to compute deltas; scoped and next. Nothing else from the brief
-is outstanding.
+**Nothing from the brief is outstanding.** Arena §42–§43 landed last: standings on the in-match
+HQ and the round reveal, both pure presentation over presence data every client already holds.
+One honest caveat: the Arena pieces are verified by type-check, build, suite and the single-player
+null-render path — exercising them live needs two connected clients, so the first real match is
+their first real render. The components are conditional displays over the same `NetPlayer` fields
+the sidebar roster has rendered all along.
+
+Later, by owner decision (BACKLOG §5.0): "blogs from famous people" as educational content
+(instead of FM-style named-person message attribution), and the three-column desktop zoning.

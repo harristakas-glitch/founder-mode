@@ -412,6 +412,20 @@ in high-volume sectors. Do not read the remaining gap as intended difficulty unt
 
 ## 5. UI/UX follow-ups
 
+### 5.0 Owner decisions from the FM26 Portal review — 2026-08-20
+Three calls made while reviewing the HQ against Football Manager's Portal, recorded so they are
+not re-litigated by a future pass:
+
+- **Rival standings: Arena only.** No standings line on the single-player HQ — the market table
+  on Rivals is enough there. In Arena, standings ARE the game and belong on the HQ (§42 work).
+- **Named-person messages: not now.** FM attributes every message to a named staff member; the
+  owner's direction instead is **"blogs from famous people"** later — educational content in the
+  voice of well-known founders/investors, closer to Living World content authoring than to inbox
+  attribution. Park until the content pipeline exists.
+- **Three-column desktop zoning (stream | now | horizon): evaluate later**, after the HQ's
+  content settles. Single column stands for now.
+
+
 Carried over from the design pass. None are defects; all are real improvements.
 
 1. **Market table → cards on mobile.** Same class of problem as Hiring (fixed): actions sit

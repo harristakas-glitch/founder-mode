@@ -123,6 +123,60 @@ const areaOf = (screen: ScreenId) => AREAS.find((a) => a.screens.some((sc) => sc
 const MOBILE_TABS: string[] = ['hq', 'market', 'product', 'people', 'capital']
 
 
+interface RevealRow {
+  id: string
+  company: string
+  me: boolean
+  over: boolean
+  users: number
+  share: number
+  delta: number
+}
+
+/**
+ * Arena §43 — the round resolution, made visually important. Auto-dismisses in 3.4s and closes on
+ * any click; it never gates anything (the ready flag is already on the wire before this renders),
+ * so a player who taps through instantly loses nothing but the theatre.
+ */
+function RoundReveal({ week, rows, onClose }: { week: number; rows: RevealRow[]; onClose: () => void }) {
+  const biggest = [...rows].filter((r) => !r.over).sort((a, b) => b.delta - a.delta)[0]
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="rise-in relative w-full max-w-[440px] rounded-[14px] border border-line2 bg-surface3 p-5 shadow-[var(--elev-3)]">
+        <div className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-mut">Round {week}</div>
+        {biggest && biggest.delta > 0 && (
+          <div className="mt-1.5 text-[19px] font-bold tracking-[-0.01em]">
+            {biggest.me ? 'You are' : `${biggest.company} is`} moving fastest
+            <span className="ml-2 text-[14px] font-bold text-good tnum">+{num(biggest.delta)} users</span>
+          </div>
+        )}
+        <div className="mt-3 space-y-1">
+          {rows.map((r, i) => (
+            <div
+              key={r.id}
+              className={`flex items-baseline gap-3 rounded-[8px] px-2.5 py-1.5 text-[13.5px] ${r.me ? 'bg-accent/12 font-bold' : ''}`}
+            >
+              <span className="w-4 shrink-0 text-right text-[11px] text-mut tnum">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {r.over ? '☠️ ' : ''}
+                {r.company}
+                {r.me ? ' (you)' : ''}
+              </span>
+              <span className="text-[12px] text-mut tnum">{Math.round(r.share * 100)}%</span>
+              <span className="w-16 shrink-0 text-right tnum">{num(r.users)}</span>
+              <span className={`w-14 shrink-0 text-right text-[11.5px] tnum ${r.delta > 0 ? 'text-good' : r.delta < 0 ? 'text-bad' : 'text-mut'}`}>
+                {r.delta === 0 ? '—' : `${r.delta > 0 ? '▲' : '▼'}${num(Math.abs(r.delta))}`}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-center text-[11px] text-mut">tap anywhere to continue</div>
+      </div>
+    </div>
+  )
+}
+
 function MuteButton() {
   const [muted, setM] = useState(isMuted())
   const Icon = muted ? VolumeX : Volume2
@@ -192,6 +246,10 @@ export default function App() {
     void useStore.getState().initAuth()
   }, [])
   const [weekFlash, setWeekFlash] = useState<number | null>(null)
+  // Arena §43: the round reveal. Rows are computed ONCE when the round resolves and frozen in
+  // state, so the overlay does not reshuffle under the player's eyes as presence updates drift in.
+  const [reveal, setReveal] = useState<{ week: number; rows: RevealRow[] } | null>(null)
+  const prevStandings = useRef<Record<string, number>>({})
   const [resultsClosed, setResultsClosed] = useState(false) // results overlay dismissed for a last look around
   const [, setClock] = useState(0) // re-render for the round countdown
   const prevWeek = useRef<number | null>(null)
@@ -200,6 +258,29 @@ export default function App() {
     if (!game) {
       prevWeek.current = null
       return
+    }
+    if (prevWeek.current !== null && game.week > prevWeek.current && online) {
+      // Arena: the round resolution is the game's heartbeat and deserves more than a sweep (§43).
+      // Standings by users, with the delta since last round from a client-local snapshot — no new
+      // wire traffic, this is arithmetic on presence data every client already holds.
+      const everyone = online.players.filter((p) => p.playing !== false)
+      const total = Math.max(1, everyone.reduce((n, p) => n + Math.max(0, p.users), 0))
+      const rows: RevealRow[] = everyone
+        .map((p) => ({
+          id: p.id,
+          company: p.company,
+          me: p.id === myId(),
+          over: p.over,
+          users: Math.max(0, p.users),
+          share: Math.max(0, p.users) / total,
+          delta: prevStandings.current[p.id] !== undefined ? p.users - prevStandings.current[p.id] : 0,
+        }))
+        .sort((a, b) => b.users - a.users)
+      prevStandings.current = Object.fromEntries(everyone.map((p) => [p.id, Math.max(0, p.users)]))
+      setReveal({ week: game.week, rows })
+      const t = setTimeout(() => setReveal(null), 3400)
+      prevWeek.current = game.week
+      return () => clearTimeout(t)
     }
     if (prevWeek.current !== null && game.week > prevWeek.current) {
       // Every mode gets the 950ms sweep and nothing more. A briefing MODAL shipped here first —
@@ -808,6 +889,9 @@ export default function App() {
 
       {/* mobile: the full metric sheet, same entries as the desktop rail */}
       {statsOpen && <MobileStatsSheet onClose={() => setStatsOpen(false)}>{statRail}</MobileStatsSheet>}
+
+      {/* Arena: the round reveal (§43) */}
+      {reveal && <RoundReveal week={reveal.week} rows={reveal.rows} onClose={() => setReveal(null)} />}
 
       {/* week transition */}
       {weekFlash && (

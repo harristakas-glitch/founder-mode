@@ -25,6 +25,7 @@ import { attentionRegister, type AttentionItem } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
 import { useState } from 'react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { myId as myOnlineId } from '../net/online'
 import { InboxStream } from './Inbox'
 import { useStore } from '../store'
 
@@ -306,6 +307,48 @@ function MetricDrawer({ metric, onClose }: { metric: MetricKey; onClose: () => v
   )
 }
 
+// Arena §42 — the standings, ON the HQ, because in a match your position IS the game. Owner
+// call (2026-08-20): Arena only — in single player the market table on Rivals is enough, and a
+// standings card there would be one more box on the screen that least needs one. Renders null
+// outside a live match.
+function ArenaStandings() {
+  const online = useStore((s) => s.online)
+  const game = useStore((s) => s.game)!
+  if (!online || online.phase !== 'playing') return null
+  const everyone = online.players.filter((p) => p.playing !== false)
+  if (everyone.length < 2) return null
+  const total = Math.max(1, everyone.reduce((n, p) => n + Math.max(0, p.users), 0))
+  const rows = [...everyone].sort((a, b) => b.users - a.users)
+  const myRank = rows.findIndex((p) => p.id === myOnlineId()) + 1
+  return (
+    <div className="mb-4 rounded-[14px] border border-line bg-surface p-4 shadow-[var(--elev-2)]">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-[15px] font-semibold">Standings</h2>
+        <span className="text-[11.5px] text-mut tnum">
+          you are #{myRank} of {rows.length} · week {game.week}
+        </span>
+      </div>
+      <div className="space-y-1">
+        {rows.map((p, i) => {
+          const me = p.id === myOnlineId()
+          return (
+            <div key={p.id} className={`flex items-baseline gap-3 rounded-[8px] px-2.5 py-1.5 text-[13px] ${me ? 'border border-line2 bg-surface3 font-bold' : ''}`}>
+              <span className="w-4 shrink-0 text-right text-[11px] text-mut tnum">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {p.over ? '☠️ ' : ''}
+                {p.company}
+                {me ? ' (you)' : ''}
+              </span>
+              <span className="text-[11.5px] text-mut tnum">{Math.round((Math.max(0, p.users) / total) * 100)}% share</span>
+              <span className="w-16 shrink-0 text-right tnum">{num(Math.max(0, p.users))}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // The horizon — FM26's Portal lesson, and the brief's own §3 UPCOMING section, finally built.
 // The HQ had alarms (the register) but no TIME: nothing said the board sits in three weeks or
 // that an offer dies on Friday. Deadlines the state already knows, nearest first, each a link to
@@ -376,6 +419,7 @@ export function Dashboard() {
       <FounderBriefing />
 
       <Hero />
+      <ArenaStandings />
       <AttentionList />
       <Upcoming />
 
