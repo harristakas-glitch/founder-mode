@@ -19,6 +19,7 @@
 // `CustomerCohort` as it already exists. Two facts are measured per cohort — the four-week snapshot
 // frozen by `tick.ts`, and today's survivor count — and the triangle says so rather than pretending
 // the cells between them were observed.
+import { ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { EmptyState, Panel } from '../components'
 import { cohortDecaysApplied, RETENTION_WINDOW_WEEKS, segmentDef, segmentsForSector } from '../game/career/pmf'
@@ -70,7 +71,8 @@ export const snapshotWeek = (acquiredWeek: number) => acquiredWeek + RETENTION_W
  * It is the same filter, the same order and the same `slice(-10)`, so for any week in which no
  * cohort has yet been dropped this reproduces `retentionBySegment` exactly. Cohorts leave the list
  * when their last customer goes (`activeCustomers > 0`) or when the 60-cohort cap pushes them off,
- * so the deep past thins out — the chart says as much beneath it.
+ * so the deep past thins out — the chart's per-week readout says how many cohorts each point
+ * averages, which is where a player can see it thinning.
  */
 export function windowAt(cohorts: CustomerCohort[], week: number): CustomerCohort[] {
   return cohorts
@@ -107,7 +109,12 @@ export function summarise(window: CustomerCohort[], week: number): Point | null 
  * the data answers honestly, and it is the question that settles whether a dip means anything.
  */
 function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: number; value: number; size: number; incentivised: boolean }[] }) {
-  const [hover, setHover] = useState<number | null>(null)
+  // The readout was bound to onMouseMove/onMouseLeave, which put every per-week number on this
+  // chart out of reach of a touch device. It is an index into `points` now, driven by pointer
+  // events — hover to scrub with a mouse, tap or drag with a finger — and by the arrow keys once
+  // the plot has focus. A tap pins it, because a finger has no way to keep hovering.
+  const [sel, setSel] = useState<number | null>(null)
+  const [pinned, setPinned] = useState(false)
   if (points.length < 2)
     return <EmptyState title="Not enough weeks yet" hint="Each cohort reports its first number four weeks after it joins. Come back in a few weeks." />
 
@@ -123,8 +130,29 @@ function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: nu
   const top = points.map((p) => `${X(p.week)},${Y(Math.min(hi, p.mean + p.spread))}`)
   const bottom = points.map((p) => `${X(p.week)},${Y(Math.max(lo, p.mean - p.spread))}`).reverse()
   const line = points.map((p) => `${X(p.week)},${Y(p.mean)}`).join(' ')
-  const near = hover === null ? null : points.reduce((best, p) => (Math.abs(X(p.week) - hover) < Math.abs(X(best.week) - hover) ? p : best), points[0])
+  const near = sel === null ? null : (points[Math.min(sel, points.length - 1)] ?? null)
   const maxSize = Math.max(...dots.map((d) => d.size), 1)
+
+  /** Nearest point to a client x, in index space — the one target pointer and keyboard share. */
+  const nearestTo = (clientX: number, el: HTMLElement) => {
+    const r = el.getBoundingClientRect()
+    const x = ((clientX - r.left) / r.width) * 100
+    let best = 0
+    for (let i = 1; i < points.length; i++) if (Math.abs(X(points[i].week) - x) < Math.abs(X(points[best].week) - x)) best = i
+    return best
+  }
+  /** Tapping the week that is already pinned lets go of it — otherwise a finger can never dismiss. */
+  const pick = (i: number, mouse: boolean) => {
+    const same = pinned && sel === i
+    setPinned(!same)
+    setSel(same && !mouse ? null : i)
+  }
+  // A dot below the band is the only mark here the legend cannot label, and it is worth a sentence
+  // only in the weeks where one exists.
+  const hasOutlier = dots.some((d) => {
+    const p = points.find((q) => q.week === d.week)
+    return !d.incentivised && p !== undefined && d.value < p.mean - p.spread
+  })
 
   return (
     <div>
@@ -135,13 +163,33 @@ function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: nu
           <span className="absolute right-2 bottom-0">{pct(lo)}</span>
         </div>
         <div
-          className="relative min-w-0 flex-1"
+          className="relative min-w-0 flex-1 touch-pan-y rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           style={{ height: 170 }}
-          onMouseMove={(e) => {
-            const r = e.currentTarget.getBoundingClientRect()
-            setHover(((e.clientX - r.left) / r.width) * 100)
+          tabIndex={0}
+          role="group"
+          aria-label="Four-week retention by week. Point at it, tap it, or use the arrow keys to read one week."
+          onPointerDown={(e) => pick(nearestTo(e.clientX, e.currentTarget), e.pointerType === 'mouse')}
+          onPointerMove={(e) => {
+            // A mouse scrubs on hover until a click pins it; a finger only reports while it is down,
+            // and `touch-pan-y` leaves the vertical drag to the page so the screen still scrolls.
+            if (e.pointerType === 'mouse' ? pinned : e.buttons === 0) return
+            setSel(nearestTo(e.clientX, e.currentTarget))
           }}
-          onMouseLeave={() => setHover(null)}
+          onPointerLeave={() => {
+            if (!pinned) setSel(null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setSel(null)
+              setPinned(false)
+              return
+            }
+            const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+            if (!step) return
+            e.preventDefault()
+            setPinned(true)
+            setSel((prev) => Math.max(0, Math.min(points.length - 1, (prev === null ? points.length - 1 : prev) + step)))
+          }}
         >
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <polygon points={[...top, ...bottom].join(' ')} fill="var(--color-accent)" fillOpacity="0.14" />
@@ -168,21 +216,25 @@ function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: nu
                   background: d.incentivised ? 'var(--color-warn)' : 'var(--color-accent2)',
                   opacity: 0.75,
                 }}
-                title={`week ${d.week}: ${pct(d.value)} from a cohort of ${d.size.toLocaleString()}`}
               />
             )
           })}
-          {near && (
-            <div
-              className="pointer-events-none absolute top-1 rounded-lg border border-line bg-surface2 px-2 py-1 text-[11px] whitespace-nowrap"
-              style={{ left: `${X(near.week)}%`, transform: `translateX(-${X(near.week)}%)` }}
-            >
-              <span className="text-mut">wk {near.week}</span>{' '}
-              <span className="font-bold tnum">{pct(near.mean)}</span>{' '}
-              <span className="text-mut tnum">± {(near.spread * 100).toFixed(1)}pp</span>{' '}
-              <span className="text-mut/70">({near.n} cohorts)</span>
-            </div>
-          )}
+          {/* The live region is always mounted, not conditionally rendered with the readout: a
+              region that appears at the same moment as its text is announced unreliably, and the
+              arrow keys are worthless if the numbers only exist as pixels. */}
+          <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-1">
+            {near && (
+              <div
+                className="absolute rounded-lg border border-line bg-surface2 px-2 py-1 text-[11px] whitespace-nowrap"
+                style={{ left: `${X(near.week)}%`, transform: `translateX(-${X(near.week)}%)` }}
+              >
+                <span className="text-mut">wk {near.week}</span>{' '}
+                <span className="font-bold tnum">{pct(near.mean)}</span>{' '}
+                <span className="text-mut tnum">± {(near.spread * 100).toFixed(1)}pp</span>{' '}
+                <span className="text-mut/70">({near.n} cohorts)</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div className="mt-1 flex justify-between pl-11 text-[10px] text-mut tnum">
@@ -197,7 +249,7 @@ function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: nu
           <span className="h-3 w-5 rounded-[3px] bg-accent/25" /> spread of the cohorts inside it
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-accent2/75" /> one cohort's own result
+          <span className="h-2.5 w-2.5 rounded-full bg-accent2/75" /> one cohort's own result, sized by the people in it
         </span>
         {dots.some((d) => d.incentivised) && (
           <span className="flex items-center gap-1.5">
@@ -205,6 +257,12 @@ function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: nu
           </span>
         )}
       </div>
+      {hasOutlier && (
+        <p className="mt-2 max-w-[70ch] pl-11 text-[11.5px] leading-relaxed text-mut">
+          A dot below the band is usually a company-wide loss — an outage, a rival's price war — charged to whichever cohort was newest that week, not a product
+          that got worse.
+        </p>
+      )}
     </div>
   )
 }
@@ -429,7 +487,10 @@ export function CohortAnalytics() {
         </Panel>
       ) : (
         <>
-          {/* ---- the verdict, first, in words ------------------------------------------------ */}
+          {/* ---- the verdict, and the picture of the same claim, in one card ------------------
+              The sentence says the move is inside the noise; the chart draws the noise. Split over
+              two cards the reader had to carry the claim to its evidence, and the chart's caption
+              re-explained both — the legend already names every mark on it. */}
           <Panel title="This week's read">
             <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
               <div>
@@ -461,59 +522,36 @@ export function CohortAnalytics() {
                 </>
               )}
             </p>
+            <div className="mt-4 border-t border-line/60 pt-4">
+              <AverageWithSpread points={trend} dots={dots} />
+            </div>
           </Panel>
 
-          {/* ---- the picture that explains the oscillation ------------------------------------ */}
+          {/* ---- the triangle, one interaction away ------------------------------------------
+              192 cells on arrival and up to 960 expanded, answering a question most weeks do not
+              ask — the loudest thing on a screen whose point is the sentence above it. Native
+              <details>: a real disclosure to a keyboard and a screen reader, one key away. */}
           <div className="mt-3.5">
-            <Panel title="The average, and the cohorts it is made of">
-              <AverageWithSpread points={trend} dots={dots} />
-              <p className="mt-3 max-w-[70ch] text-[12.5px] leading-relaxed text-mut">
-                The line is the number the game scores you on. The band is one standard deviation of the cohorts inside it — how far apart the groups being
-                averaged actually are. Each dot is one cohort's own four-week result, sized by how many people it held. When a dot lands far below the band it
-                is usually a company-wide loss — an outage, a rival's price war — landing on whichever cohort was newest that week, not a change in how well
-                your product holds people. <span className="text-ink">If the line stays inside the band, nothing happened.</span>
-              </p>
-            </Panel>
-          </div>
-
-          {/* ---- the triangle ---------------------------------------------------------------- */}
-          <div className="mt-3.5">
-            <Panel title="Cohort triangle — % of each group still here, N weeks after joining">
-              <Triangle rows={rows} />
-              <p className="mt-3 max-w-[74ch] text-[12.5px] leading-relaxed text-mut">
-                Read <span className="text-ink">across</span> a row to watch one week's arrivals leave over time. Read <span className="text-ink">down</span> a
-                column to compare like with like: if the numbers in the week-4 column are climbing as you go up the table, newer customers are sticking better
-                than older ones and the product is genuinely improving. Two cells per row are measured — the four-week mark the game freezes, and today. The{' '}
-                <span className="text-ink">join</span> column is the cohort's own size, so it is 100% by definition, and the faded cells are the steady weekly
-                rate the measured ones imply.
-              </p>
-            </Panel>
-          </div>
-
-          <div className="mt-3.5">
-            <Panel title="What moves this number">
-              <ul className="max-w-[74ch] space-y-2 text-[13px] leading-relaxed">
-                <li>
-                  <span className="font-semibold">Product fit and quality.</span> The strongest lever, and the slowest — a cohort acquired this week does not
-                  report until week four, so a genuine improvement takes about ten weeks to work through the whole window.
-                </li>
-                <li>
-                  <span className="font-semibold">Price against what this segment will pay.</span> Charging above a segment's tolerance shows up in the next
-                  cohorts' rows, not in the ones already on the books.
-                </li>
-                <li>
-                  <span className="font-semibold">Bugs.</span> Immediate, and it hits every live cohort at once — so a bug spike bends whole columns, not one
-                  row.
-                </li>
-                <li>
-                  <span className="font-semibold text-mut">Which cohorts happen to be in the window.</span> Not a lever, and the usual explanation for a
-                  one-week wobble.
-                </li>
-              </ul>
-              <p className="mt-3 max-w-[74ch] text-[12px] leading-relaxed text-mut/80">
-                Cohorts leave the books when their last customer does, so weeks far in the past are rebuilt from fewer groups than were live at the time. The
-                recent end of the chart is exact.
-              </p>
+            <Panel>
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md text-[15px] font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight size={16} className="shrink-0 text-mut transition-transform group-open:rotate-90" />
+                  Cohort triangle
+                  <span className="text-[12.5px] font-normal text-mut">
+                    {rows.length} cohort{rows.length === 1 ? '' : 's'}, week by week
+                  </span>
+                </summary>
+                <div className="mt-3.5">
+                  <Triangle rows={rows} />
+                  <p className="mt-3 max-w-[74ch] text-[12.5px] leading-relaxed text-mut">
+                    Read <span className="text-ink">across</span> a row to watch one week's arrivals leave over time. Read <span className="text-ink">down</span>{' '}
+                    a column to compare like with like: if the numbers in the week-4 column are climbing as you go up the table, newer customers are sticking
+                    better than older ones and the product is genuinely improving. Two cells per row are measured — the four-week mark the game freezes, and
+                    today. The <span className="text-ink">join</span> column is the cohort's own size, so it is 100% by definition, and the faded cells are the
+                    steady weekly rate the measured ones imply.
+                  </p>
+                </div>
+              </details>
             </Panel>
           </div>
         </>

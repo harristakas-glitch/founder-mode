@@ -1,20 +1,21 @@
 import { useState } from 'react'
-import { Bar, BarRow, Btn, DemandGauge, Panel, StatCard } from '../components'
-import { num } from '../format'
+import { Bar, BarRow, Btn, DemandGauge, Panel } from '../components'
+import { money, num } from '../format'
 import { sectorById } from '../game/data'
 import {
+  PIVOT_COOLDOWN,
+  PIVOT_COST,
   RESONANCE_RANGE,
   availableVentureSectors,
+  canPivot,
   canStartVenture,
   demandSignal,
   pivotBonus,
   pmfLabel,
-  productScore,
   resonanceEstimate,
   ventureSignal,
 } from '../game/engine'
 import { hasCapability } from '../game/modes'
-import { PMF_CAUSAL_CHAIN } from '../CareerUI'
 import { useStore } from '../store'
 
 const SIGNAL_COPY: Record<string, { text: string; cls: string }> = {
@@ -24,13 +25,23 @@ const SIGNAL_COPY: Record<string, { text: string; cls: string }> = {
   strong: { text: 'Research says demand is STRONG. Pour it on — this market wants you.', cls: 'text-good' },
 }
 
-function PivotButton({ onPivot, bonusPct }: { onPivot: () => void; bonusPct: number }) {
+// The pivot gate lives in `canPivot`, and until now the screen never showed it: the button looked
+// live at every price, you spent two clicks arming it, and the refusal arrived afterwards as a
+// flash message. The cost is on the button now and the reason it is off sits under it.
+function PivotButton({ onPivot, bonusPct, gate }: { onPivot: () => void; bonusPct: number; gate: { ok: boolean; reason?: string } }) {
   const [arming, setArming] = useState(false)
   if (!arming) {
     return (
-      <Btn variant="danger" className="mt-3" onClick={() => setArming(true)}>
-        Pivot the company ↻
-      </Btn>
+      <div className="mt-3">
+        <Btn variant="danger" disabled={!gate.ok} onClick={() => setArming(true)}>
+          Pivot the company — {money(PIVOT_COST)} ↻
+        </Btn>
+        <div className="mt-1.5 text-xs leading-relaxed text-mut">
+          {gate.ok
+            ? `${money(PIVOT_COST)} in wind-down and rebuild, then ${PIVOT_COOLDOWN} weeks before you can pivot again.`
+            : gate.reason}
+        </div>
+      </div>
     )
   }
   return (
@@ -41,7 +52,8 @@ function PivotButton({ onPivot, bonusPct }: { onPivot: () => void; bonusPct: num
           <span className="text-good">Keep</span>: 50% of features, 70% of quality, 70% of users, your whole team
         </li>
         <li>
-          <span className="text-bad">Lose</span>: 40% of hype, 60% of PMF, some morale — and the demand signal resets to unknown
+          <span className="text-bad">Lose</span>: 40% of hype, 60% of PMF, some morale, the demand signal — and no second pivot for{' '}
+          {PIVOT_COOLDOWN} weeks
         </li>
         <li>
           <span className="text-good">Gain</span>: a fresh idea with a new demand roll, tilted <b>+{bonusPct}%</b> in your favor by
@@ -56,7 +68,7 @@ function PivotButton({ onPivot, bonusPct }: { onPivot: () => void; bonusPct: num
             onPivot()
           }}
         >
-          Yes — pivot now
+          Yes — pivot for {money(PIVOT_COST)}
         </Btn>
         <Btn onClick={() => setArming(false)}>Cancel</Btn>
       </div>
@@ -79,6 +91,7 @@ function Ventures() {
   const open = availableVentureSectors(game)
   const active = game.ventures.find((v) => !v.launched)
   const launched = game.ventures.filter((v) => v.launched)
+  const sig = active ? ventureSignal(active) : 'unknown'
 
   return (
     <div className="mt-3.5">
@@ -106,23 +119,27 @@ function Ventures() {
           <div className="rounded-xl border border-accent2/40 bg-accent2/5 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <b>Exploring: {sectorById(active.sector).name}</b>
-              <span className={`text-[13px] font-semibold ${VENTURE_SIGNAL_COPY[ventureSignal(active)].cls}`}>
-                {VENTURE_SIGNAL_COPY[ventureSignal(active)].text}
-              </span>
+              <span className={`text-[13px] font-semibold ${VENTURE_SIGNAL_COPY[sig].cls}`}>{VENTURE_SIGNAL_COPY[sig].text}</span>
             </div>
-            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+            <div className={`mt-2.5 grid gap-2 ${sig === 'unknown' ? 'sm:grid-cols-2' : ''}`}>
               <div>
                 <div className="mb-1 text-[11px] text-mut">PMF — launches as a product line at 50</div>
                 <Bar value={(active.pmf / 50) * 100} color="var(--color-accent2)" />
               </div>
-              <div>
-                <div className="mb-1 text-[11px] text-mut">Demand signal research ({Math.min(100, Math.round((active.researchSignal / 14) * 100))}%)</div>
-                <Bar value={Math.min(100, (active.researchSignal / 14) * 100)} />
-              </div>
+              {/* Only while it is still counting up. The moment the signal is readable this bar is
+                  pinned at 100% for the rest of the run, and the verdict above it says more. */}
+              {sig === 'unknown' && (
+                <div>
+                  <div className="mb-1 text-[11px] text-mut">
+                    Demand signal research ({Math.min(100, Math.round((active.researchSignal / 14) * 100))}%)
+                  </div>
+                  <Bar value={Math.min(100, (active.researchSignal / 14) * 100)} />
+                </div>
+              )}
             </div>
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
-              Progress comes from the <b className="text-accent2">New bet</b> slider below — the share of engineering exploring this
-              market. The demand roll got your +{Math.round(pivotBonus(game) * 100)}% experience bonus.
+              Progress comes from the <b className="text-accent2">New bet</b> slider in Team focus above — the share of engineering
+              exploring this market.
             </div>
             <Btn variant="danger" className="mt-2.5" onClick={() => shelveBet(active.id)}>
               Shelve this bet
@@ -170,6 +187,17 @@ export function Product() {
   const signal = demandSignal(game)
   const est = resonanceEstimate(game)
 
+  const codebase = (
+    <Panel title="State of the codebase">
+      <BarRow name="Features" value={game.features} />
+      <BarRow name="Quality" value={game.quality} color="var(--color-good)" />
+      <BarRow name="Bugs" value={game.bugs} color="var(--color-bad)" />
+      {game.sector === 'fintech' && (
+        <div className="mt-3 text-xs leading-relaxed text-warn">Fintech: a bug costs you roughly double what it costs anyone else.</div>
+      )}
+    </Panel>
+  )
+
   return (
     <div>
       <h1 className="text-[20px] font-extrabold tracking-tight">Product</h1>
@@ -178,119 +206,93 @@ export function Product() {
         {game.founderKind === 'technical' ? ' + you' : ''} · building things is easy — building the <i>right</i> thing is the game
       </div>
 
-      <div className="grid gap-3.5 lg:grid-cols-2">
-        {career ? (
-          <Panel title={`Product-market fit — ${Math.round(game.pmf)}`}>
-            <Bar value={game.pmf} color={game.pmf < 40 ? 'var(--color-warn)' : 'var(--color-good)'} />
-            <p className="mt-3 text-[13px] leading-relaxed">{PMF_CAUSAL_CHAIN}</p>
-            <p className="mt-2 text-[13px] leading-relaxed text-mut">
-              So this screen is upstream of PMF, not where you read it. Quality is the only lever here that reaches it: quality decides
-              how well you clear your target segment&apos;s hidden product bar, that fit decides who stays, and who stays is the score.
-              Nothing on this page moves PMF the week you do it.
-            </p>
-            <p className="mt-2 text-[13px] leading-relaxed text-mut">
-              Which segment you are aiming at, what you believe about it, and whether to change target all live on Discovery.
-            </p>
-            <Btn className="mt-3" onClick={() => setScreen('discovery')}>
-              Discovery — segments &amp; experiments →
-            </Btn>
-          </Panel>
-        ) : (
-        <Panel title={`Product-market fit — ${pmfLabel(game.pmf)}`}>
-          <Bar value={game.pmf} color={game.pmf < 40 ? 'var(--color-warn)' : 'var(--color-good)'} />
-
-          <div className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">
-            Idea quality — your team's estimate of true market demand
-          </div>
-          {!est ? (
-            <div>
-              <Bar value={Math.min(100, (game.researchSignal / 14) * 100)} color="var(--color-accent2)" />
-              <div className="mt-1.5 text-xs text-mut">
-                Not enough user research yet to read the market ({Math.round(Math.min(100, (game.researchSignal / 14) * 100))}% there).
-                Raise the research slider below to find out faster.
-              </div>
-            </div>
-          ) : (
-            <DemandGauge lo={est.lo} hi={est.hi} {...RESONANCE_RANGE} />
-          )}
-          <div className={`mt-3 text-[13px] font-semibold ${SIGNAL_COPY[signal].cls}`}>{SIGNAL_COPY[signal].text}</div>
-          <div className="mt-2 text-xs leading-relaxed text-mut">
-            The white band is where your idea's true demand sits, as far as research can tell — more research narrows it. PMF gates
-            everything: retention, word of mouth, and how many users actually pay.
-          </div>
-          <div className="mt-3 text-xs leading-relaxed text-mut">
-            Thinking of pivoting? Research done <i>before</i> a pivot carries over — it tilts the next idea's demand roll in your favor
-            (currently <b className="text-good">+{Math.round(pivotBonus(game) * 100)}%</b>).
-          </div>
-          <PivotButton onPivot={doPivot} bonusPct={Math.round(pivotBonus(game) * 100)} />
-          {game.pivots > 0 && (
-            <span className="ml-2.5 text-xs text-mut">
-              {game.pivots} pivot{game.pivots === 1 ? '' : 's'} so far
-            </span>
-          )}
-        </Panel>
-
-        )}
-
-        <div className="space-y-3.5">
-          <StatCard
-            label="Product score (execution quality)"
-            numeric={productScore(game)}
-            format={(n) => `${Math.round(n)}/100`}
-            delta={game.sector === 'fintech' ? 'Fintech: bugs hurt double here' : undefined}
-          />
-          <Panel title="State of the codebase">
-            <BarRow name="Features" value={game.features} />
-            <BarRow name="Quality" value={game.quality} color="var(--color-good)" />
-            <BarRow name="Bugs" value={game.bugs} color="var(--color-bad)" />
-          </Panel>
+      {/* Career used to get a full-height panel here whose entire message was "the thing you want
+          is on Discovery". That is a link. */}
+      {career && (
+        <div className="mb-3.5 text-[13px] leading-relaxed text-mut">
+          Quality is the only lever on this screen that reaches PMF, and it reaches it weeks later, never the week you move it.{' '}
+          <button className="font-semibold text-accent underline underline-offset-2 hover:brightness-125" onClick={() => setScreen('discovery')}>
+            Segments, experiments and repositioning live on Discovery →
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* The allocation sliders are the only decision on this screen, so they are no longer the
+          last thing on it — everything below is the readout you check them against. */}
+      <Panel title="Team focus (share of effort)">
+        {(
+          [
+            'features',
+            'quality',
+            'bugs',
+            ...(career ? [] : (['research'] as const)),
+            ...(hasBet ? (['bet'] as const) : []),
+          ] as const
+        ).map((key) => (
+          <div className="mb-4 last:mb-0" key={key}>
+            <div className="mb-1 flex justify-between text-[13px]">
+              <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>
+                {key === 'features'
+                  ? 'New features'
+                  : key === 'quality'
+                    ? 'Polish & quality'
+                    : key === 'bugs'
+                      ? 'Bug fixing'
+                      : key === 'research'
+                        ? 'User research'
+                        : 'New bet (tiger team)'}
+              </span>
+              <span className="font-bold tnum">{Math.round((a[key] / sum) * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={a[key]}
+              style={{ ['--fill' as string]: `${a[key]}%` }}
+              onChange={(e) => setAllocation(key, Number(e.target.value))}
+            />
+          </div>
+        ))}
+        <div className="mt-2 text-xs leading-relaxed text-mut">
+          Features attract users. Quality retains them. Bugs strangle both.
+          {career ? '' : ' Research finds out what the market actually wants — without it, you are building in the dark.'}
+        </div>
+      </Panel>
+
+      {career ? (
+        <div className="mt-3.5">{codebase}</div>
+      ) : (
+        <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
+          <Panel title={`Product-market fit — ${pmfLabel(game.pmf)}`}>
+            <Bar value={game.pmf} color={game.pmf < 40 ? 'var(--color-warn)' : 'var(--color-good)'} />
+
+            <div className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-mut">
+              Idea quality — your team's estimate of true market demand
+            </div>
+            {!est ? (
+              <div>
+                <Bar value={Math.min(100, (game.researchSignal / 14) * 100)} color="var(--color-accent2)" />
+                <div className="mt-1.5 text-xs text-mut">
+                  Not enough user research yet to read the market ({Math.round(Math.min(100, (game.researchSignal / 14) * 100))}% there).
+                  Raise the research slider above to find out faster.
+                </div>
+              </div>
+            ) : (
+              <DemandGauge lo={est.lo} hi={est.hi} {...RESONANCE_RANGE} />
+            )}
+            <div className={`mt-3 text-[13px] font-semibold ${SIGNAL_COPY[signal].cls}`}>{SIGNAL_COPY[signal].text}</div>
+            <div className="mt-2 text-xs leading-relaxed text-mut">
+              The white band is where your idea's true demand sits, as far as research can tell — more research narrows it. PMF gates
+              everything: retention, word of mouth, and how many users actually pay.
+            </div>
+            <PivotButton onPivot={doPivot} bonusPct={Math.round(pivotBonus(game) * 100)} gate={canPivot(game)} />
+          </Panel>
+          {codebase}
+        </div>
+      )}
 
       <Ventures />
-
-      <div className="mt-3.5">
-        <Panel title="Team focus (share of effort)">
-          {(
-            [
-              'features',
-              'quality',
-              'bugs',
-              ...(career ? [] : (['research'] as const)),
-              ...(hasBet ? (['bet'] as const) : []),
-            ] as const
-          ).map((key) => (
-            <div className="mb-4 last:mb-0" key={key}>
-              <div className="mb-1 flex justify-between text-[13px]">
-                <span className={key === 'bet' ? 'font-semibold text-accent2' : ''}>
-                  {key === 'features'
-                    ? 'New features'
-                    : key === 'quality'
-                      ? 'Polish & quality'
-                      : key === 'bugs'
-                        ? 'Bug fixing'
-                        : key === 'research'
-                          ? 'User research'
-                          : 'New bet (tiger team)'}
-                </span>
-                <span className="font-bold tnum">{Math.round((a[key] / sum) * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={a[key]}
-                style={{ ['--fill' as string]: `${a[key]}%` }}
-                onChange={(e) => setAllocation(key, Number(e.target.value))}
-              />
-            </div>
-          ))}
-          <div className="mt-2 text-xs leading-relaxed text-mut">
-            Features attract users. Quality retains them. Bugs strangle both. Research finds out what the market actually wants —
-            without it, you are building in the dark.
-          </div>
-        </Panel>
-      </div>
     </div>
   )
 }

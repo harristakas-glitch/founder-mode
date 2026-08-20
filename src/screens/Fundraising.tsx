@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Bar, Btn, Panel, StatCard } from '../components'
+import { useState, type ReactNode } from 'react'
+import { Bar, Btn, NESTED, Panel, RAISED, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
 import {
@@ -44,6 +44,39 @@ import { isTokenised, tokenisationOffered } from '../game/token/state'
 import { networkValue } from '../game/token/scoring'
 import { useStore } from '../store'
 
+/**
+ * Context one interaction away rather than deleted. This file carried ~3,480 words of markup prose
+ * across 27 blocks, every sentence true and almost none of it re-read after the first time. The
+ * rule applied throughout: the sentence that states the DECISION stays on the face of the panel,
+ * next to the control it is about; the paragraph explaining why it is priced that way moves in
+ * here. Native <details>, so the toggle is a real button to a screen reader and announces its own
+ * expanded state without JavaScript or ARIA of ours.
+ *
+ * What never goes in here: the player's current position, and any rule they can lose the company
+ * to — the board's "finds a new CEO" clause, the community warnings and the whole no-confidence
+ * vote all stay on the face.
+ */
+function More({ label, children, className = 'mt-2.5' }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <details className={`group ${className}`}>
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-[12px] font-semibold text-mut transition-colors hover:text-ink md:min-h-[28px] [&::-webkit-details-marker]:hidden">
+        <span className="inline-block transition-transform duration-150 group-open:rotate-90">›</span>
+        {label}
+      </summary>
+      <div className="mt-1 text-xs leading-relaxed text-mut">{children}</div>
+    </details>
+  )
+}
+
+/**
+ * A route the fork closed permanently. Brief §47/§48 require the reason to stay on screen, and it
+ * does; they do not require the full-size card wrapped around a never-again-enabled button that
+ * both of these used to be. A closed door is one line, at the foot of the screen.
+ */
+function ClosedPath({ children }: { children: ReactNode }) {
+  return <div className="text-[12px] leading-relaxed text-mut">{children}</div>
+}
+
 function SecondaryPanel() {
   const game = useStore((s) => s.game)!
   const doSecondary = useStore((s) => s.doSecondary)
@@ -58,8 +91,7 @@ function SecondaryPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-[13px] leading-relaxed text-mut">
             Sell <b className="text-ink">2% of your personal stake</b> at a 30% discount —{' '}
-            <b className="text-ink tnum">{money(secondaryProceeds(game))}</b> banked for you, no matter how the company ends. Costs a
-            little reputation and team goodwill; buys a founder who sleeps. Once per funding stage, from Series B.
+            <b className="text-ink tnum">{money(secondaryProceeds(game))}</b> banked for you, no matter how the company ends.
             {game.bankedPayout > 0 && (
               <span className="text-good"> Banked so far: {money(game.bankedPayout)}.</span>
             )}
@@ -67,7 +99,8 @@ function SecondaryPanel() {
                 discount is cash worth 1.4% of the company, measured at −24% on final score. That is
                 good design — it is a hedge that survives bankruptcy, not a value play. The defect
                 was that the panel never said so, so a player could take it expecting to come out
-                ahead. Now the trade is on the screen, in the run's own numbers. */}
+                ahead. The trade therefore stays on the FACE of the panel rather than moving behind
+                a disclosure: it is the decision, not an explanation of one. */}
             <span className="mt-1.5 block">
               <b className="text-ink">This is a hedge, not a win.</b> That 2% is worth{' '}
               <b className="text-ink tnum">{money(valuation(game) * 0.02)}</b> on paper and you are taking{' '}
@@ -75,6 +108,10 @@ function SecondaryPanel() {
               <b className="text-ink tnum">{money(valuation(game) * 0.02 - secondaryProceeds(game))}</b> for the certainty. It only pays
               off if the run ends badly.
             </span>
+            <More label="What it costs beyond the discount" className="mt-1.5">
+              A little reputation and some team goodwill, in exchange for a founder who sleeps. Once per funding stage, and not before
+              Series B — an early secondary scares the people you still need to raise from.
+            </More>
           </div>
           {gate.ok ? (
             <Btn variant="primary" onClick={doSecondary}>
@@ -286,14 +323,8 @@ function TreasurySalePanel() {
               </div>
             </div>
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
-              <b className="text-ink">This is a raise, so it dilutes you like a raise.</b> Community capital is still capital — the
-              people buying own a claim on what they are funding. Trust also falls {quote.trustCost.toFixed(0)} points, and selling
-              again soon costs roughly double that.
-              <br />
-              You do not sell at the screen price — you walk the book down and realise the average. A deeper market costs you less,
-              which is the second thing liquidity incentives buy. The tokens stay in the float afterwards, so every remaining token is
-              worth slightly less of the same network, and your weekly incentive budget falls by{' '}
-              <b className="text-ink tnum">{Math.round(quote.weeklyBudgetLost).toLocaleString()}</b> tokens permanently.
+              <b className="text-ink">This is a raise, so it dilutes you like a raise.</b> Trust falls{' '}
+              {quote.trustCost.toFixed(0)} points with it.
               {t.treasurySales.tokensSold > 0 && (
                 <span className="text-ink">
                   {' '}
@@ -301,6 +332,13 @@ function TreasurySalePanel() {
                 </span>
               )}
             </div>
+            <More label="Why you receive less than the screen price">
+              Community capital is still capital — the people buying own a claim on what they are funding, and selling again soon costs
+              roughly double the trust. You also do not sell at the screen price: you walk the book down and realise the average, so a
+              deeper market costs you less, which is the second thing liquidity incentives buy. The tokens stay in the float afterwards,
+              so every remaining token is worth slightly less of the same network, and your weekly incentive budget falls by{' '}
+              <b className="text-ink tnum">{Math.round(quote.weeklyBudgetLost).toLocaleString()}</b> tokens permanently.
+            </More>
             <Btn variant="primary" className="mt-3" disabled={!quote.ok} onClick={() => sellTreasury(quote.tokens)}>
               Sell for {money(quote.proceeds)}
             </Btn>
@@ -386,18 +424,19 @@ function FounderSalePanel() {
             </div>
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
               <b className="text-ink">This money is yours, not the company's.</b> It lands in your banked payout and survives whatever
-              happens to the company afterwards — the same place a secondary sale lands, which a tokenised founder can never reach.
-              Nothing is issued, so nothing dilutes.
-              <br />
-              You are capped at one sale every {TOKEN_FOUNDER_SALE.cooldownWeeks} weeks and at half your grant across the whole run — currently{' '}
-              <b className="text-ink tnum">{Math.round(founderLifetimeRemaining(t)).toLocaleString()}</b> tokens left under that cap.
-              The binding limit right now is <b className="text-ink">{quote.boundBy}</b>.
+              happens to the company afterwards, and nothing is issued, so nothing dilutes. The binding limit on this sale is{' '}
+              <b className="text-ink">{quote.boundBy}</b>.
+            </div>
+            <More label="The cap, and what the market does to the price">
+              You are capped at one sale every {TOKEN_FOUNDER_SALE.cooldownWeeks} weeks and at half your grant across the whole run —
+              currently <b className="text-ink tnum">{Math.round(founderLifetimeRemaining(t)).toLocaleString()}</b> tokens left under
+              that cap.
               <br />
               <b className="text-ink">The real price is the market you sell into.</b> Trust runs depth, sentiment and members; those
               three run your liquidity discount, currently <b className="text-ink tnum">{pct(discount, 0)}</b> — the fraction of your
               remaining bag you would actually realise. Selling now is paid for by the price of selling later. The one thing pulling the
               other way is real: a smaller position is a smaller overhang, and a smaller overhang realises a larger share of itself.
-            </div>
+            </More>
             <Btn variant="primary" className="mt-3" disabled={!quote.ok || cooldown > 0} onClick={() => sell(quote.tokens)}>
               Sell for {money(quote.proceeds)}
             </Btn>
@@ -434,11 +473,11 @@ function NetworkEndingPanel() {
             </div>
           ))}
         </div>
-        <div className="mt-2.5 text-xs leading-relaxed text-mut">
+        <More label="Why this is the ending that replaced the IPO">
           Tokenising closed the IPO permanently and made an acquisition rarer and cheaper. This is the success state that replaced
           them, and the only one this path has. Your position clears into the network rather than being dumped into a float you
           dominate, which is worth a real premium on the token half of your standing — the equity half is unchanged.
-        </div>
+        </More>
       </Panel>
     </div>
   )
@@ -516,12 +555,12 @@ function IncentivePanel() {
           })}
         </div>
 
-        <div className="mt-3 text-xs leading-relaxed text-mut">
+        <More label="How the weekly budget works" className="mt-3">
           Everything here is a standing order against one weekly budget, and the budget is 2% of the treasury — in <b>tokens</b>, so a
           rising price buys more with the same allocation but never lets you spend more of it. Effects build over weeks and decay when
           you stop paying, so these are policies rather than purchases. Every token committed also reaches the float, which pushes the
           price down by slightly more than the demand it creates: spending is never free.
-        </div>
+        </More>
       </Panel>
     </div>
   )
@@ -586,15 +625,18 @@ function CommunityPanel() {
         {drags.length > 0 ? (
           <div className="mt-2.5 text-xs leading-relaxed text-mut">
             <span className="font-bold text-ink">What they hold against you:</span>{' '}
-            {drags.map((d) => `${CONDUCT_LABELS[d.id]} (−${d.points.toFixed(1)})`).join(' · ')}. Trust recovers when the conduct stops
-            — the ledger fades, it does not accumulate.
+            {drags.map((d) => `${CONDUCT_LABELS[d.id]} (−${d.points.toFixed(1)})`).join(' · ')}.
           </div>
         ) : (
           <div className="mt-2.5 text-xs leading-relaxed text-mut">
-            The conduct ledger is clean: nothing you have done recently is dragging trust down. A trusted community grows, deepens your
-            market and absorbs bad weeks; a betrayed one starves all three, and below the floor it leaves.
+            The conduct ledger is clean: nothing you have done recently is dragging trust down.
           </div>
         )}
+
+        <More label="What trust is actually worth here">
+          A trusted community grows, deepens your market and absorbs bad weeks; a betrayed one starves all three, and below the floor
+          it leaves. Trust recovers when the conduct stops — the ledger fades, it does not accumulate.
+        </More>
       </Panel>
     </div>
   )
@@ -602,7 +644,13 @@ function CommunityPanel() {
 
 /** ICO brief §36–§38, §69 (Slice 6). Governance: proposals visible BEFORE they resolve, the vote
  *  arithmetic legible (§69 shows the tally; §9 says words over candles), the founder's three moves
- *  — comply, campaign, defy — each with its price on the label. Only shown when relevant (§69). */
+ *  — comply, campaign, defy — each with its price on the label. Only shown when relevant (§69).
+ *
+ *  UX audit, the one item that had to get LOUDER rather than smaller: a no-confidence vote ends the
+ *  run, and it used to sit third of six nested panels behind six full-size cards, two of which were
+ *  permanently dead. This panel is now rendered FIRST on the screen, above the metrics, and a
+ *  removal vote takes the bad hue on its ring, its title, its clock and its binding clause. Nothing
+ *  in it is behind a disclosure. */
 function GovernancePanel() {
   const game = useStore((s) => s.game)!
   const setProposalStance = useStore((s) => s.setProposalStance)
@@ -612,20 +660,24 @@ function GovernancePanel() {
   const p = gov.proposal
   const brewing = gov.revoltHeat >= 4 && (!p || p.type !== 'founder_removal')
   if (!p && gov.mandates.length === 0 && gov.recent.length === 0 && !brewing) return null
+  const removal = p?.type === 'founder_removal'
 
   return (
     <div className="mt-3.5">
-      <Panel title="Governance — the community votes, and the votes bind">
+      <Panel title={removal ? 'A vote to remove you is on the ballot' : 'Governance — the community votes, and the votes bind'}>
         {p ? (
-          <div className="rounded-xl border border-line bg-surface2 p-3.5">
+          // Plane 3 for a live question, plus a bad ring when the question is you — a ring and not
+          // a border, because RAISED already owns border-color and two utilities on one property
+          // resolve by stylesheet order.
+          <div className={`${RAISED} p-3.5 ${removal ? 'ring-1 ring-bad/60' : ''}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div className="text-[13px] font-bold">{p.type === 'founder_removal' ? '⚠️ ' : ''}{p.content.title}</div>
-              <span className="text-[11px] text-mut">
+              <div className={`text-[13px] font-bold ${removal ? 'text-bad' : ''}`}>{removal ? '⚠️ ' : ''}{p.content.title}</div>
+              <span className={`text-[11px] ${removal ? 'font-semibold text-bad' : 'text-mut'}`}>
                 {p.weeksLeft <= 0 ? 'Voting closes this week' : `Voting closes week ${p.closesWeek} · ${p.weeksLeft} wk left`}
               </span>
             </div>
-            <div className="mt-1.5 text-[13px] leading-relaxed text-mut">{p.content.ask}</div>
-            <div className="mt-1 text-xs leading-relaxed text-warn">{p.content.binds}</div>
+            <div className={`mt-1.5 text-[13px] leading-relaxed ${removal ? 'text-ink' : 'text-mut'}`}>{p.content.ask}</div>
+            <div className={`mt-1 text-xs leading-relaxed ${removal ? 'font-semibold text-bad' : 'text-warn'}`}>{p.content.binds}</div>
 
             <div className="mt-3 flex flex-wrap items-center gap-x-8 gap-y-2">
               <div className="min-w-[180px] flex-1">
@@ -637,7 +689,7 @@ function GovernancePanel() {
                 </div>
                 <Bar
                   value={p.support}
-                  color={p.support >= p.passBar ? (p.type === 'founder_removal' ? 'var(--color-bad)' : 'var(--color-good)') : 'var(--color-warn)'}
+                  color={p.support >= p.passBar ? (removal ? 'var(--color-bad)' : 'var(--color-good)') : 'var(--color-warn)'}
                 />
               </div>
             </div>
@@ -648,9 +700,12 @@ function GovernancePanel() {
                 .filter((t) => Math.abs(t.points) >= 1)
                 .map((t) => `${t.label} (${t.points > 0 ? '+' : ''}${t.points.toFixed(0)})`)
                 .join(' · ') || 'Nothing is pulling it far from the middle.'}
-              . The tally is arithmetic over trust, mood, the chart and who holds the float — recomputed every week from the state, never
-              rolled. Change the state and you change the vote.
+              .
             </div>
+            <More label="How the tally is computed" className="mt-1.5">
+              Arithmetic over trust, mood, the chart and who holds the float — recomputed every week from the state, never rolled.
+              Change the state and you change the vote.
+            </More>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {p.campaigned ? (
@@ -671,8 +726,11 @@ function GovernancePanel() {
           </div>
         ) : (
           <div className="text-[13px] text-mut">
-            No question is on the ballot. Proposals table themselves when the community's own state demands one — pressure for control, fear
-            of sell pressure, an ecosystem asking to be funded.
+            No question is on the ballot.
+            <More label="When a proposal tables itself" className="mt-1.5">
+              When the community's own state demands one — pressure for control, fear of sell pressure, an ecosystem asking to be
+              funded.
+            </More>
           </div>
         )}
 
@@ -686,7 +744,7 @@ function GovernancePanel() {
         {gov.mandates.length > 0 && (
           <div className="mt-3 grid gap-2">
             {gov.mandates.map((m) => (
-              <div key={m.proposalId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2 px-3.5 py-2.5">
+              <div key={m.proposalId} className={`${NESTED} flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5`}>
                 <div className="text-[13px]">
                   <b>{m.content.title}</b> <span className="text-mut">— passed, and binding for {m.weeksLeft} more wk.</span>{' '}
                   <span className="text-[11px] text-mut">
@@ -704,15 +762,20 @@ function GovernancePanel() {
         )}
 
         {gov.recent.length > 0 && (
-          <div className="mt-2.5 text-[11px] leading-relaxed text-mut">
-            <span className="font-bold text-ink">Recent votes:</span>{' '}
-            {gov.recent
-              .map((r) => `${PROPOSAL_CONTENT[r.type].title} — ${r.status} at ${r.support.toFixed(0)} (wk ${r.resolvedWeek ?? r.closesWeek})`)
-              .join(' · ')}
+          // History, not a decision — but the defiance count changes how every future vote starts,
+          // so that clause stays on the face and only the log goes behind the toggle.
+          <>
             {gov.defiances > 0 && (
-              <span className="text-warn"> · You have defied {gov.defiances} — every vote from here starts angrier.</span>
+              <div className="mt-2.5 text-xs leading-relaxed text-warn">
+                You have defied {gov.defiances} mandate{gov.defiances === 1 ? '' : 's'} — every vote from here starts angrier.
+              </div>
             )}
-          </div>
+            <More label={`Recent votes · ${gov.recent.length}`}>
+              {gov.recent
+                .map((r) => `${PROPOSAL_CONTENT[r.type].title} — ${r.status} at ${r.support.toFixed(0)} (wk ${r.resolvedWeek ?? r.closesWeek})`)
+                .join(' · ')}
+            </More>
+          </>
         )}
       </Panel>
     </div>
@@ -763,18 +826,22 @@ function TokenisationPanel() {
             </div>
           </div>
           <div className="mt-2.5 text-xs leading-relaxed text-mut">
-            Launched week {t.launchWeek} · {t.plan.totalSupply.toLocaleString()} tokens minted at {tokenPrice(t.plan.launchPrice)}. Your
-            allocation vests on the schedule that started that week — the run ends whether or not your cliff has passed. Enterprise value
-            and network value are tracked separately and never added together; your standing is the equity you still own plus what your
-            token position could actually be sold for.
+            Launched week {t.launchWeek} · {t.plan.totalSupply.toLocaleString()} tokens minted at {tokenPrice(t.plan.launchPrice)}.
           </div>
+          <More label="How this is scored">
+            Your allocation vests on the schedule that started that week — the run ends whether or not your cliff has passed. Enterprise
+            value and network value are tracked separately and never added together; your standing is the equity you still own plus what
+            your token position could actually be sold for.
+          </More>
         </Panel>
+        {/* GovernancePanel is deliberately NOT in this list any more: it renders at the top of the
+            screen, above the metrics, because a no-confidence vote ends the run. The panels left
+            here are the week's ordinary levers, cheapest attention first. */}
         <CommunityPanel />
-        <GovernancePanel />
         <TreasurySalePanel />
         <FounderSalePanel />
-        <NetworkEndingPanel />
         <IncentivePanel />
+        <NetworkEndingPanel />
       </div>
     )
   }
@@ -812,11 +879,11 @@ function TokenisationPanel() {
                 </li>
               ))}
             </ul>
-            <div className="mt-3 text-xs leading-relaxed text-mut">
-              Suitability is not fixed by your sector alone — the market's appetite this cycle and the strategy you have actually run
-              (pricing, product focus, research, the balance of hype and reputation) all move the bar. A sector that reads badly for
-              tokens can still be the right call for a particular company in a particular world.
-            </div>
+            <More label="Why suitability moves" className="mt-3">
+              It is not fixed by your sector alone — the market's appetite this cycle and the strategy you have actually run (pricing,
+              product focus, research, the balance of hype and reputation) all move the bar. A sector that reads badly for tokens can
+              still be the right call for a particular company in a particular world.
+            </More>
             <Btn variant="primary" className="mt-3" disabled>
               Tokenise — not yet
             </Btn>
@@ -847,6 +914,11 @@ function TokenisationPanel() {
               </div>
             </div>
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
+              <b className="text-ink">The sale is a raise, and it is priced like one.</b> {money(terms.saleProceeds)} against a{' '}
+              {money(terms.enterpriseValue)} company costs you <b className="text-ink tnum">{pct(terms.equityDilution, 1)}</b> of your
+              stake. Vesting is {terms.cliffWeeks}wk cliff · {terms.durationWeeks}wk.
+            </div>
+            <More label="Where the size of the sale comes from">
               Supply is minted against the community you have today — roughly {terms.communityMembers.toLocaleString()} people — and the
               sale clears at what they will actually absorb
               {terms.boundBy === 'float_depth'
@@ -856,14 +928,10 @@ function TokenisationPanel() {
                   : '.'}{' '}
               Launch early and you mint a small float, keep a larger share of it and vest it all before the run ends; launch late and you
               raise more against stronger fundamentals but may never get past your own cliff.
-            </div>
-            <div className="mt-2 text-xs leading-relaxed text-mut">
-              <b className="text-ink">The sale is a raise, and it is priced like one.</b> The community that funds you owns a claim on
-              what they funded, so {money(terms.saleProceeds)} against a {money(terms.enterpriseValue)} company costs you{' '}
-              <b className="text-ink tnum">{pct(terms.equityDilution, 1)}</b> of your stake — the same price the round you are closing the
-              door on would have charged. Vesting is {terms.cliffWeeks}wk cliff · {terms.durationWeeks}wk, and the{' '}
-              {pct(terms.plan.allocation.founder, 0)} of supply is what you keep on top of it.
-            </div>
+              <br />
+              The community that funds you owns a claim on what they funded — the same price the round you are closing the door on would
+              have charged — and the {pct(terms.plan.allocation.founder, 0)} of supply is what you keep on top of it.
+            </More>
             <TokenomicsSetup game={game} draft={draft} setDraft={setDraft} />
             <div className="mt-3 rounded-xl border border-line bg-surface2 p-3.5">
               <div className="text-[13px] font-bold">This is a major strategic fork.</div>
@@ -926,35 +994,20 @@ function IpoPanel() {
               />
             </div>
           </div>
-          <div className="mt-2.5 text-xs leading-relaxed text-mut">
+          <More label="What moves the book">
             {filing
               ? 'The street reads everything: bugs and a shaky reputation bleed demand, growth builds it. The roadshow starts when the review clears.'
               : 'Every strong week adds orders to the book. On pricing day, demand meets the funding climate — strong demand pops, weak demand gets the offering pulled at the door.'}
-          </div>
+          </More>
         </Panel>
       </div>
     )
   }
 
-  // ICO brief §48: "Do not silently hide it without explanation." The panel still renders, the
-  // checklist is replaced by the reason, and the button is DISABLED rather than absent.
-  const closed = ipoClosed(game)
-  if (closed.closed)
-    return (
-      <div className="mt-3.5">
-        <Panel title="The final exit — take the company public">
-          <div className="text-[13px] font-bold">{closed.reason}</div>
-          <div className="mt-2 text-xs leading-relaxed text-mut">
-            A conventional listing sells equity in a company to public shareholders. This company already sold its upside to its
-            community, and the two cannot both be the senior claim. The token path has its own endings — the network is the thing you
-            take to scale now.
-          </div>
-          <Btn variant="primary" className="mt-3" disabled>
-            File the S-1 — unavailable
-          </Btn>
-        </Panel>
-      </div>
-    )
+  // Brief §48's rule is "do not silently hide it without explanation", and the explanation is
+  // still on screen — as one line in the closed-paths block at the foot, which the parent renders.
+  // `ipoVisible` deliberately still returns true for a tokenised company so it has somewhere to go.
+  if (ipoClosed(game).closed) return null
 
   const checks = ipoChecklist(game)
   return (
@@ -969,12 +1022,15 @@ function IpoPanel() {
           ))}
         </div>
         <div className="mt-3 text-xs leading-relaxed text-mut">
-          You don't need late-stage rounds to go public — profitable companies walk straight to the exchange. Eight weeks from filing
-          to the bell: four of SEC scrutiny, four of roadshow. Fundraising freezes, the process eats ~15% of the team's output, and on
-          pricing day the market decides — a pop crowns the run, a pulled IPO costs $2M, reputation, and ~25 weeks before the street
-          will look at you again. Time it to a warm climate and a hot growth curve — and note the run no longer auto-ends at $1B while
-          your IPO is in flight, so a monster debut can beat the plain unicorn ending.
+          Eight weeks from filing to the bell, fundraising frozen and ~15% of the team's output gone. A pulled IPO costs{' '}
+          <b className="text-ink">$2M, reputation, and ~25 weeks</b> before the street will look at you again.
         </div>
+        <More label="How to time it">
+          You don't need late-stage rounds to go public — profitable companies walk straight to the exchange. The eight weeks are four
+          of SEC scrutiny and four of roadshow, and on pricing day the market decides: a pop crowns the run. Time it to a warm climate
+          and a hot growth curve — and note the run no longer auto-ends at $1B while your IPO is in flight, so a monster debut can beat
+          the plain unicorn ending.
+        </More>
         <Btn variant="primary" className="mt-3" disabled={!ipoEligible(game)} onClick={fileIPO}>
           {game.ipoCooldown > 0 ? `The street remembers — ${game.ipoCooldown} wk` : 'File the S-1 ▸'}
         </Btn>
@@ -993,23 +1049,35 @@ export function Fundraising() {
   const target = nextStage(game)
   const threshold = STAGE_THRESHOLDS[game.stage]
   const ready = target && val >= threshold
+  const tokenised = isTokenised(game)
   const roundsClosed = institutionalRoundsClosed(game)
+  const ipoRestriction = ipoClosed(game)
 
   return (
     <div>
       <h1 className="text-[20px] font-extrabold tracking-tight">Fundraising</h1>
-      <div className="mb-4 text-[13px] text-mut">
-        {game.stage} · you own {pct(game.founderEquity, 1)} · dilution is forever, choose wisely
-      </div>
+      {/* The equity % was here AND on the "Your stake" card below; the card also says what it is
+          worth, so this is the copy that went. */}
+      <div className="mb-4 text-[13px] text-mut">{game.stage} · dilution is forever, choose wisely</div>
 
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      {/* First on the screen, above the metrics, because it is the only thing here that can take
+          the company away from you this week. Renders nothing at all on an institutional run. */}
+      <GovernancePanel />
+
+      {/* After the fork the token console IS the screen — every live lever a tokenised founder has
+          is in it, and it used to render last, below two dead cards. What follows it stays, because
+          a tokenised company still has a board, a stake and term sheets it may not have signed. */}
+      {tokenised && <TokenisationPanel />}
+
+      <div className="mt-3.5 grid grid-cols-2 gap-3.5 xl:grid-cols-3">
         <StatCard
           label="Funding climate"
           value={climateLabel(game.climate)}
           delta={game.climate < -0.4 ? 'Valuations depressed, funds hibernating' : game.climate > 0.4 ? 'Cheap money — strike now' : 'Business as usual'}
           tone={game.climate < -0.4 ? 'down' : game.climate > 0.4 ? 'up' : undefined}
         />
-        <StatCard label="Current valuation" numeric={val} format={money} />
+        {/* "Current valuation" is gone — the topbar rail renders it on every screen, forty pixels
+            above this card. `val` still feeds the stage bar and the stake. */}
         <StatCard
           label={target ? `Bar for ${target}` : 'Final stage'}
           value={target ? money(threshold) : '$1B exit'}
@@ -1053,41 +1121,23 @@ export function Fundraising() {
               </div>
               {game.board.defied && <b className="text-bad">You defied the board — hit the target by the next review or you are out.</b>}
             </div>
+            {/* A rule you can lose the company to never goes behind a disclosure; the three ways
+                to satisfy the board do. */}
             <div className="mt-2.5 text-xs leading-relaxed text-mut">
-              Investor money comes with investor expectations — but there are three ways to satisfy them: user growth above target,
-              revenue growth above target, or real profitability (15%+ net margin with revenue still climbing). The target eases as
-              your market saturates. Miss on all three at three reviews and you face an ultimatum; keep missing and the board finds a
-              new CEO.
+              Miss on growth, revenue and profit at three reviews and you face an ultimatum; keep missing and{' '}
+              <b className="text-ink">the board finds a new CEO</b>.
             </div>
+            <More label="The three ways to satisfy the board">
+              Investor money comes with investor expectations, and any one of three things meets them: user growth above target, revenue
+              growth above target, or real profitability (15%+ net margin with revenue still climbing). The target eases as your market
+              saturates.
+            </More>
           </Panel>
         </div>
       )}
 
-      {/* The institutional path leads and the fork sits at the bottom. Ordering is the loudest
-          thing a screen says about which choice is the default: with the tokenisation panel
-          first, a founder read "raise a round" as the alternative to a thing they had not
-          chosen yet. */}
-      <div className="mt-3.5">
-        <Panel title="Pitch investors">
-          {/* ICO brief §47: the button stays on screen and carries its reason. A control that
-              vanishes teaches nothing; one that says why it is dark teaches the fork. */}
-          <p className="mb-3 text-[13px] leading-relaxed text-mut">
-            {roundsClosed.closed
-              ? roundsClosed.reason
-              : `Running a fundraise takes about 10 weeks of founder attention, so you cannot pitch constantly. Offers price around your
-            valuation and swing with the funding climate — in a frozen market, even good companies get ghosted. Raising below your last
-            round's price is a down round: cash in the bank, morale out the door. Term sheets expire in 3 weeks.`}
-          </p>
-          <Btn variant="primary" disabled={roundsClosed.closed || game.raiseCooldown > 0 || !!game.gameOver} onClick={pitch}>
-            {roundsClosed.closed
-              ? 'Institutional rounds — closed'
-              : game.raiseCooldown > 0
-                ? `On the road — try again in ${game.raiseCooldown} wk`
-                : 'Start pitching ▸'}
-          </Btn>
-        </Panel>
-      </div>
-
+      {/* An offer on the table is a decision with a three-week clock on it; "Start pitching" is a
+          decision about whether to spend the next ten weeks. The clock goes first. */}
       {game.termSheets.length > 0 && (
         <div className="mt-3.5">
           <Panel title="Term sheets on the table">
@@ -1122,11 +1172,41 @@ export function Fundraising() {
         </div>
       )}
 
+      {/* Not rendered at all once the fork closes it — the reason is one line at the foot instead
+          of a card wrapped around a button that will never enable again. */}
+      {!roundsClosed.closed && (
+        <div className="mt-3.5">
+          <Panel title="Pitch investors">
+            <p className="text-[13px] leading-relaxed text-mut">
+              A fundraise takes about 10 weeks of founder attention, so you cannot pitch constantly. Term sheets expire 3 weeks after
+              they arrive.
+            </p>
+            <More label="What the offers will look like" className="mt-1.5">
+              Offers price around your valuation and swing with the funding climate — in a frozen market, even good companies get
+              ghosted. Raising below your last round's price is a down round: cash in the bank, morale out the door.
+            </More>
+            <Btn variant="primary" className="mt-3" disabled={game.raiseCooldown > 0 || !!game.gameOver} onClick={pitch}>
+              {game.raiseCooldown > 0 ? `On the road — try again in ${game.raiseCooldown} wk` : 'Start pitching ▸'}
+            </Btn>
+          </Panel>
+        </div>
+      )}
+
       {ipoVisible(game) && <IpoPanel />}
 
       <SecondaryPanel />
 
-      <TokenisationPanel />
+      {!tokenised && <TokenisationPanel />}
+
+      {/* Both of these were full-size cards around a disabled button, rendering for the whole rest
+          of the run above the panels that could actually be used. §47/§48 ask for the reason on
+          screen rather than a silent disappearance, and this is where a shut door belongs. */}
+      {(roundsClosed.closed || ipoRestriction.closed) && (
+        <div className="mt-5 grid gap-1.5 border-t border-line/60 pt-3">
+          {roundsClosed.closed && <ClosedPath>{roundsClosed.reason}</ClosedPath>}
+          {ipoRestriction.closed && <ClosedPath>{ipoRestriction.reason}</ClosedPath>}
+        </div>
+      )}
     </div>
   )
 }

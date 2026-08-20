@@ -2,11 +2,10 @@
 // This screen is the centre of early Career play — it is where you find out that you were
 // wrong about your own market.
 import { useState } from 'react'
-import { Btn, Panel } from '../components'
+import { Btn, NESTED, Panel } from '../components'
 import { money } from '../format'
 import {
   EXPERIMENTS,
-  PMF_CUSTOMER_FLOOR,
   METRIC_LABEL,
   TRUTH_METRICS,
   beliefBand,
@@ -19,7 +18,7 @@ import {
   totalCustomers,
 } from '../game/career/pmf'
 import type { ExperimentType, SegmentId } from '../game/career/types'
-import { CustomerInterview, PMF_CAUSAL_CHAIN, PmfBreakdown, SegmentHealth } from '../CareerUI'
+import { CustomerInterview, PmfBreakdown, SegmentHealth } from '../CareerUI'
 import { useStore } from '../store'
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -105,11 +104,24 @@ export function Discovery() {
   const setTargetSegment = useStore((s) => s.setTargetSegment)
   const setPricing = useStore((s) => s.setPricing)
   const setProductFocus = useStore((s) => s.setProductFocus)
+  // Every hook runs before the first `return`. This used to sit under `if (!career) return null`,
+  // which meant the hook count changed the week a run became a Career run — React's one rule.
+  const [picked, setPicked] = useState<SegmentId | null>(career?.primaryTargetSegmentId ?? null)
+  // Which catalogue rows are armed as standing studies. Replaces a second Run button per row.
+  const [standingTypes, setStandingTypes] = useState<ReadonlySet<string>>(() => new Set())
   if (!career) return null
 
   const segs = segmentsForSector(game.sector)
   const suggestion = suggestedExperiment(career, game.sector)
-  const [segment, setSegment] = useState<SegmentId>(career.primaryTargetSegmentId)
+  // Falls back to the live target for the one render where the board opened before there was a
+  // career to read one from.
+  const segment = picked ?? career.primaryTargetSegmentId
+  const toggleStanding = (type: string) =>
+    setStandingTypes((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(type)) next.add(type)
+      return next
+    })
 
   return (
     <div>
@@ -118,24 +130,54 @@ export function Discovery() {
         You don't know your market yet. Research improves what you <i>know</i>; customers prove whether you were <i>right</i>.
       </div>
 
+      {/* The screen's verb, first. This was the fifth block, ~1,200px down and undercut by a
+          catalogue of identical buttons: the one thing that knows what to do next was the hardest
+          thing here to reach. */}
+      <Panel title="Run this next">
+        {suggestion ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="min-w-0 flex-1 text-[12.5px]">
+              <b>
+                {experimentDef(suggestion.type).name} — {segmentDef(game.sector, suggestion.segmentId).name}
+              </b>
+              <div className="mt-0.5 text-mut">{suggestion.why}</div>
+            </span>
+            <Btn
+              variant="primary"
+              className="shrink-0"
+              disabled={!canRunExperiment(career, suggestion.type, suggestion.segmentId, game.cash).ok}
+              onClick={() => {
+                setPicked(suggestion.segmentId)
+                runExperiment(suggestion.type, suggestion.segmentId)
+              }}
+            >
+              Run it
+            </Btn>
+          </div>
+        ) : (
+          <div className="text-[12.5px] leading-snug text-mut">
+            Nothing cheap left to learn — every open question is either answered or already being tested. Go and win customers; their
+            behaviour is the evidence you can't buy.
+          </div>
+        )}
+      </Panel>
+
       {/* the scoreboard: what customers are doing, before anything you believe about them */}
-      <div className="mb-3.5">
+      <div className="mt-3.5">
         <SegmentHealth />
       </div>
 
       {/* …and immediately underneath it, why that score is that score. The scoreboard alone tells a
           stuck player what the number is; this tells them which of the five terms is holding it,
-          which levers are already spent, and when the segment simply has nothing left to give. */}
-      <div className="mb-3.5">
+          which levers are already spent, and when the segment simply has nothing left to give.
+          The causal-chain paragraph that used to follow was the fourth rendering of the same
+          string; it survives on the Product screen and in the PMF explainer, next to the number. */}
+      <div className="mt-3.5">
         <PmfBreakdown />
       </div>
 
-      <div className="mb-3.5 rounded-2xl border border-line/70 bg-surface px-4 py-3 text-[13px] leading-relaxed">
-        {PMF_CAUSAL_CHAIN}
-      </div>
-
       {/* strategy row */}
-      <Panel title="Your bet">
+      <Panel title="Your bet" className="mt-3.5">
         <div className="text-[12.5px] leading-snug text-mut">
           Who you are building for, what the product optimises for, and what you charge. All three are guesses until customers stay —
           and switching target costs weeks of velocity, because the roadmap was built for somebody else.
@@ -215,8 +257,11 @@ export function Discovery() {
                       </b>
                       <span className="flex items-center gap-2">
                         <button
-                          className={`rounded-md border px-1.5 py-px text-[10.5px] font-bold uppercase tracking-wide transition-colors ${
-                            e.standing ? 'border-good/50 bg-good/15 text-good' : 'border-line2 text-mut hover:border-accent hover:text-ink'
+                          type="button"
+                          role="switch"
+                          aria-checked={e.standing}
+                          className={`rounded-md border px-1.5 py-px text-[11px] font-semibold transition-colors ${
+                            e.standing ? 'border-accent bg-accent/15 text-ink' : 'border-line2 text-mut hover:border-accent hover:text-ink'
                           }`}
                           title={
                             e.standing
@@ -225,7 +270,7 @@ export function Discovery() {
                           }
                           onClick={() => setExperimentStanding(e.id, !e.standing)}
                         >
-                          ↻ {e.standing ? 'Standing' : 'One-off'}
+                          ↻ Standing
                         </button>
                         <span className="text-mut tnum">
                           Week {elapsed} / {done}
@@ -241,32 +286,6 @@ export function Discovery() {
             </div>
           )}
 
-          {suggestion ? (
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface2 px-3 py-2 text-[12.5px]">
-              <span className="min-w-0 flex-1">
-                <b>
-                  Worth answering next: {experimentDef(suggestion.type).name} — {segmentDef(game.sector, suggestion.segmentId).name}
-                </b>
-                <div className="mt-0.5 text-mut">{suggestion.why}</div>
-              </span>
-              <Btn
-                className="shrink-0"
-                disabled={!canRunExperiment(career, suggestion.type, suggestion.segmentId, game.cash).ok}
-                onClick={() => {
-                  setSegment(suggestion.segmentId)
-                  runExperiment(suggestion.type, suggestion.segmentId)
-                }}
-              >
-                Run it
-              </Btn>
-            </div>
-          ) : (
-            <div className="mb-3 rounded-lg border border-good/30 bg-good/5 px-3 py-2 text-[12.5px] text-mut">
-              Nothing cheap left to learn — every open question is either answered or already being tested. Go and win customers; their
-              behaviour is the evidence you can't buy.
-            </div>
-          )}
-
           {/* Experiments run on ANY segment. Investigating only your current bet is how you end
               up certain about the wrong market. */}
           <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
@@ -274,7 +293,7 @@ export function Discovery() {
             {segs.map((sg) => (
               <button
                 key={sg.id}
-                onClick={() => setSegment(sg.id)}
+                onClick={() => setPicked(sg.id)}
                 className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-all ${
                   segment === sg.id ? 'border-accent bg-accent/15 text-ink' : 'border-line bg-surface text-mut hover:border-accent/50'
                 }`}
@@ -285,49 +304,57 @@ export function Discovery() {
             ))}
           </div>
 
-          <div className="mb-2.5 rounded-lg border border-line/60 bg-surface2 px-3 py-2 text-[12px] leading-relaxed text-mut">
-            <b className="text-ink">What research does, exactly.</b> It moves what you <i>believe</i> about a segment — never what the
-            segment <i>is</i>, and never PMF on its own. PMF is scored on customers who stay. Research is how you find out where to aim
-            before you spend a quarter building for the wrong people, and below {PMF_CUSTOMER_FLOOR} customers it is the only thing that
-            can move the number at all (to a ceiling of 40). <b className="text-ink">Designers run studies best</b> — they count triple
-            toward how reliable a result is, marketers 1.5×, everyone else once. Product <i>quality</i> also raises reliability; shipping
-            more <i>features</i> does nothing for it.
-          </div>
-
           <div className="space-y-2">
             {EXPERIMENTS.map((def) => {
               const gate = canRunExperiment(career, def.type, segment, game.cash)
+              const standing = standingTypes.has(def.type)
               return (
                 <div key={def.type} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2 last:border-b-0">
                   <span className="min-w-0 flex-1 text-[12.5px]">
                     <b>{def.name}</b> <span className="text-mut">· {def.weeks} wk · {money(def.cashCost)}</span>
                     <div className="text-[11.5px] text-mut">{def.blurb}</div>
                   </span>
-                  <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="flex shrink-0 items-center gap-2">
+                    {/* Standing is the mode Run runs in, so it is a switch, not the second
+                        full-size button it used to be on all five rows. */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={standing}
+                      onClick={() => toggleStanding(def.type)}
+                      title={`Standing: this study restarts itself every ${def.weeks} wk on ${segmentDef(game.sector, segment).name} while the cash lasts.`}
+                      className={`rounded-md border px-2 py-1 text-[11.5px] font-semibold transition-colors ${
+                        standing ? 'border-accent bg-accent/15 text-ink' : 'border-line2 text-mut hover:border-accent hover:text-ink'
+                      }`}
+                    >
+                      ↻ Standing
+                    </button>
                     <Btn
                       variant="primary"
                       disabled={!gate.ok}
                       title={gate.reason}
-                      onClick={() => runExperiment(def.type as ExperimentType, segment)}
+                      onClick={() => runExperiment(def.type as ExperimentType, segment, standing)}
                     >
-                      Run once
-                    </Btn>
-                    <Btn
-                      disabled={!gate.ok}
-                      title={
-                        gate.ok
-                          ? `Keep this study running on ${segmentDef(game.sector, segment).name}: it restarts itself every ${def.weeks} wk while the cash lasts.`
-                          : gate.reason
-                      }
-                      onClick={() => runExperiment(def.type as ExperimentType, segment, true)}
-                    >
-                      ↻ Standing
+                      Run
                     </Btn>
                   </span>
                 </div>
               )
             })}
           </div>
+
+          {/* All that survives of the research explainer: the scoreboard above already says what
+              PMF is scored on and where the floor sits, but nothing anywhere says who makes a
+              result reliable. One interaction away, not on the face of the screen. */}
+          <details className="mt-3">
+            <summary className="cursor-pointer text-[12px] font-semibold text-mut transition-colors hover:text-ink">
+              What makes a study reliable
+            </summary>
+            <div className={`mt-1.5 ${NESTED} px-3 py-2 text-[12px] leading-relaxed text-mut`}>
+              <b className="text-ink">Designers run studies best</b> — they count triple toward how reliable a result is, marketers 1.5×,
+              everyone else once. Product <i>quality</i> also raises reliability; shipping more <i>features</i> does nothing for it.
+            </div>
+          </details>
         </Panel>
       </div>
 
@@ -349,20 +376,6 @@ export function Discovery() {
           ))}
         </div>
       </div>
-
-      {/* journal */}
-      {career.journal.length > 0 && (
-        <div className="mt-3.5">
-          <Panel title="Decision journal">
-            {career.journal.slice(0, 8).map((j) => (
-              <div key={j.id} className="border-b border-line/40 py-2 text-[12.5px] last:border-b-0">
-                <span className="text-mut tnum">wk {j.week}</span> <b className="ml-1.5">{j.title}</b>
-                <div className="text-[12px] text-mut">{j.description}</div>
-              </div>
-            ))}
-          </Panel>
-        </div>
-      )}
     </div>
   )
 }

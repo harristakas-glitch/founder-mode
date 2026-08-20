@@ -1,13 +1,12 @@
-import { useState } from 'react'
-import { Btn, LineChart, Panel, StatCard, Td, Th } from '../components'
+import { useState, type ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
+import { Btn, LineChart, Panel, Td, Th } from '../components'
 import { money } from '../format'
 import {
   committedCosts,
   debtApr,
   debtCapacity,
   recruiterFee,
-  runwayWeeks,
-  weeklyBurn,
   weeklyInfra,
   weeklyInterest,
   weeklyOffice,
@@ -15,6 +14,26 @@ import {
 } from '../game/engine'
 import { hasCapability } from '../game/modes'
 import { useStore } from '../store'
+
+/**
+ * The rules are not optional reading, but they are not every-week reading either — a disclosure
+ * keeps them one keypress away instead of permanently occupying the screen. Native <details>, so
+ * the toggle is a real button to a screen reader and needs no JavaScript of ours.
+ *
+ * What never goes in here: the player's current position, and any rule they could lose the company
+ * to. That is why the covenant consequence stays on the face of the debt panel.
+ */
+function Explainer({ label = 'What this means', children }: { label?: string; children: ReactNode }) {
+  return (
+    <details className="group mt-2">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-mut transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={12} strokeWidth={2.4} className="transition-transform duration-150 group-open:rotate-90" />
+        {label}
+      </summary>
+      <div className="mt-1.5 text-xs leading-relaxed text-mut">{children}</div>
+    </details>
+  )
+}
 
 function MacroPanel() {
   const game = useStore((s) => s.game)!
@@ -42,10 +61,10 @@ function MacroPanel() {
             {idxHistory.length > 1 && <LineChart data={idxHistory} height={54} formatY={(n) => n.toFixed(0)} startWeek={game.history[0]?.week ?? 1} />}
           </div>
         </div>
-        <div className="mt-2 text-xs leading-relaxed text-mut">
+        <Explainer label="Why these three numbers matter">
           The market's mood drives the funding climate, the bank rate prices your debt, and inflation quietly raises every salary on
           your payroll each week. Rate cuts and rallies open funding windows; shocks slam them shut.
-        </div>
+        </Explainer>
       </Panel>
     </div>
   )
@@ -88,10 +107,12 @@ function DebtPanel() {
             </span>
           </div>
         ) : (
+          // The offer itself is state, not prose, so it stays visible; only the arithmetic behind
+          // the cap and the rate moved into the disclosure below.
           <div className="mb-3 text-[13px] text-mut">
             {cap === 0
               ? 'Banks lend against revenue — come back with $250k+/yr and they\'ll answer the phone.'
-              : `The bank will lend up to ${money(cap)} (half your annual revenue) at ${apr}% APR — the central-bank rate plus a spread for your risk.`}
+              : `The bank will lend up to ${money(cap)} at ${apr}% APR.`}
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -112,12 +133,18 @@ function DebtPanel() {
             Repay
           </Btn>
         </div>
+        {/* Never behind the disclosure. This is the only place in the game a player is told that
+            15% of the company is on the table, and a rule you can lose the company to is not an
+            explainer — it is the price on the button directly above it. */}
         <div className="mt-2 text-xs leading-relaxed text-mut">
-          Non-dilutive cash: no equity lost, interest hits your weekly burn. The condition, stated up front: the covenant locks at 60%
-          of your revenue when you draw — fall below it and the bank calls the loan, seizing cash first and{' '}
-          <b className="text-ink">15% of the company</b> for anything it can't collect. Debt is rocket fuel for a working machine and
-          poison for a broken one.
+          The condition, stated up front: the covenant locks at 60% of your revenue when you draw — fall below it and the bank calls
+          the loan, seizing cash first and <b className="text-ink">15% of the company</b> for anything it can't collect.
         </div>
+        <Explainer label="How the cap, the rate and the trade-off work">
+          The cap is half your annual revenue; the rate is the central-bank rate plus a spread for your risk. In exchange you get
+          non-dilutive cash — no equity lost, with the interest landing on your weekly burn instead. Debt is rocket fuel for a
+          working machine and poison for a broken one.
+        </Explainer>
       </Panel>
     </div>
   )
@@ -151,9 +178,7 @@ function UpcomingPayments() {
         ))}
         {due === 0 && potential === 0 && <div className="py-1 text-[13px] text-mut">Nothing committed right now.</div>}
         <div className="mt-2.5 flex justify-between rounded-lg bg-surface2 px-3 py-2 text-[13px]">
-          <span>
-            Recommended cash buffer <span className="text-mut">— committed fees + a worst-case event (grows with your user count)</span>
-          </span>
+          <span>Recommended cash buffer</span>
           <b className={`tnum ${game.cash < recommended ? 'text-bad' : 'text-good'}`}>{money(recommended)}</b>
         </div>
         {game.cash < recommended && (
@@ -161,6 +186,10 @@ function UpcomingPayments() {
             Your {money(game.cash)} is below the buffer — one bad week could zero the account.
           </div>
         )}
+        <Explainer label="How the buffer is set">
+          Committed recruiter fees plus one worst-case event. It grows with your user count, because a bigger product has bigger
+          accidents.
+        </Explainer>
       </Panel>
     </div>
   )
@@ -168,41 +197,28 @@ function UpcomingPayments() {
 
 export function Finance() {
   const game = useStore((s) => s.game)!
-  const runway = runwayWeeks(game)
   const rows = [...game.history].slice(-12).reverse()
-  const startWeek = game.history[0]?.week ?? 1
 
   return (
     <div>
       <h1 className="text-[20px] font-extrabold tracking-tight">Finance</h1>
-      <div className="mb-4 text-[13px] text-mut">Cash is oxygen. Everything else is commentary.</div>
-
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
-        <StatCard label="Cash" numeric={game.cash} format={money} />
-        <StatCard
-          label="Weekly burn"
-          numeric={weeklyBurn(game)}
-          format={money}
-          delta={`payroll ${money(weeklyPayroll(game))} · infra ${money(weeklyInfra(game))} · office ${money(weeklyOffice(game))} · mktg ${money(game.marketingSpend)}`}
-        />
-        <StatCard label="Weekly revenue" numeric={game.lastRevenue} format={money} />
-        <StatCard
-          label="Runway"
-          value={runway === Infinity ? 'Profitable' : `${Math.max(0, Math.floor(runway))} weeks`}
-          tone={runway !== Infinity && runway < 12 ? 'down' : 'up'}
-        />
+      <div className="text-[13px] text-mut">Cash is oxygen. Everything else is commentary.</div>
+      {/* Cash, runway, revenue and burn were four StatCards here; all four are on the topbar rail
+          of every screen, so the rail wins. The one thing the rail cannot carry is what the burn is
+          made OF — infra and office appear nowhere else — so that survives as a line, not boxes. */}
+      <div className="mt-1.5 mb-4 text-[13px] text-mut">
+        Burn goes to payroll <span className="tnum text-ink">{money(weeklyPayroll(game))}</span> · infra{' '}
+        <span className="tnum text-ink">{money(weeklyInfra(game))}</span> · office{' '}
+        <span className="tnum text-ink">{money(weeklyOffice(game))}</span> · marketing{' '}
+        <span className="tnum text-ink">{money(game.marketingSpend)}</span> a week.
       </div>
 
       {hasCapability(game, 'bankDebt') && <DebtPanel />}
       <MacroPanel />
       <UpcomingPayments />
 
-      <div className="mt-3.5">
-        <Panel title="Cash over time">
-          <LineChart data={game.history.map((h) => h.cash)} color="var(--color-good)" formatY={money} startWeek={startWeek} />
-        </Panel>
-      </div>
-
+      {/* The cash line chart that used to sit here was the same series, the same panel title and
+          the same component as the Dashboard's. One home per number. */}
       <div className="mt-3.5">
         <Panel title="Last 12 weeks">
           {rows.length === 0 ? (

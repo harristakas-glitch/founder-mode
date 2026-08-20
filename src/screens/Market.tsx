@@ -1,4 +1,5 @@
-import { Bar, Btn, Panel, StatCard, Td, Th } from '../components'
+import type { ReactNode } from 'react'
+import { Btn, NESTED, Panel, StatCard, Td, Th } from '../components'
 import { money, num, pct } from '../format'
 import { STAGES, sectorById } from '../game/data'
 import {
@@ -24,9 +25,27 @@ import {
 } from '../game/engine'
 import { CONCEDE_USER_SHARE } from '../game/pvp'
 import { hasCapability } from '../game/modes'
-import { SegmentHealth } from '../CareerUI'
 import { hasForfeited, myId } from '../net/online'
 import { useStore } from '../store'
+
+/**
+ * Context that is one interaction away rather than deleted.
+ *
+ * `<details>` and not a div with an onClick: it is the only toggle the platform already makes
+ * keyboard-reachable and already announces as expanded/collapsed. The summary keeps a touch-sized
+ * target for the same reason `Btn` does.
+ */
+function More({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group mt-3">
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-[12px] font-semibold text-mut hover:text-ink md:min-h-[28px] [&::-webkit-details-marker]:hidden">
+        <span className="inline-block transition-transform duration-150 group-open:rotate-90">›</span>
+        {label}
+      </summary>
+      <div className="mt-1 text-xs leading-relaxed text-mut">{children}</div>
+    </details>
+  )
+}
 
 /**
  * What a rival's posture looks like on the board.
@@ -34,7 +53,8 @@ import { useStore } from '../store'
  * The whole fairness case for AI rivals using the attack layer rests on this being visible BEFORE
  * the attack: `rivalAggressionStep` also gives one week of public notice in the inbox, but a
  * message scrolls away and a badge does not. `title` carries `stance.why` — the same sentence the
- * attack itself will lead with, so the warning and the blow give one account of one decision.
+ * attack itself will lead with, so the warning and the blow give one account of one decision. On
+ * the phone cards there is no hover to carry it, so the sentence is printed under the badge.
  */
 const STANCE_STYLE: Record<string, string> = {
   calm: 'border-line/60 text-mut',
@@ -71,7 +91,6 @@ export function Market() {
           name: isMe ? `${p.company} (you)` : p.company,
           users: isMe ? game.users : p.users,
           stage: (isMe ? game.stage : `wk ${p.week}`) as string,
-          product: undefined as number | undefined,
           val: isMe ? valuation(game) : p.over ? p.payout : p.val,
           alive: isMe ? !game.gameOver : !p.over,
           you: isMe,
@@ -90,7 +109,6 @@ export function Market() {
           name: `${game.companyName} (you)`,
           users: game.users,
           stage: game.stage as string,
-          product: undefined as number | undefined,
           val: valuation(game),
           alive: true,
           you: true,
@@ -110,7 +128,6 @@ export function Market() {
       name: r.name,
       users: r.users,
       stage: STAGES[r.stage] as string,
-      product: r.product,
       val: rivalValuation(r, game),
       alive: r.alive,
       you: false,
@@ -132,7 +149,12 @@ export function Market() {
         {sector.name} · addressable market ≈ {num(effectiveTam(game))} users (and growing) · winners take most
       </div>
 
-      <div className="grid gap-3.5 md:grid-cols-2">
+      {/* A running price war takes a cut of revenue every single week and has a deadline attached,
+          so it opens the screen. It used to sit under the leaderboard, three panels down, which is
+          below the fold on every phone — the one thing here with a clock was the last thing seen. */}
+      {hasCapability(game, 'pvpActions') || hasCapability(game, 'rivalAggression') ? <PriceWarBanner /> : null}
+
+      <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
         <StatCard
           label="Market saturation"
           value={pct(saturation, 1)}
@@ -150,17 +172,13 @@ export function Market() {
         />
       </div>
 
-      {/* Career: the market is three different customer segments, not one pool of users. */}
-      {hasCapability(game, 'detailedPMF') && (
-        <div className="mt-3.5">
-          <SegmentHealth title="Your segments — customers, retention, PMF" />
-        </div>
-      )}
+      {/* The segment table used to be rendered here too, under a second title. Discovery owns it —
+          it is the scoreboard that screen is built around, and one table cannot be two screens'. */}
 
       <div className="mt-3.5">
         <Panel title="Leaderboard">
           {/* Phones get cards, same trade as Hiring: in a horizontally scrolling table the
-              right-hand columns (valuation, momentum) sit off-screen, invisible unless you
+              right-hand columns (valuation, posture) sit off-screen, invisible unless you
               notice you can swipe sideways. */}
           <div className="space-y-2.5 md:hidden">
             {rows.map((r, i) => (
@@ -203,22 +221,14 @@ export function Market() {
                     </>
                   )}
                 </div>
-                {!online && r.alive && (
-                  <div className="mt-2 flex items-center gap-3">
-                    <span className="shrink-0 text-[12px] text-mut">Momentum</span>
-                    <div className="flex-1">
-                      <Bar
-                        value={r.product ?? Math.min(100, 40 + game.pmf / 2)}
-                        color={r.you ? 'var(--color-accent)' : 'var(--color-mut)'}
-                      />
-                    </div>
-                  </div>
+                {r.stance && r.stance.id !== 'calm' && (
+                  <div className="mt-2 text-[12px] leading-snug text-mut">{r.stance.why}</div>
                 )}
               </div>
             ))}
           </div>
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[620px]">
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr>
                   <Th>#</Th>
@@ -234,7 +244,6 @@ export function Market() {
                   )}
                   <Th right>Est. valuation</Th>
                   {!online && <Th>Posture</Th>}
-                  {!online && <Th>Momentum</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -263,32 +272,21 @@ export function Market() {
                     )}
                     <Td right>{r.alive ? money(r.val) : '—'}</Td>
                     {!online && <Td>{r.stance ? <StanceBadge stance={r.stance} /> : <span className="text-mut">—</span>}</Td>}
-                    {!online && (
-                      <Td className="w-[140px]">
-                        {r.alive && (
-                          <Bar
-                            value={r.product ?? Math.min(100, 40 + game.pmf / 2)}
-                            color={r.you ? 'var(--color-accent)' : 'var(--color-mut)'}
-                          />
-                        )}
-                      </Td>
-                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="mt-3 text-xs leading-relaxed text-mut">
+          <More label="How to read this table">
             {online
               ? 'Open books: every founder sees everyone’s cash, revenue, and PMF — this is a knife fight under stadium lights, not a mystery novel. Fallen players show their final payout.'
               : hasCapability(game, 'rivalAggression')
-                ? 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Posture is not: it is read off the same market position, growth and funding gap the rivals themselves act on, so Hostile means a move is coming and Watching means it is not. Rivals raise rounds, ship launches, come for your users and your people, and sometimes die. Their obituaries are good for you.'
-                : 'Rival intel is approximate — the momentum bar reflects their product strength as far as your team can tell. Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
-          </div>
+                ? 'Posture is read off the same market position, growth and funding gap the rivals themselves act on, so Hostile means a move is coming and Watching means it is not. Rivals raise rounds, ship launches, come for your users and your people, and sometimes die. Their obituaries are good for you.'
+                : 'Rivals raise rounds, ship launches, poach your users, and sometimes die. Their obituaries are good for you.'}
+          </More>
         </Panel>
       </div>
 
-      {hasCapability(game, 'pvpActions') || hasCapability(game, 'rivalAggression') ? <PriceWarBanner /> : null}
       {online && hasCapability(game, 'pvpActions') && <PvpOps />}
       {!online && hasCapability(game, 'rivalAggression') && <RivalOps />}
       {!online && <Acquisitions />}
@@ -318,8 +316,10 @@ function PriceWarBanner() {
             </span>
           )}
         </span>
+        {/* Primary, not default: this is a decision with a countdown on it, and it was previously
+            styled identically to the twenty-odd attack buttons further down the page. */}
         {gate.ok && (
-          <Btn className="shrink-0" onClick={concede}>
+          <Btn variant="primary" className="shrink-0" onClick={concede}>
             Concede — raise prices back
           </Btn>
         )}
@@ -328,44 +328,88 @@ function PriceWarBanner() {
   )
 }
 
+/**
+ * The defensive control, given its own block at the top of whichever ops panel is showing.
+ *
+ * It has to be bought BEFORE the week an attack lands, which makes it the only thing in the panel
+ * with a deadline — and it used to be a default-styled button under a paragraph, below five rows
+ * of offensive buttons. Its unavailability reason was in a `title`, which is to say nowhere at all
+ * on a phone; it is printed now.
+ */
+function CrisisRetainer({ blurb }: { blurb: string }) {
+  const game = useStore((s) => s.game)!
+  const buyShield = useStore((s) => s.buyShield)
+  const gate = canBuyShield(game)
+  const cost = shieldCost(game)
+  const shielded = (game.flags.shield ?? 0) > 0
+  const broke = game.cash < cost
+
+  return (
+    <div className={`mb-3 ${NESTED} px-3.5 py-3`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13px] leading-snug">
+          🛡 <b>Crisis retainer</b> <span className="text-mut">— {blurb}</span>
+        </span>
+        {shielded ? (
+          <span className="shrink-0 rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-bold text-good">
+            Active — {game.flags.shield} wk left
+          </span>
+        ) : (
+          <Btn variant="primary" className="shrink-0" disabled={!gate.ok || broke} onClick={buyShield}>
+            Retain · {money(cost)}
+          </Btn>
+        )}
+      </div>
+      {!shielded && (!gate.ok || broke) && (
+        <div className="mt-2 text-[12px] leading-snug text-warn">
+          {gate.reason ?? `You have ${money(game.cash)} — the retainer costs ${money(cost)}.`}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * What the five operations actually do, printed once on the face of the panel.
+ *
+ * This text used to live in a `title` on every attack button — five operations against every
+ * target, ten hidden copies of a sentence a touch device cannot reach at all. The blurb describes
+ * the OPERATION and never the target, so one rendering says everything ten tooltips said.
+ */
+function AttackLegend() {
+  return (
+    <div className={`mb-2.5 grid gap-1.5 ${NESTED} px-3.5 py-3`}>
+      {ATTACKS.map((a) => (
+        <div key={a.id} className="text-[12px] leading-snug text-mut">
+          <b className="text-ink">
+            {a.emoji} {a.name}
+          </b>{' '}
+          — {a.blurb}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function PvpOps() {
   const game = useStore((s) => s.game)!
   const online = useStore((s) => s.online)!
   const attackPlayer = useStore((s) => s.attackPlayer)
-  const buyShield = useStore((s) => s.buyShield)
   const targets = online.players.filter((p) => p.id !== myId() && !p.over)
   if (targets.length === 0) return null
   const gate = canAttack(game)
-  const shieldGate = canBuyShield(game)
-  const sCost = shieldCost(game)
-  const shielded = (game.flags.shield ?? 0) > 0
 
   return (
     <div className="mt-3.5">
       <Panel title="Dirty tricks — hit the other founders">
-        <div className="mb-2 text-xs leading-relaxed text-mut">
+        <CrisisRetainer blurb={`silently deflects the next attack on you. Lasts ${SHIELD_WEEKS} weeks; your rivals can’t see it.`} />
+        <div className="mb-2.5 text-xs leading-relaxed text-mut">
           This market has one pot of users and no referee. Each operation costs cash, drains your energy, and puts your ops team on a
           5-week cooldown — and everyone in the room will know it was you. Costs rise with your stage: a bigger company swings a bigger,
           pricier bat.
         </div>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2 px-3 py-2.5">
-          <span className="text-[13px]">
-            🛡 <b>Crisis retainer</b>{' '}
-            <span className="text-mut">
-              — silently deflects the next attack on you. Lasts {SHIELD_WEEKS} weeks; your rivals can&apos;t see it.
-            </span>
-          </span>
-          {shielded ? (
-            <span className="rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-bold text-good">
-              Active — {game.flags.shield} wk left
-            </span>
-          ) : (
-            <Btn disabled={!shieldGate.ok || game.cash < sCost} title={shieldGate.reason} onClick={buyShield}>
-              Retain · {money(sCost)}
-            </Btn>
-          )}
-        </div>
         {!gate.ok && <div className="mb-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{gate.reason}</div>}
+        <AttackLegend />
         {targets.map((p) => (
           <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
             <span className="text-[13px]">
@@ -375,12 +419,7 @@ function PvpOps() {
               {ATTACKS.map((a) => {
                 const cost = attackCost(game, a.id)
                 return (
-                  <Btn
-                    key={a.id}
-                    disabled={!gate.ok || game.cash < cost}
-                    title={`${a.blurb} Costs ${money(cost)}.`}
-                    onClick={() => attackPlayer(p.id, a.id)}
-                  >
+                  <Btn key={a.id} disabled={!gate.ok || game.cash < cost} onClick={() => attackPlayer(p.id, a.id)}>
                     {a.emoji} {a.name} · {money(cost)}
                   </Btn>
                 )
@@ -405,26 +444,17 @@ function PvpOps() {
 function RivalOps() {
   const game = useStore((s) => s.game)!
   const attackRival = useStore((s) => s.attackRival)
-  const buyShield = useStore((s) => s.buyShield)
   const targets = game.rivals.filter((r) => r.alive)
   if (targets.length === 0) return null
   const gate = canAttack(game)
-  const shieldGate = canBuyShield(game)
-  const sCost = shieldCost(game)
-  const shielded = (game.flags.shield ?? 0) > 0
   const threats = hostileRivals(game)
 
   return (
     <div className="mt-3.5">
       <Panel title="Competitive response">
-        <div className="mb-2 text-xs leading-relaxed text-mut">
-          Rivals in this market act on what they can see: how much of the market they hold, how fast you are growing, who out-raised
-          whom. A rival that turns on you is flagged <b>Hostile</b> or <b>Cornered</b> in the table above a full week before their first
-          move — that week is the one to spend the retainer in. Every operation here costs cash, drains your energy, and puts your ops
-          team on a 5-week cooldown.
-        </div>
+        {/* Threat, then the one control that answers it, then everything else. */}
         {threats.length > 0 && (
-          <div className="mb-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-xs leading-relaxed text-bad">
+          <div className="mb-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-xs leading-relaxed text-bad">
             <b>{threats.map((r) => r.name).join(', ')}</b> {threats.length === 1 ? 'is' : 'are'} coming for you.{' '}
             {threats
               .filter((r) => rivalStance(game, r).attack === 'raid')
@@ -432,27 +462,15 @@ function RivalOps() {
               .join(' ')}
           </div>
         )}
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2 px-3 py-2.5">
-          <span className="text-[13px]">
-            🛡 <b>Crisis retainer</b>{' '}
-            <span className="text-mut">— silently deflects EVERY attack on you for {SHIELD_WEEKS} weeks. Your rivals can&apos;t see it.</span>
-          </span>
-          {shielded ? (
-            <span className="rounded-full border border-good/40 bg-good/10 px-3 py-1 text-xs font-bold text-good">
-              Active — {game.flags.shield} wk left
-            </span>
-          ) : (
-            <Btn
-              variant={threats.length > 0 ? 'primary' : undefined}
-              disabled={!shieldGate.ok || game.cash < sCost}
-              title={shieldGate.reason}
-              onClick={buyShield}
-            >
-              Retain · {money(sCost)}
-            </Btn>
-          )}
+        <CrisisRetainer blurb={`silently deflects EVERY attack on you for ${SHIELD_WEEKS} weeks. Your rivals can’t see it.`} />
+        <div className="mb-2.5 text-xs leading-relaxed text-mut">
+          Rivals in this market act on what they can see: how much of the market they hold, how fast you are growing, who out-raised
+          whom. A rival that turns on you is flagged <b>Hostile</b> or <b>Cornered</b> in the table above a full week before their first
+          move — that week is the one to spend the retainer in. Every operation here costs cash, drains your energy, and puts your ops
+          team on a 5-week cooldown.
         </div>
         {!gate.ok && <div className="mb-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">{gate.reason}</div>}
+        <AttackLegend />
         {targets.map((r) => (
           <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2.5 last:border-b-0">
             <span className="text-[13px]">
@@ -462,12 +480,7 @@ function RivalOps() {
               {ATTACKS.map((a) => {
                 const cost = attackCost(game, a.id)
                 return (
-                  <Btn
-                    key={a.id}
-                    disabled={!gate.ok || game.cash < cost}
-                    title={`${a.blurb} Costs ${money(cost)}.`}
-                    onClick={() => attackRival(r.id, a.id)}
-                  >
+                  <Btn key={a.id} disabled={!gate.ok || game.cash < cost} onClick={() => attackRival(r.id, a.id)}>
                     {a.emoji} {a.name} · {money(cost)}
                   </Btn>
                 )
@@ -490,11 +503,6 @@ function Acquisitions() {
   return (
     <div className="mt-3.5">
       <Panel title="Corp dev — buy your rivals">
-        <div className="mb-2 text-xs leading-relaxed text-mut">
-          Consolidate the market: acquire a living rival and ~70% of their users migrate to you, along with their best features — and
-          their bugs. Pay in cash, or in stock (dilution). Weak rivals sell; confident ones leak your offer and gloat. Each deal takes
-          ~15 weeks to integrate before the next.
-        </div>
         {targets.map((r) => {
           const gate = canAcquire(game, r)
           const price = acquisitionPrice(game, r)
@@ -520,6 +528,11 @@ function Acquisitions() {
             </div>
           )
         })}
+        <More label="What an acquisition actually does">
+          Acquire a living rival and ~70% of their users migrate to you, along with their best features — and their bugs. Pay in cash,
+          or in stock (dilution). Weak rivals sell; confident ones leak your offer and gloat. Each deal takes ~15 weeks to integrate
+          before the next.
+        </More>
       </Panel>
     </div>
   )

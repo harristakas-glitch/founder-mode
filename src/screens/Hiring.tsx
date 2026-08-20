@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Btn, Panel, SkillDots, Td, Th, TraitChip } from '../components'
+import { Btn, Panel, SkillDots, TraitChip } from '../components'
 import { money } from '../format'
-import { recruiterFee, runwayAfterHire, runwayWeeks, weeklyBurn } from '../game/engine'
+import { recruiterFee, runwayAfterHire } from '../game/engine'
 import { hasCapability } from '../game/modes'
 import { myId } from '../net/online'
 import { useStore } from '../store'
@@ -72,30 +72,42 @@ const ROLE_HELP: Record<string, string> = {
 export function Hiring() {
   const game = useStore((s) => s.game)!
   const sendOffer = useStore((s) => s.sendOffer)
-  const runway = runwayWeeks(game)
   // must match sendOffer's own branch exactly — gating the UI on the capability alone let the
   // sealed-bid controls render in a session that would silently take the single-player path
   const online = useStore((st) => st.online)
   const shared = hasCapability(game, 'sharedHiringPool') && !!online
 
+  // Deadline first. A candidate on their last week is a decision that expires, and until now the
+  // only sign of it was an unsorted grey column at the right-hand end of a wide table. Sort is
+  // stable, so the pool's own order survives inside each expiry group.
+  const pool = [...game.candidates].sort((a, b) => a.weeksLeft - b.weeksLeft)
+
   return (
     <div>
       <h1 className="text-[20px] font-extrabold tracking-tight">Hiring</h1>
+      {/* Burn, revenue and runway are in the topbar rail on every screen; repeating them here only
+          gave the player a second place they could disagree. The one number this screen owes is
+          what a given hire does to the runway. */}
       <div className="mb-4 text-[13px] leading-relaxed text-mut">
-        Burn {money(weeklyBurn(game))}/wk · revenue {money(game.lastRevenue)}/wk · runway{' '}
-        {runway === Infinity ? '∞' : `${Math.floor(runway)} wk`}. The <b className="text-ink">runway after</b> column shows what hiring
-        that person does to it — under ~20 weeks is living dangerously, and candidates start declining offers below ~10.
+        <b className="text-ink">Runway after</b> is what hiring that person does to your runway — under ~20 weeks is living
+        dangerously, and candidates start declining offers below ~10.
       </div>
 
       {shared && (
-        <div className="mb-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed">
-          <b>One market, every founder.</b> These five people are the same five your rivals are looking at, and the whole pool is
-          replaced next week. Offers are <b>sealed</b>: choose a premium over asking without seeing anyone else&apos;s number, and at
-          the end of the round the candidate picks — weighing the money against your reputation and how safe your runway looks. Winning
-          a contested hire means paying over the odds, or being somewhere worth joining. Only a <b>hash</b> of your offer goes over the
-          wire while the round is live, so not even a modified client can read your number and undercut it. You court{' '}
-          <b>one candidate per round</b>.
-        </div>
+        // The rules of the shared market are worth one sentence up front and a paragraph on
+        // demand. What is gone entirely is how the bid is transported: whether a number travels
+        // as a hash is not a decision the player makes on a hiring screen.
+        <details className="mb-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed">
+          <summary className="cursor-pointer font-semibold text-ink marker:text-accent">
+            One market, every founder — sealed offers, one candidate per round
+          </summary>
+          <div className="mt-2 text-mut">
+            These five people are the same five your rivals are looking at, and the whole pool is replaced next week. Choose a premium
+            over asking without seeing anyone else&apos;s number, and at the end of the round the candidate picks — weighing the money
+            against your reputation and how safe your runway looks. Winning a contested hire means paying over the odds, or being
+            somewhere worth joining.
+          </div>
+        </details>
       )}
 
       {(game.offersOut.length > 0 || game.pendingHires.length > 0) && (
@@ -130,14 +142,18 @@ export function Hiring() {
         </div>
       )}
 
-      {/* Phones get cards: in a horizontally scrolling table the "Send offer" button sits
-          off-screen, so the primary action of the screen is unreachable without noticing
-          you can swipe sideways. */}
-      <div className="space-y-2.5 md:hidden">
-        {game.candidates.map((c) => {
+      {/* One list at every width. The desktop table this replaces spent 40 cells on 5 people and
+          put the only number that decides anything — runway after — sixth of eight columns, with
+          "Send offer" off the right edge of a horizontal scroller on a phone. Two implementations
+          of one decision rule had already begun copying each other. */}
+      <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+        {pool.map((c) => {
           const after = runwayAfterHire(game, c)
           const afterLabel = after === Infinity ? '∞' : `${Math.max(0, Math.floor(after))} wk`
           const cls = after === Infinity ? 'text-good' : after < 12 ? 'text-bad font-bold' : after < 20 ? 'text-warn' : 'text-good'
+          // Arena refreshes the whole pool every week, so every card would carry this badge and it
+          // would mean nothing; the shared-market line above says it once instead.
+          const lastWeek = !shared && c.weeksLeft <= 1
           return (
             <Panel key={c.id}>
               <div className="flex items-start justify-between gap-3">
@@ -152,6 +168,11 @@ export function Hiring() {
                 </div>
                 <SkillDots skill={c.skill} />
               </div>
+              {lastWeek && (
+                <div className="mt-2.5 rounded-lg border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[12px] font-semibold text-warn">
+                  ⏳ Last week in the pool — gone when you end the week
+                </div>
+              )}
               <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
                 <span className="text-mut">Salary</span>
                 <span className="text-right tnum">{money(c.salary)}/yr</span>
@@ -162,8 +183,12 @@ export function Hiring() {
                   {afterLabel}
                   {after !== Infinity && after < 12 && ' · overhiring!'}
                 </span>
-                <span className="text-mut">Leaves the pool in</span>
-                <span className="text-right tnum">{c.weeksLeft} wk</span>
+                {!lastWeek && (
+                  <>
+                    <span className="text-mut">Leaves the pool in</span>
+                    <span className="text-right tnum">{c.weeksLeft} wk</span>
+                  </>
+                )}
               </div>
               {shared ? (
                 <BidControl candidateId={c.id} />
@@ -176,69 +201,6 @@ export function Hiring() {
           )
         })}
       </div>
-
-      <Panel className="hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px]">
-            <thead>
-              <tr>
-                <Th>Name</Th>
-                <Th>Role</Th>
-                <Th>Skill</Th>
-                <Th right>Salary</Th>
-                <Th right>Fee</Th>
-                <Th right>Runway after</Th>
-                <Th right>In pool</Th>
-                <Th right></Th>
-              </tr>
-            </thead>
-            <tbody>
-              {game.candidates.map((c) => {
-                const after = runwayAfterHire(game, c)
-                const afterLabel = after === Infinity ? '∞' : `${Math.max(0, Math.floor(after))} wk`
-                const cls = after === Infinity ? 'text-good' : after < 12 ? 'text-bad font-bold' : after < 20 ? 'text-warn' : 'text-good'
-                return (
-                  <tr key={c.id}>
-                    <Td>
-                      <b>{c.name}</b>
-                      <TraitChip trait={c.trait} />
-                    </Td>
-                    <Td>
-                      {c.role}
-                      <div className="text-[11px] text-mut">{ROLE_HELP[c.role]}</div>
-                    </Td>
-                    <Td>
-                      <SkillDots skill={c.skill} />
-                    </Td>
-                    <Td right>{money(c.salary)}/yr</Td>
-                    <Td right className="text-mut">
-                      {money(recruiterFee(c))}
-                    </Td>
-                    <Td right className={cls}>
-                      {afterLabel}
-                      {after !== Infinity && after < 12 && <div className="text-[10px]">overhiring!</div>}
-                    </Td>
-                    <Td right className="text-mut">
-                      {c.weeksLeft} wk
-                    </Td>
-                    <Td right>
-                      {shared ? (
-                        <div className="min-w-[210px]">
-                          <BidControl candidateId={c.id} />
-                        </div>
-                      ) : (
-                        <Btn variant="primary" onClick={() => sendOffer(c.id)}>
-                          Send offer
-                        </Btn>
-                      )}
-                    </Td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
     </div>
   )
 }

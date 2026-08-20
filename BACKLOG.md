@@ -133,6 +133,68 @@ for those answers.
 `granted` state and its tests specifically so this can be picked up without rebuilding the state
 machine underneath it. See `docs/analytics.md`.
 
+### 2.3 Arena matchmaking — join a game without knowing anybody
+
+**Decided 2026-08-20: build it, but not yet, and build a LOBBY rather than a QUEUE.**
+
+Today Arena is join-by-code only, so playing a stranger is impossible: you must already know
+someone and send them five characters. Matchmaking is the fix, and the architecture is friendlier
+than expected — rooms are Supabase **Realtime channels + presence**, not database rows
+(`src/net/online.ts`). The channel *is* the room. Discovery can therefore be a single well-known
+lobby channel that players join while looking for a game: **no new tables, no new RLS policy, and
+no SQL for the owner to run.** That matters given this repo has shipped a broken leaderboard policy
+three times and §1.3's `leaderboard-v6.sql` is still unrun.
+
+**Why a lobby and not a queue.** A queue only works above a concurrency threshold. Below it, it
+shows a spinner forever, which is strictly worse than join-by-code because it promises a game it
+cannot deliver and reads as "this game is dead". A visible list is honest at any scale:
+
+    3 founders looking for a game right now
+      Kestrel     SaaS      waiting 40s   [Join]
+      Northreef   Fintech   waiting 2m    [Join]
+      Start a room and I'll put you on this list
+
+Auto-pairing is then an *emergent* behaviour to switch on later — when two people are waiting,
+offer the match automatically — rather than the thing the design depends on.
+
+**The blocking unknown is a number we are about to have.** Nobody knows the concurrent player
+count. PostHog went live 2026-08-20 and now captures sessions and duration correctly (§ analytics),
+so within about a week `run_started` overlap will answer it. Do not design the pairing rules before
+reading that number.
+
+**Format choice: 1v1 or free-for-all.** The player picks which they are queuing for, and this is
+not cosmetic — the two are *balanced differently and already were*. `test/arena-duel-probe.ts`
+calibrates against a single peer while `test/arena-ffa-probe.ts` calibrates a crowd, and
+`engine.ts:2927` documents a cap that "would silently rebalance every duel in the file that
+calibrated it". The Lobby is already hard-capped at 4 (`Lobby.tsx:136`), so today's Arena is
+"2 to 4 players, undifferentiated" — the simulation makes the distinction and the UI never asks.
+
+This changes the lobby design rather than sitting on top of it: two pools, shown with their own
+counts, because a single number ("5 searching") is a lie when four of them want a format you do
+not. Expect 1v1 to fill first at low concurrency — it needs one other person, not three — which
+makes it the better default and the honest thing to surface first.
+
+    ARENA          [ 1v1 ]   [ Free-for-all ]
+    2 founders searching for a duel · nobody in free-for-all yet
+
+Also settle, when picked up, whether a queued player accepts *either* format ("any game") — good
+for fill rate, bad if it drops someone into a format they did not want to play.
+
+Scope when it is picked up:
+- **format selection first**: 1v1 and free-for-all as separate pools with separate live counts
+- lobby channel + presence-based "looking for a game" broadcast; reuse `connectRoom` for the join
+- real counts always, never a spinner — including "nobody is here right now"
+- bot backfill after ~60s, **with consent** ("play against 3 AI rivals?"); the sim already drives
+  rivals, so this is mostly wiring
+- **abuse story — the genuinely new work.** A public lobby is the first surface in this game where
+  a stranger broadcasts text (company name) to people who did not invite them. It needs the
+  treatment `validateChat` already applies, plus a rate limit on lobby joins.
+
+Already in place and reusable: `MAX_PLAYERS` (32), presence rosters, forfeit/absence detection,
+per-event rate limiting, and validated wire payloads.
+
+---
+
 ### 2.2 Multiplayer has no jeopardy
 A 52-week Sprint produced **3 bankruptcies per 100 player-runs** — it's a pure score race, with
 relative growth as the only real interaction. That may be exactly right for a short competitive

@@ -17,9 +17,9 @@ import { MODE_META, QUICK_FORMAT_META, type GameFormat, type GameMode } from '..
 import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
-import { MATCH_CAP, dailyInfo, readHall, useStore } from '../store'
+import { dailyInfo, readHall, useStore } from '../store'
 import { DailyLeaderboard } from './DailyLeaderboard'
-import { FirstRunBriefingNote, FirstRunPath, recommendedMode } from '../onboarding/FirstRun'
+import { FirstRunBriefingNote, recommendedMode, useFirstTimer } from '../onboarding/FirstRun'
 import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
@@ -27,7 +27,7 @@ const vars = (o: Record<string, string>) => o as CSSProperties
 
 // A market's character, read straight off its simulation numbers rather than invented:
 // revenue per user (log — the spread is three orders of magnitude), word of mouth, and
-// loyalty (the inverse of churn). Ranked 1–5 across the five markets.
+// loyalty (the inverse of churn). Ranked 1–5 across the markets.
 const scale = (values: number[]) => {
   const lo = Math.min(...values)
   const hi = Math.max(...values)
@@ -36,15 +36,15 @@ const scale = (values: number[]) => {
 const REV = scale(SECTORS.map((s) => Math.log10(s.arpuPerCustomer)))
 const VIRAL = scale(SECTORS.map((s) => s.viral))
 const LOYAL = scale(SECTORS.map((s) => -s.churn))
+// One list names the three traits, and both the cards and the legend above them read it, so the
+// key cannot drift from the pips it explains.
+const TRAITS = [
+  { k: 'Rev', label: 'Revenue per user' },
+  { k: 'Viral', label: 'Word of mouth' },
+  { k: 'Loyal', label: 'Customer loyalty' },
+] as const
 const SECTOR_TRAITS: Record<string, { k: string; label: string; v: number }[]> = Object.fromEntries(
-  SECTORS.map((s, i) => [
-    s.id,
-    [
-      { k: 'Rev', label: 'Revenue per user', v: REV[i] },
-      { k: 'Viral', label: 'Word of mouth', v: VIRAL[i] },
-      { k: 'Loyal', label: 'Customer loyalty', v: LOYAL[i] },
-    ],
-  ]),
+  SECTORS.map((s, i) => [s.id, [REV[i], VIRAL[i], LOYAL[i]].map((v, t) => ({ ...TRAITS[t], v }))]),
 )
 
 const FOUNDER_META: Record<FounderKind, { name: string; blurb: string }> = {
@@ -113,6 +113,19 @@ function Step({ n, title, hint, children }: { n: number; title: string; hint?: R
 const inputCls =
   'w-full min-w-0 rounded-xl border border-line bg-surface px-4 py-3 text-[15px] transition-colors placeholder:text-mut/50 focus:border-[var(--ha)]'
 
+/**
+ * The other half of the Lobby's copy button: a link the host pasted into a chat opens straight
+ * on the Arena step with the code already typed. Sanitised to the room-code alphabet — this is a
+ * URL a stranger controls, and it goes nowhere near the network until the player presses Join.
+ */
+const ROOM_PARAM =
+  typeof location === 'undefined'
+    ? ''
+    : (new URLSearchParams(location.search).get('room') ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 5)
+
 function AchievementGallery() {
   const earned = earnedAchievements()
   if (earned.size === 0) return null // nothing to brag about yet — keep the first screen clean
@@ -121,21 +134,19 @@ function AchievementGallery() {
       <div className={`${eyebrow} mb-2`}>
         Achievements — {earned.size}/{ACHIEVEMENTS.length}
       </div>
+      {/* Earned only. The locked chips were 25 identical "·····" placeholders that carried no
+          information the "{n}/{total}" count above does not already carry, and they buried the
+          handful the player actually won. */}
       <div className="flex flex-wrap gap-1.5">
-        {ACHIEVEMENTS.map((a) => {
-          const has = earned.has(a.id)
-          return (
-            <span
-              key={a.id}
-              title={`${a.name} — ${has ? a.desc : '???'}`}
-              className={`cursor-help rounded-lg border px-2 py-1 text-[12px] font-semibold ${
-                has ? 'border-[var(--ha2)]/50 bg-[var(--ha2)]/10 text-ink' : 'border-line bg-surface opacity-35 grayscale'
-              }`}
-            >
-              {a.emoji} {has ? a.name : '·····'}
-            </span>
-          )
-        })}
+        {ACHIEVEMENTS.filter((a) => earned.has(a.id)).map((a) => (
+          <span
+            key={a.id}
+            title={`${a.name} — ${a.desc}`}
+            className="cursor-help rounded-lg border border-[var(--ha2)]/50 bg-[var(--ha2)]/10 px-2 py-1 text-[12px] font-semibold text-ink"
+          >
+            {a.emoji} {a.name}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -214,14 +225,15 @@ export function NewGame() {
   const joinRoom = useStore((s) => s.joinRoom)
   const connecting = useStore((s) => s.connecting)
   const daily = dailyInfo()
+  const firstTimer = useFirstTimer()
   // The product has three top-level experiences; Daily Challenge is a FORMAT inside Quick
   // Play, not a fourth pillar. `experience === null` shows the pick-an-experience landing.
-  const [experience, setExperience] = useState<GameMode | null>(null)
+  const [experience, setExperience] = useState<GameMode | null>(ROOM_PARAM.length === 5 ? 'arena' : null)
   const [format, setFormat] = useState<GameFormat>('standard')
   const [sector, setSector] = useState<SectorId>('saas')
   const [name, setName] = useState('')
   const [founder, setFounder] = useState<FounderKind>('technical')
-  const [joinCode, setJoinCode] = useState('')
+  const [joinCode, setJoinCode] = useState(ROOM_PARAM)
   const [scenario, setScenario] = useState('standard')
   const [netError, setNetError] = useState<string | null>(null)
 
@@ -349,14 +361,6 @@ export function NewGame() {
               })}
             </div>
 
-            <FirstRunPath
-              onTakeIt={() => {
-                setExperience('quick')
-                setFormat('standard')
-                setSector('saas')
-              }}
-            />
-
             {/* Daily stays one tap away without becoming a fourth pillar. */}
             <button
               type="button"
@@ -393,13 +397,9 @@ export function NewGame() {
           <div className="home-in mt-5" style={vars({ '--d': '0ms' })}>
             {experience === 'career' && (
               <div className="rounded-2xl border border-[var(--ha)]/25 bg-[var(--ha)]/[0.06] p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] font-extrabold">{MODE_META.career.promise}</span>
-                  {/* the badge follows you off the gate — the game never overstates what it has */}
-                  <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] font-bold text-warn">
-                    Early access
-                  </span>
-                </div>
+                {/* the "Early access" badge is on the Career card on the gate, one click behind
+                    this panel — the paragraph below says the same thing in full sentences */}
+                <div className="text-[15px] font-extrabold">{MODE_META.career.promise}</div>
                 <p className="mt-1 text-[13px] leading-relaxed text-mut">
                   {MODE_META.career.blurb} Career runs on the same simulation as Quick Play today — the deeper systems (customer
                   discovery, founder attention, executives, board politics) are being built and will switch on here first.
@@ -465,6 +465,24 @@ export function NewGame() {
                     )
                   }
                 >
+                  {/* The key to the pips used to sit BELOW the grid it explains and vanish for
+                      good once a run finished. It now sits above the grid and never leaves: a
+                      returning player reading six markets against each other needs it more than a
+                      first-timer does. The two forms never stack — the first-run note is the long
+                      version of this same key, so the compact one takes over when it retires. */}
+                  {firstTimer ? (
+                    <FirstRunBriefingNote mode={experience === 'career' ? 'career' : 'quick'} />
+                  ) : (
+                    <div className="mb-2.5 text-[12px] leading-relaxed text-mut">
+                      {TRAITS.map((t, i) => (
+                        <span key={t.k}>
+                          {i > 0 && ' · '}
+                          <b className="text-[10px] font-bold tracking-wider text-ink uppercase">{t.k}</b> {t.label.toLowerCase()}
+                        </span>
+                      ))}{' '}
+                      — five pips each, ranked across the {SECTORS.length} markets and read off the simulation.
+                    </div>
+                  )}
                   <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                     {SECTORS.map((s) => {
                       const [c] = sectorAccent(s.id)
@@ -515,8 +533,6 @@ export function NewGame() {
                   </Step>
                 )}
 
-                <FirstRunBriefingNote mode={experience === 'career' ? 'career' : 'quick'} />
-
                 {/* sticky, so the way into the game stays on screen however far down
                     the option list the player has scrolled */}
                 <div className="sticky bottom-3 z-20 mt-8">
@@ -552,10 +568,11 @@ export function NewGame() {
               <Step n={2} title="Open a room" hint="or join one with a friend's code">
                 <div className="rounded-2xl border border-line bg-surface p-4">
                   {!onlineConfigured ? (
+                    /* the build-time setup steps that used to live here were a README addressed to
+                       whoever deploys the game, printed to a player who cannot act on them */
                     <div className="text-[13px] leading-relaxed text-mut">
-                      <b className="text-warn">Online play isn&apos;t configured yet.</b> It needs a free Supabase project: create one
-                      at supabase.com, then paste its URL and anon key into <code className="text-ink">src/net/config.ts</code> and
-                      redeploy. No database or SQL required — the game only uses realtime channels.
+                      <b className="text-warn">Online play isn&apos;t available in this build.</b> Quick Play and Career run entirely on
+                      this device and need nothing.
                     </div>
                   ) : (
                     <>
@@ -587,12 +604,6 @@ export function NewGame() {
                             Join
                           </button>
                         </div>
-                      </div>
-                      <div className="mt-3 text-xs leading-relaxed text-mut">
-                        Create a room and send the code to 1–3 friends — they open this same site anywhere in the world and join.
-                        Everyone competes in one market with the same starting hand. Each round is a week: play your moves, hit Ready,
-                        and the world advances when everyone is ready or the 2½-minute clock runs out. After {MATCH_CAP} weeks, highest
-                        founder payout wins.
                       </div>
                     </>
                   )}

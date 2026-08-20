@@ -6,13 +6,32 @@
 
 import { useState } from 'react'
 import { EmptyState, Panel } from '../components'
-import { buildStory, storyChapters, storyEnding, type StoryTone } from '../game/story'
+import { buildStory, storyChapters, storyEnding, type StoryBeat, type StoryTone } from '../game/story'
 import { sectorById } from '../game/data'
 import { GAME_URL } from '../theme'
-import { money } from '../format'
 import { useStore } from '../store'
 
 const DOT: Record<StoryTone, string> = { good: 'bg-good', bad: 'bg-bad', neutral: 'bg-line2' }
+
+// `StoryBeat.weight` (0–100) is the run's own answer to "how much did this week matter". The share
+// card has read it since it shipped (`definingBeats`); this screen never did, so a $12M round and a
+// designer's third week landed at identical size. Importance is carried by white and by size; the
+// dot's hue still means tone and only tone, because a heavy beat is not a good one.
+type Emphasis = 'major' | 'normal' | 'minor'
+const emphasis = (weight: number): Emphasis => (weight >= 70 ? 'major' : weight >= 45 ? 'normal' : 'minor')
+
+const BEAT_TEXT: Record<Emphasis, string> = {
+  major: 'text-[14.5px] font-semibold text-ink',
+  normal: 'text-[13.5px] text-ink',
+  minor: 'text-[12.5px] text-mut',
+}
+// Scale, never width: a transform is centred on the dot, so a dot of any size stays on the rail.
+// Changing h/w would walk each row's dot off the line by half the difference.
+const BEAT_DOT: Record<Emphasis, string> = {
+  major: 'mt-[9px] scale-[1.6]',
+  normal: 'mt-[7px]',
+  minor: 'mt-[7px] scale-75 opacity-70',
+}
 
 // Same lazy-import discipline as every other share button: the canvas renderer only loads
 // the first time someone actually shares, so the biography cannot drag it into the main chunk.
@@ -78,7 +97,7 @@ export function Story() {
             <div className="mt-3.5">
               <Panel title="So far">
                 {beats.map((b, i) => (
-                  <BeatRow key={i} week={b.week} tone={b.tone} text={b.text} />
+                  <BeatRow key={i} beat={b} />
                 ))}
               </Panel>
             </div>
@@ -89,23 +108,17 @@ export function Story() {
           {chapters.map((ch, ci) => (
             <Panel key={ci} title={ch.title}>
               <div className="relative">
-                {/* the rail: one quiet line through the chapter's weeks */}
-                <span className="absolute top-2 bottom-2 left-[52px] w-px bg-line/60" aria-hidden />
+                {/* the rail: one quiet line through the chapter's weeks, centred on the dots (40px
+                    week column + 12px gap + half a 6px dot) so the scaled ones stay threaded on it */}
+                <span className="absolute top-2 bottom-2 left-[55px] w-px bg-line/60" aria-hidden />
                 {ch.beats.map((b, i) => (
-                  <BeatRow key={i} week={b.week} tone={b.tone} text={b.text} />
+                  <BeatRow key={i} beat={b} />
                 ))}
               </div>
-              {/* the autopsy rides with the final chapter, in the ending's own words */}
-              {ending && ci === chapters.length - 1 && ending.detail && (
-                <p className="mt-3 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-mut">
-                  <b className="text-ink">Autopsy:</b> {ending.detail}
-                </p>
-              )}
-              {ending && ci === chapters.length - 1 && (ending.payout ?? 0) > 0 && (
-                <div className="mt-3 text-[13px] text-mut">
-                  Founder payout: <b className="text-good tnum">{money(ending.payout ?? 0)}</b>
-                </div>
-              )}
+              {/* §25: the autopsy and the founder payout are gone from the foot of the final
+                  chapter. The results overlay prints both at full size, the network ending's beat
+                  already quotes its autopsy verbatim, and Career's "All runs" keeps every run's
+                  payout as its score. This screen is the timeline, not the scoreboard. */}
             </Panel>
           ))}
           <div className="pb-2 text-center text-[11.5px] text-mut">
@@ -117,12 +130,15 @@ export function Story() {
   )
 }
 
-function BeatRow({ week, tone, text }: { week: number; tone: StoryTone; text: string }) {
+function BeatRow({ beat }: { beat: StoryBeat }) {
+  const em = emphasis(beat.weight)
   return (
-    <div className="relative flex gap-3 py-1.5">
-      <span className="w-10 shrink-0 pt-px text-right text-[11px] font-semibold text-mut tnum">wk {week}</span>
-      <span className={`z-10 mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ring-2 ring-bg2 ${DOT[tone]}`} aria-hidden />
-      <span className="min-w-0 flex-1 text-[13.5px] leading-relaxed">{text}</span>
+    <div className={`relative flex gap-3 ${em === 'major' ? 'py-2.5' : 'py-1.5'}`}>
+      <span className={`w-10 shrink-0 pt-px text-right text-[11px] font-semibold tnum ${em === 'major' ? 'text-ink' : 'text-mut'}`}>
+        wk {beat.week}
+      </span>
+      <span className={`z-10 h-1.5 w-1.5 shrink-0 rounded-full ring-2 ring-bg2 ${DOT[beat.tone]} ${BEAT_DOT[em]}`} aria-hidden />
+      <span className={`min-w-0 flex-1 leading-relaxed ${BEAT_TEXT[em]}`}>{beat.text}</span>
     </div>
   )
 }
