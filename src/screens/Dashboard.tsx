@@ -19,7 +19,7 @@
 // milestones → the run record; "Latest news" → the Inbox owns that list; the Benchmarks panel →
 // its verdicts are now register items (see attention.ts), because two functions evaluating the
 // same health into two UI regions is how they drift.
-import { RAISED, StatCard } from '../components'
+import { Meter, RAISED, Sparkline, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
@@ -100,12 +100,12 @@ function Hero() {
 
   const labelTone = { bad: 'text-bad', warn: 'text-warn', good: 'text-good', mut: 'text-mut' }[tone]
   return (
-    <div className="mb-4">
+    <div className="mb-3 md:mb-4">
       <div className={`text-[10.5px] font-bold uppercase tracking-[0.13em] ${labelTone}`}>{label}</div>
-      <div className="mt-1 text-[44px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[56px]">
+      <div className="mt-1 text-[38px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[56px]">
         {figure}
       </div>
-      <div className="mt-2 max-w-[52ch] text-[13.5px] leading-snug text-mut">{sentence}</div>
+      <div className="mt-1.5 line-clamp-2 max-w-[52ch] text-[13px] leading-snug text-mut md:line-clamp-none md:text-[13.5px]">{sentence}</div>
     </div>
   )
 }
@@ -349,6 +349,36 @@ function ArenaStandings() {
   )
 }
 
+// The mobile stream peek — see the FEED comment at the call site.
+function StreamPeek() {
+  const game = useStore((s) => s.game)!
+  const latest = game.inbox.filter((m) => !(m.kind === 'choice' && !m.resolved)).slice(0, 2)
+  if (latest.length === 0) return null
+  const more = game.inbox.length - latest.length
+  return (
+    <div className="order-5 mb-4 rounded-[10px] border border-line/60 bg-surface px-3.5 py-2 lg:hidden">
+      {latest.map((m) => (
+        <button
+          key={m.id}
+          onClick={() => document.getElementById('week-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="flex w-full items-baseline gap-2.5 py-1 text-left"
+        >
+          <span className="shrink-0 text-[10.5px] text-mut tnum">wk {m.week}</span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px]">{m.title}</span>
+        </button>
+      ))}
+      {more > 0 && (
+        <button
+          onClick={() => document.getElementById('week-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="pt-0.5 text-[11.5px] font-semibold text-mut transition-colors hover:text-ink"
+        >
+          {more} more this run ↓
+        </button>
+      )}
+    </div>
+  )
+}
+
 // The horizon — FM26's Portal lesson, and the brief's own §3 UPCOMING section, finally built.
 // The HQ had alarms (the register) but no TIME: nothing said the board sits in three weeks or
 // that an offer dies on Friday. Deadlines the state already knows, nearest first, each a link to
@@ -427,8 +457,13 @@ export function Dashboard() {
       <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6 xl:gap-8">
         {/* the FEED — left on desktop, interleaved by order on the phone */}
         <div className="contents lg:order-first lg:block lg:w-[320px] lg:shrink-0 xl:w-[380px]">
-          <div className="order-5"><Upcoming /></div>
-          <div className="order-8 lg:mt-0">
+          {/* Mobile peek (owner call): the stream must exist above the fold WITHOUT taking the
+              screen over. Two one-line rows of the latest news — decisions are excluded because
+              the attention list directly above already carries them at full weight — and a jump
+              to the full stream below. Desktop hides it: the feed column is already visible. */}
+          <StreamPeek />
+          <div className="order-6"><Upcoming /></div>
+          <div id="week-stream" className="order-9 lg:mt-0">
             <h2 className="mb-2.5 text-[15px] font-semibold">This week</h2>
             <InboxStream />
           </div>
@@ -436,8 +471,11 @@ export function Dashboard() {
 
         {/* the NOW */}
         <div className="contents lg:block lg:min-w-0 lg:flex-1">
-          {/* Career: what just happened and why, in prose — before what needs doing about it. */}
-          <div className="order-1"><FounderBriefing /></div>
+          {/* Career: what just happened and why, in prose. On DESKTOP it leads the now-zone —
+              the story before the state. On a PHONE it measured 251px of narration sitting on
+              top of the fold while the alarms and the stream waited below it, so there it yields:
+              hero and alarms first, the story after the horizon. Same DOM, order classes only. */}
+          <div className="order-6"><FounderBriefing /></div>
           <div className="order-2"><Hero /></div>
           <div className="order-3"><ArenaStandings /></div>
           <div className="order-4"><AttentionList /></div>
@@ -446,45 +484,58 @@ export function Dashboard() {
           the number in every compounding formula, the growth RATE is what the board judges — the
           user COUNT is its delta line, demoted from a 34px figure to the small print, because the
           level moves the ego and the rate moves the outcome. Revenue and People close the row. */}
-      <div className="order-6 grid grid-cols-2 gap-3 2xl:grid-cols-4">
-        <button type="button" className="text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
+      <div className="order-7 grid grid-cols-2 gap-3 2xl:grid-cols-4">
+        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'fit'} onClick={() => toggle('fit')}>
         {career ? (
           <StatCard
+            className="h-full"
             label="4-week retention"
             value={retention > 0 ? pct(retention, 0) : '—'}
             delta={retention > 0 ? 'of your target segment still here' : 'nothing has retained long enough to measure'}
             tone={retention >= 0.7 ? 'up' : retention > 0 && retention < 0.4 ? 'down' : undefined}
-          />
+          >
+            <Meter value={retention * 100} tone={retention >= 0.7 ? 'good' : retention > 0 && retention < 0.4 ? 'bad' : 'accent'} />
+          </StatCard>
         ) : (
           <StatCard
+            className="h-full"
             label="Product-market fit"
             numeric={game.pmf}
             format={(n) => `${Math.round(n)}/100`}
             delta={pmfLabel(game.pmf)}
             tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined}
-          />
+          >
+            <Meter value={game.pmf} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'bad' : 'accent'} />
+          </StatCard>
         )}
         </button>
-        <button type="button" className="text-left" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
+        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
         <StatCard
+          className="h-full"
           label="Growth"
           value={`${growth >= 0 ? '+' : ''}${pct(growth, 1)}/wk`}
           delta={`${num(totalUsers(game))} user${totalUsers(game) === 1 ? '' : 's'}${game.ventures.some((v) => v.launched) ? ' across lines' : ''}${game.board ? ` · board expects ${pct(boardEffectiveTarget(game), 1)}` : ''}`}
           tone={game.board ? (growth >= boardEffectiveTarget(game) ? 'up' : 'down') : growth > 0 ? 'up' : growth < 0 ? 'down' : undefined}
-        />
+        >
+          <Sparkline data={game.history.map((x) => x.users)} tone={growth > 0 ? 'good' : growth < 0 ? 'bad' : 'mut'} />
+        </StatCard>
         </button>
-        <button type="button" className="text-left" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
+        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
         <StatCard
+          className="h-full"
           label="Revenue"
           numeric={game.lastRevenue}
           format={(n) => `${money(n)}/wk`}
           trend={revDelta !== 0 ? revDelta : undefined}
           trendFormat={money}
           tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
-        />
+        >
+          <Sparkline data={game.history.map((x) => x.revenue)} tone={game.lastRevenue >= weeklyBurn(game) ? 'good' : 'mut'} />
+        </StatCard>
         </button>
-        <button type="button" className="text-left" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
+        <button type="button" className="h-full text-left" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
         <StatCard
+          className="h-full"
           label="People"
           value={game.employees.length === 0 ? 'Just you' : `${game.employees.length}`}
           delta={
@@ -493,16 +544,18 @@ export function Dashboard() {
               : `lowest morale ${Math.round(lowest!)} · energy ${Math.round(game.energy)}`
           }
           tone={anyAtRisk || game.energy <= 12 ? 'down' : undefined}
-        />
+        >
+          <Meter value={game.energy} tone={game.energy <= 12 ? 'bad' : game.energy <= 35 ? 'warn' : 'good'} />
+        </StatCard>
         </button>
       </div>
 
       {/* the Understand step — under the row, one at a time */}
-      <div className="order-7">{openMetric && <MetricDrawer metric={openMetric} onClose={() => setOpenMetric(null)} />}</div>
+      <div className="order-8">{openMetric && <MetricDrawer metric={openMetric} onClose={() => setOpenMetric(null)} />}</div>
 
       {/* Career: the PMF/retention number above is an output — say what it is made of; then the
           named reads of the same week. Each renders null without its capability. */}
-      <div className="order-9">
+      <div className="order-10">
         <PmfExplainer />
         <TeamOpinions />
         <Commitments />

@@ -19,7 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
-import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn } from './game/engine'
+import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn, growthRate } from './game/engine'
 import { money, num } from './format'
 import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
 import { MODE_META, hasCapability } from './game/modes'
@@ -363,6 +363,7 @@ export default function App() {
   const unread = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved).length
   const burn = weeklyBurn(game)
   const runway = runwayWeeks(game)
+  const growthTrend = growthRate(game)
   const secondsLeft = online?.deadline ? Math.max(0, Math.ceil((online.deadline - Date.now()) / 1000)) : null
   const h = game.history
   const cashDelta = h.length >= 2 ? h[h.length - 1].cash - h[h.length - 2].cash : 0
@@ -465,6 +466,16 @@ export default function App() {
       </Stat>
       <Stat k="Net /wk" tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
         <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
+      </Stat>
+      {/* The two DRIVERS join the money clock — owner call, from the causal review: PMF is in
+          every compounding formula (word-of-mouth at ^1.5, acquisition, churn's dominant term)
+          and the growth rate is what the board fires you over. Five entries, the audit's ceiling.
+          The rail shows the number; the HQ owns its meter, sparkline and drawer. */}
+      <Stat k="PMF" tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
+        <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
+      </Stat>
+      <Stat k="Growth" tone={growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined}>
+        <Ticker value={growthTrend * 100} format={(n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`} />
       </Stat>
       {online && secondsLeft !== null && !matchOver && (
         <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>

@@ -201,6 +201,8 @@ export function StatCard({
   tone,
   trend,
   trendFormat,
+  className = '',
+  children,
 }: {
   label: string
   value?: string
@@ -210,6 +212,10 @@ export function StatCard({
   tone?: 'up' | 'down'
   trend?: number
   trendFormat?: (n: number) => string
+  /** `h-full` from grid callers, so a row of cards shares one bottom edge. */
+  className?: string
+  /** The infographic slot: a sparkline or a meter, rendered under the figure. */
+  children?: ReactNode
 }) {
   // Label first, value second — same reading order as the topbar rail, so the eye
   // finds the metric by its name and only then parses the digits.
@@ -223,7 +229,7 @@ export function StatCard({
   // stopped carrying any hierarchy at all, so the number now separates from its label by SIZE —
   // 34 against 11 — which is a difference that survives being looked at quickly on a phone.
   return (
-    <div className={`${CARD} p-4 transition-colors duration-[120ms] hover:border-line2`}>
+    <div className={`${CARD} flex flex-col p-4 transition-colors duration-[120ms] hover:border-line2 ${className}`}>
       <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">{label}</div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[34px] leading-[1.05] font-bold tracking-[-0.02em] tnum">
         {numeric !== undefined && format ? <Ticker value={numeric} format={format} /> : value}
@@ -236,6 +242,42 @@ export function StatCard({
           {delta}
         </div>
       )}
+      {children && <div className="mt-auto pt-3">{children}</div>}
+    </div>
+  )
+}
+
+/**
+ * A sparkline: the shape of a number's recent past, no axes, no labels — the infographic answer
+ * to "is this going the right way?" that a bare figure cannot give. Pure SVG from a series the
+ * caller already holds; renders nothing until there are three points to draw a shape with.
+ */
+export function Sparkline({ data, tone = 'mut' }: { data: number[]; tone?: 'good' | 'bad' | 'accent' | 'mut' }) {
+  const pts = data.slice(-24)
+  if (pts.length < 3) return null
+  const min = Math.min(...pts)
+  const max = Math.max(...pts)
+  const span = max - min || 1
+  const W = 100
+  const H = 26
+  const path = pts.map((v, i) => `${(i / (pts.length - 1)) * W},${H - 3 - ((v - min) / span) * (H - 6)}`).join(' ')
+  const stroke = { good: 'var(--color-good)', bad: 'var(--color-bad)', accent: 'var(--color-accent)', mut: 'var(--color-line2)' }[tone]
+  const [lx, ly] = path.split(' ').pop()!.split(',')
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[26px] w-full" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={path} fill="none" stroke={stroke} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <circle cx={lx} cy={ly} r="2" fill={stroke} vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
+/** A meter: a bounded 0-100 number as a bar, so 5/100 LOOKS like 5/100. Never colour alone — the
+ *  figure above it carries the number; this is the shape of it. */
+export function Meter({ value, tone = 'accent' }: { value: number; tone?: 'good' | 'bad' | 'warn' | 'accent' }) {
+  const fill = { good: 'bg-good', bad: 'bg-bad', warn: 'bg-warn', accent: 'bg-accent' }[tone]
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface3">
+      <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.max(2, Math.min(100, value))}%` }} />
     </div>
   )
 }
