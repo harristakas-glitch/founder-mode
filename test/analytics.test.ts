@@ -372,6 +372,33 @@ await ok("PostHog's own URL properties lose their query string and fragment", ()
   assert.strictEqual(out.distinct_id, 'xyz')
   assert.strictEqual(out.$lib, 'web')
 })
+await ok('campaign parameters are dropped — stripping the URL alone was NOT enough', () => {
+  // A REGRESSION TEST FOR A REAL FINDING, 2026-08-20. Found by loading the built app at
+  // `?utm_source=newsletter&email=...&token=...#deeplink` and reading the payload PostHog actually
+  // assembled. `$current_url` was correctly cut back to the origin and the email and token were
+  // nowhere — but `utm_source: 'newsletter'` had already been lifted into its own property before
+  // `sanitize_properties` ever ran, so seven keys outside ANALYTICS_PROPERTIES were shipping.
+  const out = scrubUrlProperties({
+    $current_url: 'https://game.example/?utm_source=newsletter&email=a@b.com',
+    utm_source: 'newsletter',
+    utm_campaign: 'launch',
+    gclid: 'CjwKCAiA-click-id',
+    fbclid: 'IwAR-click-id',
+    $session_id: 'abc',
+  })
+  for (const k of ['utm_source', 'utm_campaign', 'gclid', 'fbclid']) {
+    assert.strictEqual(out[k], null, `${k} reached the vendor`)
+  }
+  assert.strictEqual(out.$current_url, 'https://game.example/')
+  // The honest half, again: the SDK's own bookkeeping must survive, or nothing works.
+  assert.strictEqual(out.$session_id, 'abc')
+})
+await ok('a campaign key absent from the payload is not invented', () => {
+  // Nulling `key in out` only — never adding keys — so an ordinary event does not grow twenty
+  // empty properties on every capture.
+  const out = scrubUrlProperties({ $session_id: 'abc' })
+  assert.deepStrictEqual(Object.keys(out), ['$session_id'])
+})
 await ok('an unparseable URL is still cut at the first ? or #', () => {
   assert.strictEqual(stripUrlDetail('not a url?secret=1'), 'not a url')
   assert.strictEqual(stripUrlDetail('android-app://x#frag'), 'android-app://x')

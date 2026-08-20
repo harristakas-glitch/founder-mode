@@ -130,8 +130,49 @@ export function scrubUrlProperties(properties: Record<string, unknown>): Record<
     if (typeof v !== 'string' || v.length === 0) continue
     out[key] = stripUrlDetail(v)
   }
+  for (const key of CAMPAIGN_PROPERTIES) if (key in out) out[key] = null
   return out
 }
+
+/**
+ * Campaign parameters, dropped — found by reading a real payload rather than by reasoning.
+ *
+ * Stripping the query string off `$current_url` is NOT enough on its own. posthog-js lifts a fixed
+ * list of campaign keys out of `location.search` into their own top-level properties BEFORE
+ * `sanitize_properties` sees the URL, so a visit to `?utm_source=newsletter` arrived at PostHog
+ * carrying `utm_source: 'newsletter'` even though `$current_url` had been cut back to the origin.
+ *
+ * Nothing personal was escaping: the list is fixed, and an `?email=` or `?token=` in the same URL
+ * was correctly dropped, because those are not campaign keys. But seven properties were reaching
+ * the vendor that are not in ANALYTICS_PROPERTIES, which makes the allowlist above a partial
+ * control while describing itself as a total one — and `gclid`/`fbclid` are ad-network click ids,
+ * which are closer to identifiers than to attribution.
+ *
+ * This game runs no campaigns and buys no ads, so every one of these is surface with no consumer.
+ * If that ever changes, deleting a line here is the deliberate diff that turns one back on.
+ */
+const CAMPAIGN_PROPERTIES = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+  'gclid',
+  'gad_source',
+  'fbclid',
+  'msclkid',
+  'twclid',
+  'li_fat_id',
+  'igshid',
+  'ttclid',
+  'rdt_cid',
+  'epik',
+  'qclid',
+  'sccid',
+  'irclid',
+  'wbraid',
+  'gbraid',
+] as const
 
 /** `https://host/path?q=secret#frag` → `https://host/path`. Anything unparseable is cut at the ?. */
 export function stripUrlDetail(raw: string): string {

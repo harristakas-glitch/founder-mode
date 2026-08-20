@@ -117,6 +117,39 @@ only allowlisted scalars come out.
 
 ---
 
+#### The campaign-parameter gap, found by reading a real payload
+
+Stripping the query string off `$current_url` is **not sufficient on its own**, and this was found
+by loading the built app at
+
+```
+?utm_source=newsletter&utm_campaign=launch&gclid=CLICKID123&email=…&token=secret123#deeplink
+```
+
+and decompressing what posthog-js actually put on the wire. `$current_url` was correctly cut back to
+the origin, and the `email`, `token` and fragment were nowhere — but posthog-js lifts a fixed list of
+campaign keys out of `location.search` into their own top-level properties *before*
+`sanitize_properties` sees anything, so `utm_source: 'newsletter'` was shipping.
+
+Nothing personal was escaping — the list is fixed, and arbitrary query parameters are not on it —
+but properties outside `ANALYTICS_PROPERTIES` were reaching the vendor, which made the allowlist a
+partial control describing itself as a total one. `CAMPAIGN_PROPERTIES` in `src/analytics/props.ts`
+now nulls them. The game runs no campaigns and buys no ads, so each was surface with no consumer;
+`gclid`/`fbclid` in particular are ad-network click ids, closer to identifiers than to attribution.
+
+`test/analytics.test.ts` §3 carries the regression test. If a real campaign ever runs, deleting a
+line from that list is the deliberate diff that turns one back on.
+
+**What is actually on the wire**, decompressed from a live session — the complete set of non-null
+properties that are not posthog's own `$`-prefixed bookkeeping:
+
+```
+distinct_id  mode  format  sector  scenario  career  week  screen
+stage  employees  users  cash  revenue  pmf  pivots  tokenised  trigger
+```
+
+An anonymous UUID and the state of a simulated company. No company name, no email, no URL detail.
+
 ## The consent model
 
 Three states. The record lives under its **own** localStorage key, `fm-analytics-consent-v1`, never
