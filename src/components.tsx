@@ -47,7 +47,7 @@ export function Ticker({ value, format }: { value: number; format: (n: number) =
 // ---------- buttons ----------
 
 const BTN_VARIANTS = {
-  default: 'border border-line bg-surface2 text-ink hover:border-line2 hover:bg-surface2/70',
+  default: 'border border-line bg-surface2 text-ink hover:border-line2 hover:bg-surface2',
   primary: 'bg-accent text-bg shadow-[var(--elev-2)] hover:brightness-110',
   good: 'bg-good text-bg shadow-[var(--elev-2)] hover:brightness-110',
   danger: 'border border-line bg-surface2 text-ink hover:border-bad/70 hover:text-bad',
@@ -91,7 +91,7 @@ export function Td({ children, right, className = '' }: { children?: ReactNode; 
 
 // One card recipe for the whole game — plane 1 of four (docs/ui-audit-2026-08.md §1.1).
 //
-// `bg-surface` is OPAQUE and must stay that way. It was `bg-surface/80` over a fixed page gradient,
+// `bg-surface` is OPAQUE and must stay that way. It was `bg-surface` over a fixed page gradient,
 // which is what made the same card read as raised at one end of the screen and sunken at the other.
 // A card whose apparent depth depends on where it scrolled to is not an elevation ramp.
 //
@@ -105,8 +105,30 @@ export function Td({ children, right, className = '' }: { children?: ReactNode; 
 // be visibly tighter than its parent or the nesting disappears.
 const CARD = 'rounded-[14px] border border-line bg-surface shadow-[var(--elev-2)]'
 
-/** Plane 2 — a box INSIDE a card. Exported so screens stop inventing their own nested recipe. */
+/**
+ * THE PLANE RULE. Four surfaces, one job each, and a thing belongs to exactly one of them.
+ *
+ *   bg        L*  3.1   the page. Nothing lives here; things sit ON it.
+ *   bg2       L*  5.6   CHROME — topbar, sidebar, bottom tab bar. Frames content, is not content.
+ *   surface   L*  8.4   plane 1 — the card. `CARD` / <Panel>.
+ *   surface2  L* 14.2   plane 2 — a box INSIDE a card. `NESTED`.
+ *   surface3  L* 20.5   plane 3 — a thing on top of THAT: popovers, the selected row, a sheet.
+ *
+ * Two invariants keep it standing, and the audit's own warning was that without a written rule
+ * this degenerates back into soup within a month:
+ *
+ *   1. NO SURFACE IS SEMI-TRANSPARENT. `bg-surface` over a page that varies is what made the
+ *      old ramp invert across the viewport. A translucent plane is not a plane — it is whatever
+ *      happens to be behind it. The ONE exception is a modal scrim (`bg-black/60`), which is not a
+ *      plane at all: it is a filter over everything, and it is supposed to take its colour from
+ *      what it covers.
+ *   2. NEVER SKIP A STEP, AND NEVER REPEAT ONE. A nested box on `surface` is invisible; a nested
+ *      box on `surface3` inside a card on `surface` reads as floating loose. Adjacent only.
+ */
 export const NESTED = 'rounded-[10px] border border-line/70 bg-surface2'
+
+/** Plane 3 — on top of a nested box: a popover, a selected row, the sheet over a screen. */
+export const RAISED = 'rounded-[10px] border border-line2 bg-surface3'
 
 export function Panel({ title, action, children, className = '' }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -523,7 +545,7 @@ export function LineChart({
           )}
           {hi !== null && (
             <div
-              className="pointer-events-none absolute top-0 z-10 rounded-lg border border-line bg-bg2/95 px-2 py-1 text-[11px] shadow-[var(--elev-3)] tnum"
+              className="pointer-events-none absolute top-0 z-10 rounded-lg border border-line bg-surface2 px-2 py-1 text-[11px] shadow-[var(--elev-3)] tnum"
               style={{ left: `${p * 100}%`, transform: `translateX(${-p * 100}%)` }}
             >
               <span className="text-mut">wk {startWeek + hi}</span> <b>{formatY(data[hi])}</b>

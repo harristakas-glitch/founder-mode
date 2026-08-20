@@ -111,7 +111,7 @@ function Step({ n, title, hint, children }: { n: number; title: string; hint?: R
 }
 
 const inputCls =
-  'w-full min-w-0 rounded-xl border border-line bg-surface/80 px-4 py-3 text-[15px] transition-colors placeholder:text-mut/50 focus:border-[var(--ha)]'
+  'w-full min-w-0 rounded-xl border border-line bg-surface px-4 py-3 text-[15px] transition-colors placeholder:text-mut/50 focus:border-[var(--ha)]'
 
 function AchievementGallery() {
   const earned = earnedAchievements()
@@ -129,7 +129,7 @@ function AchievementGallery() {
               key={a.id}
               title={`${a.name} — ${has ? a.desc : '???'}`}
               className={`cursor-help rounded-lg border px-2 py-1 text-[12px] font-semibold ${
-                has ? 'border-[var(--ha2)]/50 bg-[var(--ha2)]/10 text-ink' : 'border-line bg-surface/60 opacity-35 grayscale'
+                has ? 'border-[var(--ha2)]/50 bg-[var(--ha2)]/10 text-ink' : 'border-line bg-surface opacity-35 grayscale'
               }`}
             >
               {a.emoji} {has ? a.name : '·····'}
@@ -149,7 +149,7 @@ function HallOfFame() {
       <div className={`${eyebrow} mb-2 flex items-center gap-1.5`}>
         <Trophy size={12} /> Hall of fame — your best runs
       </div>
-      <div className="rounded-xl border border-line/70 bg-surface/50 px-3.5">
+      <div className="rounded-xl border border-line/70 bg-surface px-3.5">
         {hall.slice(0, 5).map((r, i) => (
           <div key={i} className="flex items-center justify-between gap-3 border-b border-line/40 py-2 text-[13px] last:border-b-0">
             <span className="min-w-0 truncate">
@@ -175,7 +175,7 @@ function AuthCorner() {
 
   if (authUser) {
     return (
-      <div className="flex items-center gap-2 rounded-full border border-line bg-surface/80 px-1.5 py-1 backdrop-blur">
+      <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-1.5 py-1 backdrop-blur">
         {authUser.avatar ? (
           <img src={authUser.avatar} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
         ) : (
@@ -196,7 +196,7 @@ function AuthCorner() {
         {(['google', 'twitter'] as const).map((p) => (
           <button
             key={p}
-            className="flex items-center gap-1.5 rounded-full border border-line bg-surface/70 px-3 py-1.5 text-[12px] font-semibold text-mut backdrop-blur transition-colors hover:border-[var(--ha)] hover:text-ink"
+            className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-semibold text-mut backdrop-blur transition-colors hover:border-[var(--ha)] hover:text-ink"
             onClick={async () => setErr(await signIn(p))}
           >
             <LogIn size={12} /> {p === 'google' ? 'Google' : '𝕏'}
@@ -260,7 +260,7 @@ export function NewGame() {
           {experience ? (
             <div className="flex flex-wrap items-center gap-2.5">
               <button
-                className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-line bg-surface/60 px-3 text-[12.5px] font-semibold text-mut transition-colors hover:border-line2 hover:text-ink"
+                className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold text-mut transition-colors hover:border-line2 hover:text-ink"
                 onClick={() => setExperience(null)}
               >
                 <ArrowLeft size={14} /> All experiences
@@ -364,7 +364,7 @@ export function NewGame() {
                 setExperience('quick')
                 setFormat('daily_challenge')
               }}
-              className="home-in mt-3 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-line bg-surface/50 px-4 py-3.5 text-left transition-colors hover:border-[var(--ha)]/60 hover:bg-surface2/50"
+              className="home-in mt-3 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-line bg-surface px-4 py-3.5 text-left transition-colors hover:border-[var(--ha)]/60 hover:bg-surface2"
               style={vars({ '--d': '340ms' })}
             >
               <span className="flex items-center gap-3">
@@ -520,7 +520,7 @@ export function NewGame() {
                 {/* sticky, so the way into the game stays on screen however far down
                     the option list the player has scrolled */}
                 <div className="sticky bottom-3 z-20 mt-8">
-                  <div className="flex items-center gap-3 rounded-2xl border border-[var(--ha)]/25 bg-bg2/80 p-2 shadow-[var(--elev-3)] backdrop-blur-md">
+                  <div className="flex items-center gap-3 rounded-2xl border border-[var(--ha)]/25 bg-surface2 p-2 shadow-[var(--elev-3)] backdrop-blur-md">
                     <div className="ml-2 hidden min-w-0 flex-1 text-[12.5px] text-mut sm:block">
                       <b className="text-ink">{name.trim() || 'Untitled Inc.'}</b> · {sectorById(activeSector).name} ·{' '}
                       {founder === 'technical' ? 'Technical' : 'Business'} founder
@@ -550,7 +550,7 @@ export function NewGame() {
             {/* ---------- Arena ---------- */}
             {experience === 'arena' && (
               <Step n={2} title="Open a room" hint="or join one with a friend's code">
-                <div className="rounded-2xl border border-line bg-surface/60 p-4">
+                <div className="rounded-2xl border border-line bg-surface p-4">
                   {!onlineConfigured ? (
                     <div className="text-[13px] leading-relaxed text-mut">
                       <b className="text-warn">Online play isn&apos;t configured yet.</b> It needs a free Supabase project: create one

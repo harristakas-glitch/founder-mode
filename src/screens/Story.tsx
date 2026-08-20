@@ -97,7 +97,7 @@ export function Story() {
               </div>
               {/* the autopsy rides with the final chapter, in the ending's own words */}
               {ending && ci === chapters.length - 1 && ending.detail && (
-                <p className="mt-3 rounded-xl border border-line bg-surface2/60 px-4 py-3 text-[13px] leading-relaxed text-mut">
+                <p className="mt-3 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-mut">
                   <b className="text-ink">Autopsy:</b> {ending.detail}
                 </p>
               )}

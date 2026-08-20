@@ -167,7 +167,7 @@ export function Market() {
               <div
                 key={r.id}
                 className={`rounded-xl border px-3.5 py-3 ${
-                  r.you ? 'border-accent/40 bg-accent/10' : !r.alive ? 'border-line/60 opacity-40' : 'border-line/60 bg-surface2/40'
+                  r.you ? 'border-accent/40 bg-accent/10' : !r.alive ? 'border-line/60 opacity-40' : 'border-line/60 bg-surface2'
                 }`}
               >
                 <div className="flex items-baseline justify-between gap-3">
@@ -342,13 +342,13 @@ function PvpOps() {
 
   return (
     <div className="mt-3.5">
-      <Panel title="⚔️ Dirty tricks — hit the other founders">
+      <Panel title="Dirty tricks — hit the other founders">
         <div className="mb-2 text-xs leading-relaxed text-mut">
           This market has one pot of users and no referee. Each operation costs cash, drains your energy, and puts your ops team on a
           5-week cooldown — and everyone in the room will know it was you. Costs rise with your stage: a bigger company swings a bigger,
           pricier bat.
         </div>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2/50 px-3 py-2.5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2 px-3 py-2.5">
           <span className="text-[13px]">
             🛡 <b>Crisis retainer</b>{' '}
             <span className="text-mut">
@@ -416,7 +416,7 @@ function RivalOps() {
 
   return (
     <div className="mt-3.5">
-      <Panel title="⚔️ Competitive response">
+      <Panel title="Competitive response">
         <div className="mb-2 text-xs leading-relaxed text-mut">
           Rivals in this market act on what they can see: how much of the market they hold, how fast you are growing, who out-raised
           whom. A rival that turns on you is flagged <b>Hostile</b> or <b>Cornered</b> in the table above a full week before their first
@@ -432,7 +432,7 @@ function RivalOps() {
               .join(' ')}
           </div>
         )}
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2/50 px-3 py-2.5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface2 px-3 py-2.5">
           <span className="text-[13px]">
             🛡 <b>Crisis retainer</b>{' '}
             <span className="text-mut">— silently deflects EVERY attack on you for {SHIELD_WEEKS} weeks. Your rivals can&apos;t see it.</span>

@@ -37,7 +37,7 @@ function PitchPanel() {
         </div>
         <div className="grid gap-2.5 md:grid-cols-3">
           {options.map((o) => (
-            <div key={o.id} className="flex flex-col rounded-xl border border-line bg-surface2/50 p-3">
+            <div key={o.id} className="flex flex-col rounded-xl border border-line bg-surface2 p-3">
               <div className="flex items-center justify-between">
                 <b className="text-[14px]">{o.name}</b>
                 <span className={`text-[13px] font-bold tnum ${o.p >= 0.6 ? 'text-good' : o.p >= 0.4 ? 'text-warn' : 'text-bad'}`}>

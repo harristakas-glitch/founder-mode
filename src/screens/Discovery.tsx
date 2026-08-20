@@ -64,7 +64,7 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
           const b = beliefs[m]
           const band = beliefBand(b)
           return (
-            <div key={m} className="rounded-lg border border-line/60 bg-surface2/40 px-2.5 py-2">
+            <div key={m} className="rounded-lg border border-line/60 bg-surface2 px-2.5 py-2">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[12.5px] font-semibold">{METRIC_LABEL[m]}</span>
                 <span className="text-[12.5px] font-bold">{band.label}</span>
@@ -130,7 +130,7 @@ export function Discovery() {
         <PmfBreakdown />
       </div>
 
-      <div className="mb-3.5 rounded-2xl border border-line/70 bg-surface/60 px-4 py-3 text-[13px] leading-relaxed">
+      <div className="mb-3.5 rounded-2xl border border-line/70 bg-surface px-4 py-3 text-[13px] leading-relaxed">
         {PMF_CAUSAL_CHAIN}
       </div>
 
@@ -242,7 +242,7 @@ export function Discovery() {
           )}
 
           {suggestion ? (
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface2/50 px-3 py-2 text-[12.5px]">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface2 px-3 py-2 text-[12.5px]">
               <span className="min-w-0 flex-1">
                 <b>
                   Worth answering next: {experimentDef(suggestion.type).name} — {segmentDef(game.sector, suggestion.segmentId).name}
@@ -285,7 +285,7 @@ export function Discovery() {
             ))}
           </div>
 
-          <div className="mb-2.5 rounded-lg border border-line/60 bg-surface2/40 px-3 py-2 text-[12px] leading-relaxed text-mut">
+          <div className="mb-2.5 rounded-lg border border-line/60 bg-surface2 px-3 py-2 text-[12px] leading-relaxed text-mut">
             <b className="text-ink">What research does, exactly.</b> It moves what you <i>believe</i> about a segment — never what the
             segment <i>is</i>, and never PMF on its own. PMF is scored on customers who stay. Research is how you find out where to aim
             before you spend a quarter building for the wrong people, and below {PMF_CUSTOMER_FLOOR} customers it is the only thing that

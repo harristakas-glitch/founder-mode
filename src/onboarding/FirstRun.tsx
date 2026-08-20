@@ -56,7 +56,7 @@ export function FirstRunBriefingNote({ mode }: { mode: 'quick' | 'career' | 'are
   if (!first || mode === 'arena') return null
   return (
     <>
-      <div className="mt-5 rounded-2xl border border-line/70 bg-surface/50 px-4 py-3 text-[12.5px] leading-relaxed text-mut">
+      <div className="mt-5 rounded-2xl border border-line/70 bg-surface px-4 py-3 text-[12.5px] leading-relaxed text-mut">
         <b className="text-ink">What the market choice actually decides.</b> Revenue per customer, how much word of mouth you get
         for free, and how fast customers leave — the three pips on each card. They are read off the simulation, not invented.{' '}
         <b className="text-ink">B2B SaaS</b> is the kindest of the six to learn in; <b className="text-ink">AI/ML Infra</b> pays the

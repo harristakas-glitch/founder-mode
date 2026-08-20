@@ -85,7 +85,7 @@ export function Lobby() {
                   </span>
                 </div>
               ) : (
-                <div key={p.id} className="flex items-center justify-between rounded-xl border border-line bg-surface2/60 px-4 py-2.5">
+                <div key={p.id} className="flex items-center justify-between rounded-xl border border-line bg-surface2 px-4 py-2.5">
                   <b>{p.company}</b>
                   <span className="text-xs text-mut">
                     {p.founder === 'technical' ? 'Technical' : 'Business'}
@@ -160,7 +160,7 @@ export function Lobby() {
             </button>
           </>
         ) : (
-          <div className="mt-6 rounded-xl border border-line bg-surface2/50 px-4 py-3 text-center text-[14px] text-mut">
+          <div className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-center text-[14px] text-mut">
             <span className="animate-pulse">Waiting for the host to start the match…</span>
             <div className="mt-1.5 text-xs">The host picks the market and the match rules — battle-mode by default: PvP on, story systems off.</div>
           </div>

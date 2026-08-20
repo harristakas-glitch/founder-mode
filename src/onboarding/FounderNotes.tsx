@@ -34,7 +34,7 @@ function Note() {
     <div
       role="note"
       aria-live="polite"
-      className="rise-in mb-2.5 rounded-2xl border border-line/70 bg-surface/50 pl-0.5 md:mb-3.5"
+      className="rise-in mb-2.5 rounded-2xl border border-line/70 bg-surface pl-0.5 md:mb-3.5"
     >
       <div className="flex items-start gap-2.5 rounded-2xl border-l-[3px] border-l-accent2/60 px-3 py-2.5 md:gap-3 md:px-4 md:py-3">
         <PenLine size={15} className="mt-[3px] shrink-0 text-accent2/80" aria-hidden="true" />

@@ -62,7 +62,7 @@ function TermRow({ t, highlight }: { t: Term; highlight: boolean }) {
       ref={ref}
       id={`fg-${t.id}`}
       className={`rounded-xl border px-3.5 py-2.5 ${
-        highlight ? 'border-accent/60 bg-accent/[0.07]' : 'border-line/60 bg-surface/50'
+        highlight ? 'border-accent/60 bg-accent/[0.07]' : 'border-line/60 bg-surface'
       }`}
     >
       <div className="text-[13.5px] font-bold">{t.name}</div>
@@ -112,7 +112,7 @@ export function FieldGuide() {
         role="dialog"
         aria-modal="true"
         aria-label="Field guide"
-        className="relative flex max-h-full w-full max-w-[760px] flex-col overflow-hidden rounded-2xl border border-line bg-bg2 shadow-[var(--elev-3)]"
+        className="relative flex max-h-full w-full max-w-[760px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--elev-3)]"
       >
         <div className="flex items-center gap-3 border-b border-line px-4 py-3">
           <BookOpen size={17} className="shrink-0 text-accent" />
@@ -128,7 +128,7 @@ export function FieldGuide() {
         </div>
 
         <div className="border-b border-line px-4 py-2.5">
-          <label className="flex items-center gap-2 rounded-xl border border-line bg-surface/70 px-3 py-2 focus-within:border-accent">
+          <label className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 focus-within:border-accent">
             <Search size={14} className="shrink-0 text-mut" />
             <input
               value={q}

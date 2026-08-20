@@ -676,7 +676,7 @@ export function PmfExplainer() {
   const blocker = pmfBlocker(target)
 
   return (
-    <div className="mt-3.5 rounded-2xl border border-line/70 bg-surface/60 px-4 py-3">
+    <div className="mt-3.5 rounded-2xl border border-line/70 bg-surface px-4 py-3">
       <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-mut">Why PMF is {Math.round(game.pmf)}</div>
       <p className="mt-1.5 text-[13px] leading-relaxed">{PMF_CAUSAL_CHAIN}</p>
       <p className="mt-1.5 text-[13px] leading-relaxed text-mut">
@@ -829,7 +829,7 @@ function Answers({ room }: { room: StructuredInteraction }) {
         .map((o) => (
           <button
             key={o.id}
-            className="block w-full rounded-xl border border-line2 px-3 py-2 text-left transition-colors hover:border-accent hover:bg-surface2/60"
+            className="block w-full rounded-xl border border-line2 px-3 py-2 text-left transition-colors hover:border-accent hover:bg-surface2"
             onClick={() => answer(room.id, o.id)}
           >
             <span className="text-[13px] font-semibold">{o.label}</span>
@@ -843,7 +843,7 @@ function Answers({ room }: { room: StructuredInteraction }) {
 function Outcome({ room }: { room: StructuredInteraction }) {
   if (!room.outcome) return null
   return (
-    <div className="mt-2.5 rounded-lg border border-line/60 bg-surface2/40 px-3 py-2 text-[12.5px] leading-snug">{room.outcome}</div>
+    <div className="mt-2.5 rounded-lg border border-line/60 bg-surface2 px-3 py-2 text-[12.5px] leading-snug">{room.outcome}</div>
   )
 }
 

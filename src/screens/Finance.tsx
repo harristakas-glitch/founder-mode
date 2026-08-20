@@ -150,7 +150,7 @@ function UpcomingPayments() {
           </div>
         ))}
         {due === 0 && potential === 0 && <div className="py-1 text-[13px] text-mut">Nothing committed right now.</div>}
-        <div className="mt-2.5 flex justify-between rounded-lg bg-surface2/60 px-3 py-2 text-[13px]">
+        <div className="mt-2.5 flex justify-between rounded-lg bg-surface2 px-3 py-2 text-[13px]">
           <span>
             Recommended cash buffer <span className="text-mut">— committed fees + a worst-case event (grows with your user count)</span>
           </span>

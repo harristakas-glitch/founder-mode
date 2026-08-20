@@ -174,7 +174,7 @@ function AverageWithSpread({ points, dots }: { points: Point[]; dots: { week: nu
           })}
           {near && (
             <div
-              className="pointer-events-none absolute top-1 rounded-lg border border-line bg-bg2/95 px-2 py-1 text-[11px] whitespace-nowrap"
+              className="pointer-events-none absolute top-1 rounded-lg border border-line bg-surface2 px-2 py-1 text-[11px] whitespace-nowrap"
               style={{ left: `${X(near.week)}%`, transform: `translateX(-${X(near.week)}%)` }}
             >
               <span className="text-mut">wk {near.week}</span>{' '}

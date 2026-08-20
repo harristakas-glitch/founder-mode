@@ -16,7 +16,13 @@
      far down the dark end because its +0.05 flare term makes every near-black pair score ~1.1:1.
      ΔL* >= 4 is a step a player can see on a laptop in a lit room; ΔL* <= 2 is a rounding error. */
   --color-bg: #080b14; /* L* 3.1  — the page. Nothing else lives here. */
-  --color-bg2: #0d1220; /* L* 5.6  — chrome: topbar, sidebar, tab bar */
+  /* NOTE: there is deliberately no separate "chrome" plane. A topbar or sidebar sits BESIDE the
+     page rather than on top of it, and you cannot go meaningfully darker than L* 3.1 to make a
+     step downward — the old #0d1220 landed at ΔL* 2.54, which by the rule above is a rounding
+     error, not a plane. Chrome is therefore the page itself, separated by a hairline, and the four
+     steps below are the only ones that exist. `bg2` is kept only because a few gradients and
+     `theme.ts` still name it. */
+  --color-bg2: #0d1220;
   --color-surface: #111828; /* L* 8.4  — plane 1, ΔL* 5.3: the card */
   --color-surface2: #1b2437; /* L* 14.2 — plane 2, ΔL* 5.9: nested inside a card */
   --color-surface3: #27314a; /* L* 20.5 — plane 3, ΔL* 6.3: the thing on top of that */

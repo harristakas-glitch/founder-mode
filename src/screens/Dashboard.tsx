@@ -38,7 +38,7 @@ function WeekDigest() {
   ].filter((i) => i.delta !== 0)
   if (items.length === 0) return null
   return (
-    <div className="mb-3.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-line/60 bg-surface/60 px-4 py-2.5">
+    <div className="mb-3.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-line/60 bg-surface px-4 py-2.5">
       <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-mut">This week</span>
       {items.map((i) => (
         <span key={i.label} className="whitespace-nowrap text-[13px]">
@@ -367,7 +367,7 @@ export function Dashboard() {
           {recent.map((m) => (
             <button
               key={m.id}
-              className="-mx-2 block w-[calc(100%+1rem)] rounded-lg border-b border-line/40 px-2 py-2 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-surface2/60"
+              className="-mx-2 block w-[calc(100%+1rem)] rounded-lg border-b border-line/40 px-2 py-2 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-surface2"
               onClick={() => setScreen('inbox')}
             >
               <div className="text-[11px] text-mut tnum">Week {m.week}</div>

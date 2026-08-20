@@ -44,15 +44,26 @@ export function Inbox() {
           return (
             <div
               key={m.id}
-              className={`rounded-r-xl border border-l-[3px] border-line/60 p-3.5 transition-colors duration-[120ms] ${rail} ${
-                // an item that needs you is lit; everything already handled recedes
-                needsYou ? 'bg-warn/[0.06]' : 'bg-surface/70'
+              className={`rounded-r-[10px] border border-l-[3px] p-4 transition-colors duration-[120ms] ${rail} ${
+                // AUDIT FINDING 5. The comment used to say an item that needs you "is lit", and the
+                // fill was `bg-warn/[0.06]` — ΔL* 1.21 from a handled row, at or below the smallest
+                // difference an eye can detect. The whole "this blocks your week" signal was riding
+                // on a 3px border while the code claimed otherwise.
+                //
+                // It is now a real plane step and a real amber: the blocking row sits a full step
+                // ABOVE the handled ones and carries a warm border, so it separates by lightness,
+                // by hue and by edge at once. A handled row drops to plane 2 and recedes, which is
+                // the other half of the contrast — the urgent row cannot look raised unless
+                // something is below it.
+                needsYou
+                  ? 'border-warn/45 bg-[color-mix(in_srgb,var(--color-warn)_11%,var(--color-surface3))] shadow-[var(--elev-2)]'
+                  : 'border-line/60 bg-surface2'
               }`}
             >
               <div className="flex items-center gap-2 text-[11px] text-mut">
                 <span className="tnum">Week {m.week}</span>
                 {needsYou && (
-                  <span className="rounded-md bg-warn/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-warn">
+                  <span className="rounded-md bg-warn px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-bg">
                     Decision
                   </span>
                 )}

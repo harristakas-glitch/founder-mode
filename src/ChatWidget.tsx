@@ -42,7 +42,7 @@ export function ChatWidget() {
   }
 
   return (
-    <div className="fixed right-4 bottom-20 z-40 flex h-[380px] w-[300px] flex-col overflow-hidden rounded-2xl border border-line bg-bg2/98 shadow-[var(--elev-3)] backdrop-blur md:bottom-4">
+    <div className="fixed right-4 bottom-20 z-40 flex h-[380px] w-[300px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--elev-3)] backdrop-blur md:bottom-4">
       <div className="flex items-center justify-between border-b border-line/60 px-3 py-2">
         <b className="text-[13px]">Room {online.code} — chat</b>
         <button className="rounded p-1 text-mut hover:text-ink" onClick={() => setOpen(false)}>

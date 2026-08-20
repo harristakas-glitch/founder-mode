@@ -210,7 +210,7 @@ export function DecisionLens({ message }: { message: Message }) {
   const perOption = message.choices.map((c) => axesOf(c.effects, false))
   if (perOption.every((a) => a.length === 0)) return null
   return (
-    <div className="mt-2 rounded-xl border border-line/50 bg-surface2/30 px-3 py-2">
+    <div className="mt-2 rounded-xl border border-line/50 bg-surface2 px-3 py-2">
       <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">What is at stake</div>
       <div className="mt-1 space-y-1">
         {message.choices.map((c, i) => (

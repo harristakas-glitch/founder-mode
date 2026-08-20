@@ -274,7 +274,7 @@ export default function App() {
             }}
             aria-current={active ? 'page' : undefined}
             className={`relative flex min-h-[44px] w-full items-center gap-2.5 rounded-xl py-2 pr-3 pl-4 text-left text-[14px] transition-colors duration-[120ms] md:min-h-[36px] ${
-              active ? 'bg-accent/12 font-semibold text-ink' : 'text-mut hover:bg-surface2/70 hover:text-ink'
+              active ? 'bg-accent/12 font-semibold text-ink' : 'text-mut hover:bg-surface2 hover:text-ink'
             }`}
           >
             {/* a quiet accent rail marks the place; the accent itself stays reserved for actions */}
@@ -407,7 +407,7 @@ export default function App() {
   return (
     <div className="flex h-[100dvh] overflow-hidden">
       {/* sidebar — desktop */}
-      <aside className="hidden w-[230px] shrink-0 flex-col border-r border-line/60 bg-gradient-to-b from-bg2 to-bg md:flex">
+      <aside className="hidden w-[230px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
         <div className="border-b border-line/60 px-4 py-4">
           <div className="flex items-center gap-2.5">
             <Monogram name={game.companyName} />
@@ -507,7 +507,7 @@ export default function App() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setNavOpen(false)} />
           {/* A bottom sheet, not a left drawer: it opens from the bar the player just touched, and
               its contents land under the thumb instead of at the far top-left of the screen. */}
-          <aside className="home-in pad-bottom-safe absolute inset-x-0 bottom-0 flex max-h-[80%] flex-col rounded-t-2xl border-t border-line bg-bg2 shadow-[var(--elev-3)]">
+          <aside className="home-in pad-bottom-safe absolute inset-x-0 bottom-0 flex max-h-[80%] flex-col rounded-t-[18px] border-t border-line2 bg-surface shadow-[var(--elev-3)]">
             <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-line2" />
             <div className="flex items-center justify-between border-b border-line/60 px-4 py-3">
               <div>
@@ -535,7 +535,7 @@ export default function App() {
         {/* topbar */}
         {/* `h-[60px]` is the BAR's height; the notch pad is added on top of it rather than eaten
             out of it, or the controls sit half under the Dynamic Island on a modern iPhone. */}
-        <header className="pad-top-safe inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg2/70 px-2 backdrop-blur-md md:gap-4 md:px-5">
+        <header className="pad-top-safe inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg px-2 md:gap-4 md:px-5">
           <div className="flex h-[60px] min-w-0 flex-1 items-center gap-2 md:gap-4">
           {/* the metric rail scrolls if it must; the soft right edge is the
               affordance, so a value is never chopped off mid-word — desktop only,
@@ -662,7 +662,7 @@ export default function App() {
           <div className="inset-x-safe bg-gradient-to-t from-bg via-bg/95 to-transparent px-4 pt-6 pb-2">{advanceBtn}</div>
           <nav
             aria-label="Sections"
-            className="inset-x-safe pad-bottom-safe flex items-stretch border-t border-line/60 bg-bg2/95 backdrop-blur-md"
+            className="inset-x-safe pad-bottom-safe flex items-stretch border-t border-line/60 bg-bg"
           >
             {MOBILE_TABS.map((id) => {
               const item = NAV.find((n) => n.id === id)!
@@ -717,7 +717,7 @@ export default function App() {
       {/* week transition */}
       {weekFlash && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
-          <div className="week-sweep rounded-2xl border border-line/60 bg-bg2/90 px-10 py-6 text-center shadow-[var(--elev-3)] backdrop-blur">
+          <div className="week-sweep rounded-[14px] border border-line2 bg-surface3 px-10 py-6 text-center shadow-[var(--elev-3)]">
             <div className="text-3xl font-extrabold tracking-tight">Week {weekFlash}</div>
             <div className="mt-1 text-sm text-mut">{weekDate(weekFlash)}</div>
           </div>
@@ -728,7 +728,7 @@ export default function App() {
       {emotes.length > 0 && (
         <div className="pointer-events-none fixed top-16 left-1/2 z-[75] flex -translate-x-1/2 flex-col items-center gap-1.5">
           {emotes.map((e) => (
-            <div key={e.id} className="flash-in rounded-full border border-line bg-bg2/95 px-4 py-1.5 text-[14px] shadow-[var(--elev-3)]">
+            <div key={e.id} className="flash-in rounded-full border border-line2 bg-surface2 px-4 py-1.5 text-[14px] shadow-[var(--elev-3)]">
               <b>{e.from}</b> <span className="text-[18px]">{e.emoji}</span>
             </div>
           ))}
@@ -741,7 +741,7 @@ export default function App() {
       {online && link === 'reconnecting' && (
         <div
           role="status"
-          className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-full border border-warn/50 bg-bg2/95 px-4 py-2 text-[13px] font-semibold text-warn shadow-[var(--elev-2)] backdrop-blur"
+          className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-full border border-warn/50 bg-surface2 px-4 py-2 text-[13px] font-semibold text-warn shadow-[var(--elev-2)]"
         >
           <span className="mr-2 inline-block animate-pulse">⟳</span>
           Reconnecting to the room… your match is still running
@@ -750,7 +750,7 @@ export default function App() {
       {online && !matchOver && targetToBeat > 0 && !game.gameOver && (
         <div
           role="status"
-          className="fixed bottom-4 left-1/2 z-[65] -translate-x-1/2 rounded-full border border-warn/50 bg-bg2/95 px-4 py-2 text-[13px] font-semibold shadow-[var(--elev-2)] backdrop-blur"
+          className="fixed bottom-4 left-1/2 z-[65] -translate-x-1/2 rounded-full border border-warn/50 bg-surface2 px-4 py-2 text-[13px] font-semibold shadow-[var(--elev-2)]"
         >
           <span className="text-mut">Best exit so far</span> <b className="text-warn tnum">{money(targetToBeat)}</b>{' '}
           <span className="text-mut">— beat it or finish second</span>
@@ -769,7 +769,7 @@ function MobileStatsSheet({ onClose, children }: { onClose: () => void; children
   return (
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="All stats" className="fixed inset-0 z-40 md:hidden">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="rise-in absolute inset-x-0 top-0 border-b border-line bg-bg2 px-4 pt-3 pb-4 shadow-[var(--elev-3)]">
+      <div className="rise-in absolute inset-x-0 top-0 border-b border-line2 bg-surface px-4 pt-3 pb-4 shadow-[var(--elev-3)]">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-mut">This week&apos;s numbers</h3>
           <button
@@ -828,7 +828,7 @@ function SocialShareRow({ text }: { text: string }) {
       {targets.map((t) => (
         <button
           key={t.label}
-          className="rounded-lg border border-line bg-surface2/70 px-3.5 py-1.5 text-[13px] font-semibold text-mut transition-all hover:border-accent hover:text-ink active:scale-[0.97]"
+          className="rounded-lg border border-line bg-surface2 px-3.5 py-1.5 text-[13px] font-semibold text-mut transition-all hover:border-accent hover:text-ink active:scale-[0.97]"
           onClick={() => window.open(t.href, '_blank', 'noopener,width=640,height=560')}
         >
           {t.label}
@@ -901,7 +901,7 @@ function MatchOver({ onClose }: { onClose: () => void }) {
             <div
               key={p.id}
               className={`flex items-center justify-between rounded-xl border px-4 py-2.5 ${
-                i === 0 ? 'border-warn/60 bg-warn/10' : 'border-line bg-surface2/50'
+                i === 0 ? 'border-warn/60 bg-warn/10' : 'border-line bg-surface2'
               }`}
             >
               <span>
@@ -970,7 +970,7 @@ function TokenPostmortem() {
   const pct = (v: number) => `${Math.round(v * 100)}%`
 
   return (
-    <div className="mt-6 rounded-2xl border border-line bg-surface2/50 p-4 text-left">
+    <div className="mt-6 rounded-2xl border border-line bg-surface2 p-4 text-left">
       <div className="text-[11px] font-semibold tracking-wide text-mut uppercase">The token run</div>
 
       <div className="mt-2.5 text-[13px] leading-relaxed text-mut">
@@ -1077,7 +1077,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
               team, and the domain now redirects to a competitor.
             </p>
             {go.detail && (
-              <p className="mt-3 rounded-xl border border-line bg-surface2/60 px-4 py-3 text-left text-[13px] leading-relaxed text-mut">
+              <p className="mt-3 rounded-xl border border-line bg-surface2 px-4 py-3 text-left text-[13px] leading-relaxed text-mut">
                 <b className="text-ink">Autopsy:</b> {go.detail}
               </p>
             )}
@@ -1195,7 +1195,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
         )}
 
         {/* Brief §35: what you just played decides what you're offered next. */}
-        <div className="mt-5 rounded-xl border border-line/60 bg-surface2/40 px-4 py-3 text-left text-[13px] text-mut">
+        <div className="mt-5 rounded-xl border border-line/60 bg-surface2 px-4 py-3 text-left text-[13px] text-mut">
           {game.config?.format === 'daily_challenge' ? (
             <>Same world for everyone today — your score is on the board above. A new one lands tomorrow.</>
           ) : game.config?.format === 'scenario' ? (
