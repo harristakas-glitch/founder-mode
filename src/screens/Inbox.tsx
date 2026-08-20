@@ -52,15 +52,17 @@ export function StreamItem({ m }: { m: ReturnType<typeof useStore.getState>['gam
 }
 
 /**
- * The stream: the SETTLED record — recent past first, the rest one disclosure away.
+ * The stream: unresolved decisions first with their choices inline, then the settled record, the
+ * deep past one disclosure away.
  *
- * Unresolved decisions are deliberately NOT here. They render once, at the top of the HQ's
- * attention area, with their choices inline — the owner's play-testing found the same decision
- * card appearing twice on one screen (as an alarm up top and again here), and an alarm whose
- * button navigates to the screen you are already on. One fact, one card, actionable in place.
+ * The owner's rule (2026-08-20): inbox content renders in the inbox column and NOWHERE else — the
+ * HQ's attention area carries only the facts no message owns. That rule replaced an intermediate
+ * design where decisions rendered at the top of the attention area, which fixed a duplication and
+ * created a placement problem; this fixes both. One fact, one home, and the home is here.
  */
 export function InboxStream({ recent = 6 }: { recent?: number }) {
   const game = useStore((s) => s.game)!
+  const unresolved = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved)
   const settled = game.inbox.filter((m) => !(m.kind === 'choice' && !m.resolved))
   const shown = settled.slice(0, recent)
   // The history is unbounded (the engine trims nothing); the fold is capped so a 100-week run
@@ -78,6 +80,9 @@ export function InboxStream({ recent = 6 }: { recent?: number }) {
 
   return (
     <div className="max-w-[820px] space-y-2.5">
+      {unresolved.map((m) => (
+        <StreamItem key={m.id} m={m} />
+      ))}
       {shown.map((m) => (
         <StreamItem key={m.id} m={m} />
       ))}

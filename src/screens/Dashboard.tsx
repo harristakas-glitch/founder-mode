@@ -26,7 +26,7 @@ import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, we
 import { useState } from 'react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
 import { myId as myOnlineId } from '../net/online'
-import { InboxStream, StreamItem } from './Inbox'
+import { InboxStream } from './Inbox'
 import { useStore } from '../store'
 
 // ---------------------------------------------------------------------------------------------
@@ -116,15 +116,14 @@ function Hero() {
 function AttentionList() {
   const game = useStore((s) => s.game)!
   const setScreen = useStore((s) => s.setScreen)
-  // Blocking decisions render as their OWN cards, choices inline — the owner's play-testing found
-  // the same decision on screen twice (as an alarm here and again in the stream) with an alarm
-  // button that navigated to the screen the player was already on. One fact, one card, actionable
-  // where it is announced. The register still carries decision items for every other consumer;
-  // this renderer simply gives them the stream card instead of an alarm row.
-  const unresolved = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved)
+  // THE ATTENTION AREA IS NON-INBOX ONLY (owner rule, 2026-08-20): anything that lives in the
+  // inbox renders in the inbox column and nowhere else — the stream carries the decisions with
+  // their choices, unresolved-first, and this list carries the facts no message owns: runway, the
+  // covenant, the board, the person about to quit, the market acting on you. One fact, one home.
+  // The register still emits decision items for other consumers; this renderer skips them.
   const items = attentionRegister(game).filter((i) => !i.id.startsWith('decision:'))
 
-  if (items.length === 0 && unresolved.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="mb-4 rounded-[10px] border border-good/30 bg-surface px-4 py-2.5 text-[13px] text-mut">
         ✓ Nothing needs you. Good week to make a bet.
@@ -132,13 +131,6 @@ function AttentionList() {
     )
   }
 
-  const decisions = unresolved.length > 0 && (
-    <div className="mb-2 space-y-2">
-      {unresolved.map((m) => (
-        <StreamItem key={m.id} m={m} />
-      ))}
-    </div>
-  )
   const [top, ...rest] = items
   const shown = rest.slice(0, 2)
   const folded = rest.slice(2)
@@ -170,9 +162,6 @@ function AttentionList() {
 
   return (
     <div className="mb-4">
-      {decisions}
-      {items.length === 0 ? null : (
-      <>
       {/* The top item is the screen's second-loudest element after the hero — a full plane step
           above the rows below it, the same raised-vs-receded grammar the Inbox uses. */}
       <div
@@ -221,8 +210,6 @@ function AttentionList() {
             </div>
           ))}
         </details>
-      )}
-      </>
       )}
     </div>
   )
@@ -375,7 +362,10 @@ function ArenaStandings() {
 // The mobile stream peek — see the FEED comment at the call site.
 function StreamPeek() {
   const game = useStore((s) => s.game)!
-  const latest = game.inbox.filter((m) => !(m.kind === 'choice' && !m.resolved)).slice(0, 2)
+  // Unresolved decisions first — they are inbox content and the inbox column sits below the fold
+  // on a phone, so these two lines are what keep a blocking decision visible. Then the news.
+  const unresolved = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved)
+  const latest = unresolved.concat(game.inbox.filter((m) => !(m.kind === 'choice' && !m.resolved))).slice(0, 2)
   if (latest.length === 0) return null
   const more = game.inbox.length - latest.length
   return (
