@@ -89,19 +89,36 @@ export function Td({ children, right, className = '' }: { children?: ReactNode; 
 
 // ---------- surfaces ----------
 
-// One card recipe for the whole game: a lifted surface, a hairline, an ambient
-// shadow, and a 1px inner highlight along the top edge. No glass, no gradients —
-// depth comes from the elevation ramp so dense numbers stay on a flat backdrop.
-// Local to this module: `Panel` and `StatCard` are the only consumers. A screen that wants this
-// look should use `Panel`, not re-apply the class string.
-const CARD = 'rounded-2xl border border-line/70 bg-surface/80 shadow-[var(--elev-2)] ring-1 ring-inset ring-white/[0.03]'
+// One card recipe for the whole game — plane 1 of four (docs/ui-audit-2026-08.md §1.1).
+//
+// `bg-surface` is OPAQUE and must stay that way. It was `bg-surface/80` over a fixed page gradient,
+// which is what made the same card read as raised at one end of the screen and sunken at the other.
+// A card whose apparent depth depends on where it scrolled to is not an elevation ramp.
+//
+// The old recipe also carried `ring-1 ring-inset ring-white/[0.03]` under a comment describing "a
+// 1px inner highlight along the TOP edge". `ring` draws all four sides — the code did not do what
+// its own comment said, and a box outlined in white on every side reads as a selection state, not
+// as light. The real top highlight now lives in `--elev-2` as an `inset 0 1px 0`, which is the only
+// shape that puts light where light would actually fall.
+//
+// Radius is 14px, down from `rounded-2xl` (16px), with nested boxes at 10px: a nested corner has to
+// be visibly tighter than its parent or the nesting disappears.
+const CARD = 'rounded-[14px] border border-line bg-surface shadow-[var(--elev-2)]'
+
+/** Plane 2 — a box INSIDE a card. Exported so screens stop inventing their own nested recipe. */
+export const NESTED = 'rounded-[10px] border border-line/70 bg-surface2'
 
 export function Panel({ title, action, children, className = '' }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={`${CARD} p-4 ${className}`}>
+    <div className={`${CARD} p-5 ${className}`}>
       {title && (
-        <div className="mb-3 flex min-h-[16px] items-center justify-between gap-3">
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-mut">{title}</h3>
+        <div className="mb-3.5 flex min-h-[18px] items-center justify-between gap-3">
+          {/* 15px sentence case, not 11px UPPERCASE with letter-spacing. The old treatment was
+              designed for two-word labels and the game has titles like "Cohort triangle — % of each
+              group still here, N weeks after joining": 69 characters, tracked out, in grey, at
+              eleven pixels. Uppercase survives in exactly one place now — the metric label in
+              StatCard — because that is short by construction. */}
+          <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
           {action}
         </div>
       )}
@@ -154,15 +171,24 @@ export function StatCard({
 }) {
   // Label first, value second — same reading order as the topbar rail, so the eye
   // finds the metric by its name and only then parses the digits.
+  //
+  // The label is the ONE surviving uppercase treatment in the game. It earns it by being short by
+  // construction ("Cash", "Runway", "Users"); the 69-character tracked-out uppercase sentences that
+  // used to head every Panel do not, and are now sentence case at a readable size.
+  //
+  // The figure is 34px, up from 26px, and `font-bold` rather than `extrabold`. That is not a
+  // decoration: with 111 bold and 48 extrabold declarations against 2 normal ones, weight had
+  // stopped carrying any hierarchy at all, so the number now separates from its label by SIZE —
+  // 34 against 11 — which is a difference that survives being looked at quickly on a phone.
   return (
-    <div className={`${CARD} p-3.5 transition-colors duration-[120ms] hover:border-line2`}>
+    <div className={`${CARD} p-4 transition-colors duration-[120ms] hover:border-line2`}>
       <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">{label}</div>
-      <div className="mt-1 flex flex-wrap items-baseline gap-x-1 text-[26px] leading-[1.15] font-extrabold tracking-tight tnum">
+      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[34px] leading-[1.05] font-bold tracking-[-0.02em] tnum">
         {numeric !== undefined && format ? <Ticker value={numeric} format={format} /> : value}
         {trend !== undefined && <TrendBadge value={trend} format={trendFormat} />}
       </div>
       {delta && (
-        <div className={`mt-1.5 text-[12px] leading-snug ${tone === 'up' ? 'text-good' : tone === 'down' ? 'text-bad' : 'text-mut'}`}>
+        <div className={`mt-2 text-[13px] leading-snug ${tone === 'up' ? 'text-good' : tone === 'down' ? 'text-bad' : 'text-mut'}`}>
           {/* status colour never travels alone */}
           {tone === 'up' ? '▲ ' : tone === 'down' ? '▼ ' : ''}
           {delta}

@@ -1,21 +1,35 @@
 @import 'tailwindcss';
 
 @theme {
-  /* ---------- surfaces: a 5-step dark elevation ramp, no pure black ---------- */
-  --color-bg: #0a0e18;
-  --color-bg2: #0d1322;
-  --color-surface: #121a2c;
-  --color-surface2: #1a2338;
-  --color-line: #24304a;
-  --color-line2: #33405e; /* hover / emphasis hairline — 3:1 against surface */
-  --color-ink: #dce5f5;
-  --color-mut: #8593ab;
+  /* ---------- surfaces: FOUR planes, and every one of them visible ----------
+     Direction B ("Cockpit"), docs/ui-audit-2026-08.md §1.1. The old ramp had five names and two
+     visible steps, and worse, it INVERTED: cards were `bg-surface/80` — semi-transparent — over a
+     `background-attachment: fixed` radial gradient, so the same <Panel> composited +4.26 L* above
+     the page at the bottom-left of the screen and 2.72 L* BELOW it at the top-right. A card that
+     is raised or sunken depending on where it happens to sit, changing as you scroll.
+
+     Two rules now hold the ramp up, and breaking either one brings the soup back:
+       1. NO SURFACE IS SEMI-TRANSPARENT. An opaque plane cannot be re-ordered by what is behind it.
+       2. The page gradient is gone (see `body` below), so there is no "behind it" that varies.
+
+     Steps are measured in CIE L* — perceptual lightness — not WCAG contrast, which is useless this
+     far down the dark end because its +0.05 flare term makes every near-black pair score ~1.1:1.
+     ΔL* >= 4 is a step a player can see on a laptop in a lit room; ΔL* <= 2 is a rounding error. */
+  --color-bg: #080b14; /* L* 3.1  — the page. Nothing else lives here. */
+  --color-bg2: #0d1220; /* L* 5.6  — chrome: topbar, sidebar, tab bar */
+  --color-surface: #111828; /* L* 8.4  — plane 1, ΔL* 5.3: the card */
+  --color-surface2: #1b2437; /* L* 14.2 — plane 2, ΔL* 5.9: nested inside a card */
+  --color-surface3: #27314a; /* L* 20.5 — plane 3, ΔL* 6.3: the thing on top of that */
+  --color-line: #26304a; /* hairline on plane 1 */
+  --color-line2: #3a4665; /* hover / emphasis hairline */
+  --color-ink: #e8edf9; /* 15.1:1 on plane 1 */
+  --color-mut: #96a3bd; /* 7.0:1 — lifted from #8593ab, which read as *disabled* at 5.6:1 */
   --color-accent: #7c9aff;
   --color-accent2: #a78bfa;
   --color-chart: #6172f3; /* deep series color — validated for the dark chart surface */
   --color-good: #34d399;
   --color-bad: #f87171;
-  --color-warn: #fbbf24;
+  --color-warn: #ffc44d; /* 11.2:1 — the blocking-decision colour, so it has to carry */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
   /* ---------- motion: one vocabulary, all of it fast and interruptible ----------
@@ -32,11 +46,19 @@
   --dur-3: 240ms; /* enter, screen change */
   --e-out: cubic-bezier(0.2, 0.7, 0.3, 1);
 
-  /* elevation: dark UI reads depth from a lifted surface + a soft ambient shadow,
-     not from heavy drop shadows or blur */
-  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --elev-2: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-  --elev-3: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+  /* Elevation. The old values were pure black on a page already at L* 4.02, so `--elev-2`'s
+     DARKEST pixel landed at ΔL* -2.12 from the page behind it: there was functionally no shadow
+     anywhere in this product. Black shadows do not work on near-black backgrounds — that is
+     physics, not taste.
+
+     What reads instead is a 1px LIGHT line along the top edge, the way a real lit surface catches
+     the light, with the shadow demoted to a wide soft pool that separates rather than darkens. The
+     plane step does the actual work; these two only sharpen its edge. */
+  --elev-1: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --elev-2:
+    inset 0 1px 0 rgb(255 255 255 / 0.07), 0 10px 26px -14px rgb(0 0 0 / 0.9);
+  --elev-3:
+    inset 0 1px 0 rgb(255 255 255 / 0.09), 0 24px 48px -20px rgb(0 0 0 / 0.95);
 
   color-scheme: dark;
 }
@@ -110,8 +132,11 @@ label {
 }
 
 body {
-  background: radial-gradient(1400px 700px at 70% -20%, #16203b 0%, var(--color-bg) 55%);
-  background-attachment: fixed;
+  /* The radial gradient that used to live here is DELETED, not tuned. Being `fixed`, it sat still
+     while cards scrolled across it, and because every card was semi-transparent it decided whether
+     each one read as raised or sunken. A flat page is what makes a four-plane ramp mean anything:
+     depth now comes from the planes, which is the one place it can be relied on. */
+  background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

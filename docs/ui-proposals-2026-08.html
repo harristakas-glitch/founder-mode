@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Founder Mode — Three Directions</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   PAGE CHROME — theme-aware. Light is the base; dark overrides only tokens.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --page:#f7f8fa; --page2:#ffffff; --sheet:#ffffff;
+  --tx:#14161b; --tx2:#5b6472; --tx3:#8b95a3;
+  --hair:#e4e7ec; --hair2:#cfd5de;
+  --brand:#3550d8; --brandsoft:#eef1fe;
+  --ok:#0d7a54; --bad:#b3261e; --warnc:#8a5a00;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px -12px rgba(16,24,40,.18);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --page:#0e1014; --page2:#15181e; --sheet:#15181e;
+    --tx:#eef1f6; --tx2:#a3adbb; --tx3:#78828f;
+    --hair:#262b33; --hair2:#39404b;
+    --brand:#8ba4ff; --brandsoft:#1a2036;
+    --ok:#4ade9b; --bad:#ff8080; --warnc:#f0b341;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0e1014; --page2:#15181e; --sheet:#15181e;
+  --tx:#eef1f6; --tx2:#a3adbb; --tx3:#78828f;
+  --hair:#262b33; --hair2:#39404b;
+  --brand:#8ba4ff; --brandsoft:#1a2036;
+  --ok:#4ade9b; --bad:#ff8080; --warnc:#f0b341;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -16px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--page); color:var(--tx);
+  font-family:var(--ui); font-size:16px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:0 20px 96px}
+@media (max-width:640px){ .wrap{padding:0 14px 64px} }
+
+h1,h2,h3,h4{margin:0; line-height:1.15; letter-spacing:-.02em; text-wrap:balance}
+p{margin:0; text-wrap:pretty}
+code,.mono{font-family:var(--mono); font-size:.86em}
+a{color:var(--brand)}
+
+/* ---- masthead ---- */
+.mast{padding:56px 0 28px; border-bottom:1px solid var(--hair)}
+.eyebrow{font-size:12px; font-weight:650; letter-spacing:.12em; text-transform:uppercase; color:var(--tx3)}
+.mast h1{font-size:clamp(30px,5.2vw,50px); font-weight:760; margin-top:14px; letter-spacing:-.032em}
+.mast .sub{margin-top:14px; font-size:17px; color:var(--tx2); max-width:62ch}
+.quote{
+  margin-top:26px; padding:16px 20px; border-left:3px solid var(--brand);
+  background:var(--brandsoft); border-radius:0 10px 10px 0;
+  font-size:16px; line-height:1.5;
+}
+.quote cite{display:block; margin-top:8px; font-style:normal; font-size:13px; color:var(--tx2)}
+.pills{display:flex; flex-wrap:wrap; gap:8px; margin-top:22px}
+.pill{
+  padding:6px 13px; border-radius:99px; border:1px solid var(--hair2);
+  font-size:13px; font-weight:600; color:var(--tx2); background:var(--page2);
+}
+
+/* ---- section furniture ---- */
+section{padding-top:60px}
+.sec-num{font-family:var(--mono); font-size:12px; color:var(--tx3); letter-spacing:.06em}
+h2{font-size:clamp(22px,3.4vw,32px); font-weight:720; margin-top:8px}
+h3{font-size:19px; font-weight:680; margin-top:34px}
+.lede{margin-top:12px; font-size:16.5px; color:var(--tx2); max-width:70ch}
+.note{margin-top:10px; font-size:14px; color:var(--tx3); max-width:74ch}
+
+/* ---- evidence grid ---- */
+.ev{display:grid; grid-template-columns:repeat(auto-fit,minmax(226px,1fr)); gap:12px; margin-top:26px}
+.ev-card{
+  background:var(--sheet); border:1px solid var(--hair); border-radius:12px;
+  padding:16px 16px 15px; box-shadow:var(--shadow);
+}
+.ev-card .n{font-size:29px; font-weight:740; letter-spacing:-.03em; font-variant-numeric:tabular-nums; line-height:1.1}
+.ev-card .n.warn{color:var(--bad)}
+.ev-card .k{margin-top:7px; font-size:13.5px; font-weight:620; color:var(--tx)}
+.ev-card .v{margin-top:5px; font-size:12.5px; color:var(--tx2); line-height:1.45}
+.ev-card .src{margin-top:9px; font-family:var(--mono); font-size:11px; color:var(--tx3); word-break:break-all}
+
+/* ---- generic table ---- */
+.tbl-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:20px}
+table.t{border-collapse:collapse; width:100%; min-width:600px; font-size:14px}
+table.t th{
+  text-align:left; font-weight:640; font-size:12px; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--tx3); padding:0 14px 9px 0; border-bottom:1px solid var(--hair2); white-space:nowrap;
+}
+table.t td{padding:11px 14px 11px 0; border-bottom:1px solid var(--hair); vertical-align:top; color:var(--tx2)}
+table.t td:first-child{color:var(--tx); font-weight:600}
+table.t td.num{font-variant-numeric:tabular-nums; white-space:nowrap}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE INVERSION DEMO — live, not described
+   ══════════════════════════════════════════════════════════════════════════ */
+.inv{
+  margin-top:24px; border-radius:14px; overflow:hidden; border:1px solid var(--hair);
+  background:#0a0e18;
+  background-image:radial-gradient(1400px 700px at 78% -30%,#16203b 0%,#0a0e18 55%);
+  padding:26px 22px; position:relative;
+}
+.inv-row{display:flex; gap:18px; flex-wrap:wrap}
+.inv-card{
+  flex:1 1 240px; min-width:210px;
+  border-radius:16px; border:1px solid rgba(36,48,74,.7);
+  background:rgba(18,26,44,.8);
+  box-shadow:0 2px 8px -2px rgba(0,0,0,.5);
+  padding:15px 16px; color:#dce5f5;
+}
+.inv-card .lbl{font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#8593ab}
+.inv-card .val{font-size:26px; font-weight:800; letter-spacing:-.02em; margin-top:5px; font-variant-numeric:tabular-nums}
+.inv-card .m{margin-top:8px; font-size:11px; color:#8593ab; font-family:var(--mono)}
+.inv-cap{margin-top:18px; font-size:13px; color:#8593ab; line-height:1.5; max-width:72ch}
+.inv-cap b{color:#dce5f5}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOCKUP FRAME
+   ══════════════════════════════════════════════════════════════════════════ */
+.frame{
+  border:1px solid var(--hair2); border-radius:14px; overflow:hidden;
+  box-shadow:var(--shadow); background:#000; margin-top:0;
+}
+.frame-bar{
+  display:flex; align-items:center; gap:8px; padding:9px 13px;
+  background:var(--page2); border-bottom:1px solid var(--hair);
+}
+.dot{width:9px;height:9px;border-radius:99px;background:var(--hair2)}
+.frame-bar .ttl{margin-left:6px; font-size:11.5px; font-weight:640; color:var(--tx2); letter-spacing:.01em}
+.frame-bar .tag{
+  margin-left:auto; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  padding:3px 8px; border-radius:99px; border:1px solid var(--hair2); color:var(--tx3);
+}
+.frame-bar .tag.now{border-color:var(--bad); color:var(--bad)}
+.frame-bar .tag.new{border-color:var(--brand); color:var(--brand)}
+.viewport{overflow-x:auto; -webkit-overflow-scrolling:touch}
+.m{min-width:760px; display:flex; height:624px; font-family:var(--ui)}
+.m.tall{height:712px}
+.m-side{width:196px; flex-shrink:0; display:flex; flex-direction:column}
+.m-main{flex:1; min-width:0; display:flex; flex-direction:column}
+.m-body{flex:1; overflow:hidden; padding:16px 18px}
+
+.pair{display:grid; gap:20px; margin-top:22px; grid-template-columns:1fr}
+@media (min-width:1000px){ .pair.two{grid-template-columns:1fr 1fr} .pair.two .m{min-width:0;} .pair.two .viewport{overflow-x:auto} .pair.two .m{min-width:560px} }
+
+/* sparkline helper */
+svg.spark{display:block; width:100%; height:100%}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOCKUP — CURRENT (exact tokens from src/index.css @theme)
+   ══════════════════════════════════════════════════════════════════════════ */
+.d-now{
+  --bg:#0a0e18; --bg2:#0d1322; --surface:#121a2c; --surface2:#1a2338;
+  --line:#24304a; --line2:#33405e; --ink:#dce5f5; --mut:#8593ab;
+  --accent:#7c9aff; --accent2:#a78bfa; --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+  background:#0a0e18;
+  background-image:radial-gradient(1400px 700px at 70% -20%,#16203b 0%,#0a0e18 55%);
+  color:var(--ink);
+}
+.d-now .m-side{background:linear-gradient(180deg,#0d1322,#0a0e18); border-right:1px solid rgba(36,48,74,.6)}
+.d-now .brand{display:flex; gap:9px; align-items:center; padding:13px 13px; border-bottom:1px solid rgba(36,48,74,.6)}
+.d-now .mono-chip{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,hsl(214 68% 68%),hsl(264 70% 58%));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#0a0e18}
+.d-now .brand .nm{font-size:14px;font-weight:800;letter-spacing:-.02em}
+.d-now .brand .st{font-size:11px;color:var(--mut)}
+.d-now .nav{padding:9px 7px; display:flex; flex-direction:column; gap:2px}
+.d-now .nav a{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:9px;font-size:13px;color:var(--mut);text-decoration:none}
+.d-now .nav a.on{background:rgba(124,154,255,.12); color:var(--ink); font-weight:650; position:relative}
+.d-now .nav a.on::before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:3px;border-radius:99px;background:var(--accent)}
+.d-now .nav .ico{width:14px;height:14px;border-radius:3px;border:1.6px solid currentColor;opacity:.85}
+.d-now .nav a.on .ico{border-color:var(--accent)}
+.d-now .nav .badge{margin-left:auto;background:var(--bad);color:#0a0e18;font-size:9.5px;font-weight:800;border-radius:99px;padding:1px 5px}
+.d-now .rail{display:flex;gap:22px;align-items:center;height:52px;padding:0 16px;border-bottom:1px solid rgba(36,48,74,.6);background:rgba(13,19,34,.7);overflow:hidden}
+.d-now .rail .st{flex-shrink:0}
+.d-now .rail .k{font-size:10px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.d-now .rail .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap}
+.d-now h1{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.d-now .subtitle{font-size:13px;color:var(--mut);margin-top:2px;margin-bottom:14px}
+.d-now .att{display:flex;align-items:center;gap:11px;border-radius:16px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);padding:9px 15px;font-size:13.5px;margin-bottom:6px}
+.d-now .att.w{border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08)}
+.d-now .att .dt{width:6px;height:6px;border-radius:99px;background:var(--bad);flex-shrink:0}
+.d-now .att.w .dt{background:var(--warn)}
+.d-now .att .btn{margin-left:auto;border:1px solid var(--line2);border-radius:8px;padding:3px 9px;font-size:12px;font-weight:650;color:var(--ink);flex-shrink:0}
+.d-now .digest{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center;border-radius:12px;border:1px solid rgba(36,48,74,.6);background:rgba(18,26,44,.6);padding:8px 15px;font-size:13px;margin:8px 0 14px}
+.d-now .digest .h{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.d-now .digest .g{color:var(--good);font-weight:700;font-size:11px;font-variant-numeric:tabular-nums}
+.d-now .digest .r{color:var(--bad);font-weight:700;font-size:11px;font-variant-numeric:tabular-nums}
+.d-now .card{border-radius:16px;border:1px solid rgba(36,48,74,.7);background:rgba(18,26,44,.8);box-shadow:0 2px 8px -2px rgba(0,0,0,.5);box-shadow:0 2px 8px -2px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.03)}
+.d-now .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.d-now .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.d-now .sc{padding:13px}
+.d-now .sc .k{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.d-now .sc .v{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-top:4px;font-variant-numeric:tabular-nums}
+.d-now .sc .d{font-size:12px;color:var(--mut);margin-top:6px;line-height:1.3}
+.d-now .sc .d.up{color:var(--good)} .d-now .sc .d.dn{color:var(--bad)}
+.d-now .pnl{padding:15px}
+.d-now .pnl .ttl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);margin-bottom:11px}
+.d-now .bench{display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(36,48,74,.4);padding:7px 0;font-size:13px}
+.d-now .bench:last-child{border-bottom:0}
+.d-now .bench .dt{width:8px;height:8px;border-radius:99px;flex-shrink:0}
+.d-now .bench .nm{width:118px;color:var(--mut);flex-shrink:0}
+.d-now .bench b{font-variant-numeric:tabular-nums}
+.d-now .bench .vs{color:var(--mut)}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOCKUP — A · LEDGER
+   ══════════════════════════════════════════════════════════════════════════ */
+.d-a{
+  --bg:#090c13; --raise:#12161f; --rule:#232b3a; --rule2:#37425a;
+  --ink:#eef2f8; --mut:#98a5b8; --acc:#f0b341; --good:#4ade9b; --bad:#ff7b7b;
+  background:var(--bg); color:var(--ink);
+}
+.d-a .m-side{background:var(--bg); border-right:1px solid var(--rule)}
+.d-a .brand{padding:16px 16px 14px; border-bottom:1px solid var(--rule)}
+.d-a .brand .nm{font-size:16px;font-weight:600;letter-spacing:-.015em}
+.d-a .brand .st{font-size:12px;color:var(--mut);margin-top:2px;font-variant-numeric:tabular-nums}
+.d-a .nav{padding:12px 0}
+.d-a .nav a{display:flex;align-items:center;gap:9px;padding:5px 16px;font-size:14px;color:var(--mut);text-decoration:none;position:relative}
+.d-a .nav a.on{color:var(--ink);font-weight:550}
+.d-a .nav a.on::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--acc)}
+.d-a .nav .badge{margin-left:auto;font-size:11px;font-weight:600;color:var(--acc);font-variant-numeric:tabular-nums}
+.d-a .nav .sep{height:1px;background:var(--rule);margin:11px 16px}
+.d-a .rail{display:flex;height:54px;align-items:stretch;border-bottom:1px solid var(--rule);overflow:hidden}
+.d-a .rail .st{padding:9px 16px;border-right:1px solid var(--rule);flex-shrink:0}
+.d-a .rail .k{font-size:11px;color:var(--mut);white-space:nowrap;font-weight:500}
+.d-a .rail .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:1px;white-space:nowrap}
+.d-a .rail .v.bad{color:var(--bad)}
+.d-a h1{font-size:28px;font-weight:600;letter-spacing:-.025em}
+.d-a .subtitle{font-size:14px;color:var(--mut);margin-top:3px}
+.d-a .alert{display:flex;align-items:baseline;gap:10px;margin:18px 0 2px;padding-bottom:9px;border-bottom:1px solid var(--rule)}
+.d-a .alert .tag{font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--acc);flex-shrink:0;width:74px}
+.d-a .alert .tx{font-size:14px;flex:1}
+.d-a .alert .go{font-size:13px;color:var(--acc);font-weight:550;flex-shrink:0}
+.d-a .alert.q .tag{color:var(--mut)}
+.d-a .alert.q .tx{color:var(--mut)}
+.d-a .hero{display:flex;align-items:flex-end;gap:0;margin:26px 0 4px}
+.d-a .hero .f{flex:1;padding-right:20px;border-right:1px solid var(--rule)}
+.d-a .hero .f:last-child{border-right:0}
+.d-a .hero .f+.f{padding-left:20px}
+.d-a .hero .k{font-size:12px;color:var(--mut);font-weight:500}
+.d-a .hero .v{font-size:30px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:4px}
+.d-a .hero .f.lead .v{font-size:44px;letter-spacing:-.035em}
+.d-a .hero .d{font-size:12px;color:var(--mut);margin-top:5px}
+.d-a .hero .d .up{color:var(--good)} .d-a .hero .d .dn{color:var(--bad)}
+.d-a .sech{display:flex;align-items:center;gap:14px;margin:26px 0 10px}
+.d-a .sech h3{font-size:14px;font-weight:600;letter-spacing:0;margin:0;white-space:nowrap;color:var(--ink)}
+.d-a .sech .ln{flex:1;height:1px;background:var(--rule)}
+.d-a .sech .aux{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.d-a .row{display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13.5px}
+.d-a .row:last-child{border-bottom:0}
+.d-a .row .nm{width:132px;flex-shrink:0;color:var(--mut)}
+.d-a .row .you{width:78px;flex-shrink:0;font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.d-a .row .you.g{color:var(--good)} .d-a .row .you.b{color:var(--bad)} .d-a .row .you.w{color:var(--acc)}
+.d-a .row .meter{flex:1;height:4px;border-radius:99px;background:var(--rule);position:relative;overflow:hidden;min-width:40px}
+.d-a .row .meter i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--mut)}
+.d-a .row .meter i.g{background:var(--good)} .d-a .row .meter i.b{background:var(--bad)} .d-a .row .meter i.w{background:var(--acc)}
+.d-a .row .vs{width:150px;flex-shrink:0;color:var(--mut);font-size:12.5px;text-align:right}
+.d-a .charts{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:6px}
+.d-a .ch .hd{display:flex;align-items:baseline;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:5px}
+.d-a .ch .hd b{color:var(--ink);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.d-a .ch .plot{height:62px;border-bottom:1px solid var(--rule)}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOCKUP — B · COCKPIT
+   ══════════════════════════════════════════════════════════════════════════ */
+.d-b{
+  --bg:#080b14; --s1:#111828; --s2:#1b2437; --s3:#27314a;
+  --line:#39455f; --line2:#4a587a;
+  --ink:#e8edf9; --mut:#96a3bd; --acc:#7c9aff; --acc2:#a78bfa;
+  --good:#3ddc97; --bad:#ff7a7a; --warn:#ffc44d;
+  --lift:inset 0 1px 0 rgba(255,255,255,.07), 0 10px 26px -14px rgba(0,0,0,.9);
+  background:var(--bg); color:var(--ink);
+}
+.d-b .m-side{background:var(--bg);border-right:1px solid rgba(57,69,95,.5)}
+.d-b .brand{display:flex;gap:10px;align-items:center;padding:14px}
+.d-b .mono-chip{width:34px;height:34px;border-radius:11px;background:linear-gradient(140deg,#8fa8ff,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:750;font-size:13px;color:#080b14}
+.d-b .brand .nm{font-size:14.5px;font-weight:650;letter-spacing:-.015em}
+.d-b .brand .st{font-size:11.5px;color:var(--mut);margin-top:1px}
+.d-b .nav{padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.d-b .nav a{display:flex;align-items:center;gap:10px;padding:7px 11px;border-radius:10px;font-size:13.5px;color:var(--mut);text-decoration:none}
+.d-b .nav a.on{background:var(--s2);color:var(--ink);font-weight:600;box-shadow:var(--lift)}
+.d-b .nav .ico{width:15px;height:15px;border-radius:4px;border:1.7px solid currentColor;opacity:.8}
+.d-b .nav a.on .ico{border-color:var(--acc);opacity:1}
+.d-b .nav .badge{margin-left:auto;background:var(--bad);color:#080b14;font-size:10px;font-weight:750;border-radius:99px;padding:1px 6px;font-variant-numeric:tabular-nums}
+.d-b .cta{margin:auto 10px 12px;background:var(--good);color:#080b14;border-radius:12px;padding:11px;text-align:center;font-size:14px;font-weight:700;box-shadow:0 8px 20px -12px var(--good)}
+.d-b .rail{display:flex;gap:8px;align-items:center;height:56px;padding:0 14px;background:var(--s1);border-bottom:1px solid rgba(57,69,95,.4);overflow:hidden}
+.d-b .rail .st{flex-shrink:0;padding:0 10px}
+.d-b .rail .k{font-size:10.5px;color:var(--mut);white-space:nowrap;font-weight:550}
+.d-b .rail .v{font-size:15px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.015em;margin-top:1px;white-space:nowrap}
+.d-b .rail .v.bad{color:var(--bad)} .d-b .rail .v.good{color:var(--good)}
+.d-b .m-body{background:var(--bg);padding:18px 20px}
+.d-b .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.d-b h1{font-size:24px;font-weight:680;letter-spacing:-.025em}
+.d-b .subtitle{font-size:13px;color:var(--mut);margin-top:3px}
+.d-b .banner{
+  margin-top:16px;border-radius:16px;background:var(--s2);box-shadow:var(--lift);
+  padding:16px 18px;display:flex;align-items:center;gap:18px;
+  border-left:3px solid var(--warn);
+}
+.d-b .banner .big{font-size:56px;font-weight:720;letter-spacing:-.04em;line-height:.95;font-variant-numeric:tabular-nums;color:var(--warn)}
+.d-b .banner .cap{font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.d-b .banner .tx{font-size:14.5px;line-height:1.45;flex:1;color:var(--ink)}
+.d-b .banner .tx span{color:var(--mut)}
+.d-b .banner .act{background:var(--acc);color:#080b14;border-radius:11px;padding:9px 15px;font-size:13.5px;font-weight:700;flex-shrink:0;box-shadow:0 8px 20px -12px var(--acc)}
+.d-b .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.d-b .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.d-b .card{background:var(--s1);border-radius:14px;box-shadow:var(--lift);padding:14px 15px}
+.d-b .card.up{background:var(--s2)}
+.d-b .sc .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.d-b .sc .v{font-size:28px;font-weight:680;letter-spacing:-.03em;line-height:1.1;margin-top:6px;font-variant-numeric:tabular-nums}
+.d-b .sc .d{font-size:12px;color:var(--mut);margin-top:6px}
+.d-b .sc .d .up{color:var(--good);font-weight:650} .d-b .sc .d .dn{color:var(--bad);font-weight:650}
+.d-b .pnl .hd{display:flex;align-items:baseline;justify-content:space-between;margin:-14px -15px 12px;padding:10px 15px;background:var(--s2);border-radius:14px 14px 0 0}
+.d-b .pnl .hd h4{font-size:13px;font-weight:620;letter-spacing:-.005em}
+.d-b .pnl .hd .aux{font-size:11.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.d-b .bench{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
+.d-b .bench .dt{width:7px;height:7px;border-radius:99px;flex-shrink:0}
+.d-b .bench .nm{width:104px;flex-shrink:0;color:var(--mut)}
+.d-b .bench b{font-variant-numeric:tabular-nums}
+.d-b .bench .vs{color:var(--mut);font-size:12px}
+.d-b .plot{height:74px;margin-top:4px}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOCKUP — C · BRIEFING
+   ══════════════════════════════════════════════════════════════════════════ */
+.d-c{
+  --bg:#0b1016; --s1:#161d26; --s2:#222b36; --line:#2e3945; --line2:#41505f;
+  --ink:#eaeff4; --mut:#9ba7b4; --acc:#5eead4; --acc2:#a78bfa;
+  --good:#4ade80; --bad:#fb7185; --warn:#fbbf24;
+  background:var(--bg); color:var(--ink);
+}
+.d-c .m-side{background:var(--bg);border-right:1px solid var(--line)}
+.d-c .brand{padding:16px 15px 13px}
+.d-c .brand .nm{font-size:15px;font-weight:640;letter-spacing:-.015em}
+.d-c .brand .st{font-size:12px;color:var(--mut);margin-top:2px}
+.d-c .nav{padding:8px 8px;display:flex;flex-direction:column;gap:1px}
+.d-c .nav a{display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:10px;font-size:13.5px;color:var(--mut);text-decoration:none}
+.d-c .nav a.on{background:rgba(94,234,212,.11);color:var(--acc);font-weight:620}
+.d-c .nav .dotb{margin-left:auto;width:6px;height:6px;border-radius:99px;background:var(--warn)}
+.d-c .rail{display:flex;gap:20px;align-items:center;height:52px;padding:0 18px;border-bottom:1px solid var(--line);overflow:hidden}
+.d-c .rail .st{flex-shrink:0}
+.d-c .rail .k{font-size:11px;color:var(--mut);white-space:nowrap}
+.d-c .rail .v{font-size:15px;font-weight:620;font-variant-numeric:tabular-nums;margin-top:1px;white-space:nowrap}
+.d-c .m-body{padding:20px 22px}
+.d-c .kicker{font-size:12px;font-weight:640;letter-spacing:.1em;text-transform:uppercase;color:var(--acc)}
+.d-c h1{font-size:26px;font-weight:640;letter-spacing:-.025em;margin-top:7px}
+.d-c .decl{font-size:15px;line-height:1.6;color:var(--mut);margin-top:9px;max-width:64ch}
+.d-c .decl b{color:var(--ink);font-weight:620}
+.d-c .prime{
+  margin-top:18px;border-radius:18px;background:var(--s1);padding:18px 20px;
+  border:1px solid var(--line); position:relative; overflow:hidden;
+}
+.d-c .prime::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--warn)}
+.d-c .prime .cap{font-size:11px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--warn)}
+.d-c .prime .q{font-size:19px;font-weight:600;letter-spacing:-.018em;margin-top:8px;line-height:1.35}
+.d-c .prime .body{font-size:15px;line-height:1.62;color:var(--mut);margin-top:9px;max-width:60ch}
+.d-c .prime .acts{display:flex;gap:9px;margin-top:15px;flex-wrap:wrap}
+.d-c .prime .b1{background:var(--acc);color:#08110f;border-radius:11px;padding:9px 16px;font-size:13.5px;font-weight:680}
+.d-c .prime .b2{border:1px solid var(--line2);color:var(--ink);border-radius:11px;padding:9px 16px;font-size:13.5px;font-weight:600}
+.d-c .fold{margin-top:9px;border-radius:14px;border:1px solid var(--line);background:var(--s1);overflow:hidden}
+.d-c .fold .hd{display:flex;align-items:center;gap:14px;padding:13px 17px;cursor:default}
+.d-c .fold .chev{color:var(--mut);font-size:14px;line-height:1;flex-shrink:0;width:12px}
+.d-c .fold .nm{font-size:14.5px;font-weight:600;flex-shrink:0;width:118px}
+.d-c .fold .sum{font-size:13.5px;color:var(--mut);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d-c .fold .sum b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:620}
+.d-c .fold .sum .g{color:var(--good);font-weight:620} .d-c .fold .sum .r{color:var(--bad);font-weight:620}
+.d-c .fold .mini{width:74px;height:22px;flex-shrink:0;opacity:.85}
+.d-c .fold.open{background:var(--s1);border-color:var(--line2)}
+.d-c .fold .bd{padding:2px 17px 17px;border-top:1px solid var(--line)}
+.d-c .fold .bd .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:15px}
+.d-c .fold .bd .k{font-size:11.5px;color:var(--mut)}
+.d-c .fold .bd .v{font-size:24px;font-weight:640;letter-spacing:-.028em;margin-top:3px;font-variant-numeric:tabular-nums}
+.d-c .fold .bd .d{font-size:12px;color:var(--mut);margin-top:4px}
+.d-c .fold .bd .plot{height:46px;margin-top:13px}
+.d-c .pinned{margin-left:auto;font-size:10.5px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);border:1px solid var(--line2);border-radius:99px;padding:2px 8px;flex-shrink:0}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SPEC BLOCKS
+   ══════════════════════════════════════════════════════════════════════════ */
+.dirhead{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;margin-top:14px}
+.dirmark{
+  width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:21px;font-weight:750;letter-spacing:-.02em;color:#fff;
+}
+.dirmark.a{background:linear-gradient(140deg,#f0b341,#c98a1e)}
+.dirmark.b{background:linear-gradient(140deg,#7c9aff,#a78bfa)}
+.dirmark.c{background:linear-gradient(140deg,#5eead4,#38a3a5)}
+.dirhead .txt{flex:1;min-width:240px}
+.dirhead h2{margin:0}
+.thesis{margin-top:9px;font-size:17px;line-height:1.5;color:var(--tx2);max-width:66ch}
+.thesis b{color:var(--tx);font-weight:640}
+
+.specs{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:14px;margin-top:26px}
+.spec{background:var(--sheet);border:1px solid var(--hair);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow)}
+.spec h4{font-size:11.5px;font-weight:680;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);margin-bottom:11px}
+.spec .line{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:4px 0;border-bottom:1px solid var(--hair)}
+.spec .line:last-child{border-bottom:0}
+.spec .line .l{color:var(--tx2)} .spec .line .r{font-family:var(--mono);font-size:11.5px;color:var(--tx);text-align:right}
+
+/* type scale specimen */
+.scale{display:flex;flex-direction:column;gap:2px}
+.scale .s{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--hair);padding:5px 0}
+.scale .s:last-child{border-bottom:0}
+.scale .s .px{font-family:var(--mono);font-size:10.5px;color:var(--tx3);width:64px;flex-shrink:0}
+.scale .s .sp{color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* palette swatches */
+.sw{display:flex;flex-direction:column;gap:6px}
+.sw .r{display:flex;align-items:center;gap:10px;font-size:12px}
+.sw .chip{width:30px;height:30px;border-radius:8px;flex-shrink:0;border:1px solid var(--hair2)}
+.sw .r .nm{font-weight:600;color:var(--tx);width:58px;flex-shrink:0}
+.sw .r .hx{font-family:var(--mono);font-size:11px;color:var(--tx2);width:66px;flex-shrink:0}
+.sw .r .cr{font-family:var(--mono);font-size:11px;color:var(--tx3);margin-left:auto;text-align:right;white-space:nowrap}
+.sw .r .cr.pass{color:var(--ok)}
+
+/* verdict / risk */
+.vr{display:grid;grid-template-columns:1fr;gap:12px;margin-top:20px}
+@media(min-width:760px){.vr{grid-template-columns:1fr 1fr}}
+.vr .b{border-radius:12px;padding:15px 17px;border:1px solid var(--hair);background:var(--sheet)}
+.vr .b h4{font-size:12px;font-weight:680;letter-spacing:.08em;text-transform:uppercase;margin-bottom:9px}
+.vr .b.good h4{color:var(--ok)} .vr .b.risk h4{color:var(--bad)}
+.vr .b ul{margin:0;padding-left:18px;font-size:14px;color:var(--tx2);line-height:1.6}
+.vr .b li{margin-bottom:5px}
+.vr .b li b{color:var(--tx);font-weight:620}
+
+.cap{margin-top:11px;font-size:13px;color:var(--tx3);line-height:1.5;max-width:78ch}
+.cap b{color:var(--tx2)}
+
+/* stress test strip */
+.stress{margin-top:20px}
+.stress .frame{margin-top:12px}
+.stress-note{font-size:13.5px;color:var(--tx2);max-width:74ch;margin-top:10px}
+
+/* theme toggle */
+.tt{position:fixed;bottom:16px;right:16px;z-index:50;display:flex;gap:0;border:1px solid var(--hair2);border-radius:99px;background:var(--sheet);overflow:hidden;box-shadow:var(--shadow)}
+.tt button{border:0;background:transparent;color:var(--tx2);font:inherit;font-size:12px;font-weight:620;padding:6px 12px;cursor:pointer}
+.tt button[aria-pressed="true"]{background:var(--brand);color:#fff}
+@media print{.tt{display:none}}
+
+/* dense-table stress mock (shared shell) */
+.sm{min-width:760px;height:560px;display:flex;flex-direction:column;font-family:var(--ui)}
+.sm .bd{flex:1;overflow:hidden;padding:14px 18px}
+</style>
+</head>
+<body>
+
+<div class="tt" role="group" aria-label="Theme">
+  <button type="button" data-set="light" aria-pressed="false">Light</button>
+  <button type="button" data-set="dark" aria-pressed="false">Dark</button>
+  <button type="button" data-set="system" aria-pressed="true">Auto</button>
+</div>
+
+<div class="wrap">
+
+<!-- ══════════════════ MASTHEAD ══════════════════ -->
+<header class="mast">
+  <div class="eyebrow">Founder Mode · UI direction · August 2026</div>
+  <h1>Three ways out of&nbsp;flat.</h1>
+  <p class="sub">The current build has one visual plane, two working type sizes, and sixteen identical rectangles per screen. Below: what is actually wrong, measured — then three complete directions, rendered, so the choice is between real alternatives rather than one option to approve.</p>
+  <div class="quote">
+    “our UI overall is not top class, not even average, it’s boring and old school… we should be more sleek and fresh and clean.”
+    <cite>— the brief, verbatim</cite>
+  </div>
+  <div class="pills">
+    <span class="pill">easiness</span><span class="pill">fresh</span><span class="pill">ux friendly</span><span class="pill">clean</span><span class="pill">sleek</span>
+  </div>
+</header>
+
+<!-- ══════════════════ 01 · THE DIAGNOSIS ══════════════════ -->
+<section id="diagnosis">
+  <div class="sec-num">01</div>
+  <h2>What is actually wrong</h2>
+  <p class="lede">Not “needs more whitespace”. Six measurements, each checkable by opening the file named under it. Surfaces are compared in <b>CIE L*</b> (perceptual lightness, 0–100), because WCAG’s contrast ratio is meaningless this far down the dark end — its <code>+0.05</code> flare term makes every near-black pair score ~1.1:1. Rule used: <b>ΔL* ≥ 4</b> is a plane step a player can see; ΔL* ≤ 2 is a rounding error.</p>
+
+  <div class="ev">
+    <div class="ev-card">
+      <div class="n warn">−2.72</div>
+      <div class="k">The elevation ramp inverts</div>
+      <div class="v">A <code>Panel</code> is <code>bg-surface/80</code> over a <b>fixed</b> radial gradient. Bottom-left it is +4.26 L* above the page. Top-right it is 2.72 L* <em>below</em> it. Same class, raised card or sunken hole depending on where it lands.</div>
+      <div class="src">components.tsx:97 · index.css:113</div>
+    </div>
+    <div class="ev-card">
+      <div class="n warn">24</div>
+      <div class="k">Type sizes, and effectively two</div>
+      <div class="v">19 <code>text-[Npx]</code> values + 5 named. <code>13px</code> ×143 and <code>11px</code> ×107 are 63% of all sized text. The rest includes <code>12.5px</code>, <code>11.5px</code>, <code>10.5px</code>, <code>9.5px</code> — half-pixel “levels” nobody can perceive.</div>
+      <div class="src">grep -rhoE "text-\[[0-9.]+px\]" src</div>
+    </div>
+    <div class="ev-card">
+      <div class="n warn">2 / 232</div>
+      <div class="k">Weight declarations that are normal</div>
+      <div class="v">111 bold, 71 semibold, 48 extrabold, <b>2 normal</b>. With size unable to carry hierarchy across a 2px range, weight and ALL-CAPS carry it instead — so everything shouts and nothing is loud.</div>
+      <div class="src">src/**/*.tsx</div>
+    </div>
+    <div class="ev-card">
+      <div class="n warn">460 : 113</div>
+      <div class="k">Grey text vs ink text</div>
+      <div class="v">Four fifths of explicitly-coloured text is <code>--color-mut</code>. It passes AA at 5.59:1 and still reads as <em>disabled</em>. A page whose majority type is secondary has no figure/ground — the eye lands nowhere.</div>
+      <div class="src">text-mut ×460 · text-ink ×113</div>
+    </div>
+    <div class="ev-card">
+      <div class="n warn">16</div>
+      <div class="k">Boxes on one Dashboard</div>
+      <div class="v">Quick Play: 16 bordered rectangles, same radius, same fill, same hairline, separated by <code>mt-3</code> (×62) or <code>mt-3.5</code> (×59) — two values 2px apart, used interchangeably. Career passes 20.</div>
+      <div class="src">screens/Dashboard.tsx:257</div>
+    </div>
+    <div class="ev-card">
+      <div class="n warn">ΔL* 1.21</div>
+      <div class="k">The Inbox’s “this blocks your week”</div>
+      <div class="v"><code>bg-warn/[0.06]</code> (L* 8.65) vs a handled item’s <code>bg-surface/70</code> (L* 7.44). At or below the just-noticeable difference. The whole signal rides on a 3px left border.</div>
+      <div class="src">screens/Inbox.tsx:47</div>
+    </div>
+  </div>
+
+  <h3>The inversion, live</h3>
+  <p class="note">Below is the real body gradient from <code>index.css:113</code> with the real <code>CARD</code> recipe from <code>components.tsx:97</code>. Nothing is exaggerated. The left card is raised. The right card, under the gradient’s hot corner, is a hole.</p>
+  <div class="inv">
+    <div class="inv-row">
+      <div class="inv-card">
+        <div class="lbl">Cash</div><div class="val">$412.8k</div>
+        <div class="m">page L* 4.02 → card L* 8.28 &nbsp;(ΔL* +4.26)</div>
+      </div>
+      <div class="inv-card">
+        <div class="lbl">Runway</div><div class="val">31 weeks</div>
+        <div class="m">page L* ~9 → card L* ~9 &nbsp;(ΔL* ≈ 0)</div>
+      </div>
+      <div class="inv-card">
+        <div class="lbl">Valuation</div><div class="val">$18.4M</div>
+        <div class="m">page L* 12.73 → card L* 10.01 &nbsp;(ΔL* −2.72)</div>
+      </div>
+    </div>
+    <p class="inv-cap">And the shadow cannot rescue it: <b>--elev-2</b> is <code>0 2px 8px -2px rgba(0,0,0,.5)</code> — pure black on a page already at L* 4.02. Its darkest possible pixel lands at L* 1.90, <b>ΔL* −2.12</b>. There is functionally no shadow anywhere in this product. Black shadows do not work on near-black backgrounds; that is physics, not taste.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ 02 · THE CONTROL ══════════════════ -->
+<section id="current">
+  <div class="sec-num">02</div>
+  <h2>The control: today’s Dashboard</h2>
+  <p class="lede">Rebuilt from the real tokens and the real class strings, so the comparisons below are honest. This is what “boring and old school” looks like when you name the parts: everything is a bordered box, every label is 11px letterspaced grey caps, every gap is 14px, and no element is visually more important than any other.</p>
+
+  <div class="frame" style="margin-top:22px">
+    <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">Founder Mode — Dashboard, week 27</span><span class="tag now">Current</span></div>
+    <div class="viewport"><div class="m d-now" style="height:720px">
+      <aside class="m-side">
+        <div class="brand"><div class="mono-chip">NR</div><div><div class="nm">Northreef</div><div class="st">Series A · Week 27</div></div></div>
+        <nav class="nav">
+          <a class="on"><i class="ico"></i>Dashboard</a>
+          <a><i class="ico"></i>Inbox<span class="badge">2</span></a>
+          <a><i class="ico"></i>Team</a>
+          <a><i class="ico"></i>Hiring</a>
+          <a><i class="ico"></i>Product</a>
+          <a><i class="ico"></i>Growth</a>
+          <a><i class="ico"></i>Market</a>
+          <a><i class="ico"></i>Finance</a>
+          <a><i class="ico"></i>Fundraising</a>
+          <a><i class="ico"></i>Story</a>
+        </nav>
+      </aside>
+      <div class="m-main">
+        <div class="rail">
+          <div class="st"><div class="k">Cash</div><div class="v">$412.8k</div></div>
+          <div class="st"><div class="k">Runway</div><div class="v">31 wk</div></div>
+          <div class="st"><div class="k">Rev /wk</div><div class="v">$28.4k</div></div>
+          <div class="st"><div class="k">Burn /wk</div><div class="v">$41.6k</div></div>
+          <div class="st"><div class="k">Net /wk</div><div class="v">−$13.2k</div></div>
+          <div class="st"><div class="k">Users</div><div class="v">18.4k</div></div>
+          <div class="st"><div class="k">PMF</div><div class="v">54</div></div>
+          <div class="st"><div class="k">Valuation</div><div class="v">$18.4M</div></div>
+        </div>
+        <div class="m-body">
+          <h1>Dashboard</h1>
+          <div class="subtitle">Week 27 · Series A · You own 61.4% of the company</div>
+          <div class="att"><i class="dt"></i><span>A decision is blocking the week.</span><span class="btn">Open Inbox →</span></div>
+          <div class="att w"><i class="dt"></i><span>PMF 54 against ~43 expected by week 27. Bugs at 61 are driving churn.</span><span class="btn">Product →</span></div>
+          <div class="digest">
+            <span class="h">This week</span>
+            <span>Users <span class="g">▲ 1.2k</span></span>
+            <span>Cash <span class="r">▼ $13.2k</span></span>
+            <span>Revenue <span class="g">▲ $2.1k</span></span>
+            <span>PMF <span class="g">▲ 1.4</span></span>
+            <span>Valuation <span class="g">▲ $1.8M</span></span>
+          </div>
+          <div class="grid4">
+            <div class="card sc"><div class="k">Cash</div><div class="v">$412.8k</div><div class="d">burn $41.6k/wk</div></div>
+            <div class="card sc"><div class="k">Runway</div><div class="v">31 weeks</div><div class="d">&nbsp;</div></div>
+            <div class="card sc"><div class="k">Users</div><div class="v">18.4k</div><div class="d up">▲ +6.9% /wk avg</div></div>
+            <div class="card sc"><div class="k">Valuation</div><div class="v">$18.4M</div><div class="d">37% of the way to Series B</div></div>
+          </div>
+          <div class="grid2">
+            <div class="card pnl"><div class="ttl">Users over time</div>
+              <svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" style="height:56px" aria-hidden="true">
+                <polygon points="0,34 0,29 10,28 20,25 30,24 40,20 50,18 60,13 70,11 80,7 90,5 100,3 100,34" fill="#7c9aff" fill-opacity=".15"/>
+                <polyline points="0,29 10,28 20,25 30,24 40,20 50,18 60,13 70,11 80,7 90,5 100,3" fill="none" stroke="#6172f3" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+              </svg></div>
+            <div class="card pnl"><div class="ttl">Cash over time</div>
+              <svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" style="height:56px" aria-hidden="true">
+                <polygon points="0,34 0,6 12,9 24,13 36,17 48,21 56,16 68,18 80,14 90,17 100,20 100,34" fill="#34d399" fill-opacity=".15"/>
+                <polyline points="0,6 12,9 24,13 36,17 48,21 56,16 68,18 80,14 90,17 100,20" fill="none" stroke="#34d399" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+              </svg></div>
+          </div>
+          <div class="card pnl" style="margin-top:14px">
+            <div class="ttl">How you compare — benchmarks</div>
+            <div class="bench"><i class="dt" style="background:#fbbf24"></i><span class="nm">User growth</span><b>6.9%/wk</b>&nbsp;<span class="vs">vs 8.0% board target</span></div>
+            <div class="bench"><i class="dt" style="background:#f87171"></i><span class="nm">Churn</span><b>4.1%/wk</b>&nbsp;<span class="vs">vs 2.6% market average — driven by PMF, quality, bugs</span></div>
+            <div class="bench"><i class="dt" style="background:#34d399"></i><span class="nm">PMF pace</span><b>54</b>&nbsp;<span class="vs">vs ~43 expected by week 27</span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <p class="cap"><b>Read it as a shape, not as content:</b> 16 rectangles of near-identical value, uniform 14px apart, with the only strong contrast in the product (the white figures) distributed evenly across all of them. There is no answer to “where do I look first”, which is exactly the complaint.</p>
+</section>
+
+<!-- ══════════════════ 03 · DIRECTION A ══════════════════ -->
+<section id="ledger">
+  <div class="sec-num">03 · Direction A</div>
+  <div class="dirhead">
+    <div class="dirmark a">A</div>
+    <div class="txt">
+      <h2>Ledger</h2>
+      <p class="thesis"><b>Delete the boxes.</b> In a game that is fundamentally about numbers, the container is noise. Structure comes from typography, alignment and a single hairline — the way a good financial document works. Hierarchy is carried by <b>type</b>.</p>
+    </div>
+  </div>
+
+  <div class="specs">
+    <div class="spec">
+      <h4>Type scale · 7 steps</h4>
+      <div class="scale">
+        <div class="s"><span class="px">44 / 600</span><span class="sp" style="font-size:24px;font-weight:600;letter-spacing:-.035em">$18.4M</span></div>
+        <div class="s"><span class="px">28 / 600</span><span class="sp" style="font-size:19px;font-weight:600;letter-spacing:-.028em">Dashboard</span></div>
+        <div class="s"><span class="px">20 / 600</span><span class="sp" style="font-size:17px;font-weight:600;letter-spacing:-.02em">Series A</span></div>
+        <div class="s"><span class="px">16 / 600</span><span class="sp" style="font-size:15px;font-weight:600">Rail figures</span></div>
+        <div class="s"><span class="px">14 / 400</span><span class="sp" style="font-size:14px">Body and table rows</span></div>
+        <div class="s"><span class="px">12 / 500</span><span class="sp" style="font-size:12px;font-weight:500">Labels and captions</span></div>
+        <div class="s"><span class="px">11 / 650</span><span class="sp" style="font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase">Needs you</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--tx3);margin-top:9px">One uppercase step survives, at exactly one job: the urgency tag. Everything else is sentence case.</p>
+    </div>
+
+    <div class="spec">
+      <h4>Palette · 2 planes</h4>
+      <div class="sw">
+        <div class="r"><i class="chip" style="background:#090c13"></i><span class="nm">page</span><span class="hx">#090C13</span><span class="cr">L* 3.3</span></div>
+        <div class="r"><i class="chip" style="background:#12161f"></i><span class="nm">raised</span><span class="hx">#12161F</span><span class="cr">L* 7.2 · Δ3.9</span></div>
+        <div class="r"><i class="chip" style="background:#232b3a"></i><span class="nm">rule</span><span class="hx">#232B3A</span><span class="cr">L* 17.4 · Δ14.1</span></div>
+        <div class="r"><i class="chip" style="background:#eef2f8"></i><span class="nm">ink</span><span class="hx">#EEF2F8</span><span class="cr pass">17.4 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#98a5b8"></i><span class="nm">muted</span><span class="hx">#98A5B8</span><span class="cr pass">7.8 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#f0b341"></i><span class="nm">accent</span><span class="hx">#F0B341</span><span class="cr pass">10.5 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#4ade9b"></i><span class="nm">good</span><span class="hx">#4ADE9B</span><span class="cr pass">11.4 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#ff7b7b"></i><span class="nm">bad</span><span class="hx">#FF7B7B</span><span class="cr pass">7.8 : 1</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--tx3);margin-top:9px">Ratios against the page. Muted goes <em>up</em> from today’s 5.59:1 to 7.8:1, because with no card fill under it, it has to carry alone.</p>
+    </div>
+
+    <div class="spec">
+      <h4>System</h4>
+      <div class="line"><span class="l">Spacing steps</span><span class="r">4 · 8 · 16 · 28 · 48</span></div>
+      <div class="line"><span class="l">Corner radius</span><span class="r">6px (inputs 8px)</span></div>
+      <div class="line"><span class="l">Elevation</span><span class="r">1 raised plane, no shadow</span></div>
+      <div class="line"><span class="l">Boxes on Dashboard</span><span class="r">0</span></div>
+      <div class="line"><span class="l">Grid</span><span class="r">12-col, 1240px max</span></div>
+      <div class="line"><span class="l">Motion</span><span class="r">120ms opacity + colour</span></div>
+      <div class="line"><span class="l">Signature move</span><span class="r">2px accent underline</span></div>
+      <div class="line"><span class="l">Numerals</span><span class="r">tabular, −.03em, 600</span></div>
+    </div>
+  </div>
+
+  <div class="frame" style="margin-top:26px">
+    <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">Direction A — Ledger · Dashboard, week 27</span><span class="tag new">Proposed</span></div>
+    <div class="viewport"><div class="m d-a" style="height:794px">
+      <aside class="m-side">
+        <div class="brand"><div class="nm">Northreef</div><div class="st">Series A · Week 27</div></div>
+        <nav class="nav">
+          <a class="on">Dashboard</a>
+          <a>Inbox<span class="badge">2</span></a>
+          <div class="sep"></div>
+          <a>Team</a><a>Hiring</a><a>Product</a><a>Growth</a>
+          <div class="sep"></div>
+          <a>Market</a><a>Finance</a><a>Fundraising</a><a>Story</a>
+        </nav>
+      </aside>
+      <div class="m-main">
+        <div class="rail">
+          <div class="st"><div class="k">Cash</div><div class="v">$412.8k</div></div>
+          <div class="st"><div class="k">Runway</div><div class="v">31 wk</div></div>
+          <div class="st"><div class="k">Net / wk</div><div class="v bad">−$13.2k</div></div>
+          <div class="st"><div class="k">Users</div><div class="v">18,412</div></div>
+          <div class="st"><div class="k">PMF</div><div class="v">54</div></div>
+          <div class="st"><div class="k">Valuation</div><div class="v">$18.4M</div></div>
+        </div>
+        <div class="m-body">
+          <h1>Dashboard</h1>
+          <div class="subtitle">Week 27 · Series A · you own 61.4%</div>
+
+          <div class="alert"><span class="tag">Needs you</span><span class="tx">A decision is blocking the week — <b>Accelerator invitation</b>, 7% for $120k.</span><span class="go">Inbox →</span></div>
+          <div class="alert q"><span class="tag">Watch</span><span class="tx">Bugs at 61 are driving churn and scaring off the press.</span><span class="go">Product →</span></div>
+
+          <div class="hero">
+            <div class="f lead">
+              <div class="k">Valuation</div>
+              <div class="v">$18.4M</div>
+              <div class="d"><span class="up">▲ $1.8M</span> this week · 37% to Series B</div>
+            </div>
+            <div class="f">
+              <div class="k">Cash</div><div class="v">$412.8k</div>
+              <div class="d"><span class="dn">▼ $13.2k</span> · 31 wk left</div>
+            </div>
+            <div class="f">
+              <div class="k">Users</div><div class="v">18,412</div>
+              <div class="d"><span class="up">▲ 6.9%</span> /wk average</div>
+            </div>
+            <div class="f">
+              <div class="k">PMF</div><div class="v">54</div>
+              <div class="d">Real signal · target 43</div>
+            </div>
+          </div>
+
+          <div class="sech"><h3>How you compare</h3><span class="ln"></span><span class="aux">week 27 · Series A · B2B SaaS</span></div>
+          <div class="row"><span class="nm">User growth</span><span class="you w">6.9%</span><span class="meter"><i class="w" style="width:63%"></i></span><span class="vs">vs 8.0% board target</span></div>
+          <div class="row"><span class="nm">Churn</span><span class="you b">4.1%</span><span class="meter"><i class="b" style="width:88%"></i></span><span class="vs">vs 2.6% market average</span></div>
+          <div class="row"><span class="nm">PMF pace</span><span class="you g">54</span><span class="meter"><i class="g" style="width:74%"></i></span><span class="vs">vs ~43 expected by wk 27</span></div>
+          <div class="row"><span class="nm">Runway</span><span class="you g">31 wk</span><span class="meter"><i class="g" style="width:70%"></i></span><span class="vs">vs 30+ wk healthy</span></div>
+          <div class="row"><span class="nm">Product vs rivals</span><span class="you b">68</span><span class="meter"><i class="b" style="width:52%"></i></span><span class="vs">vs 81 for Halcyon Labs</span></div>
+
+          <div class="sech"><h3>Trends</h3><span class="ln"></span><span class="aux">weeks 1–27</span></div>
+          <div class="charts">
+            <div class="ch">
+              <div class="hd"><span>Users</span><b>18,412</b></div>
+              <div class="plot"><svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points="0,30 10,29 20,26 30,25 40,21 50,19 60,14 70,12 80,8 90,5 100,3" fill="none" stroke="#eef2f8" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+                <circle cx="100" cy="3" r="2" fill="#f0b341"/>
+              </svg></div>
+            </div>
+            <div class="ch">
+              <div class="hd"><span>Cash</span><b>$412.8k</b></div>
+              <div class="plot"><svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points="0,5 12,8 24,12 36,16 48,20 56,15 68,17 80,13 90,16 100,19" fill="none" stroke="#eef2f8" stroke-width="1.4" vector-effect="non-scaling-stroke"/>
+                <circle cx="100" cy="19" r="2" fill="#f0b341"/>
+              </svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="vr">
+    <div class="b good"><h4>What it buys</h4><ul>
+      <li><b>Density with air.</b> Same information as the control in less vertical space, because 16 sets of padding + border + radius are gone.</li>
+      <li><b>A real first look.</b> One 44px figure and one gold “Needs you” tag are the only two things competing; everything else is deliberately quiet.</li>
+      <li><b>Scales to Fundraising.</b> A table does not get worse at 40 rows; a grid of cards does.</li>
+      <li><b>Cheapest to build.</b> Delete <code>CARD</code>, rewrite <code>Panel</code> as a heading + rule, keep every screen’s structure.</li>
+    </ul></div>
+    <div class="b risk"><h4>What it costs / risks</h4><ul>
+      <li><b>Unforgiving.</b> With no boxes to hide behind, every alignment error and every long label is visible. The type has to be right.</li>
+      <li><b>Reads austere</b> if the accent is used more than twice per screen. This direction lives or dies on restraint.</li>
+      <li><b>Least “fun”.</b> Furthest from a game, closest to a terminal. Good for Career, arguable for Arena.</li>
+      <li>Emoji have to go — they are the loudest thing on a page this quiet.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 04 · DIRECTION B ══════════════════ -->
+<section id="cockpit">
+  <div class="sec-num">04 · Direction B</div>
+  <div class="dirhead">
+    <div class="dirmark b">B</div>
+    <div class="txt">
+      <h2>Cockpit</h2>
+      <p class="thesis"><b>Keep the cards — but make elevation real.</b> Four planes you can actually see, one hero number per screen, and everything else deliberately pushed to the back. Hierarchy is carried by <b>depth</b>.</p>
+    </div>
+  </div>
+
+  <div class="specs">
+    <div class="spec">
+      <h4>Type scale · 7 steps</h4>
+      <div class="scale">
+        <div class="s"><span class="px">56 / 720</span><span class="sp" style="font-size:26px;font-weight:720;letter-spacing:-.04em">31 wk</span></div>
+        <div class="s"><span class="px">34 / 700</span><span class="sp" style="font-size:21px;font-weight:700;letter-spacing:-.03em">$18.4M</span></div>
+        <div class="s"><span class="px">24 / 680</span><span class="sp" style="font-size:18px;font-weight:680;letter-spacing:-.025em">Dashboard</span></div>
+        <div class="s"><span class="px">18 / 650</span><span class="sp" style="font-size:16px;font-weight:650">Panel headers</span></div>
+        <div class="s"><span class="px">15 / 400</span><span class="sp" style="font-size:15px">Body prose</span></div>
+        <div class="s"><span class="px">13 / 450</span><span class="sp" style="font-size:13px">Table rows and captions</span></div>
+        <div class="s"><span class="px">11 / 600</span><span class="sp" style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase">Metric label</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--tx3);margin-top:9px">Uppercase survives only at 11px on metric labels — where it started, and where it works.</p>
+    </div>
+
+    <div class="spec">
+      <h4>Palette · 4 planes, ΔL* ≈ 5–6</h4>
+      <div class="sw">
+        <div class="r"><i class="chip" style="background:#080b14"></i><span class="nm">bg</span><span class="hx">#080B14</span><span class="cr">L* 3.1</span></div>
+        <div class="r"><i class="chip" style="background:#111828"></i><span class="nm">plane 1</span><span class="hx">#111828</span><span class="cr">L* 8.4 · Δ5.3</span></div>
+        <div class="r"><i class="chip" style="background:#1b2437"></i><span class="nm">plane 2</span><span class="hx">#1B2437</span><span class="cr">L* 14.2 · Δ5.9</span></div>
+        <div class="r"><i class="chip" style="background:#27314a"></i><span class="nm">plane 3</span><span class="hx">#27314A</span><span class="cr">L* 20.5 · Δ6.3</span></div>
+        <div class="r"><i class="chip" style="background:#e8edf9"></i><span class="nm">ink</span><span class="hx">#E8EDF9</span><span class="cr pass">15.1 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#96a3bd"></i><span class="nm">muted</span><span class="hx">#96A3BD</span><span class="cr pass">7.0 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#7c9aff"></i><span class="nm">accent</span><span class="hx">#7C9AFF</span><span class="cr pass">6.7 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#ffc44d"></i><span class="nm">warn</span><span class="hx">#FFC44D</span><span class="cr pass">11.2 : 1</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--tx3);margin-top:9px">Ratios against plane 1. No card is semi-transparent, so the ordering cannot invert — and the body gradient is deleted.</p>
+    </div>
+
+    <div class="spec">
+      <h4>System</h4>
+      <div class="line"><span class="l">Spacing steps</span><span class="r">4 · 8 · 12 · 20 · 32</span></div>
+      <div class="line"><span class="l">Corner radius</span><span class="r">14px (nested 10px)</span></div>
+      <div class="line"><span class="l">Elevation</span><span class="r">plane step + top highlight</span></div>
+      <div class="line"><span class="l">Shadow</span><span class="r">inset 0 1px 0 #fff/7%</span></div>
+      <div class="line"><span class="l">&nbsp;</span><span class="r">0 10px 26px −14px #000</span></div>
+      <div class="line"><span class="l">Boxes on Dashboard</span><span class="r">9</span></div>
+      <div class="line"><span class="l">Motion</span><span class="r">rise 8px, 40ms stagger ×6</span></div>
+      <div class="line"><span class="l">Accent budget</span><span class="r">1 filled element / screen</span></div>
+    </div>
+  </div>
+
+  <div class="frame" style="margin-top:26px">
+    <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">Direction B — Cockpit · Dashboard, week 27</span><span class="tag new">Proposed</span></div>
+    <div class="viewport"><div class="m d-b">
+      <aside class="m-side">
+        <div class="brand"><div class="mono-chip">NR</div><div><div class="nm">Northreef</div><div class="st">Series A · Week 27</div></div></div>
+        <nav class="nav">
+          <a class="on"><i class="ico"></i>Dashboard</a>
+          <a><i class="ico"></i>Inbox<span class="badge">2</span></a>
+          <a><i class="ico"></i>Team</a>
+          <a><i class="ico"></i>Hiring</a>
+          <a><i class="ico"></i>Product</a>
+          <a><i class="ico"></i>Growth</a>
+          <a><i class="ico"></i>Market</a>
+          <a><i class="ico"></i>Finance</a>
+          <a><i class="ico"></i>Fundraising</a>
+        </nav>
+        <div class="cta">Advance Week →</div>
+      </aside>
+      <div class="m-main">
+        <div class="rail">
+          <div class="st"><div class="k">Cash</div><div class="v">$412.8k</div></div>
+          <div class="st"><div class="k">Runway</div><div class="v good">31 wk</div></div>
+          <div class="st"><div class="k">Rev /wk</div><div class="v">$28.4k</div></div>
+          <div class="st"><div class="k">Burn /wk</div><div class="v">$41.6k</div></div>
+          <div class="st"><div class="k">Net /wk</div><div class="v bad">−$13.2k</div></div>
+          <div class="st"><div class="k">Users</div><div class="v">18.4k</div></div>
+          <div class="st"><div class="k">PMF</div><div class="v">54</div></div>
+          <div class="st"><div class="k">Valuation</div><div class="v">$18.4M</div></div>
+        </div>
+        <div class="m-body">
+          <div class="head">
+            <div><h1>Dashboard</h1><div class="subtitle">Week 27 · Series A · you own 61.4% of the company</div></div>
+          </div>
+
+          <div class="banner">
+            <div>
+              <div class="cap">Runway</div>
+              <div class="big">31</div>
+            </div>
+            <div class="tx"><b>weeks of runway, and net is −$13.2k/wk.</b><br><span>One decision is blocking this week: the accelerator wants 7% for $120k.</span></div>
+            <div class="act">Open Inbox →</div>
+          </div>
+
+          <div class="grid3">
+            <div class="card sc"><div class="k">Valuation</div><div class="v">$18.4M</div><div class="d"><span class="up">▲ $1.8M</span> · 37% to Series B</div></div>
+            <div class="card sc"><div class="k">Users</div><div class="v">18,412</div><div class="d"><span class="up">▲ 6.9%</span> /wk average</div></div>
+            <div class="card sc"><div class="k">Product-market fit</div><div class="v">54</div><div class="d">Real signal · target 43</div></div>
+          </div>
+
+          <div class="grid2">
+            <div class="card pnl">
+              <div class="hd"><h4>Users over time</h4><span class="aux">wk 1 → 27</span></div>
+              <div class="plot"><svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true">
+                <defs><linearGradient id="gb1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7c9aff" stop-opacity=".34"/><stop offset="100%" stop-color="#7c9aff" stop-opacity="0"/></linearGradient></defs>
+                <polygon points="0,34 0,30 10,29 20,26 30,25 40,21 50,19 60,14 70,12 80,8 90,5 100,3 100,34" fill="url(#gb1)"/>
+                <polyline points="0,30 10,29 20,26 30,25 40,21 50,19 60,14 70,12 80,8 90,5 100,3" fill="none" stroke="#7c9aff" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+              </svg></div>
+            </div>
+            <div class="card pnl">
+              <div class="hd"><h4>How you compare</h4><span class="aux">5 benchmarks</span></div>
+              <div class="bench"><i class="dt" style="background:#ffc44d"></i><span class="nm">User growth</span><b>6.9%</b>&nbsp;<span class="vs">vs 8.0% target</span></div>
+              <div class="bench"><i class="dt" style="background:#ff7a7a"></i><span class="nm">Churn</span><b>4.1%</b>&nbsp;<span class="vs">vs 2.6% market</span></div>
+              <div class="bench"><i class="dt" style="background:#3ddc97"></i><span class="nm">PMF pace</span><b>54</b>&nbsp;<span class="vs">vs ~43 expected</span></div>
+              <div class="bench"><i class="dt" style="background:#3ddc97"></i><span class="nm">Runway</span><b>31 wk</b>&nbsp;<span class="vs">vs 30+ healthy</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="vr">
+    <div class="b good"><h4>What it buys</h4><ul>
+      <li><b>Depth that survives a screenshot.</b> Four planes at ΔL* 5–6 read on a phone in daylight; today’s ramp does not read on a good monitor indoors.</li>
+      <li><b>One hero, decided by the engine.</b> The 56px figure is whatever is closest to killing the run this week — the sim already computes it in <code>attentionItems()</code>.</li>
+      <li><b>Least disruptive.</b> Screen structure is untouched; this is a rewrite of <code>@theme</code>, <code>CARD</code>, <code>Panel</code> and <code>StatCard</code>.</li>
+      <li><b>Most “game”.</b> Closest to what a modern management sim looks like; best fit for Arena.</li>
+    </ul></div>
+    <div class="b risk"><h4>What it costs / risks</h4><ul>
+      <li><b>Four planes need policing.</b> Without a rule for which plane a thing lives on, it degenerates back into soup within a month.</li>
+      <li><b>Still card-shaped.</b> Fundraising’s 15 panels stay 15 panels — this direction makes them legible, not fewer.</li>
+      <li>The gradient in <code>index.css:113</code> has to go. It is the cause of the inversion and cannot be tuned around.</li>
+      <li>Higher pixel cost per number than Ledger: ~15% more vertical space for the same data.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 05 · DIRECTION C ══════════════════ -->
+<section id="briefing">
+  <div class="sec-num">05 · Direction C</div>
+  <div class="dirhead">
+    <div class="dirmark c">C</div>
+    <div class="txt">
+      <h2>Briefing</h2>
+      <p class="thesis"><b>The screen is a weekly briefing, not a dashboard.</b> One question at the top, everything else folded until asked for. Hierarchy is carried by <b>disclosure</b> — and this is the only direction that changes what is on screen, not just how it looks.</p>
+    </div>
+  </div>
+
+  <div class="specs">
+    <div class="spec">
+      <h4>Type scale · 6 steps + a reading size</h4>
+      <div class="scale">
+        <div class="s"><span class="px">40 / 640</span><span class="sp" style="font-size:23px;font-weight:640;letter-spacing:-.03em">$18.4M</span></div>
+        <div class="s"><span class="px">26 / 640</span><span class="sp" style="font-size:19px;font-weight:640;letter-spacing:-.025em">Week 27</span></div>
+        <div class="s"><span class="px">20 / 600</span><span class="sp" style="font-size:17px;font-weight:600;letter-spacing:-.018em">The accelerator wants 7%</span></div>
+        <div class="s"><span class="px">16 / 600</span><span class="sp" style="font-size:15px;font-weight:600">Section names</span></div>
+        <div class="s"><span class="px">15 / 400 · 1.62</span><span class="sp" style="font-size:15px">The reading size — prose lives here</span></div>
+        <div class="s"><span class="px">14 / 400</span><span class="sp" style="font-size:14px">Summaries and rows</span></div>
+        <div class="s"><span class="px">12 / 500</span><span class="sp" style="font-size:12px;font-weight:500">Labels</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--tx3);margin-top:9px">The game has 92 <code>leading-relaxed</code> prose blocks, all currently set at 12–13px. This direction gives them a 15px / 1.62 reading size — the single biggest “easiness” win available.</p>
+    </div>
+
+    <div class="spec">
+      <h4>Palette · 3 planes, warm neutral</h4>
+      <div class="sw">
+        <div class="r"><i class="chip" style="background:#0b1016"></i><span class="nm">bg</span><span class="hx">#0B1016</span><span class="cr">L* 4.5</span></div>
+        <div class="r"><i class="chip" style="background:#161d26"></i><span class="nm">sheet</span><span class="hx">#161D26</span><span class="cr">L* 10.5 · Δ6.0</span></div>
+        <div class="r"><i class="chip" style="background:#222b36"></i><span class="nm">raised</span><span class="hx">#222B36</span><span class="cr">L* 17.2 · Δ6.7</span></div>
+        <div class="r"><i class="chip" style="background:#eaeff4"></i><span class="nm">ink</span><span class="hx">#EAEFF4</span><span class="cr pass">15.1 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#9ba7b4"></i><span class="nm">muted</span><span class="hx">#9BA7B4</span><span class="cr pass">7.1 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#5eead4"></i><span class="nm">accent</span><span class="hx">#5EEAD4</span><span class="cr pass">11.8 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#fbbf24"></i><span class="nm">warn</span><span class="hx">#FBBF24</span><span class="cr pass">10.5 : 1</span></div>
+        <div class="r"><i class="chip" style="background:#fb7185"></i><span class="nm">bad</span><span class="hx">#FB7185</span><span class="cr pass">6.5 : 1</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--tx3);margin-top:9px">Ratios against the sheet. Teal accent because the warn amber has to stay reserved for “this blocks your week”, and today the two fight.</p>
+    </div>
+
+    <div class="spec">
+      <h4>System</h4>
+      <div class="line"><span class="l">Spacing steps</span><span class="r">4 · 9 · 18 · 30 · 52</span></div>
+      <div class="line"><span class="l">Corner radius</span><span class="r">18px (nested 12px)</span></div>
+      <div class="line"><span class="l">Elevation</span><span class="r">plane step + 1px hairline</span></div>
+      <div class="line"><span class="l">Visible boxes</span><span class="r">6 (1 open, 5 folded)</span></div>
+      <div class="line"><span class="l">Motion</span><span class="r">200ms height + opacity</span></div>
+      <div class="line"><span class="l">&nbsp;</span><span class="r">one section open at a time</span></div>
+      <div class="line"><span class="l">Escape hatch</span><span class="r">pin any section open</span></div>
+      <div class="line"><span class="l">Density toggle</span><span class="r">Brief ⇄ Everything</span></div>
+    </div>
+  </div>
+
+  <div class="frame" style="margin-top:26px">
+    <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">Direction C — Briefing · Dashboard, week 27</span><span class="tag new">Proposed</span></div>
+    <div class="viewport"><div class="m d-c" style="height:968px">
+      <aside class="m-side">
+        <div class="brand"><div class="nm">Northreef</div><div class="st">Series A · Week 27</div></div>
+        <nav class="nav">
+          <a class="on">Dashboard</a>
+          <a>Inbox<span class="dotb"></span></a>
+          <a>Team</a><a>Hiring</a><a>Product</a><a>Growth</a>
+          <a>Market</a><a>Finance</a><a>Fundraising</a><a>Story</a>
+        </nav>
+      </aside>
+      <div class="m-main">
+        <div class="rail">
+          <div class="st"><div class="k">Cash</div><div class="v">$412.8k</div></div>
+          <div class="st"><div class="k">Runway</div><div class="v">31 wk</div></div>
+          <div class="st"><div class="k">Users</div><div class="v">18,412</div></div>
+          <div class="st"><div class="k">Valuation</div><div class="v">$18.4M</div></div>
+        </div>
+        <div class="m-body">
+          <div class="kicker">Week 27 · Series A</div>
+          <h1>You grew 6.9% and lost $13.2k.</h1>
+          <p class="decl">Users are up <b>1,204</b> and valuation crossed <b>$18.4M</b> — 37% of the way to a Series B. Churn is the problem: <b>4.1%</b> against a market average of 2.6%, and bugs at 61 are the reason.</p>
+
+          <div class="prime">
+            <div class="cap">Blocking this week</div>
+            <div class="q">A famous accelerator wants 7% for $120,000.</div>
+            <p class="body">At today’s $18.4M that stake is worth <b>$1.29M</b>, so you are selling at a 90% discount for cash, connections and press. Your stake goes <b>61.4% → 57.1%</b>. Runway goes 31 → 41 weeks.</p>
+            <div class="acts"><span class="b1">Accept the deal</span><span class="b2">Decline</span></div>
+          </div>
+
+          <div class="fold open">
+            <div class="hd"><span class="chev">▾</span><span class="nm">Money</span><span class="sum">Cash <b>$412.8k</b> · net <span class="r">−$13.2k</span>/wk · runway <b>31 wk</b></span><span class="pinned">Pinned</span></div>
+            <div class="bd">
+              <div class="grid3">
+                <div><div class="k">Cash</div><div class="v">$412.8k</div><div class="d">▼ $13.2k this week</div></div>
+                <div><div class="k">Runway</div><div class="v">31 wk</div><div class="d">vs 30+ healthy</div></div>
+                <div><div class="k">Burn</div><div class="v">$41.6k</div><div class="d">against $28.4k revenue</div></div>
+              </div>
+              <div class="plot"><svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+                <defs><linearGradient id="gc1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5eead4" stop-opacity=".3"/><stop offset="100%" stop-color="#5eead4" stop-opacity="0"/></linearGradient></defs>
+                <polygon points="0,30 0,4 12,7 24,11 36,15 48,19 56,14 68,16 80,12 90,15 100,18 100,30" fill="url(#gc1)"/>
+                <polyline points="0,4 12,7 24,11 36,15 48,19 56,14 68,16 80,12 90,15 100,18" fill="none" stroke="#5eead4" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+              </svg></div>
+            </div>
+          </div>
+
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">Users</span><span class="sum"><b>18,412</b> · <span class="g">▲ 6.9%</span>/wk · churn <span class="r">4.1%</span> vs 2.6% market</span>
+            <svg class="mini" viewBox="0 0 74 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,20 8,19 16,17 24,16 32,13 40,12 48,9 56,7 64,5 74,2" fill="none" stroke="#9ba7b4" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg></div></div>
+
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">Product</span><span class="sum">PMF <b>54</b> vs ~43 expected · quality 71 · bugs <span class="r">61</span></span>
+            <svg class="mini" viewBox="0 0 74 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,17 10,15 20,16 30,12 40,13 50,9 60,10 74,7" fill="none" stroke="#9ba7b4" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg></div></div>
+
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">The team</span><span class="sum">9 people · morale <b>62</b> · 2 conversations waiting</span>
+            <svg class="mini" viewBox="0 0 74 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,8 10,7 20,10 30,9 40,12 50,11 60,14 74,13" fill="none" stroke="#9ba7b4" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg></div></div>
+
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">The market</span><span class="sum">3rd of 5 · Halcyon Labs leads on product <b>81</b> vs your 68</span>
+            <svg class="mini" viewBox="0 0 74 22" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,11 10,12 20,10 30,13 40,11 50,14 60,12 74,15" fill="none" stroke="#9ba7b4" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg></div></div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="vr">
+    <div class="b good"><h4>What it buys</h4><ul>
+      <li><b>It answers “what do I do this week?”</b> — the question the Dashboard currently makes the player derive from 16 boxes.</li>
+      <li><b>The prose finally gets a reading size.</b> 92 blocks of genuinely good writing stop being fine print.</li>
+      <li><b>Decisions get priced on the screen where they are taken</b> — the exact gap named in <code>docs/onboarding-design.md §1C</code>, closed by layout rather than by a new teaching system.</li>
+      <li><b>Best on a phone.</b> A folded list is native to the bottom-tab shell that just shipped; the other two are desktop-first designs adapted down.</li>
+    </ul></div>
+    <div class="b risk"><h4>What it costs / risks</h4><ul>
+      <li><b>Hiding numbers in a simulation is dangerous.</b> An expert wants all forty at once. Mitigated by the pin and the Brief ⇄ Everything toggle — but that is two states to design and test, not one.</li>
+      <li><b>Most expensive.</b> Needs a new <code>&lt;Section&gt;</code> component, a reorder of <code>Dashboard.tsx</code>, and per-section summary strings the engine does not currently produce.</li>
+      <li><b>One more click</b> between the player and a number they used to see. That is a real cost, not a rounding error.</li>
+      <li>Only works if every summary line is genuinely informative. A folded section whose summary says “5 metrics” is worse than the box it replaced.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 06 · THE STRESS TEST ══════════════════ -->
+<section id="stress">
+  <div class="sec-num">06</div>
+  <h2>The stress test: forty numbers, not four</h2>
+  <p class="lede">Any direction looks good with three widgets. The real screen is <code>Fundraising.tsx</code> — 1,132 lines, 15 <code>&lt;Panel&gt;</code>s, five nested boxes inside them, sliders, tables and 27 prose blocks. Here is the same slice of it in all three, at the same scale. This is the comparison that should decide it.</p>
+
+  <div class="stress">
+    <div class="frame">
+      <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">A — Ledger · Fundraising, term sheets + your position</span><span class="tag new">Proposed</span></div>
+      <div class="viewport"><div class="sm d-a" style="background:#090c13">
+        <div class="bd">
+          <div class="sech" style="margin-top:0"><h3>Term sheets on the table</h3><span class="ln"></span><span class="aux">3 open · expire wk 29</span></div>
+          <div class="row"><span class="nm">Corvus Capital</span><span class="you">$4.0M</span><span class="meter"><i style="width:70%"></i></span><span class="vs">$22.0M post · 18.2% · exp wk 29</span></div>
+          <div class="row"><span class="nm">Meridian Partners</span><span class="you w">$6.5M</span><span class="meter"><i class="w" style="width:100%"></i></span><span class="vs">$26.0M post · 25.0% · 1 board seat</span></div>
+          <div class="row"><span class="nm">Salt Flats Fund</span><span class="you">$2.2M</span><span class="meter"><i style="width:38%"></i></span><span class="vs">$19.4M post · 11.3% · no seat</span></div>
+
+          <div class="sech"><h3>Your own position</h3><span class="ln"></span><span class="aux">after Meridian</span></div>
+          <div class="hero" style="margin:8px 0 4px">
+            <div class="f"><div class="k">Stake now</div><div class="v" style="font-size:26px">61.4%</div><div class="d">$11.3M on paper</div></div>
+            <div class="f"><div class="k">After this round</div><div class="v" style="font-size:26px">46.1%</div><div class="d"><span class="dn">▼ 15.3 pts</span></div></div>
+            <div class="f"><div class="k">Banked</div><div class="v" style="font-size:26px">$0</div><div class="d">no secondary taken</div></div>
+            <div class="f"><div class="k">Board</div><div class="v" style="font-size:26px">2 / 5</div><div class="d">you keep control</div></div>
+          </div>
+
+          <div class="sech"><h3>What the round costs</h3><span class="ln"></span><span class="aux">at $26.0M post</span></div>
+          <div class="row"><span class="nm">Option pool top-up</span><span class="you b">−4.0%</span><span class="meter"><i class="b" style="width:26%"></i></span><span class="vs">pre-money, so you pay for it</span></div>
+          <div class="row"><span class="nm">1× participating pref</span><span class="you b">−$6.5M</span><span class="meter"><i class="b" style="width:44%"></i></span><span class="vs">off the top on any exit</span></div>
+          <div class="row"><span class="nm">Growth covenant</span><span class="you w">8.0%/wk</span><span class="meter"><i class="w" style="width:63%"></i></span><span class="vs">you are at 6.9% — 2 strikes</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="frame" style="margin-top:22px">
+      <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">B — Cockpit · Fundraising, term sheets + your position</span><span class="tag new">Proposed</span></div>
+      <div class="viewport"><div class="sm d-b" style="background:#080b14">
+        <div class="bd">
+          <div class="banner" style="margin-top:0">
+            <div><div class="cap">Best offer</div><div class="big" style="font-size:44px;color:var(--acc)">$6.5M</div></div>
+            <div class="tx"><b>Meridian Partners, at $26.0M post.</b><br><span>Takes 25% and one board seat. Your stake 61.4% → 46.1%. Expires week 29.</span></div>
+            <div class="act">Review terms →</div>
+          </div>
+          <div class="grid3" style="margin-top:12px">
+            <div class="card sc"><div class="k">Stake after</div><div class="v" style="font-size:24px">46.1%</div><div class="d"><span class="dn">▼ 15.3 pts</span></div></div>
+            <div class="card sc"><div class="k">Runway after</div><div class="v" style="font-size:24px">187 wk</div><div class="d"><span class="up">▲ from 31</span></div></div>
+            <div class="card sc"><div class="k">Board seats</div><div class="v" style="font-size:24px">2 / 5</div><div class="d">you keep control</div></div>
+          </div>
+          <div class="grid2" style="margin-top:12px">
+            <div class="card pnl">
+              <div class="hd"><h4>The other offers</h4><span class="aux">2 open</span></div>
+              <div class="bench"><i class="dt" style="background:#96a3bd"></i><span class="nm">Corvus Capital</span><b>$4.0M</b>&nbsp;<span class="vs">$22.0M · 18.2%</span></div>
+              <div class="bench"><i class="dt" style="background:#96a3bd"></i><span class="nm">Salt Flats</span><b>$2.2M</b>&nbsp;<span class="vs">$19.4M · 11.3%</span></div>
+            </div>
+            <div class="card pnl">
+              <div class="hd"><h4>What it costs</h4><span class="aux">at $26.0M post</span></div>
+              <div class="bench"><i class="dt" style="background:#ff7a7a"></i><span class="nm">Option pool</span><b>−4.0%</b>&nbsp;<span class="vs">pre-money</span></div>
+              <div class="bench"><i class="dt" style="background:#ff7a7a"></i><span class="nm">1× participating</span><b>−$6.5M</b>&nbsp;<span class="vs">off the top</span></div>
+              <div class="bench"><i class="dt" style="background:#ffc44d"></i><span class="nm">Growth covenant</span><b>8.0%/wk</b>&nbsp;<span class="vs">you: 6.9%</span></div>
+            </div>
+          </div>
+          <div class="card pnl" style="margin-top:12px">
+            <div class="hd"><h4>Your own position</h4><span class="aux">61.4% · $11.3M on paper</span></div>
+            <div class="bench"><i class="dt" style="background:#96a3bd"></i><span class="nm">Banked</span><b>$0</b>&nbsp;<span class="vs">no secondary taken — available from Series B</span></div>
+            <div class="bench"><i class="dt" style="background:#3ddc97"></i><span class="nm">Board</span><b>2 / 5</b>&nbsp;<span class="vs">you keep control after this round</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="frame" style="margin-top:22px">
+      <div class="frame-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="ttl">C — Briefing · Fundraising, term sheets + your position</span><span class="tag new">Proposed</span></div>
+      <div class="viewport"><div class="sm d-c" style="background:#0b1016">
+        <div class="bd">
+          <div class="kicker">Fundraising · week 27</div>
+          <h1 style="font-size:22px;margin-top:6px">Three offers. Meridian is the only one that changes the run.</h1>
+          <p class="decl" style="font-size:14px;margin-top:8px">$6.5M at $26.0M post buys 187 weeks of runway and costs you 15.3 points and a board seat. The other two are cheaper and do not solve the covenant.</p>
+          <div class="prime" style="margin-top:14px">
+            <div class="cap" style="color:var(--acc)">Meridian Partners · $6.5M</div>
+            <div class="q" style="font-size:17px">25% and one board seat, at $26.0M post.</div>
+            <p class="body" style="font-size:14px">Your stake goes <b>61.4% → 46.1%</b>. Runway <b>31 → 187 weeks</b>. The 1× participating preference takes <b>$6.5M</b> off the top of any exit before you see a cent, and the growth covenant is <b>8.0%/wk</b> against your current 6.9%.</p>
+            <div class="acts"><span class="b1">Sign with Meridian</span><span class="b2">Compare all three</span></div>
+          </div>
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">Corvus Capital</span><span class="sum">$4.0M at $22.0M post · <b>18.2%</b> · no board seat · expires wk 29</span></div></div>
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">Salt Flats</span><span class="sum">$2.2M at $19.4M post · <b>11.3%</b> · no board seat · expires wk 31</span></div></div>
+          <div class="fold"><div class="hd"><span class="chev">▸</span><span class="nm">Your position</span><span class="sum">61.4% · $11.3M on paper · $0 banked · 2 of 5 board seats</span></div></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <p class="stress-note"><b>What the stress test shows.</b> Ledger absorbs density best — the three panels above became three labelled tables and nothing was hidden or shrunk. Cockpit stays legible but pays ~15% more vertical space per number, so Fundraising will still scroll. Briefing wins the <em>decision</em> — it is the only one where the player can see the trade without reading three panels — but it is also the only one that had to fold two offers away to do it.</p>
+</section>
+
+<!-- ══════════════════ 07 · HOW TO CHOOSE ══════════════════ -->
+<section id="choose">
+  <div class="sec-num">07</div>
+  <h2>How to choose</h2>
+  <p class="lede">The three are not variations. They disagree about what should carry hierarchy, and that disagreement has consequences all the way down to how many components get rewritten.</p>
+
+  <div class="tbl-scroll">
+    <table class="t">
+      <thead><tr><th></th><th>A · Ledger</th><th>B · Cockpit</th><th>C · Briefing</th></tr></thead>
+      <tbody>
+        <tr><td>Hierarchy carried by</td><td>Typography</td><td>Elevation</td><td>Disclosure</td></tr>
+        <tr><td>Type steps</td><td class="num">7</td><td class="num">7</td><td class="num">6 + reading size</td></tr>
+        <tr><td>Surface planes</td><td class="num">2</td><td class="num">4</td><td class="num">3</td></tr>
+        <tr><td>Boxes on Dashboard</td><td class="num">0</td><td class="num">9</td><td class="num">6 (1 open)</td></tr>
+        <tr><td>Corner radius</td><td class="num">6px</td><td class="num">14px</td><td class="num">18px</td></tr>
+        <tr><td>Numbers visible without scrolling</td><td class="num">Most</td><td class="num">Middle</td><td class="num">Fewest</td></tr>
+        <tr><td>Strongest on the five principles</td><td>clean, sleek</td><td>fresh, sleek</td><td>easiness, ux friendly</td></tr>
+        <tr><td>Weakest on</td><td>fresh</td><td>easiness</td><td>clean (two density states)</td></tr>
+        <tr><td>Files to change</td><td><code>index.css</code>, <code>components.tsx</code></td><td><code>index.css</code>, <code>components.tsx</code></td><td>+ <code>Dashboard.tsx</code>, new <code>Section</code></td></tr>
+        <tr><td>Screen structure changes</td><td>None</td><td>None</td><td>Yes — Dashboard reorders</td></tr>
+        <tr><td>Rough build size</td><td>Small</td><td>Small–medium</td><td>Medium–large</td></tr>
+        <tr><td>Best fit for</td><td>Career</td><td>Arena</td><td>A brand-new player</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What is true whichever wins</h3>
+  <div class="tbl-scroll">
+    <table class="t">
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Adjacent planes ≥ ΔL* 4, measured after alpha compositing</td><td>Today’s ramp is ΔL* 2–4 and inverts under the body gradient. If a surface is translucent over a gradient, the ordering must hold at both ends of that gradient — or the gradient goes.</td></tr>
+        <tr><td>No pure-black shadows as the primary depth cue</td><td><code>--elev-2</code> is ΔL* −2.12 against the page. On dark, the plane step does ~80% of the work and a top inner highlight beats a drop shadow.</td></tr>
+        <tr><td>One scale, ≤ 8 steps, no fractional pixels</td><td>Every <code>text-[12.5px]</code> gets deleted, not migrated. This is the single highest-leverage change on the list.</td></tr>
+        <tr><td>A normal weight exists, and prose defaults to it</td><td>2 of 232 weight declarations are normal. Bold becomes a signal again only once it is rare.</td></tr>
+        <tr><td>Ink is the default text colour; grey is the exception</td><td>The current 460 : 113 ratio inverts.</td></tr>
+        <tr><td>The mobile shell is untouched</td><td>Bottom tab bar, More sheet, contextual action bar, <code>pad-bottom-safe</code>, <code>dvh</code>, 16px inputs, haptics. All three directions were designed on top of it.</td></tr>
+        <tr><td>Focus ring, reduced-motion, never-colour-alone survive verbatim</td><td>These are already right. <code>index.css:146</code>, <code>:559</code>, <code>TrendBadge</code>’s ▲/▼.</td></tr>
+        <tr><td>Per-sector accent rebinding survives</td><td><code>theme.ts</code> retints the whole UI per market. All three keep it; they differ only in how much accent gets used.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Free wins, regardless</h3>
+  <div class="tbl-scroll">
+    <table class="t">
+      <thead><tr><th>Fix</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>Panel title reads <code>YOUR OWN POSITION — §42</code> to the player. A design-brief section number shipped to screen.</td><td><code>screens/Fundraising.tsx:333</code></td></tr>
+        <tr><td>Emoji in panel titles (<code>“⚔️ Dirty tricks — hit the other founders”</code>) — full-colour platform glyphs inside an 11px grey caps label.</td><td><code>screens/Market.tsx</code></td></tr>
+        <tr><td><code>ring-1 ring-inset ring-white/[0.03]</code> is documented as “a 1px inner highlight along the top edge”. It draws four sides.</td><td><code>components.tsx:97</code></td></tr>
+        <tr><td><code>background-attachment: fixed</code> is what makes the card inversion change as you scroll.</td><td><code>index.css:113</code></td></tr>
+        <tr><td>The <code>prefers-reduced-motion</code> block is duplicated; the second is a superset of the first.</td><td><code>index.css:559</code> &amp; <code>:572</code></td></tr>
+        <tr><td>14 numbers count up simultaneously on Advance Week (7 in the rail + 7 in <code>StatCard</code>s). Animate only what changed materially.</td><td><code>components.tsx:42</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="cap" style="margin-top:26px"><b>Recommendation, since one was asked for.</b> <b>B · Cockpit</b> for the next release: it is the smallest change that removes the actual defect (one plane, no elevation, no scale), it keeps every screen’s structure so nothing regresses, and it is the most “fresh and sleek” of the three at the lowest risk. Then take <b>C · Briefing</b>’s decision-pricing pattern — the priced trade-off block — and apply it to the Inbox only, which is where the onboarding audit already said the damage is. <b>A · Ledger</b> is the right long-term answer for Career specifically, once the type discipline exists to sustain it.</p>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var K='fm-ui-theme', r=document.documentElement, b=document.querySelectorAll('.tt button');
+  function apply(v){
+    if(v==='system'){ r.removeAttribute('data-theme'); } else { r.setAttribute('data-theme',v); }
+    b.forEach(function(x){ x.setAttribute('aria-pressed', String(x.dataset.set===v)); });
+    try{ localStorage.setItem(K,v); }catch(e){}
+  }
+  var saved='system';
+  try{ saved=localStorage.getItem(K)||'system'; }catch(e){}
+  apply(saved);
+  b.forEach(function(x){ x.addEventListener('click',function(){ apply(x.dataset.set); }); });
+})();
+</script>
+</body>
+</html>
