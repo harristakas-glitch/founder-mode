@@ -79,7 +79,14 @@
       "Bash(git commit -m 'Room chat: floating widget with unread badge, session-only messages over the realtime channel, available in lobby and mid-match *)",
       "Bash(git commit -m 'Optional social login \\(Google / X\\) via Supabase Auth: profile chip on start screen, leaderboard rows carry the player'\\\\''s handle; auth-upgrade.sql adds display_name *)",
       "Bash(git commit -m 'README: full project documentation *)",
-      "Bash(git commit -m 'Update local tool settings *)"
+      "Bash(git commit -m 'Update local tool settings *)",
+      "Read(//Users/charilaostakas/Claude/onchain/**)",
+      "Bash(./analysis/daily_track.sh toad *)",
+      "Bash(awk '$1>1')",
+      "Bash(cp segments_tracked.csv segments_tracked.csv.bak-20260820)",
+      "Bash(awk '!seen[$0]++' segments_tracked.csv)",
+      "Bash(mv .dedup.tmp segments_tracked.csv)",
+      "Bash(python3 /private/tmp/claude-502/-Users-charilaostakas-Claude-game/a6e4c3e6-b837-4610-9aae-45fa8e33fac8/scratchpad/decompose.py)"
     ]
   }
 }

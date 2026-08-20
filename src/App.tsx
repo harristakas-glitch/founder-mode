@@ -5,27 +5,21 @@ import {
   ChevronDown,
   ChevronsRight,
   Globe,
-  Grid3x3,
   HandCoins,
   Hourglass,
   DoorOpen,
   LayoutDashboard,
   Mail,
   Menu,
-  Microscope,
   Package,
   Swords,
-  TrendingUp,
-  Trophy,
-  UserPlus,
   Users,
   Volume2,
   VolumeX,
-  Wallet,
   X,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
-import { avgMorale, hasPendingDecision, runwayWeeks, totalUsers, valuation, weekDate, weeklyBurn } from './game/engine'
+import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn } from './game/engine'
 import { money, num } from './format'
 import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
 import { MODE_META, hasCapability } from './game/modes'
@@ -42,13 +36,11 @@ import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
 import { Fundraising } from './screens/Fundraising'
 import { Inbox } from './screens/Inbox'
-import { Career } from './screens/Career'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
 import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge } from './components'
 import { runMarkers } from './runMarkers'
-import { PMF_CAUSAL_CHAIN } from './CareerUI'
 import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
 import { ChatWidget } from './ChatWidget'
 import { DailyLeaderboard } from './screens/DailyLeaderboard'
@@ -72,23 +64,60 @@ import type { GameState } from './game/types'
  * Kept as ids rather than a second copy of the entries, so NAV stays the single source of labels,
  * icons and badges and these two lists cannot drift apart.
  */
-const MOBILE_TABS: ScreenId[] = ['dashboard', 'inbox', 'product', 'growth']
-
-const NAV: { id: ScreenId; label: string; icon: typeof Mail; careerOnly?: boolean }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'inbox', label: 'Inbox', icon: Mail },
-  { id: 'team', label: 'Team', icon: Users },
-  { id: 'hiring', label: 'Hiring', icon: UserPlus },
-  { id: 'discovery', label: 'Discovery', icon: Microscope, careerOnly: true },
-  { id: 'cohorts', label: 'Cohorts', icon: Grid3x3, careerOnly: true },
-  { id: 'product', label: 'Product', icon: Package },
-  { id: 'growth', label: 'Growth', icon: TrendingUp },
-  { id: 'market', label: 'Market', icon: Swords },
-  { id: 'finance', label: 'Finance', icon: Wallet },
-  { id: 'fundraising', label: 'Fundraising', icon: HandCoins },
-  { id: 'story', label: 'Story', icon: BookOpen },
-  { id: 'career', label: 'Career', icon: Trophy },
+/**
+ * SIX AREAS, not thirteen rows (docs/ux-audit-2026-08.md §5; brief §11-§12).
+ *
+ * The old sidebar filed screens by NOUN — anything involving other companies went to Market,
+ * anything involving money went to Fundraising — and the audit's diagnosis was that areas named
+ * after nouns always accumulate until no screen can state a purpose. These are named after the
+ * DECISION the player is there to take, and each existing ScreenId keeps working (brief §56: no
+ * routing rewrite; a save that says `screen: 'cohorts'` lands exactly where it used to).
+ *
+ * An area with more than one screen renders its siblings as a small tab row above the content —
+ * primary area → screen → contextual disclosure, never deeper (brief §13).
+ *
+ * Deliberately absent, per the audit's flags: WORLD would be empty (its whole candidate content is
+ * one unlabelled sparkline plus a climate line derived from the same inputs — folded into Capital),
+ * and CAREER (the trophy screen) is deleted outright: zero controls, reachable only mid-run, and
+ * its headline stats were wrong by construction. Company is the record area: it must never carry a
+ * badge and must never be the landing screen.
+ */
+const AREAS: {
+  id: string
+  label: string
+  icon: typeof Mail
+  screens: { id: ScreenId; label: string; careerOnly?: boolean }[]
+}[] = [
+  { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [
+    { id: 'dashboard', label: 'This week' },
+    { id: 'inbox', label: 'Inbox' },
+  ] },
+  { id: 'market', label: 'Market', icon: Swords, screens: [
+    { id: 'market', label: 'Rivals' },
+    { id: 'growth', label: 'Growth' },
+  ] },
+  { id: 'product', label: 'Product', icon: Package, screens: [
+    { id: 'product', label: 'Build' },
+    { id: 'discovery', label: 'Discovery', careerOnly: true },
+    { id: 'cohorts', label: 'Cohorts', careerOnly: true },
+  ] },
+  { id: 'people', label: 'People', icon: Users, screens: [
+    { id: 'team', label: 'Team' },
+    { id: 'hiring', label: 'Hiring' },
+  ] },
+  { id: 'capital', label: 'Capital', icon: HandCoins, screens: [
+    { id: 'finance', label: 'Finance' },
+    { id: 'fundraising', label: 'Raise' },
+  ] },
+  { id: 'company', label: 'Company', icon: BookOpen, screens: [
+    { id: 'story', label: 'Story' },
+  ] },
 ]
+
+const areaOf = (screen: ScreenId) => AREAS.find((a) => a.screens.some((sc) => sc.id === screen))
+
+/** Five areas fit the tab bar; Company — the record, never urgent — rides behind More. */
+const MOBILE_TABS: string[] = ['hq', 'market', 'product', 'people', 'capital']
 
 
 function MuteButton() {
@@ -241,35 +270,33 @@ export default function App() {
 
   const pending = hasPendingDecision(game)
   const unread = game.inbox.filter((m) => m.kind === 'choice' && !m.resolved).length
-  const val = valuation(game)
   const burn = weeklyBurn(game)
   const runway = runwayWeeks(game)
-  const morale = avgMorale(game)
   const secondsLeft = online?.deadline ? Math.max(0, Math.ceil((online.deadline - Date.now()) / 1000)) : null
   const h = game.history
-  const usersTrend = h.length >= 5 && h[h.length - 5].users > 0 ? (h[h.length - 1].users - h[h.length - 5].users) / h[h.length - 5].users / 4 : 0
   const cashDelta = h.length >= 2 ? h[h.length - 1].cash - h[h.length - 2].cash : 0
   const celebrate =
     (game.flash?.includes('🏆') || game.flash?.startsWith('🏁') || game.flash?.startsWith('🚀') || false) ||
     (!!game.gameOver && ['unicorn', 'ipo', 'acquired'].includes(game.gameOver.type))
 
-  // What is waiting behind More, so the tab can say so without naming a number it cannot fit.
-  // Inbox is excluded on purpose: it is its own tab and carries its own count.
-  const moreWaiting = game.termSheets.length + game.candidates.length
-
   // One renderer, two callers. The desktop rail shows everything; the phone's More sheet shows
   // everything that is NOT already a tab, because repeating the four tabs inside the sheet they
   // sit under is how a "More" menu becomes a list of everything and stops meaning anything.
-  const navList = (omit: readonly ScreenId[] = []) => (
+  // Which screens inside an area actually exist for this run (Career-only ones gate out).
+  const eligible = (a: (typeof AREAS)[number]) => a.screens.filter((sc) => !sc.careerOnly || hasCapability(game, 'hypothesisBoard'))
+
+  const navList = (omit: readonly string[] = []) => (
     <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-      {NAV.filter((n) => (!n.careerOnly || hasCapability(game, 'hypothesisBoard')) && !omit.includes(n.id)).map((n) => {
-        const Icon = n.icon
-        const active = screen === n.id
+      {AREAS.filter((a) => !omit.includes(a.id) && eligible(a).length > 0).map((a) => {
+        const Icon = a.icon
+        const active = areaOf(screen)?.id === a.id
         return (
           <button
-            key={n.id}
+            key={a.id}
             onClick={() => {
-              setScreen(n.id)
+              // Entering an area lands on its first screen unless you are already inside it —
+              // re-clicking the area you are in is a "take me to the front of it" gesture.
+              setScreen(eligible(a)[0].id)
               setNavOpen(false)
             }}
             aria-current={active ? 'page' : undefined}
@@ -280,27 +307,14 @@ export default function App() {
             {/* a quiet accent rail marks the place; the accent itself stays reserved for actions */}
             {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" />}
             <Icon size={16} strokeWidth={2.2} className={active ? 'text-accent' : ''} />
-            {n.label}
-            {/* Anything waiting on the player is visible without opening the screen:
-                blocking decisions shout, opportunities murmur. */}
-            {n.id === 'inbox' && unread > 0 && (
+            {a.label}
+            {/* ONE badge in the whole nav: the blocking-decision count on HQ. The audit killed the
+                other two — the candidates badge read a constant 5 forever (the engine refills the
+                pool weekly), a notification affordance carrying zero bits that trains the player
+                to ignore badges; and term sheets duplicate a list the register now surfaces by
+                name. Company never badges: it is the record, nothing in it is ever urgent. */}
+            {a.id === 'hq' && unread > 0 && (
               <span className="ml-auto rounded-full bg-bad px-1.5 py-px text-[10px] font-bold text-bg tnum">{unread}</span>
-            )}
-            {n.id === 'fundraising' && game.termSheets.length > 0 && (
-              <span
-                className="ml-auto rounded-full bg-warn px-1.5 py-px text-[10px] font-bold text-bg tnum"
-                title={`${game.termSheets.length} term sheet${game.termSheets.length === 1 ? '' : 's'} on the table`}
-              >
-                {game.termSheets.length}
-              </span>
-            )}
-            {n.id === 'hiring' && game.candidates.length > 0 && (
-              <span
-                className="ml-auto rounded-full border border-line2 px-1.5 py-px text-[10px] font-semibold text-mut tnum"
-                title={`${game.candidates.length} candidate${game.candidates.length === 1 ? '' : 's'} in the pool`}
-              >
-                {game.candidates.length}
-              </span>
             )}
           </button>
         )
@@ -309,8 +323,38 @@ export default function App() {
   )
   const nav = navList()
 
+  // The sibling row: primary area -> screen, and never deeper. Only rendered when the area has
+  // more than one screen this run, so Quick Play's Product area (one screen) shows no chrome.
+  const activeArea = areaOf(screen)
+  const siblings = activeArea ? eligible(activeArea) : []
+  const siblingTabs = siblings.length > 1 && (
+    <div className="mb-3.5 flex flex-wrap gap-1.5">
+      {siblings.map((sc) => (
+        <button
+          key={sc.id}
+          onClick={() => setScreen(sc.id)}
+          aria-current={screen === sc.id ? 'page' : undefined}
+          className={`rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors duration-[120ms] ${
+            screen === sc.id ? 'bg-surface2 text-ink' : 'text-mut hover:text-ink'
+          }`}
+        >
+          {sc.label}
+          {sc.id === 'inbox' && unread > 0 && <span className="ml-1.5 tnum text-bad">{unread}</span>}
+        </button>
+      ))}
+    </div>
+  )
+
   // One source for the metric strip: the desktop rail and the mobile sheet render the same
   // entries, so a stat can never exist in one and not the other.
+  // FOUR entries, down from nine (audit §2.1: the rail's nine numbers were re-rendered 42 more
+  // times across nine screens, and nine equal metrics meant Cash — the number that ends the run —
+  // was typographically identical to Valuation, which the player cannot act on this week).
+  //
+  // What stays is what a player needs on EVERY screen: the money clock (cash, runway, net — net
+  // was the rail's one unique number) and the match timer online. Users, PMF, revenue, burn,
+  // valuation and morale each now have exactly one home — the HQ or their owning area — which is
+  // the audit's actual fix: a number with one home can be loud there.
   const statRail = (
     <>
       <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
@@ -320,31 +364,8 @@ export default function App() {
       <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
         {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
       </Stat>
-      <Stat k="Rev /wk">
-        <Ticker value={game.lastRevenue} format={money} />
-      </Stat>
-      <Stat k="Burn /wk">
-        <Ticker value={burn} format={money} />
-      </Stat>
       <Stat k="Net /wk" tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
         <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
-      </Stat>
-      <Stat k="Users">
-        <Ticker value={totalUsers(game)} format={num} />
-        <TrendBadge value={usersTrend} />
-      </Stat>
-      <Stat
-        k="PMF"
-        tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}
-        title={hasCapability(game, 'detailedPMF') ? PMF_CAUSAL_CHAIN : undefined}
-      >
-        <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
-      </Stat>
-      <Stat k="Valuation">
-        <Ticker value={val} format={money} />
-      </Stat>
-      <Stat k="Morale" tone={morale < 45 ? 'bad' : undefined}>
-        {Math.round(morale)}
       </Stat>
       {online && secondsLeft !== null && !matchOver && (
         <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
@@ -686,6 +707,7 @@ export default function App() {
               {game.flash}
             </div>
           )}
+          {siblingTabs}
           <div key={screen} className="rise-in">
             {screen === 'dashboard' && <Dashboard />}
             {screen === 'inbox' && <Inbox />}
@@ -696,7 +718,9 @@ export default function App() {
             {screen === 'market' && <Market />}
             {screen === 'finance' && <Finance />}
             {screen === 'fundraising' && <Fundraising />}
-            {screen === 'career' && <Career />}
+            {/* 'career' aliases to the HQ: the trophy screen is deleted (audit §3.A.1) and a
+                save written mid-run with it open must still land somewhere sensible. */}
+            {screen === 'career' && <Dashboard />}
             {screen === 'discovery' && <Discovery />}
             {screen === 'cohorts' && <CohortAnalytics />}
             {screen === 'story' && <Story />}
@@ -716,14 +740,14 @@ export default function App() {
             className="inset-x-safe pad-bottom-safe flex items-stretch border-t border-line/60 bg-bg"
           >
             {MOBILE_TABS.map((id) => {
-              const item = NAV.find((n) => n.id === id)!
+              const item = AREAS.find((a) => a.id === id)!
               const Icon = item.icon
-              const active = screen === id
-              const badge = id === 'inbox' ? unread : 0
+              const active = areaOf(screen)?.id === id
+              const badge = id === 'hq' ? unread : 0
               return (
                 <button
                   key={id}
-                  onClick={() => setScreen(id)}
+                  onClick={() => setScreen(eligible(item)[0].id)}
                   aria-current={active ? 'page' : undefined}
                   className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 pt-1.5 pb-1 text-[10px] font-semibold transition-colors duration-[120ms] ${
                     active ? 'text-accent' : 'text-mut'
@@ -746,15 +770,14 @@ export default function App() {
               aria-label="More sections"
               aria-expanded={navOpen}
               className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 pt-1.5 pb-1 text-[10px] font-semibold transition-colors duration-[120ms] ${
-                navOpen || !MOBILE_TABS.includes(screen) ? 'text-accent' : 'text-mut'
+                navOpen || !MOBILE_TABS.includes(areaOf(screen)?.id ?? 'hq') ? 'text-accent' : 'text-mut'
               }`}
             >
               <span className="relative">
                 <Menu size={20} strokeWidth={2} />
-                {/* Term sheets and candidates live behind More on a phone. Without this dot they
-                    would be invisible until the player went looking, which is how a round expires
-                    unnoticed. A dot, not a count — the number is on the row inside. */}
-                {moreWaiting > 0 && <span className="absolute -top-0.5 -right-1.5 h-2 w-2 rounded-full bg-warn" />}
+                {/* No dot. Only Company lives back here now, and Company is the record — nothing
+                    in it is ever urgent. The old dot counted term sheets and candidates, which the
+                    attention register now surfaces BY NAME on the HQ instead. */}
               </span>
               More
             </button>
