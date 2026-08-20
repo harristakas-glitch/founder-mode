@@ -49,8 +49,11 @@ export function Ticker({ value, format }: { value: number; format: (n: number) =
 
 const BTN_VARIANTS = {
   default: 'border border-line bg-surface2 text-ink hover:border-line2 hover:bg-surface2',
-  primary: 'bg-accent text-bg shadow-[var(--elev-2)] hover:brightness-110',
-  good: 'bg-good text-bg shadow-[var(--elev-2)] hover:brightness-110',
+  // The sample mocks' CTA: a purple gradient with the brand glow and light text. This is the
+  // "primary action" the spec reserves purple for — anything less prominent takes `default`.
+  primary:
+    'bg-gradient-to-b from-accent to-accent2 text-[var(--color-ink)] shadow-[var(--glow-accent)] hover:brightness-110',
+  good: 'bg-good text-bg shadow-[var(--glow-good)] hover:brightness-110',
   danger: 'border border-line bg-surface2 text-ink hover:border-bad/70 hover:text-bad',
   ghost: 'text-mut hover:bg-surface2 hover:text-ink',
 } as const
@@ -203,6 +206,7 @@ export function StatCard({
   trendFormat,
   className = '',
   children,
+  icon,
 }: {
   label: string
   value?: string
@@ -214,6 +218,8 @@ export function StatCard({
   trendFormat?: (n: number) => string
   /** `h-full` from grid callers, so a row of cards shares one bottom edge. */
   className?: string
+  /** The mock grammar: every metric card carries a small icon beside its label. */
+  icon?: ReactNode
   /** The infographic slot: a sparkline or a meter, rendered under the figure. */
   children?: ReactNode
 }) {
@@ -230,7 +236,10 @@ export function StatCard({
   // 34 against 11 — which is a difference that survives being looked at quickly on a phone.
   return (
     <div className={`${CARD} flex flex-col p-5 transition-colors duration-[120ms] hover:border-line2 ${className}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">{label}</div>
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">
+        {icon && <span className="text-accent">{icon}</span>}
+        {label}
+      </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[34px] leading-[1.05] font-bold tracking-[-0.02em] tnum">
         {numeric !== undefined && format ? <Ticker value={numeric} format={format} /> : value}
         {trend !== undefined && <TrendBadge value={trend} format={trendFormat} />}

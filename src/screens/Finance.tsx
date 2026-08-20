@@ -1,5 +1,6 @@
+import { ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
-import { Btn, Disclosure, LineChart, Panel, Td, Th } from '../components'
+import { Btn, Disclosure, LineChart, NESTED, Panel, Td, Th } from '../components'
 import { money } from '../format'
 import {
   committedCosts,
@@ -65,30 +66,63 @@ function DebtPanel() {
   // the slider's ceiling moves with revenue and debt — keep the label honest about what the buttons will do
   const sliderMax = Math.max(10_000, Math.max(available, game.debt?.principal ?? 0))
   const shownAmount = Math.min(amount, sliderMax)
+  // The two covenant conditions, unchanged: red at the engine's own breach line (covenantCheck
+  // calls the loan below the floor), amber inside the same 20% early-warning band this panel
+  // already coloured the figure with. Icon + wording carry the state; the colour only seconds it.
+  const covenant = !game.debt
+    ? null
+    : game.lastRevenue < game.debt.covenantRevenue
+      ? 'breached'
+      : game.lastRevenue < game.debt.covenantRevenue * 1.2
+        ? 'close'
+        : 'clear'
 
   return (
     <div className="mt-3.5">
       <Panel title="Bank credit line — leverage with conditions">
         {game.debt ? (
-          <div className="mb-3 flex flex-wrap items-center gap-x-8 gap-y-2 rounded-xl border border-warn/40 bg-warn/5 px-3 py-2.5">
-            <span>
-              <span className="text-[11px] text-mut">Principal</span>
-              <br />
-              <b className="tnum">{money(game.debt.principal)}</b> <span className="text-mut">at {game.debt.apr}%</span>
-            </span>
-            <span>
-              <span className="text-[11px] text-mut">Interest / wk</span>
-              <br />
-              <b className="tnum">{money(weeklyInterest(game))}</b>
-            </span>
-            <span>
-              <span className="text-[11px] text-mut">Covenant: revenue must stay above</span>
-              <br />
-              <b className={`tnum ${game.lastRevenue < game.debt.covenantRevenue * 1.2 ? 'text-bad' : 'text-good'}`}>
-                {money(game.debt.covenantRevenue)}/wk
-              </b>{' '}
-              <span className="text-mut">(now {money(game.lastRevenue)})</span>
-            </span>
+          <div className="mb-3 grid gap-2">
+            <div className={`${NESTED} flex flex-wrap items-center gap-x-8 gap-y-2 px-3.5 py-2.5`}>
+              <span>
+                <span className="text-[11px] text-mut">Principal</span>
+                <br />
+                <b className="tnum">{money(game.debt.principal)}</b> <span className="text-mut">at {game.debt.apr}%</span>
+              </span>
+              <span>
+                <span className="text-[11px] text-mut">Interest / wk</span>
+                <br />
+                <b className="tnum">{money(weeklyInterest(game))}</b>
+              </span>
+            </div>
+            <div
+              className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-snug ${
+                covenant === 'breached'
+                  ? 'border-bad/40 bg-bad/10 text-bad'
+                  : covenant === 'close'
+                    ? 'border-warn/40 bg-warn/10 text-warn'
+                    : 'border-line/70 bg-surface2 text-mut'
+              }`}
+            >
+              <ShieldAlert size={16} className="shrink-0" aria-hidden="true" />
+              <span>
+                {covenant === 'breached' ? (
+                  <>
+                    Covenant breached — revenue <b className="tnum">{money(game.lastRevenue)}/wk</b> is below the{' '}
+                    <b className="tnum">{money(game.debt.covenantRevenue)}/wk</b> floor.
+                  </>
+                ) : covenant === 'close' ? (
+                  <>
+                    Covenant: revenue must stay above <b className="tnum">{money(game.debt.covenantRevenue)}/wk</b> — now{' '}
+                    <b className="tnum">{money(game.lastRevenue)}/wk</b>, within 20% of the floor.
+                  </>
+                ) : (
+                  <>
+                    Covenant: revenue must stay above <b className="tnum">{money(game.debt.covenantRevenue)}/wk</b> — now{' '}
+                    <b className="tnum text-good">{money(game.lastRevenue)}/wk</b>, clear.
+                  </>
+                )}
+              </span>
+            </div>
           </div>
         ) : (
           // The offer itself is state, not prose, so it stays visible; only the arithmetic behind
@@ -121,7 +155,7 @@ function DebtPanel() {
             15% of the company is on the table, and a rule you can lose the company to is not an
             explainer — it is the price on the button directly above it. */}
         <div className="mt-2 text-xs leading-relaxed text-mut">
-          The condition, stated up front: the covenant locks at 60% of your revenue when you draw — fall below it and the bank calls
+          The condition, stated up front: the covenant locks at 70% of your revenue when you draw — fall below it and the bank calls
           the loan, seizing cash first and <b className="text-ink">15% of the company</b> for anything it can't collect.
         </div>
         <Disclosure label="How the cap, the rate and the trade-off work">

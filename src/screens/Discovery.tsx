@@ -1,6 +1,7 @@
 // Career-only: the Hypothesis Board, experiment catalogue and evidence log.
 // This screen is the centre of early Career play — it is where you find out that you were
 // wrong about your own market.
+import { Clock, DollarSign, FileText, MessageSquare, MousePointerClick, Rocket, Tag, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Btn, Disclosure, NESTED, Panel } from '../components'
 import { money } from '../format'
@@ -20,6 +21,52 @@ import {
 import type { ExperimentType, SegmentId } from '../game/career/types'
 import { CustomerInterview, PmfBreakdown, SegmentHealth } from '../CareerUI'
 import { useStore } from '../store'
+
+// The catalogue's icon grammar from the sample mock: one lucide glyph per way of learning,
+// sitting in a NESTED square tile at the head of each row.
+const EXPERIMENT_ICON: Record<ExperimentType, LucideIcon> = {
+  interview: MessageSquare,
+  landing_page: FileText,
+  prototype: MousePointerClick,
+  pricing_test: Tag,
+  pilot: Rocket,
+}
+
+// Duration / cost read as small bordered chips, not prose — the mock's metadata treatment.
+const CHIP = 'inline-flex items-center gap-1 rounded-md border border-line/70 bg-surface2 px-2 py-0.5 text-[11.5px] font-semibold text-mut tnum'
+
+/**
+ * The mock's segmented control for "Your bet": one bordered NESTED container, the chosen option a
+ * filled accent pill. Pure presentation over choices the store already owns — every pill fires the
+ * exact store action the old buttons and <select> fired.
+ */
+function PillGroup<T extends string>({
+  options,
+  value,
+  onSelect,
+}: {
+  options: readonly { id: T; label: string }[]
+  value: T
+  onSelect: (id: T) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1 rounded-lg border border-line/70 bg-surface2 p-1">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          aria-pressed={value === o.id}
+          onClick={() => onSelect(o.id)}
+          className={`min-h-[38px] flex-1 rounded-full px-3.5 text-[12.5px] font-semibold whitespace-nowrap capitalize transition-colors duration-[120ms] ${
+            value === o.id ? 'bg-accent text-ink' : 'text-mut hover:text-ink'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function ConfidenceBar({ value }: { value: number }) {
   return (
@@ -182,18 +229,13 @@ export function Discovery() {
           Who you are building for, what the product optimises for, and what you charge. All three are guesses until customers stay —
           and switching target costs weeks of velocity, because the roadmap was built for somebody else.
         </div>
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {segs.map((sg) => (
-            <button
-              key={sg.id}
-              onClick={() => setTargetSegment(sg.id)}
-              className={`rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-all ${
-                career.primaryTargetSegmentId === sg.id ? 'border-accent bg-accent/15 text-ink' : 'border-line bg-surface text-mut hover:border-accent/50'
-              }`}
-            >
-              {sg.name}
-            </button>
-          ))}
+        <div className="mt-2.5">
+          <div className="mb-1 text-[10.5px] font-bold tracking-wide text-mut uppercase">Target segment</div>
+          <PillGroup
+            options={segs.map((sg) => ({ id: sg.id, label: sg.name }))}
+            value={career.primaryTargetSegmentId}
+            onSelect={(id) => setTargetSegment(id)}
+          />
         </div>
         {career.repositioning && (
           <div className="mt-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-[12.5px] text-warn">
@@ -205,38 +247,31 @@ export function Discovery() {
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
             <div className="mb-1 text-[10.5px] font-bold tracking-wide text-mut uppercase">Pricing</div>
-            <div className="flex gap-1.5">
-              {(['low', 'market', 'premium'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPricing(p)}
-                  className={`flex-1 rounded-lg border px-2 py-1.5 text-[12.5px] font-semibold capitalize transition-all ${
-                    career.pricing === p ? 'border-accent bg-accent/15' : 'border-line bg-surface text-mut hover:border-accent/50'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            <PillGroup
+              options={(['low', 'market', 'premium'] as const).map((p) => ({ id: p, label: p }))}
+              value={career.pricing}
+              onSelect={setPricing}
+            />
           </div>
           <div>
             <div className="mb-1 text-[10.5px] font-bold tracking-wide text-mut uppercase">Product focus</div>
-            <select
+            {/* Was a <select>; the mock's segmented grammar covers it too, and the six options
+                surface at a glance instead of hiding behind a dropdown. Same setProductFocus call. */}
+            <PillGroup
+              options={(['simplicity', 'reliability', 'collaboration', 'enterprise_readiness', 'automation', 'performance'] as const).map((f) => ({
+                id: f,
+                label: f.replace('_', ' '),
+              }))}
               value={career.focus}
-              onChange={(e) => setProductFocus(e.target.value as never)}
-              className="w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-[12.5px] font-semibold capitalize outline-none focus-visible:border-accent"
-            >
-              {(['simplicity', 'reliability', 'collaboration', 'enterprise_readiness', 'automation', 'performance'] as const).map((f) => (
-                <option key={f} value={f}>
-                  {f.replace('_', ' ')}
-                </option>
-              ))}
-            </select>
+              onSelect={setProductFocus}
+            />
           </div>
         </div>
       </Panel>
 
-      {/* experiments */}
+      {/* experiments. The sample mock also heads this panel with a stats banner — experiments run /
+          "insight velocity" / a confidence score. Deliberately NOT built: the state holds none of
+          those numbers and inventing metrics is out of scope for a presentation pass. */}
       <div className="mt-3.5">
         <Panel title="Experiments">
           <div className="mb-3 text-[12.5px] leading-snug text-mut">
@@ -308,11 +343,24 @@ export function Discovery() {
             {EXPERIMENTS.map((def) => {
               const gate = canRunExperiment(career, def.type, segment, game.cash)
               const standing = standingTypes.has(def.type)
+              const Icon = EXPERIMENT_ICON[def.type]
               return (
-                <div key={def.type} className="flex flex-wrap items-center justify-between gap-2 border-b border-line/40 py-2 last:border-b-0">
+                <div key={def.type} className="flex flex-wrap items-center gap-3 border-b border-line/40 py-2.5 last:border-b-0">
+                  <div className={`${NESTED} flex h-10 w-10 shrink-0 items-center justify-center`}>
+                    <Icon size={20} className="text-accent" aria-hidden="true" />
+                  </div>
                   <span className="min-w-0 flex-1 text-[12.5px]">
-                    <b>{def.name}</b> <span className="text-mut">· {def.weeks} wk · {money(def.cashCost)}</span>
+                    <b>{def.name}</b>
                     <div className="text-[11.5px] text-mut">{def.blurb}</div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className={CHIP}>
+                        <Clock size={16} aria-hidden="true" /> {def.weeks} wk
+                      </span>
+                      <span className={CHIP}>
+                        {/* money() already prints the $, the icon replaces it */}
+                        <DollarSign size={16} aria-hidden="true" /> {money(def.cashCost).replace('$', '')}
+                      </span>
+                    </div>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     {/* Standing is the mode Run runs in, so it is a switch, not the second

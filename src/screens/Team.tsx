@@ -1,5 +1,5 @@
 import { Megaphone } from 'lucide-react'
-import { Bar, Btn, NESTED, Panel, RoleAvatar, SkillRing, TraitChip } from '../components'
+import { Bar, Btn, Meter, Monogram, NESTED, Panel, RoleAvatar, SkillDots, TraitChip } from '../components'
 import { money, pct } from '../format'
 import { pitchOptions, weeklyPayroll } from '../game/engine'
 import { hasCapability } from '../game/modes'
@@ -147,43 +147,54 @@ export function Team() {
             </div>
           </Panel>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {roster.map((e) => {
               const floor = quitFloor(e)
               const atRisk = e.morale < floor
               return (
-                <div
-                  key={e.id}
-                  className="rounded-2xl border border-line/70 bg-gradient-to-b from-surface to-surface/60 p-3.5 shadow-[var(--elev-2)] shadow-black/25 transition-colors hover:border-line"
-                >
-                  <div className="flex items-center gap-3">
-                    <RoleAvatar name={e.name} role={e.role} size={42} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-bold">
-                        {e.name}
-                        <TraitChip trait={e.trait} />
-                      </div>
-                      <div className="text-xs text-mut">
-                        {ROLE_LABEL[e.role]} · {e.weeks} wk · {money(e.salary)}/yr
+                // Same card grammar as Hiring: Panel (the one card recipe), name with the trait chip
+                // under it, role as the muted line, SkillDots top-right, a divider, then the rows.
+                <Panel key={e.id} className="flex h-full flex-col">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Monogram name={e.name} size={42} />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold">{e.name}</div>
+                        {e.trait && (
+                          // the chip's own ml-1.5 is for the inline-after-a-name case; on its own
+                          // line the wrapper cancels it so the chip left-aligns
+                          <div className="mt-1 -ml-1.5">
+                            <TraitChip trait={e.trait} />
+                          </div>
+                        )}
+                        <div className="mt-1 text-[12px] text-mut">
+                          {ROLE_LABEL[e.role]} · {e.weeks} wk
+                        </div>
                       </div>
                     </div>
-                    <SkillRing skill={e.skill} />
+                    <SkillDots skill={e.skill} />
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    {/* The word, not just the hue — below the floor this person can resign on the
-                        next tick, and colour alone is never allowed to be the only carrier. */}
-                    <span className={`w-14 text-[11px] ${atRisk ? 'font-semibold text-bad' : 'text-mut'}`}>
-                      {atRisk ? 'may quit' : 'morale'}
-                    </span>
-                    <div className="flex-1">
-                      <Bar
-                        value={e.morale}
-                        color={atRisk ? 'var(--color-bad)' : e.morale < floor + 15 ? 'var(--color-warn)' : 'var(--color-good)'}
-                      />
+                  <div className="mt-3 border-t border-line/70 pt-3">
+                    <div className="flex items-center gap-2">
+                      {/* The word, not just the hue — below the floor this person can resign on the
+                          next tick, and colour alone is never allowed to be the only carrier. */}
+                      <span className={`w-14 text-[11px] ${atRisk ? 'font-semibold text-bad' : 'text-mut'}`}>
+                        {atRisk ? 'may quit' : 'morale'}
+                      </span>
+                      <div className="flex-1">
+                        {/* Tone bands measured against the engine's own quit roll (quitFloor above):
+                            bad below the floor, warn inside 18 points of it — 32 / 50 for most
+                            people, higher for a mercenary, exactly as the simulation treats them. */}
+                        <Meter value={e.morale} tone={atRisk ? 'bad' : e.morale < floor + 18 ? 'warn' : 'good'} />
+                      </div>
+                      <span className="w-7 text-right text-[12px] font-semibold tnum">{Math.round(e.morale)}</span>
                     </div>
-                    <span className="w-7 text-right text-[12px] font-semibold tnum">{Math.round(e.morale)}</span>
+                    <div className="mt-2 flex items-center justify-between text-[13px]">
+                      <span className="text-mut">Salary</span>
+                      <span className="text-right tnum">{money(e.salary)}/yr</span>
+                    </div>
                   </div>
-                  <div className="mt-3 flex justify-end gap-1.5">
+                  <div className="mt-auto flex justify-end gap-1.5 pt-3">
                     <Btn onClick={() => giveRaise(e.id)}>Raise</Btn>
                     <Btn
                       variant="danger"
@@ -194,7 +205,7 @@ export function Team() {
                       Fire
                     </Btn>
                   </div>
-                </div>
+                </Panel>
               )
             })}
           </div>

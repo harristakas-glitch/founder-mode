@@ -1,4 +1,5 @@
-import { Disclosure, Panel, StatCard } from '../components'
+import { AlertTriangle } from 'lucide-react'
+import { Disclosure, Meter, NESTED, Panel } from '../components'
 import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
 import { effectiveChurn, estimatedCac, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek } from '../game/engine'
@@ -10,8 +11,15 @@ export function Growth() {
   const sector = sectorById(game.sector)
   const marketers = game.employees.filter((e) => e.role === 'marketer').length
   // One formula, one home: `effectiveChurn` in src/game/engine.ts — the same call the attention
-  // register makes, so this stat card and the churn warning can never disagree.
+  // register makes, so this banner and the churn warning can never disagree.
   const churnRate = effectiveChurn(game)
+  // The sector's base churn is the yardstick the banner measures against. Past 1.5× it, the whole
+  // banner turns amber — and says so in words, because colour never travels alone.
+  const sectorAvgChurn = sector.churn
+  const churnHot = churnRate > sectorAvgChurn * 1.5
+  // Display-only arithmetic: the leak in people rather than percent. No engine call owns this
+  // number; it is the two numbers above it multiplied, shown so the % has a body count.
+  const usersLostPerWeek = Math.round(game.users * churnRate)
 
   // `marketingMax` is pure — call it once so the title, the slider, the fill and the warning cannot
   // disagree with each other about what this week's cap is.
@@ -34,18 +42,33 @@ export function Growth() {
 
       {/* Users, the users chart and the acquisition bars all lived here and all said something a
           second screen already said. What is left is the one number that argues WITH the slider
-          below: churn is the leak the budget is trying to outrun. */}
-      <div className="sm:max-w-[360px]">
-        <StatCard
-          label="Est. weekly churn"
-          value={pct(churnRate, 1)}
-          delta={game.pmf < 50 ? 'Without PMF, users leak out as fast as they arrive' : 'Users are sticking'}
-          tone={game.pmf < 50 ? 'down' : 'up'}
-        />
-      </div>
+          below: churn is the leak the budget is trying to outrun — so it reads as the mock's
+          warning banner, not as one more stat card. */}
+      <Panel className={churnHot ? 'border-warn/60' : ''}>
+        <div className="flex items-start gap-4">
+          <div className={`${NESTED} flex h-11 w-11 shrink-0 items-center justify-center`}>
+            <AlertTriangle size={20} className="text-warn" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">Est. weekly churn</div>
+            <div className="mt-1 text-[34px] leading-[1.05] font-bold tracking-[-0.02em] text-warn tnum">{pct(churnRate, 1)}</div>
+            <div className="mt-1.5 text-[13px] leading-snug">
+              <span className="text-mut">At {num(game.users)} users you lose</span> <b className="tnum">~{num(usersLostPerWeek)} users/wk</b>
+              {churnHot ? (
+                <span className="text-warn"> — over 1.5× the {sector.name} average of {pct(sectorAvgChurn, 1)}</span>
+              ) : (
+                <span className="text-mut"> · {sector.name} average {pct(sectorAvgChurn, 1)}</span>
+              )}
+            </div>
+            <div className="mt-1 text-[12.5px] leading-snug text-mut">
+              {game.pmf < 50 ? 'Without PMF, users leak out as fast as they arrive.' : 'Users are sticking.'}
+            </div>
+          </div>
+        </div>
+      </Panel>
 
       <div className="mt-3.5">
-        <Panel title={`Marketing budget: ${money(game.marketingSpend)}/week (cap ${money(cap)})`}>
+        <Panel title={`Marketing budget: ${money(game.marketingSpend)}/week`}>
           {overCap && (
             <div className="mb-3 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-[12.5px] leading-relaxed text-warn">
               {/* colour never travels alone */}▲ Over the cap. You set {money(game.marketingSpend)}/wk and are still charged every
@@ -53,30 +76,49 @@ export function Growth() {
               the budget.
             </div>
           )}
-          <input
-            type="range"
-            min={0}
-            max={cap}
-            step={cap > 100_000 ? 5000 : 500}
-            value={sliderValue}
-            style={{ ['--fill' as string]: `${(sliderValue / cap) * 100}%` }}
-            onChange={(e) => setMarketing(Number(e.target.value))}
-          />
-          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
-            <span>
-              <span className="text-mut">Est. cost per paid user (CAC):</span> <b className="tnum">{money(estimatedCac(game))}</b>
-            </span>
-            <span>
-              <span className="text-mut">≈ paid users this budget buys:</span>{' '}
-              <b className="tnum">{num(Math.round(paidUsersPerWeek(game, game.marketingSpend)))}/wk</b>
-              <span className="text-mut"> (channels fatigue past ~$150k/wk)</span>
-            </span>
-            {/* Hype is the budget's other output, so it reads beside the users it buys rather than as
-                a stat card of its own. Growth is the one screen that owns this number. */}
-            <span>
-              <span className="text-mut">Hype:</span> <b className="tnum">{Math.round(game.hype)}/100</b>
-              <span className="text-mut"> (decays ~8%/wk — keep feeding it)</span>
-            </span>
+          {/* The mock's split: the slider keeps the room on the left, and the numbers the budget
+              answers to — the cap and the hype it buys — read as a compact column on the right.
+              Both already lived in this card; only their seats changed. */}
+          <div className="flex flex-col gap-4 md:flex-row">
+            <div className="min-w-0 flex-1">
+              <input
+                type="range"
+                min={0}
+                max={cap}
+                step={cap > 100_000 ? 5000 : 500}
+                value={sliderValue}
+                style={{ ['--fill' as string]: `${(sliderValue / cap) * 100}%` }}
+                onChange={(e) => setMarketing(Number(e.target.value))}
+              />
+              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+                <span>
+                  <span className="text-mut">Est. cost per paid user (CAC):</span> <b className="tnum">{money(estimatedCac(game))}</b>
+                </span>
+                <span>
+                  <span className="text-mut">≈ paid users this budget buys:</span>{' '}
+                  <b className="tnum">{num(Math.round(paidUsersPerWeek(game, game.marketingSpend)))}/wk</b>
+                  <span className="text-mut"> (channels fatigue past ~$150k/wk)</span>
+                </span>
+              </div>
+            </div>
+            <div className={`${NESTED} flex shrink-0 flex-col gap-3 px-3.5 py-3 md:w-[210px]`}>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">Cap this week</div>
+                <div className="mt-0.5 text-[17px] font-bold tnum">{money(cap)}</div>
+              </div>
+              {/* Hype is the budget's other output. Growth is the one screen that owns this number,
+                  and the meter gives the bounded 0–100 a shape the bare figure cannot. */}
+              <div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">Hype</span>
+                  <span className="text-[13px] font-bold tnum">{Math.round(game.hype)}/100</span>
+                </div>
+                <div className="mt-1.5">
+                  <Meter value={game.hype} tone="accent" />
+                </div>
+                <div className="mt-1 text-[11px] leading-snug text-mut">Decays ~8%/wk — keep feeding it</div>
+              </div>
+            </div>
           </div>
 
           {/* Both explanations are true and neither changes week to week: you read them once, when

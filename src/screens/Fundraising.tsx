@@ -1,5 +1,6 @@
+import { CloudSun, Gem, Target, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { Bar, Btn, Disclosure, NESTED, Panel, RAISED, StatCard } from '../components'
+import { Bar, Btn, Disclosure, Meter, NESTED, Panel, RAISED, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
 import {
@@ -866,7 +867,7 @@ function TokenisationPanel() {
           </div>
           <div className="min-w-[180px] flex-1">
             <div className="mb-1 text-[11px] text-mut">Readiness</div>
-            <Bar value={elig.readinessScore} color={elig.eligible ? 'var(--color-good)' : 'var(--color-warn)'} />
+            <Meter value={elig.readinessScore} tone={elig.eligible ? 'good' : 'warn'} />
           </div>
         </div>
 
@@ -874,10 +875,14 @@ function TokenisationPanel() {
           <>
             <div className="mt-3 text-[13px] font-bold">Not ready.</div>
             <div className="mt-1 text-[13px] leading-relaxed text-mut">You still need:</div>
+            {/* Every row in `elig.blockers` is by construction an UNMET requirement — the module
+                returns only what is missing, and once nothing is, this whole branch stops
+                rendering. So each line takes the mock's unmet mark (X, text-bad); the met
+                counterpart (Check, text-good) has no row to attach to here. */}
             <ul className="mt-1.5 grid gap-1">
               {elig.blockers.map((b) => (
                 <li key={b.id} className="flex items-start gap-2 text-[13px] text-mut">
-                  <span className="text-mut">•</span>
+                  <X size={16} className="mt-0.5 shrink-0 text-bad" aria-hidden="true" />
                   <span>{b.label}</span>
                 </li>
               ))}
@@ -1088,6 +1093,7 @@ export function Fundraising() {
       <div className="mt-6 grid grid-cols-2 gap-3.5 xl:grid-cols-3">
         <StatCard
           label="Funding climate"
+          icon={<CloudSun size={13} />}
           value={climateLabel(game.climate)}
           delta={game.climate < -0.4 ? 'Valuations depressed, funds hibernating' : game.climate > 0.4 ? 'Cheap money — strike now' : 'Business as usual'}
           tone={game.climate < -0.4 ? 'down' : game.climate > 0.4 ? 'up' : undefined}
@@ -1096,11 +1102,17 @@ export function Fundraising() {
             above this card. `val` still feeds the stage bar and the stake. */}
         <StatCard
           label={target ? `Bar for ${target}` : 'Final stage'}
+          icon={<Target size={13} />}
           value={target ? money(threshold) : '$1B exit'}
           delta={target ? (ready ? 'Investors will take the meeting' : 'Grow traction first') : undefined}
           tone={ready ? 'up' : undefined}
         />
-        <StatCard label="Your stake" value={pct(game.founderEquity, 1)} delta={`worth ${money(val * game.founderEquity)} on paper`} />
+        <StatCard
+          label="Your stake"
+          icon={<Gem size={13} />}
+          value={pct(game.founderEquity, 1)}
+          delta={`worth ${money(val * game.founderEquity)} on paper`}
+        />
       </div>
 
       {game.board && (

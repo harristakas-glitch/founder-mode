@@ -17,6 +17,10 @@ import {
   Volume2,
   VolumeX,
   X,
+  Wallet,
+  Activity,
+  Target,
+  TrendingUp,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
 import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn, growthRate } from './game/engine'
@@ -457,24 +461,24 @@ export default function App() {
   // the audit's actual fix: a number with one home can be loud there.
   const statRail = (
     <>
-      <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
+      <Stat k="Cash" icon={<Wallet size={12} />} tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
         <Ticker value={game.cash} format={money} />
         <TrendBadge value={cashDelta} format={money} />
       </Stat>
-      <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
+      <Stat k="Runway" icon={<Hourglass size={12} />} tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
         {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
       </Stat>
-      <Stat k="Net /wk" tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
+      <Stat k="Net /wk" icon={<Activity size={12} />} tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
         <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
       </Stat>
       {/* The two DRIVERS join the money clock — owner call, from the causal review: PMF is in
           every compounding formula (word-of-mouth at ^1.5, acquisition, churn's dominant term)
           and the growth rate is what the board fires you over. Five entries, the audit's ceiling.
           The rail shows the number; the HQ owns its meter, sparkline and drawer. */}
-      <Stat k="PMF" tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
+      <Stat k="PMF" icon={<Target size={12} />} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
         <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
       </Stat>
-      <Stat k="Growth" tone={growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined}>
+      <Stat k="Growth" icon={<TrendingUp size={12} />} tone={growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined}>
         <Ticker value={growthTrend * 100} format={(n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`} />
       </Stat>
       {online && secondsLeft !== null && !matchOver && (
@@ -976,11 +980,11 @@ function MobileStatsSheet({ onClose, children }: { onClose: () => void; children
   )
 }
 
-function Stat({ k, tone, title, children }: { k: string; tone?: 'good' | 'bad' | 'warn'; title?: string; children: React.ReactNode }) {
+function Stat({ k, tone, title, icon, children }: { k: string; tone?: 'good' | 'bad' | 'warn'; title?: string; icon?: React.ReactNode; children: React.ReactNode }) {
   const cls = tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : tone === 'warn' ? 'text-warn' : ''
   return (
     <div className="shrink-0 leading-tight" title={title}>
-      <div className="text-[10px] font-semibold whitespace-nowrap uppercase tracking-[0.08em] text-mut">{k}</div>
+      <div className="flex items-center gap-1 text-[10px] font-semibold whitespace-nowrap uppercase tracking-[0.08em] text-mut">{icon && <span className="text-accent/80">{icon}</span>}{k}</div>
       <div className={`mt-0.5 flex items-baseline whitespace-nowrap text-[15px] font-bold tnum ${cls}`}>{children}</div>
     </div>
   )

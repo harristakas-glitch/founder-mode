@@ -24,7 +24,9 @@ import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
 import { useState } from 'react'
+import { DollarSign, Target as TargetIcon, TrendingUp as TrendIcon, Users as UsersIcon } from 'lucide-react'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
+import { openGuide } from '../onboarding/guide'
 import { myId as myOnlineId } from '../net/online'
 import { InboxStream } from './Inbox'
 import { useStore } from '../store'
@@ -100,7 +102,15 @@ function Hero() {
 
   const labelTone = { bad: 'text-bad', warn: 'text-warn', good: 'text-good', mut: 'text-mut' }[tone]
   return (
-    <div className="mb-3 md:mb-4">
+    <div className="relative mb-3 overflow-hidden md:mb-4">
+      {/* The mock's decoration: faint concentric arcs radiating from behind the figure — the one
+          purely decorative element on the screen, and it belongs to the hero alone. Pure CSS,
+          pointer-transparent, and quiet enough that it reads as depth rather than ornament. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-20 right-0 hidden h-64 w-64 md:block"
+        style={{ background: 'radial-gradient(closest-side, rgb(139 92 246 / 0.12), rgb(139 92 246 / 0.04) 55%, transparent 75%)' }}
+      />
       <div className={`text-[10.5px] font-bold uppercase tracking-[0.13em] ${labelTone}`}>{label}</div>
       <div className="mt-1 text-[38px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[56px]">
         {figure}
@@ -502,6 +512,7 @@ export function Dashboard() {
         {career ? (
           <StatCard
             className="h-full"
+            icon={<UsersIcon size={13} />}
             label="4-week retention"
             value={retention > 0 ? pct(retention, 0) : '—'}
             delta={retention > 0 ? 'of your target segment still here' : 'nothing has retained long enough to measure'}
@@ -512,6 +523,7 @@ export function Dashboard() {
         ) : (
           <StatCard
             className="h-full"
+            icon={<TargetIcon size={13} />}
             label="Product-market fit"
             numeric={game.pmf}
             format={(n) => `${Math.round(n)}/100`}
@@ -525,6 +537,7 @@ export function Dashboard() {
         <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'users'} onClick={() => toggle('users')}>
         <StatCard
           className="h-full"
+          icon={<TrendIcon size={13} />}
           label="Growth"
           value={`${growth >= 0 ? '+' : ''}${pct(growth, 1)}/wk`}
           delta={`${num(totalUsers(game))} user${totalUsers(game) === 1 ? '' : 's'}${game.ventures.some((v) => v.launched) ? ' across lines' : ''}${game.board ? ` · board expects ${pct(boardEffectiveTarget(game), 1)}` : ''}`}
@@ -536,6 +549,7 @@ export function Dashboard() {
         <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'revenue'} onClick={() => toggle('revenue')}>
         <StatCard
           className="h-full"
+          icon={<DollarSign size={13} />}
           label="Revenue"
           numeric={game.lastRevenue}
           format={(n) => `${money(n)}/wk`}
@@ -549,6 +563,7 @@ export function Dashboard() {
         <button type="button" className="h-full w-[76%] min-w-[230px] shrink-0 snap-start text-left lg:w-auto lg:min-w-0" aria-expanded={openMetric === 'people'} onClick={() => toggle('people')}>
         <StatCard
           className="h-full"
+          icon={<UsersIcon size={13} />}
           label="People"
           value={game.employees.length === 0 ? 'Just you' : `${game.employees.length}`}
           delta={
@@ -569,6 +584,27 @@ export function Dashboard() {
       {/* Career: the PMF/retention number above is an output — say what it is made of; then the
           named reads of the same week. Each renders null without its capability. */}
       <div className="order-10">
+        {!career && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-5 shadow-[var(--elev-2)]">
+            <TargetIcon size={16} className="shrink-0 text-accent" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">Why PMF is {Math.round(game.pmf)}</div>
+              <div className="mt-0.5 text-[13px] leading-snug text-mut">
+                {game.pmf < 30
+                  ? 'The market has not said yes yet. Research moves your odds; shipped quality moves the number.'
+                  : game.pmf < 60
+                    ? 'Real interest, not yet a must-have. Quality and research push it; bugs and neglect pull it back.'
+                    : 'The market wants this. Growth compounds from here — protect quality while you scale.'}
+              </div>
+            </div>
+            <button
+              onClick={() => openGuide('pmf')}
+              className="shrink-0 rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-bold text-ink transition-colors hover:border-accent"
+            >
+              How PMF works →
+            </button>
+          </div>
+        )}
         <PmfExplainer />
         <TeamOpinions />
         <Commitments />

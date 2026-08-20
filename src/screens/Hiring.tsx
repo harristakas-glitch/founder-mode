@@ -1,3 +1,4 @@
+import { Send } from 'lucide-react'
 import { useState } from 'react'
 import { Btn, Disclosure, Panel, SkillDots, TraitChip } from '../components'
 import { money } from '../format'
@@ -27,7 +28,8 @@ function BidControl({ candidateId }: { candidateId: string }) {
   const locked = !!mine || !!elsewhere
 
   return (
-    <div className="mt-2.5">
+    // vertical rhythm belongs to the card's own CTA slot, so no top margin here
+    <div>
       <div className="flex flex-wrap items-center gap-1.5">
         {PREMIUMS.map((p) => (
           <button
@@ -150,30 +152,32 @@ export function Hiring() {
         {pool.map((c) => {
           const after = runwayAfterHire(game, c)
           const afterLabel = after === Infinity ? '∞' : `${Math.max(0, Math.floor(after))} wk`
-          const cls = after === Infinity ? 'text-good' : after < 12 ? 'text-bad font-bold' : after < 20 ? 'text-warn' : 'text-good'
-          // Arena refreshes the whole pool every week, so every card would carry this badge and it
-          // would mean nothing; the shared-market line above says it once instead.
-          const lastWeek = !shared && c.weeksLeft <= 1
+          // Amber is the mock's "tight" band, from 26 weeks down. Red keeps the engine's own cliff:
+          // under ~12 weeks candidates start declining, and the card says so in words ("overhiring!"),
+          // never in colour alone. Comfortable numbers stay plain — the value is the message.
+          const cls = after === Infinity ? '' : after < 12 ? 'font-bold text-bad' : after < 26 ? 'text-warn' : ''
+          // Arena refreshes the whole pool every week, so expiry urgency would sit on every card and
+          // mean nothing; the shared-market line above says it once instead.
+          const tight = !shared && c.weeksLeft <= 2
           return (
-            <Panel key={c.id}>
+            <Panel key={c.id} className="flex h-full flex-col">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-bold">
-                    {c.name}
-                    <TraitChip trait={c.trait} />
-                  </div>
-                  <div className="text-[12px] text-mut">
+                  <div className="font-bold">{c.name}</div>
+                  {c.trait && (
+                    // the chip carries its own ml-1.5 for the inline-after-a-name case; on its own
+                    // line under the name, the wrapper cancels it so the chip left-aligns
+                    <div className="mt-1 -ml-1.5">
+                      <TraitChip trait={c.trait} />
+                    </div>
+                  )}
+                  <div className="mt-1 text-[12px] text-mut">
                     {c.role} · {ROLE_HELP[c.role]}
                   </div>
                 </div>
                 <SkillDots skill={c.skill} />
               </div>
-              {lastWeek && (
-                <div className="mt-2.5 rounded-lg border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[12px] font-semibold text-warn">
-                  ⏳ Last week in the pool — gone when you end the week
-                </div>
-              )}
-              <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-line/70 pt-3 text-[13px]">
                 <span className="text-mut">Salary</span>
                 <span className="text-right tnum">{money(c.salary)}/yr</span>
                 <span className="text-mut">Recruiter fee</span>
@@ -183,20 +187,23 @@ export function Hiring() {
                   {afterLabel}
                   {after !== Infinity && after < 12 && ' · overhiring!'}
                 </span>
-                {!lastWeek && (
-                  <>
-                    <span className="text-mut">Leaves the pool in</span>
-                    <span className="text-right tnum">{c.weeksLeft} wk</span>
-                  </>
+                <span className="text-mut">Leaves the pool in</span>
+                <span className={`text-right tnum ${tight ? 'font-semibold text-warn' : ''}`}>
+                  {tight && c.weeksLeft <= 1 && <span aria-hidden>⏳ </span>}
+                  {c.weeksLeft} wk
+                </span>
+              </div>
+              {/* mt-auto pins the CTA to one shared bottom edge across the row of equal-height cards */}
+              <div className="mt-auto pt-3">
+                {shared ? (
+                  <BidControl candidateId={c.id} />
+                ) : (
+                  <Btn variant="primary" className="w-full" onClick={() => sendOffer(c.id)}>
+                    <Send size={16} aria-hidden />
+                    Send offer
+                  </Btn>
                 )}
               </div>
-              {shared ? (
-                <BidControl candidateId={c.id} />
-              ) : (
-                <Btn variant="primary" className="mt-3 w-full" onClick={() => sendOffer(c.id)}>
-                  Send offer
-                </Btn>
-              )}
             </Panel>
           )
         })}
