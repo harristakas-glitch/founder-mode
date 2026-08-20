@@ -531,12 +531,20 @@ strategies over 24 seeds × 90 weeks in all six sectors. Measured on this tree, 
 
 | Strategy | Failed | Exits | Customers (median) | 4wk retention | Revenue/wk | Founder net |
 |---|---|---|---|---|---|---|
-| **Careless Growth** — spend, never research | 0 / 24 | 7 | 509 | 66% | $3,955 | $4.0M |
-| **Disciplined Discovery** — experiment first, scale late | 3 / 24 | 6 | 256 | 76% | $8,182 | **$6.2M** |
-| **Enterprise Bet** — pivot high, price premium, build to the bar | 2 / 24 | 2 | 177 | 72% | $5,414 | $4.3M |
+| **Careless Growth** — spend, never research | 0 / 24 | 3 | 732 | 63% | $6,695 | $4.3M |
+| **Disciplined Discovery** — experiment first, scale late | 0 / 24 | 5 | 614 | 81% | $21,186 | **$9.5M** |
+| **Enterprise Bet** — pivot high, price premium, build to the bar | 0 / 24 | 5 | 216 | 73% | $7,179 | $4.2M |
 
-Disciplined Discovery is strongest in **all six sectors** — that ordering is the property the harness
-exists to protect, and every balance change since has been checked against it.
+Measured 2026-08-21, after the `pitchInvestors` harness fix — an earlier version of this table was
+measured on bots that had never successfully raised a round, which the fix's commit owns in full.
+Disciplined Discovery is strongest in **all six sectors** — that ordering is the property the
+harness exists to protect, and every balance change since has been checked against it.
+
+**Raising, measured against its own absence** (`NORAISE=1 npm run bots -- all`, same seeds): a
+median **1.7×** on founder net across the 18 sector×strategy arms, range 0.9×–4.8× — dilution
+priced in, since founder net is what the founder keeps. It is not free money: without raising,
+failures rise from ~0 to 62 of 432 runs, and one arm (Fintech / Careless) actually nets *more*
+by never raising. An earlier reading of "5–15× with no downside" was the broken harness talking.
 
 Two things this table is not. **`failed` is bankruptcy and firing only** — an acquisition is an
 *outcome*, not a death, and reporting `alive = !gameOver` is what once made coasting look like the

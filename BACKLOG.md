@@ -410,6 +410,18 @@ in high-volume sectors. Do not read the remaining gap as intended difficulty unt
 
 ---
 
+## 4.8 The post-`pitchInvestors` re-measure — DONE 2026-08-21, and the raising question is CLOSED
+
+The README table is re-measured on the fixed harness (24 seeds × 90 weeks × six sectors);
+Disciplined Discovery still wins all six, so the load-bearing ordering survived the fix. The open
+question — "raising worth 5–15× with no downside: intended, or the next target?" — is answered
+with a counterfactual arm (`NORAISE=1 npm run bots -- all`, same seeds): median **1.7×**, range
+0.9×–4.8×, failures rising from ~0 to 62/432 without it, and one arm that nets more by never
+raising. Not dominant, not free, real texture per sector. **No balance change needed**; the 5–15×
+reading was the pre-fix harness. Full numbers in the README's Balance section.
+
+---
+
 ## 5. UI/UX follow-ups
 
 ### 5.0 Owner decisions from the FM26 Portal review — 2026-08-20

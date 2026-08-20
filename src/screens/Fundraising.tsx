@@ -1,4 +1,4 @@
-import { CloudSun, Gem, Target, X } from 'lucide-react'
+import { CloudSun, Gem, Target, TrendingUp, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Bar, Btn, Disclosure, Meter, NESTED, Panel, RAISED, StatCard } from '../components'
 import { money, pct } from '../format'
@@ -1090,7 +1090,7 @@ export function Fundraising() {
           a tokenised company still has a board, a stake and term sheets it may not have signed. */}
       {tokenised && <TokenisationPanel />}
 
-      <div className="mt-6 grid grid-cols-2 gap-3.5 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-3.5 xl:grid-cols-4">
         <StatCard
           label="Funding climate"
           icon={<CloudSun size={13} />}
@@ -1098,8 +1098,24 @@ export function Fundraising() {
           delta={game.climate < -0.4 ? 'Valuations depressed, funds hibernating' : game.climate > 0.4 ? 'Cheap money — strike now' : 'Business as usual'}
           tone={game.climate < -0.4 ? 'down' : game.climate > 0.4 ? 'up' : undefined}
         />
-        {/* "Current valuation" is gone — the topbar rail renders it on every screen, forty pixels
-            above this card. `val` still feeds the stage bar and the stake. */}
+        {/* Valuation RETURNED here 2026-08-21 after the owner could not find it anywhere in a
+            live run. Its removal was right when written — the rail rendered it on every screen —
+            and became wrong when the rail slimmed to the money clock: two individually-correct
+            passes left the number with no home at all. This is that home now (the audit's own
+            assignment: valuation belongs to Capital), with the stage-progress delta that made the
+            old Dashboard card useful — the next rung, not the summit. */}
+        <StatCard
+          label="Valuation"
+          icon={<TrendingUp size={13} />}
+          numeric={val}
+          format={money}
+          delta={
+            nextStage(game)
+              ? `${pct(Math.min(1, val / STAGE_THRESHOLDS[game.stage]), 0)} of the way to ${nextStage(game)}`
+              : `Goal: $1B — ${pct(val / 1e9, 1)} there`
+          }
+          tone={nextStage(game) && val >= STAGE_THRESHOLDS[game.stage] ? 'up' : undefined}
+        />
         <StatCard
           label={target ? `Bar for ${target}` : 'Final stage'}
           icon={<Target size={13} />}

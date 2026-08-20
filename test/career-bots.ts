@@ -82,8 +82,14 @@ function common(s: GameState) {
   // never installed (so `boardReview` could not fire, which is where "zero `fired` endings across
   // several thousand campaigns" came from), candidate salaries never repriced off the stage, and
   // dilution only ever happened through emergency bridges. See docs/exploit-hunt-2026-08.md §0.
-  if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) s.termSheets = pitchInvestors(s).sheets
-  if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
+  // NORAISE=1: the counterfactual arm for BACKLOG's open question — "raising measured worth
+  // 5-15x with no downside: intended, or the next balance target?" Same strategies, same seeds,
+  // raising switched off; the founder-net delta between the two runs IS the measured value of
+  // the capital path, downside included (dilution is in founder net by construction).
+  if (process.env.NORAISE !== '1') {
+    if (s.raiseCooldown === 0 && s.cash < (s.lastExpenses || 5000) * 25) s.termSheets = pitchInvestors(s).sheets
+    if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
+  }
   const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
   // Hire against what the business can carry, not against a runway number. The earlier
   // version hired 8 people on $1k/wk of revenue and every strategy died of payroll, which
