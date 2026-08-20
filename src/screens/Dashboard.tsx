@@ -1,390 +1,244 @@
-import { BenchRow, EmptyState, LineChart, Panel, StatCard, TrendBadge } from '../components'
+// Founder HQ — the landing screen, rebuilt to the brief's five questions, in order:
+// how is the company doing / what changed / what needs me / why / what happens next.
+//
+// WHAT THIS USED TO BE, and why almost none of it survived (docs/ux-audit-2026-08.md §1, row 2):
+// a week digest, a vitals board of 7 StatCards, two history charts, a benchmark report, a
+// milestones shelf and a "Latest news" list — 16 boxes at equal weight (22 in Career), with the
+// screen's only real answer to "what do I do this week?" rendered at 13.5px against 34px data.
+// The audit's verdict was that the Dashboard could not state a purpose. This one can:
+//
+//   ONE question — what should I do this week? — answered by exactly three things:
+//     1. the HERO: runway, the number that ends the run, with net/wk as its sentence;
+//     2. four supporting metrics, each the single home of its number;
+//     3. the attention list from src/attention.ts — top item at full weight, two beneath,
+//        the rest behind a disclosure. Severity is a TYPE and the word is printed, so the
+//        signal never rides on colour alone.
+//
+// What left, and where it lives now: cash → the hero's subtext (it was rendered 8 times across
+// the build); valuation → Capital (no in-week action); both charts → history is not a decision;
+// milestones → the run record; "Latest news" → the Inbox owns that list; the Benchmarks panel →
+// its verdicts are now register items (see attention.ts), because two functions evaluating the
+// same health into two UI regions is how they drift.
+import { StatCard } from '../components'
 import { money, num, pct } from '../format'
-import { STAGE_THRESHOLDS, sectorById } from '../game/data'
-import {
-  demandSignal,
-  MILESTONES,
-  avgMorale,
-  boardEffectiveTarget,
-  committedCosts,
-  growthRate,
-  hasPendingDecision,
-  nextStage,
-  pmfLabel,
-  productScore,
-  runwayWeeks,
-  totalUsers,
-  valuation,
-  weeklyBurn,
-} from '../game/engine'
+import { attentionRegister, type AttentionItem } from '../attention'
+import { growthRate, pmfLabel, runwayWeeks, totalUsers, weeklyBurn } from '../game/engine'
 import { BoardMeeting, Commitments, FounderBriefing, PmfExplainer, TeamOpinions, careerActive } from '../CareerUI'
-import { openInteractions } from '../game/world/interactions'
-import { PMF_LABEL, segmentSnapshots } from '../game/career/pmf'
 import { useStore } from '../store'
 
-// This week vs last: the one-glance digest of what just happened.
-function WeekDigest() {
+// ---------------------------------------------------------------------------------------------
+// The hero. Bespoke rather than a StatCard on purpose: the whole Cockpit direction hangs on ONE
+// figure per screen being brighter and bigger than everything else, and this is that figure. The
+// only pure white on the page is here.
+function Hero() {
   const game = useStore((s) => s.game)!
-  const h = game.history
-  if (h.length < 2) return null
-  const now = h[h.length - 1]
-  const prev = h[h.length - 2]
-  const items: { label: string; delta: number; format?: (n: number) => string; invert?: boolean }[] = [
-    { label: 'Users', delta: now.users - prev.users, format: num },
-    { label: 'Cash', delta: now.cash - prev.cash, format: money },
-    { label: 'Revenue', delta: now.revenue - prev.revenue, format: money },
-    { label: 'PMF', delta: now.pmf - prev.pmf, format: (n: number) => n.toFixed(1) },
-    { label: 'Valuation', delta: now.valuation - prev.valuation, format: money },
-  ].filter((i) => i.delta !== 0)
-  if (items.length === 0) return null
+  const runway = runwayWeeks(game)
+  const net = game.lastRevenue - weeklyBurn(game)
+  const profitable = runway === Infinity
+  const critical = !profitable && runway < 10
+
   return (
-    <div className="mb-3.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-line/60 bg-surface px-4 py-2.5">
-      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-mut">This week</span>
-      {items.map((i) => (
-        <span key={i.label} className="whitespace-nowrap text-[13px]">
-          <span className="text-mut">{i.label}</span>
-          <TrendBadge value={i.delta} format={i.format} invert={i.invert} />
-        </span>
-      ))}
+    <div className="mb-4">
+      <div className={`text-[10.5px] font-bold uppercase tracking-[0.13em] ${critical ? 'text-bad' : profitable ? 'text-good' : 'text-mut'}`}>
+        Runway
+      </div>
+      <div className="mt-1 text-[44px] leading-[0.98] font-bold tracking-[-0.04em] text-[var(--color-focus)] tnum md:text-[56px]">
+        {profitable ? 'Profitable' : `${Math.max(0, Math.floor(runway))} weeks`}
+      </div>
+      <div className="mt-2 max-w-[52ch] text-[13.5px] leading-snug text-mut">
+        {profitable
+          ? `Revenue covers burn with ${money(net)}/wk to spare. ${money(game.cash)} in the bank.`
+          : net < 0
+            ? `${money(game.cash)} in the bank, net ${money(net)} a week. Three ways out: raise, cut burn, or get revenue above burn.`
+            : `${money(game.cash)} in the bank and net is positive — the clock only moves if that changes.`}
+      </div>
     </div>
   )
 }
 
-function Benchmarks() {
-  const game = useStore((s) => s.game)!
-  const sector = sectorById(game.sector)
-  const growth = growthRate(game)
-  const growthTarget = game.board ? boardEffectiveTarget(game) : 0.04
-  const churn = sector.churn * Math.min(3, Math.max(0.3, 2.4 - game.pmf / 45 - game.quality / 250 + game.bugs / 200))
-  const churnBench = sector.churn
-  const pmfPace = Math.min(85, game.week * 1.6)
-  const runway = runwayWeeks(game)
-  const bestRival = [...game.rivals.filter((r) => r.alive)].sort((a, b) => b.product - a.product)[0]
-  const pScore = productScore(game)
-  const tone = (ok: boolean, mid: boolean): 'good' | 'warn' | 'bad' => (ok ? 'good' : mid ? 'warn' : 'bad')
-
-  return (
-    <Panel title="How you compare — benchmarks">
-      <BenchRow metric="User growth" tone={tone(growth >= growthTarget, growth >= growthTarget * 0.6)}>
-        <b className="tnum">{pct(growth, 1)}/wk</b>{' '}
-        <span className="text-mut">vs {pct(growthTarget, 1)} {game.board ? 'board target' : 'healthy pre-seed pace'}</span>
-      </BenchRow>
-      <BenchRow metric="Churn" tone={tone(churn <= churnBench, churn <= churnBench * 1.5)}>
-        <b className="tnum">{pct(churn, 1)}/wk</b>{' '}
-        <span className="text-mut">vs {pct(churnBench, 1)} market average — driven by PMF, quality, bugs</span>
-      </BenchRow>
-      <BenchRow metric="PMF pace" tone={tone(game.pmf >= pmfPace, game.pmf >= pmfPace * 0.6)}>
-        <b className="tnum">{Math.round(game.pmf)}</b>{' '}
-        <span className="text-mut">vs ~{Math.round(pmfPace)} expected by week {game.week} — winners find fit by ~week 40</span>
-      </BenchRow>
-      <BenchRow metric="Runway" tone={tone(runway === Infinity || runway >= 30, runway >= 15)}>
-        <b className="tnum">{runway === Infinity ? 'profitable' : `${Math.floor(runway)} wk`}</b>{' '}
-        <span className="text-mut">vs 30+ wk healthy — under 10 and candidates refuse offers</span>
-      </BenchRow>
-      <BenchRow
-        metric="Cash buffer"
-        tone={tone(game.cash >= committedCosts(game).recommended, game.cash >= committedCosts(game).recommended * 0.5)}
-      >
-        <b className="tnum">{money(game.cash)}</b>{' '}
-        <span className="text-mut">
-          vs {money(committedCosts(game).recommended)} recommended — covers committed fees + a worst-case bill (see Finance)
-        </span>
-      </BenchRow>
-      {bestRival && (
-        <BenchRow metric="Product vs rivals" tone={tone(pScore >= bestRival.product, pScore >= bestRival.product - 15)}>
-          <b className="tnum">{Math.round(pScore)}</b>{' '}
-          <span className="text-mut">vs {Math.round(bestRival.product)} for {bestRival.name} — fall 15+ behind and they steal users</span>
-        </BenchRow>
-      )}
-    </Panel>
-  )
-}
-
-// The briefing: the benchmarks panel already knows what is wrong, but it sits at the bottom
-// in muted grey. This lifts the single most urgent thing to the top, with the button that
-// acts on it — so the Dashboard answers "what should I do this week?", not just "what am I?".
-interface Attention {
-  tone: 'bad' | 'warn' | 'good'
-  text: string
-  action?: { label: string; screen: Parameters<ReturnType<typeof useStore.getState>['setScreen']>[0] }
-}
-
-function attentionItems(game: ReturnType<typeof useStore.getState>['game']): Attention[] {
-  if (!game) return []
-  const out: Attention[] = []
-  const runway = runwayWeeks(game)
-  const pmfPace = Math.min(85, game.week * 1.6)
-
-  if (hasPendingDecision(game))
-    out.push({ tone: 'bad', text: 'A decision is blocking the week.', action: { label: 'Open Inbox', screen: 'inbox' } })
-  // Living World Phase 8. The rooms live on three different screens (§74's progressive
-  // disclosure), so the strip is what stops an unanswered one going unnoticed — and it names the
-  // ONE that is closest to going cold, because a queue of nudges is not a nudge.
-  for (const room of openInteractions(game.world)) {
-    if (room.kind === 'conversation')
-      out.push({ tone: 'warn', text: `${room.title}.`, action: { label: 'Team', screen: 'team' } })
-    else if (room.kind === 'board_meeting')
-      out.push({ tone: 'warn', text: 'The board is waiting on a decision from you.', action: { label: 'Read the room', screen: 'dashboard' } })
-    else
-      out.push({
-        tone: 'good',
-        text: `${room.movesLeft} interview question${room.movesLeft === 1 ? '' : 's'} left — the calls are still running.`,
-        action: { label: 'Discovery', screen: 'discovery' },
-      })
-    break
-  }
-  if (runway !== Infinity && runway < 12)
-    out.push({
-      tone: 'bad',
-      text: `Only ${Math.max(0, Math.floor(runway))} weeks of runway left — raise, or cut burn now.`,
-      action: { label: 'Fundraising', screen: 'fundraising' },
-    })
-  if (game.termSheets.length > 0)
-    out.push({
-      tone: 'good',
-      text: `${game.termSheets.length} term sheet${game.termSheets.length === 1 ? '' : 's'} on the table — they expire.`,
-      action: { label: 'Review', screen: 'fundraising' },
-    })
-  // The one warning that names the SEED, not the play. `demandSignal` only reads 'weak' once
-  // researchSignal >= 14 — i.e. the player has done the research and the research came back
-  // negative. Before this line the verdict lived only on the Product screen, while the player
-  // watching PMF stall was here, on the Dashboard, being told to work harder at an idea the
-  // engine had already priced as unwinnable-at-reasonable-effort. A weak-resonance company now
-  // settles at a low PMF equilibrium instead of decaying to zero (the P2 proportional decay), so
-  // "pivot" is honest advice rather than a eulogy: research carries over and tilts the next roll.
-  if (!careerActive(game) && demandSignal(game) === 'weak')
-    out.push({
-      tone: 'bad',
-      text: 'Your research came back: demand for this idea is WEAK. More effort will not fix the idea — a pivot might, and your research carries over.',
-      action: { label: 'Product — pivot', screen: 'product' },
-    })
-  // Career derives PMF from retained customers, so "research harder" is actively wrong advice
-  // there — the fix is retention, and the screen that shows it is Discovery.
-  if (game.week > 6 && game.pmf < pmfPace * 0.6) {
-    const career = careerActive(game) ? game.career! : null
-    const retention = career ? (career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) : 0
-    out.push(
-      career
-        ? {
-            tone: 'warn',
-            text:
-              retention > 0
-                ? `PMF ${Math.round(game.pmf)} — it is read off customers who stay, and only ${Math.round(retention * 100)}% of your target segment is still here after four weeks.`
-                : `PMF ${Math.round(game.pmf)} — nothing has retained long enough to measure yet. Research moves your beliefs; only paying customers who stay move PMF.`,
-            action: { label: 'Discovery', screen: 'discovery' },
-          }
-        : {
-            tone: 'warn',
-            text: `PMF ${Math.round(game.pmf)} against ~${Math.round(pmfPace)} expected by week ${game.week}. The market isn't biting — research harder, or pivot.`,
-            action: { label: 'Product', screen: 'product' },
-          },
-    )
-  }
-  if (game.bugs > 55)
-    out.push({
-      tone: 'warn',
-      text: `Bugs at ${Math.round(game.bugs)} are driving churn and scaring off the press.`,
-      action: { label: 'Shift focus', screen: 'product' },
-    })
-  if (avgMorale(game) < 45 && game.employees.length > 0)
-    out.push({ tone: 'warn', text: 'Team morale is low — output suffers and people start leaving.', action: { label: 'Team', screen: 'team' } })
-  if (game.board && game.board.strikes > 0)
-    out.push({
-      tone: 'bad',
-      text: `The board has issued ${game.board.strikes} strike${game.board.strikes === 1 ? '' : 's'}. Miss the next review and you can be replaced.`,
-      action: { label: 'Fundraising', screen: 'fundraising' },
-    })
-  // SEVERITY FIRST, THEN TRUNCATE. This used to be a bare `slice(0, 3)` over the push order, and
-  // the board-strike item — "miss the next review and you can be replaced" — is pushed LAST. Any
-  // three milder items ahead of it, including a `good` one, silently discarded the only warning
-  // that the player is about to lose the company. The brief's rule is: never make the player hunt
-  // for something urgent; dropping it entirely is worse than hiding it.
-  //
-  // A stable sort keeps the authored order within a tone, so the ranking below is the only thing
-  // that changed — bad before warn before good.
-  const RANK = { bad: 0, warn: 1, good: 2 } as const
-  return [...out].sort((a, b) => RANK[a.tone] - RANK[b.tone]).slice(0, 3)
-}
-
-function AttentionStrip() {
+// ---------------------------------------------------------------------------------------------
+// The attention list. The register decides what exists and in what order; this only decides how
+// much of it is visible at once — one at full weight, two as rows, the rest one interaction away.
+function AttentionList() {
   const game = useStore((s) => s.game)!
   const setScreen = useStore((s) => s.setScreen)
-  const items = attentionItems(game)
+  const items = attentionRegister(game)
+
   if (items.length === 0) {
     return (
-      <div className="mb-3.5 rounded-2xl border border-good/30 bg-good/5 px-4 py-2.5 text-[13px] text-mut">
-        ✓ Nothing on fire. Good week to make a bet.
+      <div className="mb-4 rounded-[10px] border border-good/30 bg-surface px-4 py-2.5 text-[13px] text-mut">
+        ✓ Nothing needs you. Good week to make a bet.
       </div>
     )
   }
-  const ring = { bad: 'border-bad/40 bg-bad/8', warn: 'border-warn/40 bg-warn/8', good: 'border-good/40 bg-good/8' }
-  const dot = { bad: 'bg-bad', warn: 'bg-warn', good: 'bg-good' }
+
+  const [top, ...rest] = items
+  const shown = rest.slice(0, 2)
+  const folded = rest.slice(2)
+
+  // The severity WORD is printed on every item — brief §8: "do not rely solely on colour".
+  const chip: Record<AttentionItem['type'], string> = {
+    urgent: 'bg-bad text-bg',
+    decision: 'bg-warn text-bg',
+    opportunity: 'border border-line2 text-ink',
+    insight: 'border border-line2 text-mut',
+    information: 'border border-line/60 text-mut',
+  }
+  const Go = ({ it, prominent }: { it: AttentionItem; prominent?: boolean }) =>
+    it.action ? (
+      <button
+        className={`shrink-0 rounded-lg px-2.5 py-1 text-[12px] font-bold transition-[filter] hover:brightness-110 ${
+          prominent ? 'bg-warn text-bg' : 'border border-line2 text-ink'
+        }`}
+        onClick={() => setScreen(it.action!.screen)}
+      >
+        {it.action.label} →
+      </button>
+    ) : null
+
   return (
-    <div className="mb-3.5 space-y-1.5">
-      {items.map((it, i) => (
-        <div key={i} className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border px-4 py-2.5 ${ring[it.tone]}`}>
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot[it.tone]}`} />
-          <span className="flex-1 text-[13.5px] leading-snug">{it.text}</span>
-          {it.action && (
-            <button
-              className="shrink-0 rounded-lg border border-line2 px-2.5 py-1 text-[12px] font-semibold transition-colors hover:border-accent hover:text-ink"
-              onClick={() => setScreen(it.action!.screen)}
-            >
-              {it.action.label} →
-            </button>
+    <div className="mb-4">
+      {/* The top item is the screen's second-loudest element after the hero — a full plane step
+          above the rows below it, the same raised-vs-receded grammar the Inbox uses. */}
+      <div
+        className={`rounded-[10px] border p-4 shadow-[var(--elev-2)] ${
+          top.type === 'urgent'
+            ? 'border-bad/45 bg-[color-mix(in_srgb,var(--color-bad)_9%,var(--color-surface3))]'
+            : 'border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_8%,var(--color-surface3))]'
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wider ${chip[top.type]}`}>{top.type}</span>
+          {top.deadline !== undefined && (
+            <span className="text-[11px] font-semibold text-mut">
+              {top.deadline === 0 ? 'this week' : `${top.deadline} wk${top.deadline === 1 ? '' : 's'} left`}
+            </span>
           )}
         </div>
+        <div className="mt-1.5 flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[16px] font-semibold leading-snug">{top.title}</div>
+            {top.detail && <div className="mt-1 text-[13px] leading-snug text-mut">{top.detail}</div>}
+          </div>
+          <Go it={top} prominent />
+        </div>
+      </div>
+
+      {shown.map((it) => (
+        <div key={it.id} className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-line/60 bg-surface2 px-3.5 py-2">
+          <span className={`rounded-md px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wider ${chip[it.type]}`}>{it.type}</span>
+          <span className="min-w-0 flex-1 text-[13px] leading-snug">{it.title}</span>
+          <Go it={it} />
+        </div>
       ))}
+
+      {folded.length > 0 && (
+        <details className="group mt-1.5">
+          <summary className="cursor-pointer list-none rounded-[10px] px-3.5 py-1.5 text-[12px] font-semibold text-mut transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">{folded.length} more…</span>
+            <span className="hidden group-open:inline">show less</span>
+          </summary>
+          {folded.map((it) => (
+            <div key={it.id} className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-line/60 bg-surface2 px-3.5 py-2">
+              <span className={`rounded-md px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wider ${chip[it.type]}`}>{it.type}</span>
+              <span className="min-w-0 flex-1 text-[13px] leading-snug">{it.title}</span>
+              <Go it={it} />
+            </div>
+          ))}
+        </details>
+      )}
     </div>
   )
 }
 
-// In Career the number is derived, so the label under it should name the status the
-// simulation actually assigned rather than Quick Play's generic band.
-function careerPmfLabel(game: ReturnType<typeof useStore.getState>['game']): string | null {
-  if (!careerActive(game) || !game) return null
-  const rows = segmentSnapshots({
-    career: game.career!,
-    sector: game.sector,
-    quality: game.quality,
-    sectorTam: sectorById(game.sector).tam,
-  })
-  const best = [...rows].sort((a, b) => b.score - a.score)[0]
-  if (!best) return null
-  return `${PMF_LABEL[best.status]} in ${best.name} — derived from customers who stayed`
-}
-
+// ---------------------------------------------------------------------------------------------
 export function Dashboard() {
   const game = useStore((s) => s.game)!
-  const setScreen = useStore((s) => s.setScreen)
-  const val = valuation(game)
-  const runway = runwayWeeks(game)
   const growth = growthRate(game)
-  const recent = game.inbox.slice(0, 4)
-  const startWeek = game.history[0]?.week ?? 1
+  const career = careerActive(game) ? game.career! : null
+  const retention = career ? (career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) : 0
+
+  // Trend deltas come from history — the WeekDigest strip died and these carry its information at
+  // a fifth of the footprint (and it removes the Career case where two delta strips rendered two
+  // lines apart).
+  const h = game.history
+  const revDelta = h.length >= 2 ? h[h.length - 1].revenue - h[h.length - 2].revenue : 0
+
+  // People: headcount, LOWEST morale, founder energy. Lowest, not average, because an average
+  // mathematically hides the person about to quit — one at 20 among seven at 75 averages 68.
+  const lowest = game.employees.length > 0 ? game.employees.reduce((m, e) => Math.min(m, e.morale), 100) : null
+  const anyAtRisk = game.employees.some((e) => e.morale < (e.trait === 'mercenary' ? 55 : 32))
 
   return (
     <div>
-      <h1 className="text-[20px] font-extrabold tracking-tight">Dashboard</h1>
+      <h1 className="text-[20px] font-extrabold tracking-tight">Founder HQ</h1>
       <div className="mb-4 text-[13px] text-mut">
-        Week {game.week} · {game.stage} · You own {pct(game.founderEquity, 1)} of the company
+        Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
       </div>
 
-      {/* Career: what just happened and why, before what needs doing about it. */}
+      {/* Career: what just happened and why, in prose — before what needs doing about it. */}
       <FounderBriefing />
-      <AttentionStrip />
-      <WeekDigest />
 
+      <Hero />
+      <AttentionList />
 
-      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard
-          label="Cash"
-          numeric={game.cash}
-          format={money}
-          delta={
-            game.cash < 40_000 && game.week > 6
-              ? 'Buffer is thin — one bad event (cloud bill, recruiter fee) could end you'
-              : `burn ${money(weeklyBurn(game))}/wk`
-          }
-          tone={game.cash < 40_000 && game.week > 6 ? 'down' : game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
+          label="Revenue"
+          numeric={game.lastRevenue}
+          format={(n) => `${money(n)}/wk`}
+          trend={revDelta !== 0 ? revDelta : undefined}
+          trendFormat={money}
+          tone={game.lastRevenue >= weeklyBurn(game) ? 'up' : undefined}
         />
         <StatCard
-          label="Runway"
-          value={runway === Infinity ? 'Profitable 🎉' : `${Math.max(0, Math.floor(runway))} weeks`}
-          tone={runway !== Infinity && runway < 12 ? 'down' : undefined}
-          delta={runway !== Infinity && runway < 12 ? 'Danger zone — raise or cut costs' : undefined}
-        />
-        <StatCard
-          label={game.ventures.some((v) => v.launched) ? 'Users (all product lines)' : 'Users'}
+          label={game.ventures.some((v) => v.launched) ? 'Users (all lines)' : 'Users'}
           numeric={totalUsers(game)}
           format={num}
-          delta={`${growth >= 0 ? '+' : ''}${pct(growth, 1)} /wk avg`}
-          tone={growth >= 0 ? 'up' : 'down'}
+          trend={growth !== 0 ? growth : undefined}
+          delta="/wk avg"
+          tone={growth > 0 ? 'up' : growth < 0 ? 'down' : undefined}
         />
-        {/* The next rung, not the summit: "0.1% of $1B" at week 13 tells a founder nothing
-            they can act on, while "62% of the way to a Seed" is this month's actual job. */}
+        {career ? (
+          <StatCard
+            label="4-week retention"
+            value={retention > 0 ? pct(retention, 0) : '—'}
+            delta={retention > 0 ? 'of your target segment still here' : 'nothing has retained long enough to measure'}
+            tone={retention >= 0.7 ? 'up' : retention > 0 && retention < 0.4 ? 'down' : undefined}
+          />
+        ) : (
+          <StatCard
+            label="Product-market fit"
+            numeric={game.pmf}
+            format={(n) => `${Math.round(n)}/100`}
+            delta={pmfLabel(game.pmf)}
+            tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined}
+          />
+        )}
         <StatCard
-          label="Valuation"
-          numeric={val}
-          format={money}
+          label="People"
+          value={game.employees.length === 0 ? 'Just you' : `${game.employees.length}`}
           delta={
-            nextStage(game)
-              ? `${pct(Math.min(1, val / STAGE_THRESHOLDS[game.stage]), 0)} of the way to ${nextStage(game)} (${money(STAGE_THRESHOLDS[game.stage])})`
-              : `Goal: $1B — ${pct(val / 1e9, 1)} there`
+            game.employees.length === 0
+              ? `energy ${Math.round(game.energy)}`
+              : `lowest morale ${Math.round(lowest!)} · energy ${Math.round(game.energy)}`
           }
-          tone={nextStage(game) && val >= STAGE_THRESHOLDS[game.stage] ? 'up' : undefined}
+          tone={anyAtRisk || game.energy <= 12 ? 'down' : undefined}
         />
       </div>
 
-      <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
-        <Panel title="Users over time">
-          <LineChart data={game.history.map((h) => h.users)} formatY={num} startWeek={startWeek} />
-        </Panel>
-        <Panel title="Cash over time">
-          <LineChart data={game.history.map((h) => h.cash)} color={game.cash > 0 ? 'var(--color-good)' : 'var(--color-bad)'} formatY={money} startWeek={startWeek} />
-        </Panel>
-      </div>
-
-      <div className="mt-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-3">
-        <StatCard label="Product-market fit" numeric={game.pmf} format={(n) => `${Math.round(n)}/100`} delta={careerPmfLabel(game) ?? pmfLabel(game.pmf)} tone={game.pmf >= 60 ? 'up' : game.pmf < 30 ? 'down' : undefined} />
-        <StatCard label="Hype" numeric={game.hype} format={(n) => `${Math.round(n)}/100`} delta={game.hype < 15 ? 'Nobody is talking about you' : undefined} />
-        <StatCard label="Team morale" numeric={avgMorale(game)} format={(n) => `${Math.round(n)}/100`} tone={avgMorale(game) < 45 ? 'down' : undefined} delta={avgMorale(game) < 45 ? 'People are looking at the exits' : undefined} />
-      </div>
-
-      {/* Career: the PMF number above is an output. Say what it is made of, where it is read. */}
+      {/* Career: the PMF/retention number above is an output — say what it is made of. */}
       <PmfExplainer />
 
-      <div className="mt-3.5">
-        <Benchmarks />
-      </div>
-
-      {/* Career: the same week, read by named people with different weights (§76). The benchmarks
-          above say what the numbers are; this says what your team would DO about them — and they
-          are allowed to disagree with each other. Carries its own margin so Quick Play (where it
-          renders null) gets no stray spacing. */}
+      {/* Career: the same week read by named people with different weights; the promises ledger;
+          the board sitting down. Each renders null without its capability. */}
       <TeamOpinions />
-
-      {/* Career: the promises ledger (§77) — what you committed to, who heard it, when it lands,
-          and whether the numbers say you are on track. Renders null without the capability. */}
       <Commitments />
-
-      {/* Career: the board sits down (§46-§47). Directly under the commitments, because the
-          decision taken here becomes one of them. Renders null without the capability. */}
       <BoardMeeting />
 
-      <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
-        <Panel title={`Milestones (${game.milestones.length}/${MILESTONES.length})`}>
-          {MILESTONES.filter((m) => !game.milestones.includes(m.id))
-            .slice(0, 4)
-            .map((m) => (
-              <div key={m.id} className="flex gap-2 py-1 text-[13px]">
-                <span className="text-mut">◻</span>
-                <span>
-                  <b>{m.title}</b> <span className="text-mut">— {m.goal}</span>
-                </span>
-              </div>
-            ))}
-          {game.milestones.length === MILESTONES.length && <div className="text-good">All milestones achieved. There is only the unicorn left.</div>}
-          {game.milestones.length > 0 && (
-            <div className="mt-2 text-xs text-mut">
-              Done: {game.milestones.map((id) => MILESTONES.find((m) => m.id === id)?.title).join(' · ')}
-            </div>
-          )}
-        </Panel>
-        <Panel title="Latest news">
-          {recent.length === 0 && <EmptyState title="Nothing yet" hint="Advance the week to get things moving." />}
-          {recent.map((m) => (
-            <button
-              key={m.id}
-              className="-mx-2 block w-[calc(100%+1rem)] rounded-lg border-b border-line/40 px-2 py-2 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-surface2"
-              onClick={() => setScreen('inbox')}
-            >
-              <div className="text-[11px] text-mut tnum">Week {m.week}</div>
-              <div className="text-[13px] font-semibold">{m.title}</div>
-            </button>
-          ))}
-        </Panel>
-      </div>
+      {/* Deliberately absent, and where it went: cash + valuation StatCards (hero subtext /
+          Capital), both history charts (history is not a decision), milestones (the run record),
+          "Latest news" (the Inbox), the Benchmarks panel (register items in src/attention.ts). */}
     </div>
   )
 }
