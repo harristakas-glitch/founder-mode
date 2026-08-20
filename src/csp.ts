@@ -77,7 +77,10 @@ export function buildContentSecurityPolicy(supabaseUrl: string, analyticsHost: s
     // touched; see the note on script-src above for why it needed no others.
     `connect-src 'self' ${origin} wss://${host} ${analyticsOrigin}`,
 
-    // System fonts only — src/index.css declares no @font-face and imports no font service.
+    // Self-hosted fonts only: IBM Plex Mono (the numeric face) is bundled from npm and served
+    // from our own origin, which is exactly what 'self' permits. No font service, no CDN — a
+    // font host is a third party that learns every page view, and the whole point of bundling
+    // was not to have one.
     `font-src 'self'`,
     `manifest-src 'self'`,
     // ./sw.js, same origin.

@@ -3,6 +3,12 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { AnalyticsLayer } from './analytics/Analytics'
 import { ErrorBoundary } from './ErrorBoundary'
+// The numeric face — latin subsets only, three weights, bundled from npm and served from our own
+// origin (font-src 'self' was already in the CSP). See index.css for why the numbers get a face
+// and the prose does not.
+import '@fontsource/ibm-plex-mono/latin-400.css'
+import '@fontsource/ibm-plex-mono/latin-600.css'
+import '@fontsource/ibm-plex-mono/latin-700.css'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
