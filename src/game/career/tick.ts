@@ -33,6 +33,7 @@ import {
   totalCustomers,
   updateBelief,
   type SegmentPmf,
+  oldestOrganicCohortWeeks,
 } from './pmf'
 import { PMF_LABEL } from './pmf'
 // ICO Slice 3. Career owns the cohort list; the token module owns the token maths. Nothing
@@ -543,6 +544,8 @@ export function tickCareerPMF(
       retention4wk: career.retentionBySegment[seg.id] ?? 0,
       priceFit: segmentPriceFit(truth, career.pricing),
       productFit: segmentProductFit(truth, s.quality, career.focus, sector, seg.id),
+      priceLevel: career.pricing,
+      oldestCohortWeeks: oldestOrganicCohortWeeks(career, seg.id, s.week),
       truth,
       beliefs: career.segmentBeliefs[seg.id],
       ceiling: segmentCeiling(truth, sectorTam),

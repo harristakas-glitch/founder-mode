@@ -184,6 +184,11 @@ console.log('\n— §52: EXCLUSION, NOT WEIGHTING. The bit-identity invariant �
       truth,
       beliefs: career.segmentBeliefs[seg],
       ceiling: segmentCeiling(truth, 250_000),
+      // Settled evidence (2026-08-21 rebalance): maturity is an explicit input now, and a constant
+      // keeps the bit-identity sweep's baseline honest — the invariant under test is origin
+      // exclusion, not the evidence ramp.
+      priceLevel: career.pricing,
+      oldestCohortWeeks: 20,
     })
   }
   const baseline = JSON.stringify(derive(organic))
@@ -270,9 +275,9 @@ console.log('\n— §52: EXCLUSION, NOT WEIGHTING. The bit-identity invariant �
   const s = tokenised('devtools', 31337)
   const career = s.career!
   const seg = career.primaryTargetSegmentId
-  const before = segmentSnapshots({ career, sector: s.sector, quality: s.quality, sectorTam: 900_000 })
+  const before = segmentSnapshots({ career, sector: s.sector, quality: s.quality, sectorTam: 900_000, week: s.week })
   career.cohorts.push(cohort({ id: 'rent', segmentId: seg, n: 900_000, origin: 'incentivised' }))
-  const after = segmentSnapshots({ career, sector: s.sector, quality: s.quality, sectorTam: 900_000 })
+  const after = segmentSnapshots({ career, sector: s.sector, quality: s.quality, sectorTam: 900_000, week: s.week })
   ok(JSON.stringify(before) === JSON.stringify(after), 'segmentSnapshots (what the UI shows) is unmoved by 900,000 rented customers')
 }
 

@@ -50,6 +50,7 @@ export function useSegmentSnapshots(): SegmentSnapshot[] {
     sector: game.sector,
     quality: game.quality,
     sectorTam: sectorById(game.sector).tam,
+    week: game.week,
   })
 }
 

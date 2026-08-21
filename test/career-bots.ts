@@ -49,6 +49,7 @@ import {
   segmentPriceFit,
   segmentProductFit,
   segmentCeiling,
+  oldestOrganicCohortWeeks,
 } from '../src/game/career/pmf'
 import { repositionTo, careerMarketingDrain } from '../src/game/career/tick'
 import { sectorById } from '../src/game/data'
@@ -240,6 +241,8 @@ function bestPmfLabel(r: GameState): string {
         truth: t,
         beliefs: r.career!.segmentBeliefs[sg.id],
         ceiling: segmentCeiling(t, tam),
+        priceLevel: r.career!.pricing,
+        oldestCohortWeeks: oldestOrganicCohortWeeks(r.career!, sg.id, r.week),
       })
     })
     .sort((a, b) => b.score - a.score)[0]

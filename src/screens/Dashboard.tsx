@@ -631,7 +631,7 @@ export function Dashboard() {
           <div className="min-w-0 flex-1">
             <div className="text-[13px] leading-relaxed text-mut">{PMF_CAUSAL_CHAIN}</div>
             {career && (() => {
-              const rows = segmentSnapshots({ career: game.career!, sector: game.sector, quality: game.quality, sectorTam: sectorById(game.sector).tam })
+              const rows = segmentSnapshots({ career: game.career!, sector: game.sector, quality: game.quality, sectorTam: sectorById(game.sector).tam, week: game.week })
               const best = [...rows].sort((a, b) => b.score - a.score)[0]
               const targeting = rows.find((r) => r.segmentId === game.career!.primaryTargetSegmentId)
               if (!best) return null

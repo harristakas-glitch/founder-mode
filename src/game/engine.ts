@@ -1695,8 +1695,17 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     // company hold high PMF against proportional decay after research has gone stale and the
     // feature surface has filled in — without it, every equilibrium compressed into the mid-30s
     // and no configuration could reach the acquisition gate again.
+    // REBALANCED 2026-08-21 (test/pmf-mode-probe.ts): at the previous coefficients a good quick
+    // play run produced sustained gain G ≈ 0.88, and the equilibrium 110·G/(G+1.32) settles that
+    // at PMF 44 — measured as the actual median, with 0 of 24 seeds EVER reaching 60 in 90 weeks.
+    // The "strong fit" tier was not hard, it was mathematically unreachable, while the game's own
+    // benchmark copy promises ~64 by week 40. The quality stock rises 0.35→0.72 (a polished
+    // product is the intended late-game engine, and it is strategy-agnostic — no monoculture
+    // risk), research 0.35→0.46 (learn-saturation still binds), base 0.3→0.32; decay 0.012→0.008.
+    // Post-change probe: median crossing of 60 lands in the mid-40s weeks for sustained good
+    // play, and the learn-saturation term still prevents research monoculture.
     const pmfGain =
-      (0.3 + researchPoints * 0.35 * learn + featureGain * 0.6 + (s.quality / 100) * 0.35) *
+      (0.32 + researchPoints * 0.46 * learn + featureGain * 0.6 + (s.quality / 100) * 0.72) *
       s.resonance *
       (1 - s.pmf / 110)
     // Decay proportional to the fit you have, not a flat tax. The old −0.5/wk flat decay is what
@@ -1708,7 +1717,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     // the market drifting away from a shipped product is priced the same at every scale. It also
     // takes the boot off early-game throats: at PMF 8 the old rule charged 0.5/wk against gains a
     // low-resonance seed could not produce (finding 5's death spiral); now it charges 0.1.
-    s.pmf = clamp(s.pmf + pmfGain - s.pmf * 0.012, 0, 100)
+    s.pmf = clamp(s.pmf + pmfGain - s.pmf * 0.008, 0, 100)
   }
 
   const pScore = productScore(s)

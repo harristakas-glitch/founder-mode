@@ -107,7 +107,12 @@ ok(
 
 console.log('— PMF is derived from behaviour, not research (§58) —')
 const ceiling = 20_000
-const base = { segmentId: 'small_teams', truth, ceiling, beliefs: createCareerPMF(1, 'saas', 'standard').segmentBeliefs.small_teams }
+// The 2026-08-21 rebalance made evidence two-dimensional: payment proof is weighted by price
+// level, and retention proof requires cohort MATURITY as well as bodies (a five-day-old cohort
+// proves nothing however large). These fixtures describe an established company — thousands of
+// retained customers — so they carry mature evidence explicitly; without the fields the score
+// degrades to nothing, which is itself the rebalance working as designed.
+const base = { segmentId: 'small_teams', truth, ceiling, beliefs: createCareerPMF(1, 'saas', 'standard').segmentBeliefs.small_teams, priceLevel: 'market' as const, oldestCohortWeeks: 20 }
 const churny = derivePmfForSegment({ ...base, customers: 5000, retention4wk: 0.35, priceFit: 80, productFit: 70 })
 ok(churny.status !== 'strong' && churny.status !== 'scalable', `high acquisition + low retention is NOT strong PMF (${churny.status})`)
 const sticky = derivePmfForSegment({ ...base, customers: 2000, retention4wk: 0.86, priceFit: 85, productFit: 80 })

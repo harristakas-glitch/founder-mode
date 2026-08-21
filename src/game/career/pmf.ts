@@ -676,6 +676,10 @@ export function derivePmfForSegment(args: {
   truth: SegmentTruth
   beliefs: SegmentBeliefs
   ceiling: number
+  /** The pricing strategy behind priceFit — payment proof is weighted by how much money it moved. */
+  priceLevel: PricingStrategy
+  /** Age in weeks of the segment's OLDEST organic cohort. Proof needs time as well as bodies. */
+  oldestCohortWeeks: number
 }): SegmentPmf {
   const { segmentId, customers, retention4wk, priceFit, productFit, truth, beliefs, ceiling } = args
   if (customers < PMF_CUSTOMER_FLOOR) {
@@ -687,8 +691,30 @@ export function derivePmfForSegment(args: {
     return { segmentId, status, score, retention4wk, customers }
   }
 
-  const retentionScore = clamp01((retention4wk - 0.4) / 0.5) * 46
-  const payingScore = (priceFit / 100) * 20
+  // REBALANCED 2026-08-21 (test/pmf-mode-probe.ts): a careless bot on low pricing crossed PMF 60
+  // at MEDIAN WEEK FIVE, and beat the disciplined bot to it — two faults, both here. First,
+  // retention read at full 46-point strength off the 15-customer floor, so a tiny honeymoon
+  // cohort spiked the score; the evidence ramp scales it in until ~60 retained customers, which
+  // is when a retention read stops being an anecdote. Second, payingScore treated a fitting LOW
+  // price as maximal proof of willingness to pay — but people staying at a giveaway price proves
+  // retention, not payment; the proof multiplier weights the evidence by how much money actually
+  // changed hands (low 0.55, market 1.0, premium 1.1 — premium survivors are the strongest read).
+  // The evidence ramp gates BOTH behavioural proofs — staying and paying — because both are
+  // measured on the same bodies: twenty customers' retention is an anecdote, and so is twenty
+  // customers' willingness to pay. Belief-derived terms (fit, headroom) stay unramped; they are
+  // already labelled as beliefs.
+  // Evidence needs BODIES and TIME. The bodies ramp alone was defeated in measurement: the
+  // easiest SaaS segment delivers 60+ organic customers by week five, and 64 real customers
+  // retaining at market price scored an honest-looking 60 — off cohorts that were days old. The
+  // maturity ramp is the temporal half: fit cannot be proven until at least one cohort has lived
+  // ~12 weeks past acquisition, however wide the funnel. Together they move the found-fit moment
+  // from week 5 to the teens-through-thirties, which is what the game's own "winners find fit by
+  // ~week 40" copy always claimed.
+  const maturity = clamp01(args.oldestCohortWeeks / 12)
+  const evidenceRamp = (0.4 + 0.6 * clamp01(customers / 60)) * (0.35 + 0.65 * maturity)
+  const retentionScore = clamp01((retention4wk - 0.4) / 0.5) * 46 * evidenceRamp
+  const priceProof = args.priceLevel === 'low' ? 0.45 : args.priceLevel === 'premium' ? 1.1 : 1.0
+  const payingScore = (priceFit / 100) * 20 * priceProof * evidenceRamp
   const fitScore = (productFit / 100) * 14
   const scaleScore = clamp01(customers / Math.max(200, ceiling * 0.12)) * 12
   const headroom = clamp01(truth.marketSize / 60) * 8
@@ -735,8 +761,10 @@ export function segmentSnapshots(args: {
   sector: string
   quality: number
   sectorTam: number
+  /** Current game week — cohort maturity is measured against it. */
+  week: number
 }): SegmentSnapshot[] {
-  const { career, sector, quality, sectorTam } = args
+  const { career, sector, quality, sectorTam, week } = args
   const out: SegmentSnapshot[] = []
   for (const def of segmentsForSector(sector)) {
     const truth = career.segmentTruth[def.id]
@@ -756,6 +784,8 @@ export function segmentSnapshots(args: {
       productFit,
       truth,
       beliefs,
+      priceLevel: career.pricing,
+      oldestCohortWeeks: oldestOrganicCohortWeeks(career, def.id, week),
       ceiling,
     })
     out.push({
@@ -906,6 +936,14 @@ export function cohortIsOrganic(c: CustomerCohort): boolean {
  * `totalCustomers` whenever no incentivised cohort exists, which is what makes the seam a no-op
  * for every non-token run rather than a change that has to be measured.
  */
+/** Age in weeks of a segment's oldest ORGANIC cohort — the temporal half of the evidence ramp. */
+export function oldestOrganicCohortWeeks(career: CareerPMFState, segmentId: SegmentId, week: number): number {
+  let oldest = 0
+  for (const c of career.cohorts)
+    if (c.segmentId === segmentId && cohortIsOrganic(c)) oldest = Math.max(oldest, week - c.acquiredWeek)
+  return oldest
+}
+
 export function organicCustomers(career: CareerPMFState, segmentId?: SegmentId): number {
   return career.cohorts.reduce(
     (a, c) => (segmentId && c.segmentId !== segmentId ? a : cohortIsOrganic(c) ? a + c.activeCustomers : a),

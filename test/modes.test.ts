@@ -125,9 +125,13 @@ const GOLDEN_TRACES: Record<number, number> = {
   //   1. `arpuWeekly`/`careerArpu` collapsed into one `arpuPerCustomer` (finding 1) — revenue moved.
   //   2. P2: research saturates on `researchSignal`, quality earns fit as a stock, PMF decay is
   //      proportional, churn reads the craft terms at full weight (finding 2) — pmf/users moved.
-  7: 0x8c87081a,
-  4242: 0xcbfd25a1,
-  31337: 0x87517b9d,
+  // 2026-08-21 — the cross-mode PMF rebalance (test/pmf-mode-probe.ts): quick play's gain
+  //      coefficients lifted so PMF 60 is reachable (it was mathematically unreachable — the
+  //      equilibrium capped at 44), decay 0.012→0.008; Career's evidence ramp gained the
+  //      maturity term. The pmf trajectory moved by design, so every trace moved.
+  7: 0xb33ceae6,
+  4242: 0x54446ff3,
+  31337: 0xdfea5503,
 }
 
 for (const [seedKey, expected] of Object.entries(GOLDEN_TRACES)) {

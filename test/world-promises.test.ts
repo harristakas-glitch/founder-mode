@@ -162,6 +162,10 @@ console.log('\n— §34: the choices that ARE promises get noted at the moment o
 
   // Held for the whole window, the stance settles kept — the fact is the absence of an exception.
   let held = play(4242, 6)
+  // The 2026-08-21 PMF rebalance made early career revenue leaner; unfunded, this run now dies at
+  // week 14, inside its own promise window. Cash is orthogonal to promise mechanics — fund the
+  // fixture so the window it exists to test can actually elapse.
+  held.cash += 400_000
   plantStar(held)
   held = advanceWeek(held)
   choose(held, 'refuse-raise')

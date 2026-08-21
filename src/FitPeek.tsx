@@ -56,6 +56,7 @@ export function FitPeek({ onClose }: { onClose: () => void }) {
               sector: game.sector,
               quality: game.quality,
               sectorTam: sectorById(game.sector).tam,
+              week: game.week,
             }).map((row) => (
               <div key={row.name} className="flex items-baseline gap-3 rounded-lg border border-line/70 bg-surface2 px-3.5 py-2.5">
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{row.name}</span>
