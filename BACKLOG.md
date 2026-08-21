@@ -568,3 +568,27 @@ landed; and CI now runs `npm run build` + `npm test` on every push, with `test/`
   structurally smaller; left as sector character, but it means two of six sectors have one fewer
   reachable outcome.
 
+
+## 9. Added 2026-08-21 — Discovery's honesty gap, found in play
+
+### 9.1 Operating evidence never updates beliefs
+
+The owner's screenshot said it best: Small Teams with **32 customers · 74% 4-week retention** while
+all seven belief rows read "Assumption — no evidence yet." The strongest research instrument the
+game has — actually operating the company — writes nothing to the hypothesis board; `updateBelief`
+is called from exactly one place, experiment completion (`tick.ts`). A paid pilot with 6 customers
+updates `retentionPotential`; 32 real customers paying real money for months do not.
+
+The fix is mechanical and well-shaped: each week a segment has organic customers, emit low-noise
+evidence into the same `updateBelief` pipe — measured retention → `retentionPotential`, paying at
+the current price level → `willingnessToPay`, organic acquisition rate → `acquisitionAccessibility`
+— with reliability scaling on cohort size/maturity like `evidenceRamp` does. It deliberately did
+NOT ship on 2026-08-21: it moves goldens, and it landed the same day as the cross-mode PMF
+rebalance (b72153b); stacking two engine changes in one sitting makes the next regression
+unattributable. Ship it as its own measured commit, re-record goldens in that commit, and re-run
+`test/pmf-mode-probe.ts` to confirm the balance holds (belief accuracy feeds nothing above the
+15-customer floor, so the probe should be unmoved — verify, don't assume).
+
+Until then the presentation bridge (faa44a6) tells the player the board is superseded past the
+floor, which closes the confusion but not the gap: a player who repositions late still consults a
+board their own customers were never allowed to correct.
