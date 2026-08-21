@@ -592,3 +592,27 @@ unattributable. Ship it as its own measured commit, re-record goldens in that co
 Until then the presentation bridge (faa44a6) tells the player the board is superseded past the
 floor, which closes the confusion but not the gap: a player who repositions late still consults a
 board their own customers were never allowed to correct.
+
+### 9.2 Research value is real but invisible — dramatize the kill, then consider one hard hook
+
+Traced 2026-08-21 (4-agent workflow over engine.ts/tick.ts/pmf.ts, owner question "what's the
+value of research?"). The verified facts: in Career, research's ONLY hard mechanical payoffs are
+(a) the under-15-customer PMF score (confidence×28, cap ~40) which feeds revenue conversion
+(0.25 + 0.75·pmf/100) and a few event/pitch gates — small while the customer count is small — and
+(b) standing-study retirement stopping a recurring charge. Career acquisition and churn never read
+s.pmf or beliefs; the pmf^1.5 word-of-mouth loop is Quick-only. The dominant value is the
+information itself, and it is enormous: right vs wrong segment+price is ~86% vs ~62% 4-week
+retention, 2–5× the weekly adds, an equilibrium customer base 5–25× larger, and the wrong bet is
+mathematically locked out of Strong/Scalable PMF (retention gates 0.72/0.8). The catalogue costs
+$4k–$28k against a repositioning penalty of 2–6 weeks at 0.55× marketing.
+
+Two follow-ups, in order of value:
+1. **Dramatize the kill.** When evidence moves a belief ≥15 points (or kills the planted
+   overconfident prior), the completion inbox message should say what was wrong and what it was
+   steering: "You believed willingness-to-pay was 60. It is 24. Premium pricing was built on the
+   old number." The text lives in tick.ts → goldens move → same-commit re-record.
+2. **Candidate hard hook, if research still feels optional after §9.1 + (1): repositioning
+   discount for researched destinations.** Repositioning cost already scales with segment
+   distance; scale it also by destination-segment evidence confidence — "you knew where you were
+   going." Thematic, small surface area, gives evidence a price in weeks. Balance-probe before and
+   after; must not make serial repositioning free.

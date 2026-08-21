@@ -134,7 +134,18 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
                 <ConfidenceBar value={b.confidence} />
                 <span className="w-16 shrink-0 text-right text-[10.5px] text-mut">{confidenceLabel(b.confidence)}</span>
               </div>
-              {b.evidenceCount === 0 && <div className="mt-1 text-[10.5px] text-mut">Assumption — no evidence yet.</div>}
+              {/* Honest starting beliefs sit at confidence 0.10–0.22; the one prior initialBeliefs
+                  seeds deliberately wrong sits at 0.42 (migrated saves can carry similar unearned
+                  confidence). 0.3 cleanly separates them, so the board can point at the tell —
+                  "confident with zero evidence" — without revealing which way the number lies. */}
+              {b.evidenceCount === 0 &&
+                (b.confidence >= 0.3 ? (
+                  <div className="mt-1 text-[10.5px] font-semibold text-warn">
+                    Confident with zero evidence — exactly the kind of belief that kills companies. Test it.
+                  </div>
+                ) : (
+                  <div className="mt-1 text-[10.5px] text-mut">Assumption — no evidence yet.</div>
+                ))}
             </div>
           )
         })}
@@ -188,8 +199,12 @@ export function Discovery() {
   return (
     <div>
       <h1 className="text-[28px] font-bold tracking-tight">Discovery</h1>
-      <div className="mb-4 text-[13px] text-mut">
-        You don't know your market yet. Research improves what you <i>know</i>; customers prove whether you were <i>right</i>.
+      <div className="mb-4 max-w-[95ch] text-[13px] text-mut">
+        You don't know your market yet — and worse, some of what you believe is <i>confidently</i> wrong: every run seeds at least one
+        bad number per segment, and your starting target was chosen by those same untested beliefs. Research is how you find the lie
+        before the market charges you for it. Bet on the wrong segment or price and cohorts drain faster than marketing can refill
+        them; turning round later costs weeks at half power. The entire study catalogue costs less than a fortnight of mistargeted
+        marketing.
       </div>
 
       {/* The screen's verb, first. This was the fifth block, ~1,200px down and undercut by a
