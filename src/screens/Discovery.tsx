@@ -7,12 +7,15 @@ import { Btn, Disclosure, NESTED, Panel } from '../components'
 import { money } from '../format'
 import {
   EXPERIMENTS,
+  EXPERIMENT_ANSWERS,
   METRIC_LABEL,
+  PMF_CUSTOMER_FLOOR,
   TRUTH_METRICS,
   beliefBand,
   canRunExperiment,
   confidenceLabel,
   experimentDef,
+  organicCustomers,
   segmentDef,
   segmentsForSector,
   suggestedExperiment,
@@ -104,6 +107,18 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
         </span>
       </div>
       <div className="mt-1 text-[12.5px] text-mut">{def.blurb}</div>
+
+      {/* The board can look broken on a segment with real customers — 32 people retaining at 74%
+          while every row still reads "no evidence yet" (owner report, 2026-08-21). It is not
+          broken, it is superseded: past the floor the tick scores behaviour, not beliefs. Say so
+          on the card, in the gap between the real numbers above and the assumptions below. */}
+      {organicCustomers(career, segmentId) >= PMF_CUSTOMER_FLOOR && (
+        <div className="mt-2.5 rounded-lg border border-line/60 bg-surface2 px-2.5 py-2 text-[11.5px] leading-snug text-mut">
+          PMF for this segment has moved past this board — with {customers.toLocaleString()} customers it is scored on what they do,
+          staying and paying{retention > 0 && <> ({Math.round(retention * 100)}% stay four weeks)</>}, not on what you believe. The rows
+          below still steer your bet; only experiments move them.
+        </div>
+      )}
 
       <div className="mt-3 space-y-2">
         {TRUTH_METRICS.map((m) => {
@@ -276,7 +291,9 @@ export function Discovery() {
         <Panel title="Experiments">
           <div className="mb-3 text-[12.5px] leading-snug text-mut">
             Experiments buy evidence, not customers. Each one costs cash, weeks and some engineering capacity; the slow, expensive ones
-            measure behaviour and are hard to argue with, the cheap ones measure opinions and flatter you.
+            measure behaviour and are hard to argue with, the cheap ones measure opinions and flatter you. A study moves exactly the
+            hypothesis-board rows named on it — the bold one is the question it exists to answer — pulling your estimate toward the
+            segment's hidden truth and raising its confidence. It never adds customers, quality or revenue.
           </div>
           {career.activeExperiments.length > 0 && (
             <div className="mb-3 space-y-1.5">
@@ -361,6 +378,17 @@ export function Discovery() {
                         <DollarSign size={16} aria-hidden="true" /> {money(def.cashCost).replace('$', '')}
                       </span>
                     </div>
+                    {/* Which board rows this instrument moves — def.metrics verbatim, the
+                        EXPERIMENT_ANSWERS headline bolded. The player's exact question ("what does
+                        research do, which metric moves?") answered where the Run button is. */}
+                    <div className="mt-1 text-[11px] leading-snug text-mut">
+                      Moves{' '}
+                      <b className="text-ink/85">{METRIC_LABEL[EXPERIMENT_ANSWERS[def.type].metric]}</b>
+                      {def.metrics
+                        .filter((m) => m !== EXPERIMENT_ANSWERS[def.type].metric)
+                        .map((m) => ` · ${METRIC_LABEL[m]}`)
+                        .join('')}
+                    </div>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     {/* Standing is the mode Run runs in, so it is a switch, not the second
@@ -413,7 +441,11 @@ export function Discovery() {
         <div className="mb-1 text-[11px] font-bold tracking-[0.1em] text-mut uppercase">Hypothesis board</div>
         <div className="mb-2.5 max-w-[95ch] text-[12.5px] leading-snug text-mut">
           What you currently believe about each segment, and how much of it is actually evidence. The bar under each line is confidence,
-          not quality — a belief can be confident and wrong, and evidence changes these numbers without changing your PMF.
+          not quality — a belief can be confident and wrong. Where this board bites: below {PMF_CUSTOMER_FLOOR} customers, a segment's
+          PMF score is <i>built from it</i> — confidence here is the only thing that raises the score, capped at "Problem validated" —
+          so research is how PMF moves before anyone has bought. From {PMF_CUSTOMER_FLOOR} customers on, the score switches to what
+          those customers actually do, and this board becomes the map you choose your bet with: target, pricing, product focus, all set
+          above.
         </div>
         <div className="grid gap-3.5 lg:grid-cols-3">
           {segs.map((sg) => (
