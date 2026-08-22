@@ -3,6 +3,48 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TRAITS } from './game/data'
 import type { TraitId } from './game/types'
 
+// ---------- overlays ----------
+
+/**
+ * Escape closes any overlay, and Tab stays inside it — without the trap, keyboard focus wanders
+ * into the dead game behind the dialog and the player cannot find their way back.
+ *
+ * Lives here rather than in App.tsx because it is now shared: App's four overlays and the employee
+ * profile all need identical behaviour, and a screen cannot import from App without a cycle.
+ */
+export function useDialog(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const focusable = () =>
+      Array.from(
+        ref.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? [],
+      ).filter((el) => el.offsetParent !== null)
+    focusable()[0]?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onClose()
+      if (e.key !== 'Tab') return
+      const items = focusable()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      previouslyFocused?.focus?.() // hand focus back where the player left it
+    }
+  }, [onClose])
+  return ref
+}
+
 // ---------- animated number ----------
 
 const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -107,7 +149,11 @@ export function Td({ children, right, className = '' }: { children?: ReactNode; 
 //
 // Radius is 14px, down from `rounded-2xl` (16px), with nested boxes at 10px: a nested corner has to
 // be visibly tighter than its parent or the nesting disappears.
-const CARD = 'rounded-xl border border-line bg-surface shadow-[var(--elev-2)]'
+// Exported because <Panel> bakes in `p-5`, and exactly one card in the game must not have padding:
+// the person card, whose portrait bleeds to its own top corners. It takes the recipe rather than
+// inventing a second one — a card that looks like a Panel and is not a Panel is how the plane rule
+// rots.
+export const CARD = 'rounded-xl border border-line bg-surface shadow-[var(--elev-2)]'
 
 /**
  * THE PLANE RULE. Four surfaces, one job each, and a thing belongs to exactly one of them.
