@@ -13,6 +13,12 @@ Founder Mode.html
 # agent worktrees
 .claude/worktrees/
 
+# Per-machine Claude Code settings. `*.local` above does NOT match `settings.local.json`
+# (the glob needs the extension), which is how this file spent months tracked in a PUBLIC repo,
+# publishing the owner's macOS username and absolute home paths in every allowlisted command.
+# No credentials were in it — but a `.local` file is by definition not shared state.
+.claude/settings.local.json
+
 # Local env — the PostHog wizard writes VITE_POSTHOG_KEY here. Never commit env files.
 # This repo does not use env vars at all (see src/analytics/config.ts and src/net/config.ts),
 # so anything landing in .env is either wizard residue or a secret. Both stay out.
