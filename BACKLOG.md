@@ -213,6 +213,11 @@ format; flagging it so the choice is deliberate rather than accidental.
 
 ## 3. Security — residual risk, accepted for now
 
+> **Security work now lives in `SECURITY-BACKLOG.md`** (added 2026-08-22 after a hostile audit of
+> the public repo, keys and live services). That file is the maintained list: owner actions, open
+> items, what is fixed, and — importantly — what has been investigated and refuted. The entries
+> below are kept because other sections reference them, and are mirrored there.
+
 Both need mandatory login or an authoritative server. Neither is worth the friction unless the
 leaderboard becomes genuinely competitive.
 
