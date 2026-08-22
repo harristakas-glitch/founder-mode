@@ -350,9 +350,11 @@ The global leaderboard has never accepted a real score. One paste fixes it.
 2. Paste the **entire** contents of `supabase/leaderboard-v6.sql`.
 3. Press **Run**.
 
-**That is the only SQL file in the repo.** There is nothing to run before it and nothing after it.
 It creates the table as well as securing it, so it is correct on a fresh project and on the
-existing one, and it is idempotent — running it twice is harmless.
+existing one, and it is idempotent — running it twice is harmless. **Since this section was
+written, one more script exists: `supabase/leaderboard-v7-proof.sql`** — additive proof columns
+(BACKLOG §3.1), run it AFTER v6, ideally in the same sitting. There is still nothing to run
+*before* v6, and v6/v7 is the complete list.
 
 It supersedes `leaderboard-v5.sql`, which **was never applied**, and you should not go looking for
 it: it and the four other former scripts were deleted in `d9159ef` precisely so there is nothing to
