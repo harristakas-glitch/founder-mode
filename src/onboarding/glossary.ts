@@ -257,7 +257,7 @@ export const TERMS: Term[] = [
     group: 'career',
     career: true,
     short: 'Experiments move what you BELIEVE about a segment. They never move the segment, and they never move PMF on their own.',
-    long: 'The bar under each line on the Hypothesis Board is confidence, not quality. A belief can be confident and wrong.',
+    long: 'The bar under each line on the Hypothesis Board is confidence, not quality. A belief can be confident and wrong. Experiments move beliefs — and so do your own customers, whose behaviour files onto the board once there are enough of them to read.',
   },
   {
     id: 'problem-intensity',

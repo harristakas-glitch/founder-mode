@@ -108,15 +108,18 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
       </div>
       <div className="mt-1 text-[12.5px] text-mut">{def.blurb}</div>
 
-      {/* The board can look broken on a segment with real customers — 32 people retaining at 74%
-          while every row still reads "no evidence yet" (owner report, 2026-08-21). It is not
-          broken, it is superseded: past the floor the tick scores behaviour, not beliefs. Say so
-          on the card, in the gap between the real numbers above and the assumptions below. */}
+      {/* The board once looked broken on a segment with real customers — 32 people retaining at
+          74% while every row still read "no evidence yet" (owner report, 2026-08-21; BACKLOG
+          §9.1). The gap is closed from both ends now: past the floor the tick scores behaviour,
+          not beliefs — and the behaviour also files onto this board as evidence every few weeks,
+          so the rows below are corrected by the customers they describe. Experiments keep the
+          questions operating cannot see: segments you haven't entered, prices you haven't asked. */}
       {organicCustomers(career, segmentId) >= PMF_CUSTOMER_FLOOR && (
         <div className="mt-2.5 rounded-lg border border-line/60 bg-surface2 px-2.5 py-2 text-[11.5px] leading-snug text-mut">
           PMF for this segment has moved past this board — with {customers.toLocaleString()} customers it is scored on what they do,
           staying and paying{retention > 0 && <> ({Math.round(retention * 100)}% stay four weeks)</>}, not on what you believe. The rows
-          below still steer your bet; only experiments move them.
+          below still steer your bet, and your customers now correct them: operating data files here as evidence.
+          Experiments answer what operating can't — the segments you haven't entered, the prices you haven't asked.
         </div>
       )}
 

@@ -17,7 +17,9 @@ import {
   EXPERIMENT_ANSWERS,
   incentivisedCustomers,
   METRIC_LABEL,
+  OPERATING_EVIDENCE,
   organicCustomers,
+  resolveOperatingReads,
   resolveCohortRetention,
   RETENTION_WINDOW_WEEKS,
   resolveExperiment,
@@ -181,13 +183,22 @@ export function tickCareerPMF(
       if (pool <= 0 || n <= 0) return 0
       let left = Math.min(n, pool)
       const removed = left
+      // A drain is a SHOCK, not churn — record it on any cohort still waiting to snapshot, so the
+      // operating-evidence instrument can set war damage aside when it reads segment character
+      // (see `preSnapshotShockKeep` in types.ts). The snapshot itself stays raw.
+      const noteShock = (c: (typeof career.cohorts)[number], exactBefore: number, taken: number) => {
+        if (c.retentionAt4wk === undefined && exactBefore > 0)
+          c.preSnapshotShockKeep = (c.preSnapshotShockKeep ?? 1) * Math.max(0, (exactBefore - taken) / exactBefore)
+      }
       // Largest first, so the rounding remainder lands where it is proportionally smallest.
       for (const c of [...picked].sort((a, b) => b.activeCustomers - a.activeCustomers)) {
         if (left <= 0) break
         const share = Math.min(c.activeCustomers, left, Math.max(1, Math.round((removed * c.activeCustomers) / pool)))
         c.activeCustomers -= share
         // keep the unrounded count in step, or decay would resurrect the people we just removed
-        c.exactCustomers = Math.max(0, (c.exactCustomers ?? c.activeCustomers + share) - share)
+        const exactBefore = c.exactCustomers ?? c.activeCustomers + share
+        c.exactCustomers = Math.max(0, exactBefore - share)
+        noteShock(c, exactBefore, share)
         left -= share
       }
       // Whatever rounding left over comes off the largest cohort that can still absorb it.
@@ -195,7 +206,9 @@ export function tickCareerPMF(
         if (left <= 0) break
         const take = Math.min(c.activeCustomers, left)
         c.activeCustomers -= take
-        c.exactCustomers = Math.max(0, (c.exactCustomers ?? c.activeCustomers + take) - take)
+        const exactBefore = c.exactCustomers ?? c.activeCustomers + take
+        c.exactCustomers = Math.max(0, exactBefore - take)
+        noteShock(c, exactBefore, take)
         left -= take
       }
       return removed - left
@@ -460,6 +473,22 @@ export function tickCareerPMF(
     // module bends the answer. While the rewards run, an incentivised cohort retains BETTER than an
     // organic one; the week the spend stops it falls to 0.38× the organic four-week rate.
     const keep = cohortIsOrganic(c) ? keepOrganic : incentivisedKeepRate(keepOrganic, incentiveStrengthNow)
+    // Operating evidence (§9.1): record the non-segment share of this week's keep AS APPLIED —
+    // fit, price, bugs, honeymoon and any cap truncation, at this week's actual values — so the
+    // retention read can divide them out exactly later. See `preSnapshotNonSegmentKeep` in
+    // types.ts for why reconstruction-at-read-time was rejected (it was an exploit).
+    // The `decays === 1` arm starts the record on a cohort's FIRST decay only: a cohort loaded
+    // mid-honeymoon from a save that predates the field would otherwise accumulate a partial
+    // product and misattribute its missing weeks to the segment. Such cohorts never get the
+    // field and never read — the instrument waits for the next cohort instead of lying once.
+    if (
+      c.retentionAt4wk === undefined &&
+      cohortIsOrganic(c) &&
+      (c.preSnapshotNonSegmentKeep !== undefined || cohortDecaysApplied(s.week, c.acquiredWeek) === 1)
+    ) {
+      const baseTerm = 0.925 + (truth.retentionPotential / 100) * 0.07
+      c.preSnapshotNonSegmentKeep = (c.preSnapshotNonSegmentKeep ?? 1) * (keep / baseTerm)
+    }
     const before = c.activeCustomers
     // Decay the unrounded count, then round only for display. Rounding first let a cohort of a
     // handful of people survive intact week after week and report perfect retention.
@@ -530,6 +559,79 @@ export function tickCareerPMF(
   }
   if (career.retentionBySegmentIncentivised && Object.keys(career.retentionBySegmentIncentivised).length === 0)
     career.retentionBySegmentIncentivised = undefined
+
+  // --- operating evidence (BACKLOG §9.1) -----------------------------------------------------
+  // Actually running the company finally updates the hypothesis board. Placed after the retention
+  // measurement so each cycle reads this week's numbers, and before the derived PMF so this
+  // week's observations feed this week's sub-floor scores. Noiseless — no rng is drawn, so the
+  // weekly draw order is untouched (the section comment on `resolveOperatingReads` owns why).
+  //
+  // In the 5-to-14-organic-customer band this raises belief confidence, which raises the
+  // sub-floor PMF score. That is DELIBERATE and it is not a violation of "research can never
+  // manufacture PMF": these are real customers behaving, the exact evidence class the floor
+  // exists to await, and the sub-floor cap (~40, 'problem validated') still binds.
+  if (s.week % OPERATING_EVIDENCE.cadenceWeeks === 0) {
+    for (const seg of segs) {
+      const reads = resolveOperatingReads({
+        career,
+        segmentId: seg.id,
+        sector,
+        week: s.week,
+        isTarget: seg.id === target,
+        acquiredThisWeek: seg.id === target ? acquired : 0,
+        marketingSpend,
+      })
+      if (reads.length === 0) continue
+      // Every read updates its belief; at most ONE lands in the visible log per segment per
+      // cycle — the read that taught the most — and only while it still teaches. Once the board
+      // has converged on what the customers keep saying, the log stops repeating it. That is
+      // what keeps the 120-item evidence buffer an audit trail of learning instead of a monthly
+      // ticker, and keeps the experiment results the player paid for from scrolling off the
+      // Discovery card (it renders four items).
+      let taught = false
+      let best: { r: (typeof reads)[number]; score: number } | null = null
+      for (const r of reads) {
+        const prev = career.segmentBeliefs[seg.id][r.metric]
+        const next = updateBelief(prev, r)
+        career.segmentBeliefs[seg.id][r.metric] = next
+        const moved = Math.abs(next.estimate - prev.estimate)
+        const gained = next.confidence - prev.confidence
+        if (moved >= 1.5 || gained >= 0.025) {
+          const score = moved + gained * 50
+          if (!best || score > best.score) best = { r, score }
+        }
+      }
+      if (best) {
+        taught = true
+        career.evidence.unshift({
+          id: uid(),
+          week: s.week,
+          segmentId: seg.id,
+          source: 'customer_behaviour',
+          metric: best.r.metric,
+          signal: Math.round(best.r.signal),
+          reliability: Number(best.r.reliability.toFixed(3)),
+          direction: best.r.direction,
+          summary: best.r.summary,
+        })
+        if (career.evidence.length > 120) career.evidence.length = 120
+      }
+      // First light, once per segment: the board's strongest instrument switched on. A journal
+      // line, not an inbox item — the evidence log itself is the ongoing record.
+      const segName = segmentDef(sector, seg.id).name
+      if (taught && !career.journal.some((j) => j.title === `Operating data — ${segName}`)) {
+        addJournal(career, {
+          week: s.week,
+          category: 'discovery',
+          title: `Operating data — ${segName}`,
+          // Worded so a rare re-fire (the journal caps at 80 and this entry can be evicted on a
+          // long run) reads as a standing fact, not as news claiming to be first.
+          description: `${segName} are numerous and old enough to be evidence. Their behaviour files onto the hypothesis board every ${OPERATING_EVIDENCE.cadenceWeeks} weeks — retention, payment and reach, measured on people rather than asked in a survey.`,
+          relatedSegmentId: seg.id,
+        })
+      }
+    }
+  }
 
   // --- derived PMF, per segment ------------------------------------------------------------
   const segmentPmf = segs.map((seg) => {

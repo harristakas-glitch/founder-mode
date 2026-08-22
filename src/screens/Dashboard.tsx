@@ -302,7 +302,7 @@ function MetricDrawer({ metric, onClose }: { metric: MetricKey; onClose: () => v
         <>
           <Fact k="4-week retention">{(career.retentionBySegment[career.primaryTargetSegmentId] ?? 0) > 0 ? pct(career.retentionBySegment[career.primaryTargetSegmentId] ?? 0, 0) : '—'}</Fact>
           <div className="py-1 text-[12.5px] leading-snug text-mut">
-            PMF here is derived from customers who stay. Research moves your beliefs; only retained customers move the number.
+            PMF here is derived from customers who stay. Research and your own customers move your beliefs; only retained customers move the number.
           </div>
           <Analyse label="Discovery" screen="discovery" />
         </>

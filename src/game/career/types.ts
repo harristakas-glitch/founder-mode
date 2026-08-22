@@ -91,6 +91,37 @@ export interface CustomerCohort {
   /** Share of this cohort still active when it turned four weeks old. Snapshotted once. */
   retentionAt4wk?: number
   /**
+   * Cumulative survival factor of NON-CHURN losses charged to this cohort before its four-week
+   * snapshot: rival raids, outages, event-driven user cuts — everything the reconciliation drain
+   * removes, multiplied together as (exactAfter / exactBefore) per hit. ABSENT MEANS 1 (no
+   * shocks), so no save needs a migration write.
+   *
+   * Exists for the operating-evidence instrument (BACKLOG §9.1): the retention read deconvolves
+   * the measured snapshot through the retention model to recover the SEGMENT's character, and
+   * shock losses are not segment character. Measured before this field existed, they depressed
+   * the recovered signal by ~16 points (the model inversion has 1/0.07 leverage, so ~4.5pp of
+   * raid damage reads as "this segment churns"). `retentionAt4wk` itself stays raw — PMF is
+   * scored on what actually happened to the book, shocks included, exactly as before.
+   */
+  preSnapshotShockKeep?: number
+  /**
+   * Product of every NON-SEGMENT retention factor actually applied to this cohort before its
+   * snapshot — each week the tick multiplies in `appliedKeep / segmentBaseTerm`, so this is
+   * fit × price × bugs × honeymoon (and any keep-cap truncation) AS THEY WERE that week, not as
+   * they can be reconstructed later. Written only for organic cohorts, only pre-snapshot; ABSENT
+   * on old saves, and the operating read simply skips cohorts that lack it.
+   *
+   * This is the whole defence of the §9.1 retention instrument, found adversarially before it
+   * ever shipped: deconvolving with CURRENT terms let a player flip pricing on a read week and
+   * turn frozen snapshots into fabricated pilot-grade evidence (signal 50 → 87–100 at full
+   * reliability, `experimentAnswered('pilot')` for free), and punished honest policy fixes with
+   * a 20–40 point wrong-way bias — the 1/0.07 leverage of the inversion amplifies any mismatch.
+   * Recording the factors as applied makes the inversion exact and the exploit meaningless:
+   * `retentionAt4wk / preSnapshotShockKeep / preSnapshotNonSegmentKeep` IS `base^4`, whatever
+   * the player does with the levers afterwards.
+   */
+  preSnapshotNonSegmentKeep?: number
+  /**
    * Why these customers arrived. ICO Slice 3, docs/ico-architecture.md §5.2.
    *
    * ABSENT MEANS 'organic', which is what every cohort written before this existed is — so no save

@@ -674,5 +674,214 @@ console.log('— A standing study is a programme that finishes, not a subscripti
   ok(Math.abs(perfectSum - perfect.loss) <= 1e-12, 'the keep ceiling attributes its residue rather than inventing a cause')
 }
 
+console.log('— Operating evidence: real customers update the board (BACKLOG §9.1) —')
+{
+  const { resolveOperatingReads, OPERATING_EVIDENCE, organicCustomers } = await import('../src/game/career/pmf')
+
+  // The deconvolution round-trip — the drift guard between `resolveCohortRetention` and its
+  // inverse. A book settled at exactly the model's own retention must hand back the segment's
+  // retentionPotential: if someone edits the retention expressions in one place and not the
+  // other, this is the assertion that goes red.
+  const cA = createCareerPMF(9091, 'saas', 'standard')
+  const segA = cA.primaryTargetSegmentId
+  const truthA = cA.segmentTruth[segA]
+  const quality = 55
+  const bugs = 20
+  const fitA = segmentProductFit(truthA, quality, cA.focus, 'saas', segA)
+  const priceA = segmentPriceFit(truthA, cA.pricing)
+  const settledA = settledCohortRetention({ truth: truthA, productFit: fitA, priceFit: priceA, bugs })
+  cA.retentionBySegment[segA] = settledA
+  // the non-segment share of the settled keep, recorded the way the tick records it as-applied
+  const baseA = 0.925 + (truthA.retentionPotential / 100) * 0.07
+  cA.cohorts.push({
+    id: 'op-1', acquiredWeek: 10, segmentId: segA, startingCustomers: 90, activeCustomers: 80,
+    exactCustomers: 80, acquisitionCost: 0, priceAtAcquisition: 52, productQualityAtAcquisition: quality,
+    retentionAt4wk: settledA, preSnapshotNonSegmentKeep: settledA / Math.pow(baseA, 4),
+  })
+  const readsA = resolveOperatingReads({
+    career: cA, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 3, marketingSpend: 8_000,
+  })
+  const retReadA = readsA.find((r) => r.metric === 'retentionPotential')!
+  ok(!!retReadA, 'a settled organic book produces a retention reading')
+  ok(
+    Math.abs(retReadA.signal - truthA.retentionPotential) <= 1.5,
+    `inverting the retention model at its own output recovers retentionPotential (${retReadA.signal.toFixed(1)} vs truth ${truthA.retentionPotential})`,
+  )
+  ok(readsA.some((r) => r.metric === 'willingnessToPay'), 'paying customers produce a willingness-to-pay reading')
+  ok(readsA.some((r) => r.metric === 'acquisitionAccessibility'), 'a live channel on the target produces a reachability reading')
+
+  // §52: an incentivised book is not evidence — about the product OR the segment.
+  const cB = createCareerPMF(9091, 'saas', 'standard')
+  cB.retentionBySegment[segA] = 0.8
+  cB.cohorts.push({
+    id: 'op-2', acquiredWeek: 10, segmentId: segA, startingCustomers: 500, activeCustomers: 400,
+    exactCustomers: 400, acquisitionCost: 0, priceAtAcquisition: 52, productQualityAtAcquisition: quality,
+    origin: 'incentivised',
+  })
+  ok(
+    resolveOperatingReads({
+      career: cB, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+      acquiredThisWeek: 0, marketingSpend: 8_000,
+    }).length === 0,
+    '400 rented customers teach the board nothing (§52: organic only)',
+  )
+
+  // The customer floor: below it there is no operating story to read at all.
+  const cC = createCareerPMF(9091, 'saas', 'standard')
+  cC.cohorts.push({
+    id: 'op-3', acquiredWeek: 20, segmentId: segA, startingCustomers: 4, activeCustomers: 4,
+    exactCustomers: 4, acquisitionCost: 0, priceAtAcquisition: 52, productQualityAtAcquisition: quality,
+  })
+  ok(
+    resolveOperatingReads({
+      career: cC, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+      acquiredThisWeek: 0, marketingSpend: 8_000,
+    }).length === 0,
+    `${OPERATING_EVIDENCE.customerFloor - 1} customers are an anecdote, not evidence`,
+  )
+
+  // Operating at a giveaway price reveals willingness to pay only up to a little above the price —
+  // staying at low proves retention, not payment. Same philosophy as derivePmfForSegment's proof
+  // multiplier, and the same reason its weight is cut.
+  const cD = createCareerPMF(9091, 'saas', 'standard')
+  cD.segmentTruth[segA].willingnessToPay = 92
+  cD.segmentBeliefs[segA].willingnessToPay = { estimate: 30, confidence: 0.15, evidenceCount: 0 }
+  cD.pricing = 'low'
+  cD.retentionBySegment[segA] = 0.75
+  cD.cohorts.push({
+    id: 'op-4', acquiredWeek: 5, segmentId: segA, startingCustomers: 100, activeCustomers: 80,
+    exactCustomers: 80, acquisitionCost: 0, priceAtAcquisition: 26, productQualityAtAcquisition: quality,
+    retentionAt4wk: 0.75, preSnapshotNonSegmentKeep: 0.9,
+  })
+  const lowReads = resolveOperatingReads({
+    career: cD, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 0, marketingSpend: 8_000,
+  })
+  const lowWtp = lowReads.find((r) => r.metric === 'willingnessToPay')!
+  ok(lowWtp.signal <= 26 + OPERATING_EVIDENCE.wtpRevealHeadroom, `low pricing caps the WTP reveal (signal ${lowWtp.signal}, truth 92)`)
+  cD.pricing = 'premium'
+  const premWtp = resolveOperatingReads({
+    career: cD, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 0, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'willingnessToPay')!
+  ok(premWtp.reliability > lowWtp.reliability, 'premium survivors are a stronger payment read than giveaway survivors')
+  ok(premWtp.signal > lowWtp.signal, 'premium pricing reveals more of a high WTP than a giveaway does')
+
+  // The censoring guard, found adversarially before this ever shipped: "they pay at least X" is a
+  // FLOOR, and a floor must never drag a belief down past its own blind spot. Prior 85 at market
+  // pricing (cap 77), truth 92: fed as a point estimate this pulled a CORRECT prior to ~52 and
+  // hardened it. Now: no read at all — no estimate pull, no confidence, no evidenceCount.
+  cD.pricing = 'market'
+  cD.segmentBeliefs[segA].willingnessToPay = { estimate: 85, confidence: 0.2, evidenceCount: 0 }
+  ok(
+    !resolveOperatingReads({
+      career: cD, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+      acquiredThisWeek: 0, marketingSpend: 8_000,
+    }).some((r) => r.metric === 'willingnessToPay'),
+    'a censored payment reading cannot drag down a prior above its cap — it is skipped entirely',
+  )
+  cD.segmentBeliefs[segA].willingnessToPay = { estimate: 40, confidence: 0.2, evidenceCount: 0 }
+  const floorRead = resolveOperatingReads({
+    career: cD, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 0, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'willingnessToPay')!
+  ok(
+    !!floorRead && floorRead.signal === 52 + OPERATING_EVIDENCE.wtpRevealHeadroom && floorRead.direction === 'positive',
+    'below the cap the floor is genuine upward information ("at least this much")',
+  )
+
+  // THE EXPLOIT that killed the first design (current-terms deconvolution): flip pricing on the
+  // read week and frozen snapshots must NOT change their story. The non-segment terms were
+  // recorded as applied, so the recovered signal is identical whatever the levers say today.
+  const beforeFlip = resolveOperatingReads({
+    career: cA, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 3, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'retentionPotential')!
+  cA.pricing = 'premium'
+  cA.focus = 'enterprise_readiness'
+  const afterFlip = resolveOperatingReads({
+    career: cA, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 3, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'retentionPotential')!
+  ok(
+    afterFlip.signal === beforeFlip.signal,
+    `flipping pricing/focus on a read week cannot fabricate retention evidence (signal ${beforeFlip.signal.toFixed(1)} either way)`,
+  )
+  cA.pricing = 'market'
+
+  // §52 in the SNAPSHOT path (a mutation here survived the whole suite once): a rented cohort
+  // with an absurd snapshot must not move the retention signal by one bit.
+  const organicOnly = resolveOperatingReads({
+    career: cA, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 3, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'retentionPotential')!
+  cA.cohorts.push({
+    id: 'op-rented', acquiredWeek: 12, segmentId: segA, startingCustomers: 5000, activeCustomers: 4000,
+    exactCustomers: 4000, acquisitionCost: 0, priceAtAcquisition: 52, productQualityAtAcquisition: quality,
+    retentionAt4wk: 0.05, preSnapshotNonSegmentKeep: 0.5, origin: 'incentivised',
+  })
+  const mixedBook = resolveOperatingReads({
+    career: cA, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 3, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'retentionPotential')!
+  ok(
+    mixedBook.signal === organicOnly.signal,
+    '4,000 rented customers with a catastrophic snapshot move the retention signal by exactly nothing',
+  )
+
+  // The reachability read exists only where acquisition actually ran: the target, with a channel.
+  const quiet = resolveOperatingReads({
+    career: cA, segmentId: segA, sector: 'saas', week: 30, isTarget: false,
+    acquiredThisWeek: 0, marketingSpend: 8_000,
+  })
+  ok(!quiet.some((r) => r.metric === 'acquisitionAccessibility'), 'a segment nobody is acquiring produces no channel readout')
+
+  // Reliability needs bodies and time — the same two ramps as the PMF evidence ramp.
+  const young = createCareerPMF(9091, 'saas', 'standard')
+  young.retentionBySegment[segA] = 0.7
+  young.cohorts.push({
+    id: 'op-5', acquiredWeek: 28, segmentId: segA, startingCustomers: 10, activeCustomers: 8,
+    exactCustomers: 8, acquisitionCost: 0, priceAtAcquisition: 52, productQualityAtAcquisition: quality,
+    retentionAt4wk: 0.7, preSnapshotNonSegmentKeep: 0.9,
+  })
+  const youngRead = resolveOperatingReads({
+    career: young, segmentId: segA, sector: 'saas', week: 30, isTarget: true,
+    acquiredThisWeek: 0, marketingSpend: 8_000,
+  }).find((r) => r.metric === 'retentionPotential')!
+  ok(
+    youngRead.reliability < retReadA.reliability * 0.6,
+    `a young, thin book reads far weaker than a settled one (${youngRead.reliability.toFixed(2)} vs ${retReadA.reliability.toFixed(2)})`,
+  )
+
+  // In the engine: operate a company with a real marketing budget and the board hears about it.
+  let og = newGame('OpsCo', 'saas', 'technical', { config: cfg({ seed: 7331 }) })
+  og.cash = 2_000_000
+  og.marketingSpend = 25_000
+  const target0 = og.career!.primaryTargetSegmentId
+  const beliefs0 = JSON.parse(JSON.stringify(og.career!.segmentBeliefs[target0]))
+  for (let w = 0; w < 48 && !og.gameOver; w++) og = advanceWeek(og)
+  const cb = og.career!.evidence.filter((e) => e.source === 'customer_behaviour')
+  ok(cb.length > 0, `operating evidence lands in the log (${cb.length} items over 48 weeks)`)
+  ok(cb.length <= 12, `and the teaching gate holds it to one item per segment per cycle at most (${cb.length} items, 12 cycles)`)
+  const bAfter = og.career!.segmentBeliefs[target0]
+  ok(
+    bAfter.retentionPotential.evidenceCount > beliefs0.retentionPotential.evidenceCount,
+    'the retention belief now rests on operating readings',
+  )
+  const truthT = og.career!.segmentTruth[target0]
+  const errBefore = Math.abs(beliefs0.retentionPotential.estimate - truthT.retentionPotential)
+  const errAfter = Math.abs(bAfter.retentionPotential.estimate - truthT.retentionPotential)
+  ok(
+    errAfter <= errBefore || errAfter <= 10,
+    `48 weeks of customers pulled the retention belief toward the truth (error ${errBefore.toFixed(0)} → ${errAfter.toFixed(0)})`,
+  )
+  ok(
+    og.career!.journal.some((j) => j.title.startsWith('Operating data')),
+    'first light is recorded in the decision journal',
+  )
+  ok(organicCustomers(og.career!, target0) >= OPERATING_EVIDENCE.customerFloor, '(sanity: the run actually had a book to read)')
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

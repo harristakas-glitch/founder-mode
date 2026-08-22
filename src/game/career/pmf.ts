@@ -226,7 +226,7 @@ export function confidenceLabel(c: number): string {
  * it should be trusted relative to what we already believe. Strong instruments move belief a
  * long way; twelve enthusiastic interviews barely move it once you already have pilot data.
  */
-export function updateBelief(prev: MetricBelief, ev: EvidenceItem): MetricBelief {
+export function updateBelief(prev: MetricBelief, ev: Pick<EvidenceItem, 'signal' | 'reliability'>): MetricBelief {
   const priorWeight = prev.confidence * 2.2 + 0.35
   const evWeight = ev.reliability * 1.6
   const estimate = (prev.estimate * priorWeight + ev.signal * evWeight) / (priorWeight + evWeight)
@@ -643,6 +643,216 @@ export function primaryLossDiagnosis(args: {
     (a, b) => b[1] - a[1],
   )[0]
   return { cause, share: share / breakdown.loss, breakdown }
+}
+
+// ---------- operating evidence (BACKLOG §9.1) ----------
+
+/**
+ * The strongest research instrument in the game is operating the company — and until this
+ * existed it wrote nothing to the hypothesis board. `updateBelief` was called from exactly one
+ * place, experiment completion: a paid pilot with 6 customers updated `retentionPotential`
+ * while 32 real customers paying real money for months updated nothing (the owner's screenshot
+ * that opened BACKLOG §9.1 — every belief row reading "Assumption" over a company with 74%
+ * measured retention).
+ *
+ * Three metrics are observable from operations, each through its own instrument:
+ *
+ *   retentionPotential       — the measured organic four-week retention, DECONVOLVED through the
+ *                              model's own product/price/bugs terms, so the signal is about the
+ *                              SEGMENT and not about this quarter's build. The company's churn
+ *                              diagnosis already separates these causes for the player
+ *                              (`resolveCohortRetentionBreakdown`), so the fiction supports the
+ *                              maths. The non-segment terms are divided out AS THEY WERE APPLIED
+ *                              (`preSnapshotNonSegmentKeep`, recorded weekly by the tick), never
+ *                              reconstructed from today's policy — reconstruction let a pricing
+ *                              flip on a read week fabricate evidence, and the 1/0.07 leverage
+ *                              of the inversion made even honest policy changes read 20–40
+ *                              points wrong.
+ *   willingnessToPay         — customers keep paying at the current price. A FLOOR observation:
+ *                              staying at a giveaway proves retention, not payment, so the price
+ *                              level caps what it can reveal (`wtpRevealHeadroom`) and scales its
+ *                              weight (`priceProof` — the same philosophy `derivePmfForSegment`
+ *                              already applies to the paying score).
+ *   acquisitionAccessibility — the channel readout from actually running acquisition. Only the
+ *                              current target is being acquired, so only it reads.
+ *
+ * NOISELESS BY DESIGN, and that is not a simplification: the noise is real and lives upstream,
+ * in the measured retention itself — cohort composition, shock weeks, small-sample wobble all
+ * flow through the deconvolution. Adding rng noise on top would count it twice. It also means
+ * the weekly RNG draw order is untouched in every mode, which is what keeps the recorded golden
+ * traces and every existing replay honest.
+ *
+ * ORGANIC ONLY (§52): a customer who was paid to be here is not evidence about the product, and
+ * they are not evidence about the segment either. `organicCustomers` gates the whole read, and
+ * `retentionBySegment` is already measured over organic cohorts alone.
+ */
+export const OPERATING_EVIDENCE = {
+  /** Below this many organic customers a segment has no operating story worth reading. */
+  customerFloor: 5,
+  /**
+   * Cadence in weeks, aligned with the retention window: the retention number only gains
+   * information as new cohorts freeze their snapshots, and a monthly reading keeps the evidence
+   * log an audit trail rather than a ticker (it is capped at 120 items and the UI shows four).
+   */
+  cadenceWeeks: RETENTION_WINDOW_WEEKS,
+  /**
+   * Per-reading reliability at full scale and maturity. Deliberately above a pilot's effective
+   * reliability (~0.5 after its sample and access penalties): a month of your own customer book
+   * outweighs a six-customer deployment, which is the entire point of §9.1.
+   */
+  baseReliability: 0.75,
+  /** Operating at a price reveals willingness to pay only a little above that price. */
+  wtpRevealHeadroom: 25,
+} as const
+
+export interface OperatingRead {
+  metric: TruthMetric
+  signal: number
+  reliability: number
+  direction: EvidenceItem['direction']
+  summary: string
+}
+
+/**
+ * What this segment's own customers taught the company this cycle. Pure, and it takes no rng —
+ * see the section comment. Returns [] below the customer floor, so a run with no organic
+ * customers is bit-identical to one written before this existed.
+ *
+ * `direction` here is relative to the PRIOR BELIEF, not to the hidden truth: an operating read
+ * is a corrective instrument, and the question it answers on the evidence log is "better or
+ * worse than the board thought?" — not "better or worse than a truth the player cannot see?".
+ */
+export function resolveOperatingReads(args: {
+  career: CareerPMFState
+  segmentId: SegmentId
+  sector: string
+  week: number
+  isTarget: boolean
+  /** Organic customers acquired into this segment THIS week — the channel readout only exists
+   *  while the channel is running. */
+  acquiredThisWeek: number
+  marketingSpend: number
+}): OperatingRead[] {
+  const { career, segmentId, sector, week, isTarget, acquiredThisWeek, marketingSpend } = args
+  const truth = career.segmentTruth[segmentId]
+  const beliefs = career.segmentBeliefs[segmentId]
+  if (!truth || !beliefs) return []
+  const organic = organicCustomers(career, segmentId)
+  if (organic < OPERATING_EVIDENCE.customerFloor) return []
+
+  // The same two ramps as the PMF evidence ramp, with the same knees: evidence needs bodies
+  // (60 customers is where a retention read stops being an anecdote) and time (one cohort must
+  // have lived ~12 weeks). A five-customer, four-week-old book reads at ~0.2; a settled company
+  // at ~0.75 per monthly reading.
+  const maturity = clamp01(oldestOrganicCohortWeeks(career, segmentId, week) / 12)
+  const rel = OPERATING_EVIDENCE.baseReliability * (0.4 + 0.6 * clamp01(organic / 60)) * (0.35 + 0.65 * maturity)
+
+  const name = segmentDef(sector, segmentId).name
+  const out: OperatingRead[] = []
+  const direction = (signal: number, prior: number): EvidenceItem['direction'] =>
+    signal > prior + 8 ? 'positive' : signal < prior - 8 ? 'negative' : 'mixed'
+  /** The §9.1 kill, spoken in the log when a read contradicts the board hard. */
+  const correction = (signal: number, prior: number): string =>
+    Math.abs(signal - prior) >= 15 ? ` The board said ${Math.round(prior)}; your customers say ${Math.round(signal)}.` : ''
+
+  // --- retention: invert the retention model at the measured number ------------------------
+  // The measurement is the same last-10 organic snapshots the tick averages into
+  // `retentionBySegment` — with each cohort's shock losses divided back out
+  // (`preSnapshotShockKeep`: a raid is not segment character) AND its non-segment keep factors
+  // divided back out (`preSnapshotNonSegmentKeep`: fit/price/bugs/honeymoon AS THEY WERE APPLIED,
+  // recorded weekly by the tick). What remains is `base^4` exactly, so the inversion recovers the
+  // segment term without reconstructing any policy — reconstruction at read time was rejected
+  // adversarially: current-terms deconvolution let a pricing flip on a read week fabricate
+  // pilot-grade evidence, and punished honest policy fixes with a 20–40 point wrong-way bias.
+  // Cohorts from saves that predate the recording simply don't read. The raw number is still
+  // what PMF is scored on and what the summary quotes.
+  const snaps = career.cohorts
+    .filter(
+      (c) =>
+        c.segmentId === segmentId &&
+        c.retentionAt4wk !== undefined &&
+        cohortIsOrganic(c) &&
+        (c.preSnapshotNonSegmentKeep ?? 0) > 0.0001,
+    )
+    .slice(-10)
+  const snapWeight = snaps.reduce((a, c) => a + c.startingCustomers, 0)
+  const measuredRaw = career.retentionBySegment[segmentId] ?? 0
+  if (snapWeight > 0) {
+    // customer-weighted mean of each cohort's recovered base term, then one inversion
+    const meanBase =
+      snaps.reduce((a, c) => {
+        const voluntary = Math.min(1, c.retentionAt4wk! / (c.preSnapshotShockKeep ?? 1))
+        const base4 = voluntary / c.preSnapshotNonSegmentKeep!
+        return a + Math.pow(Math.max(0, base4), 1 / RETENTION_WINDOW_WEEKS) * c.startingCustomers
+      }, 0) / snapWeight
+    const signal = clamp(((meanBase - 0.925) / 0.07) * 100)
+    // the voluntary (shock-adjusted) retention, for the summary only
+    const voluntaryR = clamp01(
+      snaps.reduce((a, c) => a + Math.min(1, c.retentionAt4wk! / (c.preSnapshotShockKeep ?? 1)) * c.startingCustomers, 0) /
+        snapWeight,
+    )
+    const prior = beliefs.retentionPotential.estimate
+    const shocked = voluntaryR - measuredRaw >= 0.02
+    out.push({
+      metric: 'retentionPotential',
+      signal,
+      reliability: clamp01(rel),
+      direction: direction(signal, prior),
+      summary:
+        `${organic.toLocaleString()} ${name} on the books: four-week retention measured at ` +
+        `${Math.round(measuredRaw * 100)}% — the segment holding, read off people rather than opinions.` +
+        (shocked ? ` Setting aside what raids and outages took, they hold at ${Math.round(voluntaryR * 100)}%.` : '') +
+        correction(signal, prior),
+    })
+  }
+
+  // --- willingness to pay: they keep paying at this price ----------------------------------
+  {
+    const asked = PRICE_LEVEL[career.pricing]
+    const priceProof = career.pricing === 'low' ? 0.45 : career.pricing === 'premium' ? 1.1 : 1.0
+    const cap = asked + OPERATING_EVIDENCE.wtpRevealHeadroom
+    const capBinds = truth.willingnessToPay > cap
+    const signal = clamp(Math.min(truth.willingnessToPay, cap))
+    const prior = beliefs.willingnessToPay.estimate
+    // A CENSORED observation must never drag a belief down past its own blind spot. "They pay at
+    // least X" is a floor: when the cap binds and the prior already sits at or above it, the
+    // reading is consistent with the prior and teaches nothing — emit no read at all (no
+    // estimate pull, no confidence, no evidenceCount toward `experimentAnswered`). Found
+    // adversarially: fed as a point estimate, four cycles at low pricing dragged a CORRECT
+    // prior of 85 down to ~52 and hardened it. When the cap binds but the prior is below it,
+    // "at least cap" is genuine upward information — carried at a discount, because a censored
+    // reading answers less of the question than an uncensored one.
+    if (!(capBinds && prior >= signal)) {
+      out.push({
+        metric: 'willingnessToPay',
+        signal,
+        reliability: clamp01(rel * priceProof * (capBinds ? 0.6 : 1)),
+        direction: direction(signal, prior),
+        summary:
+          `${organic.toLocaleString()} ${name} pay at ${career.pricing} pricing and stay — behaviour, not survey answers.` +
+          (capBinds ? ` At this price the reading can only say "at least this much" — ask for more to learn more.` : '') +
+          (career.pricing === 'low' && !capBinds ? ' A giveaway price can only prove so much about what they would pay.' : '') +
+          correction(signal, prior),
+      })
+    }
+  }
+
+  // --- reachability: the channel readout, target only --------------------------------------
+  if (isTarget && (marketingSpend > 0 || acquiredThisWeek > 0)) {
+    const signal = clamp(truth.acquisitionAccessibility)
+    const prior = beliefs.acquisitionAccessibility.estimate
+    out.push({
+      metric: 'acquisitionAccessibility',
+      signal,
+      reliability: clamp01(rel),
+      direction: direction(signal, prior),
+      summary:
+        `A month of live acquisition against ${name}: the channel readout is real spend and real ` +
+        `signups, not a projection.` + correction(signal, prior),
+    })
+  }
+
+  return out
 }
 
 // ---------- derived PMF ----------

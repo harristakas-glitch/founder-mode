@@ -279,7 +279,7 @@ export const CONCEPTS: Concept[] = [
     when: () => true,
     title: 'Two different things live on this screen',
     body: () =>
-      'The top half is what customers ARE doing: how many there are, how many stayed a month, what PMF each segment has actually earned. The bottom half is what you BELIEVE about them, and how little of it is evidence yet. Experiments move the bottom half. Only customers who stay move the top.',
+      'The top half is what customers ARE doing: how many there are, how many stayed a month, what PMF each segment has actually earned. The bottom half is what you BELIEVE about them, and how little of it is evidence yet. Experiments move the bottom half — and once you have real customers, their behaviour files onto it too. Only customers who stay move the top.',
     terms: ['segment', 'evidence', 'retention'],
   },
   {

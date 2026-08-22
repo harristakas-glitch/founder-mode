@@ -531,12 +531,13 @@ strategies over 24 seeds × 90 weeks in all six sectors. Measured on this tree, 
 
 | Strategy | Failed | Exits | Customers (median) | 4wk retention | Revenue/wk | Founder net |
 |---|---|---|---|---|---|---|
-| **Careless Growth** — spend, never research | 0 / 24 | 3 | 732 | 63% | $6,695 | $4.3M |
-| **Disciplined Discovery** — experiment first, scale late | 0 / 24 | 5 | 614 | 81% | $21,186 | **$9.5M** |
-| **Enterprise Bet** — pivot high, price premium, build to the bar | 0 / 24 | 5 | 216 | 73% | $7,179 | $4.2M |
+| **Careless Growth** — spend, never research | 0 / 24 | 5 | 497 | 66% | $3,470 | $3.6M |
+| **Disciplined Discovery** — experiment first, scale late | 0 / 24 | 10 | 571 | 85% | $23,917 | **$16.2M** |
+| **Enterprise Bet** — pivot high, price premium, build to the bar | 0 / 24 | 5 | 242 | 74% | $7,938 | $4.6M |
 
-Measured 2026-08-21, after the `pitchInvestors` harness fix — an earlier version of this table was
-measured on bots that had never successfully raised a round, which the fix's commit owns in full.
+Measured 2026-08-22, after operating evidence landed (BACKLOG §9.1: real customers now update the
+hypothesis board, so the disciplined bot stops paying for questions its own book has answered —
+only its rows moved; the other two strategies never read beliefs and were byte-identical).
 Disciplined Discovery is strongest in **all six sectors** — that ordering is the property the
 harness exists to protect, and every balance change since has been checked against it.
 

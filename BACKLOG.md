@@ -571,27 +571,67 @@ landed; and CI now runs `npm run build` + `npm test` on every push, with `test/`
 
 ## 9. Added 2026-08-21 — Discovery's honesty gap, found in play
 
-### 9.1 Operating evidence never updates beliefs
+### 9.1 Operating evidence never updates beliefs — SHIPPED 2026-08-22, measured
 
-The owner's screenshot said it best: Small Teams with **32 customers · 74% 4-week retention** while
-all seven belief rows read "Assumption — no evidence yet." The strongest research instrument the
-game has — actually operating the company — writes nothing to the hypothesis board; `updateBelief`
-is called from exactly one place, experiment completion (`tick.ts`). A paid pilot with 6 customers
-updates `retentionPotential`; 32 real customers paying real money for months do not.
+Real customers now update the hypothesis board. Every `OPERATING_EVIDENCE.cadenceWeeks` (4) weeks,
+each segment with ≥5 organic customers files evidence through the same `updateBelief` pipe
+experiments use: measured 4-week retention → `retentionPotential` (the retention model inverted at
+the measured number), paying at the current price → `willingnessToPay` (a FLOOR observation —
+a giveaway price caps what it can reveal), and the live channel → `acquisitionAccessibility`
+(target only). Reliability rides the same two ramps as `evidenceRamp` (bodies knee 60, maturity
+knee 12 weeks). Organic only — 400 rented customers teach the board nothing, asserted as a test.
 
-The fix is mechanical and well-shaped: each week a segment has organic customers, emit low-noise
-evidence into the same `updateBelief` pipe — measured retention → `retentionPotential`, paying at
-the current price level → `willingnessToPay`, organic acquisition rate → `acquisitionAccessibility`
-— with reliability scaling on cohort size/maturity like `evidenceRamp` does. It deliberately did
-NOT ship on 2026-08-21: it moves goldens, and it landed the same day as the cross-mode PMF
-rebalance (b72153b); stacking two engine changes in one sitting makes the next regression
-unattributable. Ship it as its own measured commit, re-record goldens in that commit, and re-run
-`test/pmf-mode-probe.ts` to confirm the balance holds (belief accuracy feeds nothing above the
-15-customer floor, so the probe should be unmoved — verify, don't assume).
+Four things the plan did not foresee, all found by measurement or adversarial review in the same
+sitting:
 
-Until then the presentation bridge (faa44a6) tells the player the board is superseded past the
-floor, which closes the confusion but not the gap: a player who repositions late still consults a
-board their own customers were never allowed to correct.
+1. **It did NOT move the goldens.** The reads are noiseless — the noise is real and lives
+   upstream in the measured retention itself, so adding rng would have counted it twice — and a
+   noiseless read draws nothing, so the draw order never changed. Quick Play traces, the full
+   suite, and `test/pmf-mode-probe.ts` all came out **byte-identical** (the probe was the
+   verify-don't-assume item; verified). Only `npm run bots` moved, and only the Disciplined rows —
+   the other two strategies never read beliefs and were bit-for-bit unchanged.
+2. **The instrument was born biased and had to be taught about war.** First integration run:
+   belief converged to truth−20, because shock losses (rival raids, outages, event cuts — routed
+   through the reconciliation drain) depress cohort snapshots, and the inversion's 1/0.07 leverage
+   turns ~4.5pp of raid damage into ~16 points of "this segment churns". Fix: the drain stamps
+   `preSnapshotShockKeep` on cohorts it hits before their snapshot (absent-means-1, no migration),
+   and the read divides it back out. `retentionAt4wk` itself stays raw — PMF is still scored on
+   what actually happened, shocks included.
+3. **Deconvolving with TODAY'S terms was an exploit, caught adversarially before commit.**
+   Reconstructing fit/price/bugs at read time let a player flip pricing to premium on a read week
+   and turn frozen snapshots into fabricated pilot-grade evidence (signal 50 → 87–100 at full
+   reliability, `experimentAnswered('pilot')` for free) — and punished honest policy fixes with a
+   20–40 point wrong-way bias. Fix: the tick records the non-segment keep factors **as applied**,
+   week by week (`preSnapshotNonSegmentKeep`), and the read divides them out exactly. The flip
+   now changes nothing (asserted as a test), and the recovered signal equals truth to one decimal
+   across 12 seed×sector probes — belief within 0.5 of truth at ~0.9 confidence by week 48.
+4. **The WTP floor observation must not be fed in as a point estimate.** "They pay at least X" is
+   censored: fed symmetrically it dragged a CORRECT prior of 85 down to ~52 and hardened it. Fix:
+   when the cap binds and the prior sits at or above it, no read at all (no estimate pull, no
+   confidence, no `evidenceCount` toward auto-retiring pricing tests); below the cap the floor is
+   genuine upward information, carried at a 0.6 discount.
+
+Log discipline: at most ONE evidence item per segment per cycle, and only while it still teaches
+(once the board converges the log goes quiet) — 11 items over 48 weeks, not 34. The Discovery
+bridge, coach card, attention insight and glossary all now say the board is FED by customers, not
+superseded ("only experiments move them" became false the moment this shipped). Bots: Disciplined
+stays strongest in all six sectors and mostly widened its lead (SaaS net $10.2M → $16.2M) — a bot
+that stops paying for answered questions is richer. README table re-measured in the same commit.
+The review also surfaced a PRE-EXISTING §52 leak, filed as §9.3 below.
+
+### 9.3 §52 leak, pre-existing, found by the §9.1 review: user-award events scale with rented users and mint organic cohorts
+
+Verified chain (adversarial review of §9.1, 2026-08-22, confirmed by execution): `s.users` includes
+incentivised customers (engine.ts sets `s.users = r.customers`, which is `totalCustomers`); several
+events and arcs award users proportional to `s.users` (viral moment `s.users × 0.15` at
+data.ts:207, app-store feature `× 0.12` at data.ts:1032 — its `s.users > 2000` gate is crossable
+on rented headcount alone — plus influencer arc stages); and next week's reconciliation mints the
+award as an origin-less cohort, which IS organic. So token spend inflates events whose payouts
+arrive as organic customers — feeding PMF's protected number, and (since §9.1) beliefs too.
+Predates §9.1: the same minted cohorts have fed `derivePmfForSegment`'s customer and retention
+inputs since ICO Slice 3 shipped. Candidate fixes, undecided: scale awards on organic customers
+only, or stamp `origin: 'incentivised'` on awards in proportion to the rented share. Either moves
+event balance, so measure with `test/token-balance-probe.ts` when picked up.
 
 ### 9.2 Research value is real but invisible — dramatize the kill, then consider one hard hook
 

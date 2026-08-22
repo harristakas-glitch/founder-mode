@@ -118,7 +118,10 @@ export function readRun(game: GameState, screen: ScreenId): RunFacts {
     researchSignal: num(game.researchSignal),
     demand: career ? 'unknown' : demandSignal(game),
     experimentsRun: (c?.activeExperiments.length ?? 0) + (c?.journal.filter((j) => j.category === 'experiment').length ?? 0),
-    evidenceItems: c?.evidence.length ?? 0,
+    // Experiment-sourced only. Operating evidence ('customer_behaviour', BACKLOG §9.1) lands for
+    // merely having customers, and this feeds the 'experiment' observed skill — which must mean
+    // "you ran a study", never "your company existed" (see observedSkills' own contract).
+    evidenceItems: c?.evidence.filter((e) => e.source !== 'customer_behaviour').length ?? 0,
     targetRetention: num(c?.retentionBySegment?.[target]),
     targetCustomers: c?.cohorts?.filter((x) => x.segmentId === target).reduce((a, x) => a + num(x.activeCustomers), 0) ?? 0,
     openInterviewMoves: openRooms.filter((r) => r.kind === 'interview').reduce((a, r) => a + num(r.movesLeft), 0),

@@ -277,7 +277,7 @@ export function attentionRegister(game: GameState): AttentionItem[] {
             title: `PMF is ${Math.round(game.pmf)} and falling behind`,
             detail: (() => {
               if (retention <= 0)
-                return 'Nothing has retained long enough to measure yet. Research moves your beliefs; only paying customers who stay move PMF.'
+                return 'Nothing has retained long enough to measure yet. Research and your own customers move your beliefs; only paying customers who stay move PMF.'
               // Churn with reasons: name the dominant cause, so the insight is a diagnosis rather
               // than a restatement of the number the player is already looking at.
               const diag = primaryLossDiagnosis({ career, sector: game.sector, quality: game.quality, bugs: game.bugs })
