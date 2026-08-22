@@ -44,7 +44,7 @@ import {
   weeklyBurn,
 } from './game/engine'
 import { hasCapability } from './game/modes'
-import { primaryLossDiagnosis } from './game/career/pmf'
+import { PMF_CUSTOMER_FLOOR, primaryLossDiagnosis } from './game/career/pmf'
 import { openInteractions } from './game/world/interactions'
 import type { GameState } from './game/types'
 import type { ScreenId } from './store'
@@ -52,6 +52,33 @@ import type { ScreenId } from './store'
 /** Career mode with the detailed-PMF loop on. Inlined from CareerUI's `careerActive` so this file
  *  never imports from a UI module — the import graph is part of the purity contract above. */
 const careerActive = (g: GameState): boolean => !!g.career && hasCapability(g, 'detailedPMF')
+
+/**
+ * The bug count at which reliability is measurably eating retention — NOT the count at which
+ * bugs "look bad".
+ *
+ * Reliability enters the weekly keep rate as `(1 − bugs/900)` (`resolveCohortRetention`), and the
+ * headline metric is four weeks of that rate multiplied together, so the damage compounds:
+ * 25 bugs is already ~11% of four-week retention, and retention is 46 of the 100 PMF points.
+ *
+ * The old threshold was 55. Measured over 120-week Career runs (three seeds), a player shipping
+ * features with a modest bug budget settles at **52** — under the old bar, forever. They lost 8
+ * PMF points and 4.5× their revenue against the same run with a real bug allocation, and were
+ * never told why. A warning nobody trips is not a warning.
+ */
+export const BUGS_BITE = 25
+
+/**
+ * How far PMF must fall from its own measured peak before the game says so, in points.
+ *
+ * Small on purpose. The decay this catches is SLOW — about one point per ten weeks — which is
+ * exactly why players do not see it: it is below the week-to-week perception threshold, and the
+ * absolute-pace warning above never fires because a decaying-but-still-decent score stays above
+ * the bar. Five points is roughly a year of neglect, still leaves plenty of run to recover in,
+ * and cannot be reached by the ordinary wobble of a healthy company (measured: a run with a real
+ * bug allocation peaks at 68 and never gives back more than one).
+ */
+export const PMF_DECAY_ALERT = 5
 
 /** Brief §7. Ordering is the enum's own order — index IS priority. */
 export const ATTENTION_TYPES = ['urgent', 'decision', 'opportunity', 'insight', 'information'] as const
@@ -265,6 +292,54 @@ export function attentionRegister(game: GameState): AttentionItem[] {
       action: { label: 'Product', screen: 'product' },
     })
   }
+  // ---- PMF is going BACKWARDS ------------------------------------------------------------------
+  //
+  // The pace check below asks "is PMF low?". It never asks "is PMF FALLING?", and those are
+  // different questions with different answers: a company can decay from 68 to 60 — losing most of
+  // its revenue on the way — while staying comfortably above any absolute bar, so the player is
+  // told nothing at all. That is the exact hole an owner fell into (2026-08-22, week 117, run
+  // ended out of cash): "when I reached 60+ PMF it started dropping, didn't know how to fix it."
+  //
+  // Measured before writing this: when Career PMF decays, FOUR of its five terms are flat or
+  // rising and only retention falls — and retention falls because bugs accumulate. The diagnosis
+  // that names which of the five churn causes dominates already exists (`primaryLossDiagnosis`);
+  // it simply was never wired to the moment the player needs it. This is that wire.
+  //
+  // The peak is taken over weeks with a REAL customer base only. Below `PMF_CUSTOMER_FLOOR` the
+  // score is derived from research confidence and is capped around 40, so crossing the floor
+  // legitimately drops the number as the honest measurement replaces the hopeful one — comparing
+  // against that era would fire this alert on a company that is doing exactly the right thing.
+  {
+    const measured = game.history.filter((h) => h.users >= PMF_CUSTOMER_FLOOR)
+    const peak = measured.reduce((a, h) => Math.max(a, h.pmf), 0)
+    const drop = peak - game.pmf
+    if (measured.length >= 12 && drop >= PMF_DECAY_ALERT && !game.gameOver) {
+      const career = careerActive(game) ? game.career! : null
+      const cause = career
+        ? primaryLossDiagnosis({ career, sector: game.sector, quality: game.quality, bugs: game.bugs })
+        : null
+      const CAUSE: Record<string, string> = {
+        segment: 'this segment churns by nature — the fix is who you target, not how hard you push',
+        product: 'they are leaving over product fit — the build is behind what this segment needs',
+        price: 'they are leaving over price',
+        bugs: 'bugs are the largest single cause, and they compound every week you leave them',
+        novelty: 'new cohorts churn before they settle — you are refilling a bucket faster than it holds',
+      }
+      // Outside Career there is no cohort attribution, so speak only to what is legible there.
+      const fallback =
+        game.bugs > BUGS_BITE
+          ? 'bugs are the largest thing you control here, and they compound every week you leave them'
+          : 'retention is what moves this number — quality and fit, not spend'
+      push({
+        id: 'pmf-decay',
+        type: 'insight',
+        title: `PMF has fallen ${Math.round(drop)} points from its peak of ${Math.round(peak)}`,
+        detail: `Customers are leaving faster than you are keeping them — ${cause ? CAUSE[cause.cause] : fallback}. Spending harder buys a bigger leak, not a bigger company.`,
+        action: { label: 'Product', screen: 'product' },
+      })
+    }
+  }
+
   const pmfPace = Math.min(85, game.week * 1.6)
   if (game.week > 6 && game.pmf < pmfPace * 0.6) {
     const career = careerActive(game) ? game.career! : null
@@ -301,12 +376,15 @@ export function attentionRegister(game: GameState): AttentionItem[] {
           },
     )
   }
-  if (game.bugs > 55) {
+  if (game.bugs > BUGS_BITE) {
     push({
       id: 'bugs',
       type: 'insight',
       title: `Bugs at ${Math.round(game.bugs)} are driving churn`,
-      detail: 'They also scare off the press. A quality week pays for itself.',
+      // Quantified in the player's own terms, because "bugs are bad" is not a decision and the
+      // cost is genuinely large: reliability enters the WEEKLY keep rate as (1 − bugs/900), so it
+      // compounds across the four weeks the retention metric measures.
+      detail: `Roughly ${Math.round((1 - Math.pow(1 - game.bugs / 900, 4)) * 100)}% of your four-week retention is going to reliability alone. A quality week pays for itself.`,
       action: { label: 'Product', screen: 'product' },
     })
   }

@@ -251,4 +251,48 @@ await ok('a calm run recommends nothing at all', () => {
   assert.deepStrictEqual(attentionRegister(calm()), [], 'a calm run produced attention items')
 })
 
+// ---- PMF decay: the slide the game used to watch in silence -------------------------------------
+// Owner report 2026-08-22: "when I reached 60+ PMF it started dropping, didn't know how to fix it."
+// Measured cause: only the retention term falls, and it falls because bugs accumulate. The absolute
+// pace check never fires on a decaying-but-decent score, so nothing spoke. Both halves are asserted
+// here — it fires on the real slide, and it stays silent on a healthy run and on the legitimate dip
+// that happens when a segment crosses the customer floor.
+const withHistory = (pmfByWeek: number[], users: number): G => {
+  const g = calm()
+  g.history = pmfByWeek.map((pmf, i) => ({
+    week: i + 1, cash: 1_000_000, users, revenue: 5_000, expenses: 5_000, payroll: 3_000,
+    marketing: 1_000, office: 500, infra: 500, valuation: 5_000_000, pmf,
+  }))
+  g.pmf = pmfByWeek[pmfByWeek.length - 1]
+  g.week = pmfByWeek.length
+  return g
+}
+ok('a slow slide off the peak is finally named', () => {
+  // 68 down to 60 over 30 weeks — one point per ~4 weeks, exactly the invisible kind
+  const decaying = Array.from({ length: 30 }, (_, i) => Math.round(68 - i * 0.27))
+  const item = attentionRegister(withHistory(decaying, 400)).find((i) => i.id === 'pmf-decay')
+  assert.ok(item, 'the decay went unreported')
+  assert.match(item!.title, /fallen \d+ points from its peak of 68/, `title was: ${item!.title}`)
+})
+ok('...and a healthy run that holds its peak is NOT nagged', () => {
+  const healthy = Array.from({ length: 30 }, (_, i) => (i < 20 ? 60 + i * 0.4 : 68))
+  assert.ok(!attentionRegister(withHistory(healthy, 400)).some((i) => i.id === 'pmf-decay'), 'nagged a healthy run')
+})
+ok('...nor is a run whose only "peak" predates having customers to measure', () => {
+  // Below the customer floor the score is research-derived and capped ~40; crossing the floor
+  // legitimately REPLACES it with an honest, lower number. That is correct play, not decay.
+  const g = withHistory([38, 38, 39, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30], 4)
+  assert.ok(!attentionRegister(g).some((i) => i.id === 'pmf-decay'), 'fired on a sub-floor company')
+})
+ok('the bug warning now trips where the damage actually starts, not at 55', () => {
+  const g = calm()
+  g.bugs = 30 // ~13% of four-week retention already gone; the old bar was 55
+  const item = attentionRegister(g).find((i) => i.id === 'bugs')
+  assert.ok(item, 'bugs at 30 went unreported')
+  assert.match(item!.detail ?? '', /% of your four-week retention/, 'the cost is not quantified')
+  const quiet = calm()
+  quiet.bugs = 12 // a normal working backlog must stay silent
+  assert.ok(!attentionRegister(quiet).some((i) => i.id === 'bugs'), 'nagged about an ordinary bug backlog')
+})
+
 console.log(`\n${passed} assertions passed\n`)
