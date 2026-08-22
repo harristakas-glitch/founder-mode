@@ -29,7 +29,7 @@ import { recordReplayProof } from './net/replayProof'
 import { haptic, sfx } from './sound'
 import { checkAchievements } from './game/achievements'
 import { submitDailyScore } from './net/leaderboard'
-import { currentProfile, onAuthChange, signInWith, signOut, type AuthProfile, type AuthProvider } from './net/auth'
+import { currentProfile, oauthReturnError, onAuthChange, signInWith, signOut, type AuthProfile, type AuthProvider } from './net/auth'
 
 // Evaluate achievement unlocks against a freshly-computed state and surface them in the flash banner.
 function awardAchievements(g: GameState) {
@@ -275,6 +275,8 @@ interface Store {
   emotes: EmoteToast[]
   chat: ChatMessage[]
   authUser: AuthProfile | null
+  /** Human-readable reason the last OAuth redirect failed, or null. Shown beside the sign-in buttons. */
+  authError: string | null
   connecting: boolean
   screen: ScreenId
   setScreen: (s: ScreenId) => void
@@ -715,6 +717,7 @@ export const useStore = create<Store>()(
         emotes: [],
         chat: [],
         authUser: null,
+        authError: null,
         connecting: false,
         screen: 'dashboard',
         setScreen: (screen) => set({ screen }),
@@ -885,8 +888,11 @@ export const useStore = create<Store>()(
         },
 
         initAuth: async () => {
+          // Surface a failed OAuth return BEFORE the session check: if the provider bounced back
+          // with an error fragment, currentProfile() is null and the player used to see nothing.
+          set({ authError: oauthReturnError() })
           set({ authUser: await currentProfile() })
-          onAuthChange((p) => set({ authUser: p }))
+          onAuthChange((p) => set({ authUser: p, ...(p ? { authError: null } : {}) }))
         },
 
         signIn: async (provider) => signInWith(provider),

@@ -225,6 +225,7 @@ function HallOfFame() {
 
 function AuthCorner() {
   const authUser = useStore((s) => s.authUser)
+  const authError = useStore((s) => s.authError)
   const signIn = useStore((s) => s.signIn)
   const signOutUser = useStore((s) => s.signOutUser)
   const [err, setErr] = useState<string | null>(null)
@@ -260,7 +261,7 @@ function AuthCorner() {
           </button>
         ))}
       </div>
-      {err && <span className="max-w-[260px] text-right text-[11px] text-bad">{err}</span>}
+      {(err ?? authError) && <span className="max-w-[260px] text-right text-[11px] text-bad">{err ?? authError}</span>}
     </div>
   )
 }

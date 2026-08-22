@@ -39,6 +39,24 @@ function safeAvatar(v: unknown): string | null {
   }
 }
 
+/**
+ * The OAuth error the provider sent back in the redirect, if any. supabase-js records the failure
+ * internally and the app used to show NOTHING — a player whose sign-in failed at Google or at the
+ * Supabase exchange just saw the buttons again, unchanged ("i logged in… nothing changed", owner,
+ * 2026-08-22). Read-only: the URL is left for auth-js to parse; we only translate it for humans.
+ */
+export function oauthReturnError(): string | null {
+  try {
+    const merge = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    for (const [k, v] of new URLSearchParams(window.location.search)) if (!merge.has(k)) merge.append(k, v)
+    const desc = merge.get('error_description') || merge.get('error')
+    if (!desc) return null
+    return `Sign-in failed: ${decodeURIComponent(desc.replace(/\+/g, ' ')).slice(0, 200)}`
+  } catch {
+    return null
+  }
+}
+
 export async function currentProfile(): Promise<AuthProfile | null> {
   if (!onlineConfigured) return null
   try {
