@@ -30,6 +30,8 @@ import { haptic, sfx } from './sound'
 import { checkAchievements } from './game/achievements'
 import { submitDailyScore } from './net/leaderboard'
 import { currentProfile, oauthReturnError, onAuthChange, signInWith, signOut, type AuthProfile, type AuthProvider } from './net/auth'
+import { fetchMyProfile, pushProfileProgress, renameProfile, type ModeBest, type Profile, type ProfileBests } from './net/profile'
+import { earnedAchievements } from './game/achievements'
 
 // Evaluate achievement unlocks against a freshly-computed state and surface them in the flash banner.
 function awardAchievements(g: GameState) {
@@ -134,6 +136,32 @@ export function readHall(): RunRecord[] {
   }
 }
 
+// Per-mode personal bests, kept locally for every player and merged into the profile when one
+// exists. The hall above is a flat top-10; the profile card wants "your best Quick Play run"
+// and "your best Career run" as separate facts.
+const BESTS_KEY = 'founder-mode-bests'
+
+export function readLocalBests(): ProfileBests {
+  try {
+    const v = JSON.parse(localStorage.getItem(BESTS_KEY) ?? '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+
+function recordLocalBest(mode: 'quick' | 'career' | 'arena', best: ModeBest): void {
+  const bests = readLocalBests()
+  if (!bests[mode] || best.score > bests[mode]!.score) {
+    bests[mode] = best
+    try {
+      localStorage.setItem(BESTS_KEY, JSON.stringify(bests))
+    } catch {
+      // private mode / quota: the profile just doesn't remember this one
+    }
+  }
+}
+
 // The soundtrack of consequence: play whatever the new week deserves.
 function weekSounds(next: GameState) {
   if (next.gameOver) {
@@ -169,6 +197,18 @@ function weekSounds(next: GameState) {
 function recordRun(g: GameState) {
   if (!g.gameOver) return
   const score = g.gameOver.payout ?? 0
+  // the profile's per-mode best — recorded for everyone, synced upward when signed in
+  const mode = g.config?.mode ?? 'quick'
+  if (mode === 'quick' || mode === 'career' || mode === 'arena') {
+    recordLocalBest(mode, {
+      score,
+      weeks: g.gameOver.week,
+      ending: g.gameOver.type,
+      company: g.companyName,
+      at: Date.now(),
+    })
+    void useStore.getState().syncProfileProgress()
+  }
   const runs = readHall()
   runs.push({
     company: g.companyName,
@@ -192,13 +232,20 @@ function recordRun(g: GameState) {
     } catch {
       // the proof is decoration on top of the score — it must never break the results screen
     }
-    void submitDailyScore(Number(daily[1]), {
-      company: g.companyName,
-      score,
-      weeks: g.gameOver.week,
-      ending: g.gameOver.type,
-      display_name: useStore.getState().authUser?.name ?? null,
-    })
+    const finished = g.gameOver
+    void (async () => {
+      // the NICKNAME, never the OAuth name — and fetched on demand if the profile hasn't loaded
+      // yet, so a signed-in player's attribution doesn't depend on a race with initAuth
+      const st = useStore.getState()
+      const nickname = st.profile?.nickname ?? (st.authUser ? (await fetchMyProfile())?.nickname : null) ?? null
+      return submitDailyScore(Number(daily[1]), {
+        company: g.companyName,
+        score,
+        weeks: finished.week,
+        ending: finished.type,
+        display_name: nickname,
+      })
+    })()
   }
 }
 
@@ -277,6 +324,8 @@ interface Store {
   authUser: AuthProfile | null
   /** Human-readable reason the last OAuth redirect failed, or null. Shown beside the sign-in buttons. */
   authError: string | null
+  /** The public profile: nickname, badge wall, per-mode bests. Null until signed in and loaded. */
+  profile: Profile | null
   connecting: boolean
   screen: ScreenId
   setScreen: (s: ScreenId) => void
@@ -298,6 +347,8 @@ interface Store {
   sendEmote: (emoji: string) => void
   sendChat: (text: string) => void
   initAuth: () => Promise<void>
+  syncProfileProgress: () => Promise<void>
+  renameProfileTo: (nickname: string) => Promise<string | null>
   signIn: (provider: AuthProvider) => Promise<string | null>
   signOutUser: () => Promise<void>
   // --- in-game actions ---
@@ -718,6 +769,7 @@ export const useStore = create<Store>()(
         chat: [],
         authUser: null,
         authError: null,
+        profile: null,
         connecting: false,
         screen: 'dashboard',
         setScreen: (screen) => set({ screen }),
@@ -892,14 +944,47 @@ export const useStore = create<Store>()(
           // with an error fragment, currentProfile() is null and the player used to see nothing.
           set({ authError: oauthReturnError() })
           set({ authUser: await currentProfile() })
-          onAuthChange((p) => set({ authUser: p, ...(p ? { authError: null } : {}) }))
+          onAuthChange((p) => {
+            set({ authUser: p, ...(p ? { authError: null } : { profile: null }) })
+            if (p) void get().syncProfileProgress()
+          })
+          if (get().authUser) void get().syncProfileProgress()
+        },
+
+        /**
+         * Load the profile and merge progress BOTH ways: local badges and bests go up (union /
+         * higher-score-wins), and whatever the server already knew comes back down into
+         * localStorage — so a second device inherits the first one's history. Safe to call any
+         * time; a signed-out player is a no-op.
+         */
+        syncProfileProgress: async () => {
+          const merged = await pushProfileProgress({ achievements: [...earnedAchievements()], bests: readLocalBests() })
+          if (!merged) return
+          set({ profile: merged })
+          try {
+            localStorage.setItem('founder-mode-achievements', JSON.stringify(merged.achievements))
+            const localBests = readLocalBests()
+            for (const mode of ['quick', 'career', 'arena'] as const) {
+              const remote = merged.bests[mode]
+              if (remote && (!localBests[mode] || remote.score > localBests[mode]!.score)) localBests[mode] = remote
+            }
+            localStorage.setItem('founder-mode-bests', JSON.stringify(localBests))
+          } catch {
+            // storage full or private mode — the server copy is still authoritative
+          }
+        },
+
+        renameProfileTo: async (nickname) => {
+          const problem = await renameProfile(nickname)
+          if (!problem) set({ profile: await fetchMyProfile() })
+          return problem
         },
 
         signIn: async (provider) => signInWith(provider),
 
         signOutUser: async () => {
           await signOut()
-          set({ authUser: null })
+          set({ authUser: null, profile: null })
         },
 
         sendChat: (text) => {

@@ -30,7 +30,7 @@ function toProfile(user: { user_metadata?: Record<string, unknown>; email?: stri
  * back. Allow https: images and nothing else — no data:/blob: payloads, no javascript:, and no
  * plain http: that would downgrade the connection and leak the request.
  */
-function safeAvatar(v: unknown): string | null {
+export function safeAvatar(v: unknown): string | null {
   if (typeof v !== 'string' || v.length > 512) return null
   try {
     return new URL(v).protocol === 'https:' ? v : null

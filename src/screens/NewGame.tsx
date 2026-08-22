@@ -8,7 +8,7 @@
 // mode colour on the gate, then the chosen market's colour on the briefing — the same
 // per-sector retheming the game itself does once a run starts, previewed a step early.
 
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -33,7 +33,7 @@ import { MODE_META, QUICK_FORMAT_META, type GameFormat, type GameMode } from '..
 import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
-import { dailyInfo, readHall, useStore } from '../store'
+import { dailyInfo, readHall, readLocalBests, useStore } from '../store'
 import { DailyLeaderboard } from './DailyLeaderboard'
 import { FirstRunBriefingNote, recommendedMode, useFirstTimer } from '../onboarding/FirstRun'
 import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
@@ -164,7 +164,11 @@ const ROOM_PARAM =
         .slice(0, 5)
 
 function AchievementGallery() {
-  const earned = earnedAchievements()
+  // Local badges UNION the synced profile's — the same set the ProfileCard counts, and reading
+  // the profile from the store means this gallery re-renders when a sync lands, so the two
+  // tallies on this screen can never disagree (review finding, 2026-08-22).
+  const remote = useStore((s) => s.profile?.achievements)
+  const earned = new Set([...earnedAchievements(), ...(remote ?? [])])
   if (earned.size === 0) return null // nothing to brag about yet — keep the first screen clean
   return (
     <div>
@@ -226,25 +230,35 @@ function HallOfFame() {
 function AuthCorner() {
   const authUser = useStore((s) => s.authUser)
   const authError = useStore((s) => s.authError)
+  const profile = useStore((s) => s.profile)
   const signIn = useStore((s) => s.signIn)
   const signOutUser = useStore((s) => s.signOutUser)
   const [err, setErr] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
   if (!onlineConfigured || location.protocol === 'file:') return null
 
   if (authUser) {
+    // The chip wears the NICKNAME, not the OAuth name — the real name is never shown, not even
+    // to its owner, so there is exactly one identity the game ever renders.
+    const shownName = profile?.nickname ?? 'Profile'
+    const avatar = profile?.avatar ?? authUser.avatar
     return (
-      <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-1.5 py-1 backdrop-blur">
-        {authUser.avatar ? (
-          <img src={authUser.avatar} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
-        ) : (
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--ha)] text-[11px] font-bold text-bg">
-            {authUser.name[0]?.toUpperCase()}
-          </span>
-        )}
-        <span className="text-[13px] font-semibold">{authUser.name}</span>
-        <button className="rounded-full p-1 text-mut hover:text-bad" title="Sign out" onClick={() => void signOutUser()}>
-          <LogOut size={13} />
+      <div className="relative flex flex-col items-end">
+        <button
+          className="flex items-center gap-2 rounded-full border border-line bg-surface px-1.5 py-1 backdrop-blur transition-colors hover:border-[var(--ha)]"
+          title="Your profile"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {avatar ? (
+            <img src={avatar} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
+          ) : (
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--ha)] text-[11px] font-bold text-bg">
+              {shownName[0]?.toUpperCase()}
+            </span>
+          )}
+          <span className="text-[13px] font-semibold">{shownName}</span>
         </button>
+        {open && <ProfileCard onClose={() => setOpen(false)} onSignOut={() => void signOutUser()} />}
       </div>
     )
   }
@@ -262,6 +276,148 @@ function AuthCorner() {
         ))}
       </div>
       {(err ?? authError) && <span className="max-w-[260px] text-right text-[11px] text-bad">{err ?? authError}</span>}
+    </div>
+  )
+}
+
+/**
+ * The profile card: nickname (editable), per-mode personal bests, the full badge wall. Every
+ * fact on it is either the public profile row or this device's own records — the real name and
+ * email exist only in the auth layer and are rendered nowhere.
+ */
+function ProfileCard({ onClose, onSignOut }: { onClose: () => void; onSignOut: () => void }) {
+  const profile = useStore((s) => s.profile)
+  const renameProfileTo = useStore((s) => s.renameProfileTo)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
+  // The app's overlay rule (useDialog in App.tsx): Escape closes anything. A popover adds the
+  // second half — clicking anywhere outside it closes it too.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (editing) setEditing(false)
+      else onClose()
+    }
+    const onDown = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown)
+    }
+  }, [editing, onClose])
+
+  const earned = new Set([...(profile?.achievements ?? []), ...earnedAchievements()])
+  const bests = { ...readLocalBests(), ...(profile?.bests ?? {}) }
+  for (const mode of ['quick', 'career', 'arena'] as const) {
+    const local = readLocalBests()[mode]
+    if (local && (!bests[mode] || local.score > bests[mode]!.score)) bests[mode] = local
+  }
+  const MODE_LABEL = { quick: 'Quick Play', career: 'Career', arena: 'Arena' } as const
+  const since = profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : null
+
+  return (
+    <div ref={cardRef} className="absolute top-10 right-0 z-40 w-[320px] rounded-xl border border-line bg-surface p-4 shadow-xl backdrop-blur">
+      {profile ? (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            {editing ? (
+              <form
+                className="flex flex-1 items-center gap-1.5"
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  setSaving(true)
+                  const p = await renameProfileTo(draft.trim())
+                  setSaving(false)
+                  setProblem(p)
+                  if (!p) setEditing(false)
+                }}
+              >
+                <input
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  maxLength={24}
+                  className="w-full rounded-md border border-line bg-surface2 px-2 py-1 text-[13px] font-semibold"
+                />
+                <Btn disabled={saving} type="submit" className="px-2 py-1 text-[12px]">
+                  Save
+                </Btn>
+                <button type="button" className="text-[11px] text-mut hover:text-ink" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <>
+                <span className="text-[15px] font-bold">{profile.nickname}</span>
+                <button
+                  className="text-[11px] text-mut hover:text-ink"
+                  onClick={() => {
+                    setDraft(profile.nickname)
+                    setProblem(null)
+                    setEditing(true)
+                  }}
+                >
+                  Rename
+                </button>
+              </>
+            )}
+          </div>
+          {problem && <div className="mt-1 text-[11px] text-bad">{problem}</div>}
+          {since && <div className="mt-0.5 text-[11px] text-mut">Founder since {since}</div>}
+        </>
+      ) : (
+        <div className="text-[12px] text-mut">Profile loading — it appears once the server answers.</div>
+      )}
+
+      <div className="mt-3 border-t border-line/60 pt-2">
+        <div className="mb-1 text-[10.5px] font-bold tracking-wide text-mut uppercase">Personal bests</div>
+        {(['quick', 'career', 'arena'] as const).filter((m) => bests[m]).length === 0 && (
+          <div className="text-[12px] text-mut">No finished runs yet — every ending records one.</div>
+        )}
+        {(['quick', 'career', 'arena'] as const).map((m) => {
+          const b = bests[m]
+          if (!b) return null
+          return (
+            <div key={m} className="flex items-baseline justify-between gap-2 py-0.5 text-[12.5px]">
+              <span className="text-mut">{MODE_LABEL[m]}</span>
+              <span className="tnum font-semibold">
+                {endingEmoji(b.ending)} {b.score > 0 ? money(b.score) : '—'} <span className="text-mut">· wk {b.weeks}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-3 border-t border-line/60 pt-2">
+        <div className="mb-1 text-[10.5px] font-bold tracking-wide text-mut uppercase">
+          Badges · {earned.size}/{ACHIEVEMENTS.length}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {ACHIEVEMENTS.map((a) => (
+            <span
+              key={a.id}
+              title={`${a.name} — ${a.desc}`}
+              className={`flex h-7 w-7 items-center justify-center rounded-md border text-[15px] ${
+                earned.has(a.id) ? 'border-line bg-surface2' : 'border-line/40 opacity-25 grayscale'
+              }`}
+            >
+              {a.emoji}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex justify-end border-t border-line/60 pt-2">
+        <button className="flex items-center gap-1 text-[11.5px] text-mut hover:text-bad" onClick={onSignOut}>
+          <LogOut size={12} /> Sign out
+        </button>
+      </div>
     </div>
   )
 }
