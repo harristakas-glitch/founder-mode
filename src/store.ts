@@ -16,6 +16,7 @@ import {
   type AttackDef,
   runwayWeeks,
   totalUsers,
+  effectiveTam,
   uid,
   valuation,
 } from './game/engine'
@@ -420,8 +421,33 @@ export const useStore = create<Store>()(
 
       // Peer-reported and therefore untrusted: normalizePlayer bounds each value, and the
       // sum is capped again so no combination of peers can crush everyone's growth headroom.
-      const othersUsers = (players: NetPlayer[]): number =>
-        Math.min(1e10, players.reduce((a, p) => (p.id === myId() || p.over ? a : a + (Number.isFinite(p.users) ? Math.max(0, p.users) : 0)), 0))
+      /**
+       * How many customers the OTHER founders in this room have taken out of the market.
+       *
+       * EACH PEER IS CAPPED AT THE MARKET ITSELF (security audit, 2026-08-22). Presence values are
+       * self-reported and presence updates are not rate-limited, so one peer tracking
+       * `users: 1e10` — 166× the largest sector's TAM, and inside the wire's MAX_USERS clamp —
+       * used to land whole in this sum. It feeds `marketSaturation`, whose growth room is
+       * `(1 − saturation)^1.2`, so a single presence write collapsed every other player's
+       * acquisition and revenue to ~zero for the rest of the match, and each victim's client
+       * persisted the wrecked result to their own save as the weeks advanced.
+       *
+       * A company cannot hold more of a market than the market contains, so `effectiveTam` is the
+       * honest ceiling: it cannot block legitimate play (the simulation's own `room` term stops
+       * real players well below it) and it bounds a liar to one ordinary competitor's worth of
+       * pressure. This does NOT authenticate peers — nothing client-side can — it removes the
+       * asymmetry that made lying overwhelming rather than merely rude.
+       */
+      const othersUsers = (players: NetPlayer[], g: GameState): number => {
+        const cap = effectiveTam(g)
+        return Math.min(
+          1e10,
+          players.reduce(
+            (a, p) => (p.id === myId() || p.over ? a : a + (Number.isFinite(p.users) ? Math.min(cap, Math.max(0, p.users)) : 0)),
+            0,
+          ),
+        )
+      }
 
       /**
        * Settle the room's shared candidate market for this week. Every founder ran the same pure
@@ -525,7 +551,7 @@ export const useStore = create<Store>()(
           let g = game
           advancing = true
           try {
-            for (let i = 0; i < CATCH_UP_LIMIT && g.week < maxWeek && !g.gameOver; i++) g = advanceWeek(g, othersUsers(players))
+            for (let i = 0; i < CATCH_UP_LIMIT && g.week < maxWeek && !g.gameOver; i++) g = advanceWeek(g, othersUsers(players, g))
           } catch (e) {
             console.error('catch-up failed; staying on the current week', e)
             return
@@ -552,7 +578,7 @@ export const useStore = create<Store>()(
         let next: GameState
         advancing = true
         try {
-          next = advanceWeek(settled, othersUsers(players))
+          next = advanceWeek(settled, othersUsers(players, settled))
         } catch (e) {
           console.error('week failed to simulate; staying put', e)
           return

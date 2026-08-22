@@ -362,9 +362,13 @@ const LIMITS: Record<string, { perSender: number; global: number; windowMs: numb
   chat: { perSender: 6, global: 24, windowMs: 10_000 },
   emote: { perSender: 10, global: 40, windowMs: 10_000 },
   attack: { perSender: 4, global: 24, windowMs: 60_000 },
-  // A war lasts six weeks and can be conceded once, so two a minute per peer is already
-  // generous; the point is that this path ADDS users to our own persisted save.
-  concede: { perSender: 2, global: 12, windowMs: 60_000 },
+  // Keyed on the RECIPIENT (see the `on('concede', …)` wiring): "how many concedes may be aimed
+  // at one player per minute". A war lasts six weeks and can be conceded once, so in a full
+  // four-player free-for-all three genuine concedes at the same player inside a round is the
+  // realistic ceiling — 4 leaves headroom above real play while bounding the forged flood this
+  // path used to allow. The point remains that this is the one message that ADDS users to the
+  // recipient's persisted save.
+  concede: { perSender: 4, global: 12, windowMs: 60_000 },
   commit: { perSender: 8, global: 48, windowMs: 60_000 },
   reveal: { perSender: 8, global: 48, windowMs: 60_000 },
   start: { perSender: 4, global: 12, windowMs: 60_000 },
@@ -593,7 +597,18 @@ function wire(ch: RealtimeChannel, handlers: Handlers) {
   on('attack', validateAttack, (p) => p.fromId ?? 'anon', (p) => handlers.onAttack?.(p))
   // `concede` had a sender (broadcastConcede), a store handler (onConcede) and no listener at
   // all, so conceding a price war removed the conceder's customers and gave them to nobody.
-  on('concede', validateConcede, (p) => p.fromCompany, (p) => handlers.onConcede?.(p))
+  //
+  // KEYED ON THE RECIPIENT, NOT THE CLAIMED SENDER (security audit, 2026-08-22). `fromCompany` is
+  // free text the sender chooses, so its bucket cardinality is unbounded: rotating the string on
+  // every message minted a fresh per-sender allowance and left only the global cap standing. And
+  // this is the one broadcast that ADDS users to the recipient's persisted save, so the quantity
+  // worth bounding is "how much can be aimed at ONE player", which is exactly what keying on
+  // `targetId` bounds — an id that must already match a presence-roster slot, so its cardinality
+  // is the roster's. The per-key allowance rises to match (a genuine four-player free-for-all can
+  // legitimately produce several concedes at one player inside a round); the global cap is
+  // unchanged. This does not authenticate the sender — nothing client-side can — it removes the
+  // free lunch that made the forgery unlimited.
+  on('concede', validateConcede, (p) => `to:${p.targetId}`, (p) => handlers.onConcede?.(p))
 }
 
 /** Tear down whatever channel we currently hold. Safe to call when there isn't one. */

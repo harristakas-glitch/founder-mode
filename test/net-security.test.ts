@@ -377,4 +377,30 @@ await ok('an ORDINARY leaderboard row passes through completely unchanged', () =
   assert.deepStrictEqual(sanitizeScoreRow(honest), honest)
 })
 
+console.log('\n--- 8. concede: the flood bucket is keyed on the RECIPIENT (security audit 2026-08-22) ---')
+// The listener keys this event on `to:${targetId}` rather than on `fromCompany`. The old key was
+// free text the SENDER chose, so its bucket cardinality was unbounded — rotating the string minted
+// a fresh allowance on every message and left only the global cap standing. `concede` is the one
+// broadcast that ADDS users to the recipient's persisted save, so the quantity worth bounding is
+// how much can be aimed at ONE player. Both properties are asserted in the same run, which is the
+// rule this repo learned the hard way (see the leaderboard policy history).
+const CONCEDE_KEY = (targetId: string) => `to:${targetId}`
+await ok('a forger rotating fromCompany can no longer mint unlimited concede allowances', () => {
+  resetRateLimits()
+  const t = 1_000_000
+  let accepted = 0
+  // 500 messages, a different claimed company each time, ALL aimed at one victim
+  for (let i = 0; i < 500; i++) if (allow('concede', CONCEDE_KEY(RIVAL), t)) accepted++
+  assert.strictEqual(accepted, 4, `only the per-recipient allowance got through (${accepted})`)
+})
+await ok('...and genuine free-for-all play is NOT blocked: each recipient keeps their own bucket', () => {
+  resetRateLimits()
+  const t = 2_000_000
+  // a four-player room: three different players are conceded to, each well inside the allowance
+  for (const victim of ['p1', 'p2', 'p3']) {
+    assert.ok(allow('concede', CONCEDE_KEY(victim), t), `${victim} receives a legitimate concede`)
+    assert.ok(allow('concede', CONCEDE_KEY(victim), t), `${victim} receives a second one in the same round`)
+  }
+})
+
 console.log(`\n${passed} assertions passed\n`)
