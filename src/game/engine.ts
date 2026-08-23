@@ -47,6 +47,11 @@ import { sellFounderPosition, type FounderSaleResult } from './token/founder'
 import { incentivisedUsers } from './token/users'
 import { TOKEN_ENDINGS, TOKEN_SCORING } from './token/types'
 import { CONCEDE_USER_SHARE, PRICE_WAR_COOLDOWN, PR_BASE_COST, prSourceHidden, PR_CAMPAIGN_WEEKS, PRICE_WAR_COST, PRICE_WAR_WEEKS, prBackfired, tickPvpEffects } from './pvp'
+// The people model. THREE SEAMS and no more — `stageOutputMultiplier` in `eff()`,
+// `burnStressMultiplier` on the cash-crunch morale hit, and `deskCost` in `weeklyOffice`. Each is
+// bounded and mean-neutral across the population; each is documented at its call site and in the
+// header of ./people. Nothing here draws from RNG, so the weekly draw ORDER is untouched.
+import { ROLE_BASE, burnStressMultiplier, deskCost, marketSalary, stageOutputMultiplier } from './people'
 import type {
   Candidate,
   Choice,
@@ -386,17 +391,11 @@ function makeRivals(tam: number): Rival[] {
 
 // ---------- people ----------
 
-const ROLE_BASE: Record<Role, number> = { engineer: 62_000, designer: 55_000, marketer: 50_000, sales: 52_000 }
-
-/**
- * What someone of this role and skill is worth on the open market, before any premium, discount or
- * noise. Exported because it is the reference point `offerAcceptChance` prices an offer against —
- * a test that wants to ask "what happens at the asking price?" must get the number from here rather
- * than transcribing `ROLE_BASE` and the `13_000` slope into itself.
- */
-export function marketSalary(role: Role, skill: number): number {
-  return ROLE_BASE[role] + skill * 13_000
-}
+// `ROLE_BASE` and `marketSalary` moved to ./people — "what a person of this role and skill is
+// worth" is a fact about the person, and the cost-efficiency read on the hiring card needs it
+// without importing the simulation. Re-exported here so every existing importer (tests included)
+// keeps working against the same single definition.
+export { ROLE_BASE, marketSalary }
 
 function rollTrait(skill: number): import('./types').TraitId | null {
   if (skill >= 8 && RNG.next() < 0.2) return 'tenx'
@@ -752,8 +751,17 @@ export function weeklyPayroll(s: GameState): number {
   return Math.round(s.employees.reduce((a, e) => a + e.salary, 0) / 52)
 }
 
+/**
+ * The office bill. SEAM 3 of the people model (src/game/people.ts): desks, not heads.
+ *
+ * This was `300 + heads * 150`, and it is calibrated so it still is in expectation — 40% of people
+ * are drawn remote and a desk now costs 250, so `300 + 0.6n * 250` is the same `300 + 150n` the
+ * game has always billed. What changed is that the mix is now yours to shape: a remote-heavy team
+ * really is cheaper to seat, an all-onsite one really is dearer, and the card that says "Remote"
+ * is saying something the finance screen can be checked against.
+ */
 export function weeklyOffice(s: GameState): number {
-  return 300 + s.employees.length * 150
+  return 300 + s.employees.reduce((a, e) => a + deskCost(e), 0)
 }
 
 export function weeklyInfra(s: GameState): number {
@@ -1626,7 +1634,13 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // Without this, headcount has no cost but payroll, and "hire everyone you can afford" is
   // strictly optimal forever — which removes the central question of how big to get.
   const coordination = coordinationDrag(s)
-  const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e) * coordination
+  // SEAM 1 of the people model (src/game/people.ts). The ONE place five attributes reach the
+  // weekly simulation. `stageOutputMultiplier` averages exactly 1.0 across the population at every
+  // stage — attributes are a constant-sum shape, so the expected output of a randomly drawn team
+  // is unchanged and only the VARIANCE moves (about ±10%, a third of what the `10x` trait is
+  // worth). Skill and traits stay the dominant terms; stage fit is the tiebreaker that makes the
+  // same person a great pre-seed hire and a mediocre Series A one.
+  const eff = (e: Employee) => e.skill * moraleFactor(e) * traitMult(e) * coordination * stageOutputMultiplier(e, s.stage)
   // an IPO process eats founder and team attention; a landed pitch lifts everything for a while.
   // The founder's own contribution runs on their energy tank — an exhausted founder is half a founder.
   const ipoDrag = s.ipo ? 0.85 : 1
@@ -1922,7 +1936,12 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   for (const e of s.employees) {
     e.weeks += 1
     let d = (70 - e.morale) * 0.06 + tokenMorale // drift toward 70
-    if (expenses > revenue && runway < 8) d -= 5
+    // SEAM 2 of the people model (src/game/people.ts): who cracks first when the money gets tight.
+    // Scales ONLY this term, so in a company that is not in a cash crunch burn risk costs exactly
+    // nothing — and `burnStressMultiplier` averages 1.0, so the crunch itself is as expensive as
+    // it always was. What changed is WHOSE morale it eats: a high-velocity, low-adaptability
+    // person now takes ~7 a week where a steady one takes ~3.
+    if (expenses > revenue && runway < 8) d -= 5 * burnStressMultiplier(e)
     if (s.bugs > 55) d -= 2
     if (featureGain > 2.5) d += 1.5
     if (s.hype > 60) d += 1

@@ -1,18 +1,14 @@
 import { Megaphone } from 'lucide-react'
-import { Bar, Btn, Meter, Monogram, NESTED, Panel, RoleAvatar, SkillDots, TraitChip } from '../components'
+import { useMemo, useState } from 'react'
+import { Bar, Btn, Meter, NESTED, Panel, RoleAvatar } from '../components'
+import { PersonCard, PersonProfile, type CardBadge } from '../People'
 import { money, pct } from '../format'
 import { pitchOptions, weeklyPayroll } from '../game/engine'
 import { hasCapability } from '../game/modes'
+import { burnRisk, deskCost, isRemote, outputPoints, stageOutputMultiplier, type TeamContext } from '../game/people'
 import type { Employee } from '../game/types'
 import { EmployeeConversations } from '../CareerUI'
 import { useStore } from '../store'
-
-const ROLE_LABEL: Record<string, string> = {
-  engineer: 'Engineer',
-  designer: 'Designer',
-  marketer: 'Marketer',
-  sales: 'Sales',
-}
 
 // The engine's weekly quit roll: `morale < 32`, or `< 55` for a mercenary, because walking early is
 // the trade you make for their output (src/game/engine.ts, the `quitters` filter). Every morale
@@ -87,17 +83,53 @@ export function Team() {
   const fire = useStore((s) => s.fire)
   const giveRaise = useStore((s) => s.giveRaise)
   const recharge = useStore((s) => s.recharge)
+  const [open, setOpen] = useState<string | null>(null)
+
+  /**
+   * SCORED WITHOUT THE PERSON IN IT — one card, but two different questions.
+   *
+   * `teamFit` is 30% `roleGap`, and `roleGap` asks "how badly does this stage's team want one MORE
+   * of this role". On Hiring the subject is a candidate, so they are absent from `game.employees`
+   * and the question is the right one. On Team the subject IS in `game.employees`, so the identical
+   * unchanged person was being asked a question that no longer applied — and answered brutally: a
+   * solo engineer at Pre-seed scores roleGap 100 as a candidate and exactly 0 the week they start
+   * (target share 0.6 vs actual 1.0), so the same hire read `69% Strong fit` in green on Monday and
+   * `39% Off-stage` in red on Tuesday. Measured across a real seeded pool: all five candidates lost
+   * 21-30 points and every one of them flipped colour band on being hired.
+   *
+   * Building the context per card, minus that person, asks the counterfactual the number is
+   * actually about: what this roster wants given everyone ELSE on it.
+   */
+  const ctxWithout = useMemo(() => {
+    const roles = game.employees.map((e) => ({ id: e.id, role: e.role }))
+    return (id: string): TeamContext => ({
+      stage: game.stage,
+      roles: roles.filter((r) => r.id !== id).map((r) => r.role),
+    })
+  }, [game.stage, game.employees])
 
   // Sorted by distance to the person's own quit floor, so whoever is closest to handing in their
   // notice is the first card you see rather than whoever you happened to hire first. A copy —
   // `game.employees` is store state and its order is the engine's, not ours.
   const roster = [...game.employees].sort((a, b) => a.morale - quitFloor(a) - (b.morale - quitFloor(b)))
+  const openEmployee = game.employees.find((e) => e.id === open) ?? null
+  const desks = game.employees.filter((e) => deskCost(e) > 0).length
+
+  const badgesFor = (e: Employee): CardBadge[] => {
+    const out: CardBadge[] = []
+    if (e.morale < quitFloor(e)) out.push({ text: 'May quit', tone: 'bad' })
+    else if (e.morale < quitFloor(e) + 18) out.push({ text: 'Unsettled', tone: 'warn' })
+    if (out.length === 0 && stageOutputMultiplier(e, game.stage) >= 1.08) out.push({ text: 'Thriving here', tone: 'good' })
+    if (out.length < 2 && e.weeks <= 2) out.push({ text: 'New', tone: 'info' })
+    return out
+  }
 
   return (
     <div>
       <h1 className="text-[28px] font-bold tracking-tight">Team</h1>
       <div className="mb-4 text-[13px] text-mut">
-        {game.employees.length} employees · payroll {money(weeklyPayroll(game))}/wk · a raise is +10% salary, +12 morale
+        {game.employees.length} {game.employees.length === 1 ? 'employee' : 'employees'} · payroll {money(weeklyPayroll(game))}/wk ·{' '}
+        {desks} {desks === 1 ? 'desk' : 'desks'} in the office · a raise is +10% salary, +12 morale
       </div>
 
       <Panel>
@@ -147,65 +179,62 @@ export function Team() {
             </div>
           </Panel>
         ) : (
+          // THE SAME CARD AS HIRING. Not a lookalike — the same component, from src/People.tsx,
+          // reading the same person through the same functions. What differs is the two rows in
+          // the middle (morale and pay instead of asking price and runway) and the actions.
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {roster.map((e) => {
               const floor = quitFloor(e)
               const atRisk = e.morale < floor
               return (
-                // Same card grammar as Hiring: Panel (the one card recipe), name with the trait chip
-                // under it, role as the muted line, SkillDots top-right, a divider, then the rows.
-                <Panel key={e.id} className="flex h-full flex-col">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <Monogram name={e.name} size={42} />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold">{e.name}</div>
-                        {e.trait && (
-                          // the chip's own ml-1.5 is for the inline-after-a-name case; on its own
-                          // line the wrapper cancels it so the chip left-aligns
-                          <div className="mt-1 -ml-1.5">
-                            <TraitChip trait={e.trait} />
-                          </div>
-                        )}
-                        <div className="mt-1 text-[12px] text-mut">
-                          {ROLE_LABEL[e.role]} · {e.weeks} wk
-                        </div>
-                      </div>
-                    </div>
-                    <SkillDots skill={e.skill} />
-                  </div>
-                  <div className="mt-3 border-t border-line/70 pt-3">
-                    <div className="flex items-center gap-2">
-                      {/* The word, not just the hue — below the floor this person can resign on the
-                          next tick, and colour alone is never allowed to be the only carrier. */}
-                      <span className={`w-14 text-[11px] ${atRisk ? 'font-semibold text-bad' : 'text-mut'}`}>
-                        {atRisk ? 'may quit' : 'morale'}
+                <PersonCard
+                  key={e.id}
+                  person={e}
+                  ctx={ctxWithout(e.id)}
+                  badges={badgesFor(e)}
+                  onOpen={() => setOpen(e.id)}
+                  rows={
+                    <>
+                      <span className={`${atRisk ? 'font-semibold text-bad' : 'text-mut'}`}>{atRisk ? 'May quit' : 'Morale'}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="flex-1">
+                          {/* Tone bands measured against the engine's own quit roll (quitFloor
+                              above): bad below the floor, warn inside 18 points of it — 32 / 50
+                              for most people, higher for a mercenary, exactly as the simulation
+                              treats them. The word, not just the hue, carries it on the left. */}
+                          <Meter value={e.morale} tone={atRisk ? 'bad' : e.morale < floor + 18 ? 'warn' : 'good'} />
+                        </span>
+                        <span className="w-7 shrink-0 text-right text-[12px] font-semibold tnum">{Math.round(e.morale)}</span>
                       </span>
-                      <div className="flex-1">
-                        {/* Tone bands measured against the engine's own quit roll (quitFloor above):
-                            bad below the floor, warn inside 18 points of it — 32 / 50 for most
-                            people, higher for a mercenary, exactly as the simulation treats them. */}
-                        <Meter value={e.morale} tone={atRisk ? 'bad' : e.morale < floor + 18 ? 'warn' : 'good'} />
-                      </div>
-                      <span className="w-7 text-right text-[12px] font-semibold tnum">{Math.round(e.morale)}</span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[13px]">
                       <span className="text-mut">Salary</span>
                       <span className="text-right tnum">{money(e.salary)}/yr</span>
-                    </div>
-                  </div>
-                  <div className="mt-auto flex justify-end gap-1.5 pt-3">
-                    <Btn onClick={() => giveRaise(e.id)}>Raise</Btn>
-                    <Btn
-                      variant="danger"
-                      onClick={() => {
-                        if (confirm(`Let ${e.name} go? One month severance, team morale takes a hit.`)) fire(e.id)
-                      }}
-                    >
-                      Fire
-                    </Btn>
-                  </div>
-                </Panel>
+                      <span className="text-mut">Contributing</span>
+                      <span className="text-right tnum">{outputPoints(e, game.stage).toFixed(1)} pts/wk</span>
+                      <span className="text-mut">Here</span>
+                      <span className="text-right tnum">
+                        {e.weeks} wk{isRemote(e) ? <span className="text-mut"> · remote</span> : ''}
+                      </span>
+                    </>
+                  }
+                  actions={
+                    <>
+                      <Btn className="flex-1" onClick={() => setOpen(e.id)}>
+                        Profile
+                      </Btn>
+                      <Btn className="flex-1" onClick={() => giveRaise(e.id)}>
+                        Raise
+                      </Btn>
+                      <Btn
+                        variant="danger"
+                        onClick={() => {
+                          if (confirm(`Let ${e.name} go? One month severance, team morale takes a hit.`)) fire(e.id)
+                        }}
+                      >
+                        Fire
+                      </Btn>
+                    </>
+                  }
+                />
               )
             })}
           </div>
@@ -215,6 +244,37 @@ export function Team() {
       {/* Below the roster now: the roster is the screen's job, and a speech to everyone is worth
           less than the person at the top of it who is about to leave. */}
       {roster.length > 0 && <PitchPanel />}
+
+      {openEmployee && (
+        <PersonProfile
+          person={openEmployee}
+          ctx={ctxWithout(openEmployee.id)}
+          onClose={() => setOpen(null)}
+          status={
+            <>
+              <b className="text-ink">{openEmployee.weeks} weeks here.</b> Morale {Math.round(openEmployee.morale)} against a quit floor of{' '}
+              {quitFloor(openEmployee)} — {openEmployee.morale < quitFloor(openEmployee) ? 'they can resign on any tick from here' : 'settled for now'}
+              . Burn risk {burnRisk(openEmployee)} decides how hard a cash crunch hits THIS person.
+            </>
+          }
+          actions={
+            <>
+              <Btn onClick={() => giveRaise(openEmployee.id)}>Give a raise</Btn>
+              <Btn
+                variant="danger"
+                onClick={() => {
+                  if (confirm(`Let ${openEmployee.name} go? One month severance, team morale takes a hit.`)) {
+                    fire(openEmployee.id)
+                    setOpen(null)
+                  }
+                }}
+              >
+                Let them go
+              </Btn>
+            </>
+          }
+        />
+      )}
     </div>
   )
 }

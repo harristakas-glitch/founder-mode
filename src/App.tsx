@@ -43,7 +43,7 @@ import { Fundraising } from './screens/Fundraising'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
-import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge, RadialGauge, Sparkline } from './components'
+import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge, RadialGauge, Sparkline, useDialog } from './components'
 import { runMarkers } from './runMarkers'
 import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
 import { FitPeek } from './FitPeek'
@@ -203,40 +203,8 @@ function MuteButton() {
 
 const EMOTES = ['👍', '😂', '😱', '🔥', '🐌', '🦄']
 
-// Escape closes any overlay, and Tab stays inside it — without the trap, keyboard focus
-// wanders into the dead game behind the dialog and the player cannot find their way back.
-function useDialog(onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null
-    const focusable = () =>
-      Array.from(
-        ref.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? [],
-      ).filter((el) => el.offsetParent !== null)
-    focusable()[0]?.focus()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose()
-      if (e.key !== 'Tab') return
-      const items = focusable()
-      if (items.length === 0) return
-      const first = items[0]
-      const last = items[items.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      previouslyFocused?.focus?.() // hand focus back where the player left it
-    }
-  }, [onClose])
-  return ref
-}
+// `useDialog` moved to ./components — App's four overlays and the employee profile all need
+// identical Escape/focus-trap behaviour, and a screen cannot import from App without a cycle.
 
 export default function App() {
   const { game, online, screen, setScreen, advance, abandonGame, resolveChoice, cancelReady, sendEmote } = useStore()

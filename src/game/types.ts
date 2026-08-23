@@ -36,26 +36,35 @@ export interface Sector {
 
 export type TraitId = 'tenx' | 'craftsman' | 'mercenary' | 'culture' | 'drama'
 
-export interface Employee {
+/**
+ * ONE PERSON, TWO SITUATIONS. A candidate and an employee are the same human being either side of
+ * a signature, so they share a base rather than duplicating five fields — and `src/game/people.ts`
+ * (attributes, stage affinity, portrait, background) takes `Person`, which is why the hiring card
+ * and the roster card can be the same component with the same reading of the same person.
+ *
+ * NOTHING WAS ADDED HERE. The rich model the Team & Staff brief asks for — five attributes, stage
+ * affinity, burn risk, work style, CV, portrait — is DERIVED from these fields, never stored
+ * beside them. See the header of src/game/people.ts for the three reasons (determinism, save
+ * compatibility, and a face that must not change when a salary drifts with inflation). The
+ * practical consequence: every save ever written already has full profiles and needs no migration.
+ */
+export interface Person {
   id: string
   name: string
   role: Role
   skill: number // 1-10
   salary: number // yearly
-  morale: number // 0-100
-  weeks: number
   trait?: TraitId | null
 }
 
-export interface Candidate {
-  id: string
-  name: string
-  role: Role
-  skill: number
-  salary: number
+export interface Employee extends Person {
+  morale: number // 0-100
+  weeks: number
+}
+
+export interface Candidate extends Person {
   weeksLeft: number
   notice: number // weeks between accepting and starting
-  trait?: TraitId | null
 }
 
 export interface Board {
