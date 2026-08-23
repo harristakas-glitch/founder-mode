@@ -23,7 +23,7 @@ import { useStore, type ScreenId } from './store'
 import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn, growthRate } from './game/engine'
 import { money, num } from './format'
 import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
-import { hasCapability } from './game/modes'
+import { hasCapability, systemDepth } from './game/modes'
 import { verifyRun, type VerifyResult } from './game/replay'
 import { isMuted, setMuted } from './sound'
 import { shareNative, shareRunText, shareTargets } from './share'
@@ -91,13 +91,15 @@ const AREAS: {
   id: string
   label: string
   icon: typeof Mail
-  screens: { id: ScreenId; label: string; careerOnly?: boolean }[]
+  screens: { id: ScreenId; label: string; careerOnly?: boolean; system?: 'roadmap' | 'bigBets' }[]
 }[] = [
   // One screen: the stream merged into the HQ (owner call, after FM26's Portal — messages are a
   // third of the overview, not a separate page). The 'inbox' ScreenId survives as an alias.
   { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [
     { id: 'dashboard', label: 'This week' },
-    { id: 'strategy', label: 'Strategy' },
+    // owner simplification 2026-08-23: strategic screens exist only where their system is on
+    // (Simulation for now) — quick and arena see the classic surfaces, nothing to configure
+    { id: 'strategy', label: 'Strategy', system: 'bigBets' },
   ] },
   // Screen order within an area is PRIORITY: the first entry is where the area lands. Owner
   // re-cut, 2026-08-23: GROWTH — the budget slider you touch most weeks — is its own top-level
@@ -107,7 +109,7 @@ const AREAS: {
   { id: 'growth', label: 'Growth', icon: TrendingUp, screens: [{ id: 'growth', label: 'Growth' }] },
   { id: 'product', label: 'Product', icon: Package, screens: [
     { id: 'product', label: 'Build' },
-    { id: 'roadmap', label: 'Roadmap' },
+    { id: 'roadmap', label: 'Roadmap', system: 'roadmap' },
     { id: 'discovery', label: 'Discovery', careerOnly: true },
     { id: 'cohorts', label: 'Cohorts', careerOnly: true },
   ] },
@@ -348,8 +350,14 @@ export default function App() {
     (game.flash?.includes('🏆') || game.flash?.startsWith('🏁') || game.flash?.startsWith('🚀') || false) ||
     (!!game.gameOver && ['unicorn', 'ipo', 'acquired'].includes(game.gameOver.type))
 
-  // Which screens inside an area actually exist for this run (Career-only ones gate out).
-  const eligible = (a: (typeof AREAS)[number]) => a.screens.filter((sc) => !sc.careerOnly || hasCapability(game, 'hypothesisBoard'))
+  // Which screens inside an area actually exist for this run: Career-only ones gate on the
+  // capability, strategic ones gate on their system's depth for THIS run's mode.
+  const eligible = (a: (typeof AREAS)[number]) =>
+    a.screens.filter(
+      (sc) =>
+        (!sc.careerOnly || hasCapability(game, 'hypothesisBoard')) &&
+        (!sc.system || systemDepth(game, sc.system) !== 'off'),
+    )
 
   // The sibling row: primary area -> screen, and never deeper. Only rendered when the area has
   // more than one screen this run, so Quick Play's Product area (one screen) shows no chrome.

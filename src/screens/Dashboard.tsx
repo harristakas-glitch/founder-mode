@@ -8,7 +8,8 @@
 //   ON YOUR RADAR  = what is coming next
 //
 // Desktop is two columns — the Inbox dominating (~60%), the interpretation stack beside it.
-// Mobile is one column: Brief first (immediate interpretation), Inbox central, Pulse, Radar,
+// Mobile is one column: Inbox first (owner call 2026-08-23 — what's happening leads the phone),
+// then Brief, Attention, Pulse, Radar,
 // with the shell's sticky CTA underneath. HQ is NOT a dashboard: the shell owns raw metrics,
 // the Brief interprets without recommending, and every number here is paired with meaning.
 //
@@ -40,7 +41,9 @@ import { Btn, EmptyState } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers } from '../game/engine'
-import { MODE_META, hasCapability } from '../game/modes'
+import { MODE_META, hasCapability, systemDepth } from '../game/modes'
+import { ATTENTION_AREAS, ATTENTION_BUDGET, ATTENTION_META, attentionNeeds, attentionSignals, delegationCover } from '../game/strategic/attention'
+import { bigBetDef } from '../game/strategic/bigbets'
 import { BoardMeeting, Commitments, FounderBriefing, TeamOpinions, careerActive } from '../CareerUI'
 import { MarketLeaderboard } from './Market'
 import { DecisionLens } from '../onboarding/DecisionLens'
@@ -234,6 +237,148 @@ function CompanyPulseCard() {
             <span className="col-span-full pl-[34px] text-[11.5px] leading-snug text-mut sm:col-span-1 sm:pl-0 sm:text-right">{r.context}</span>
           </div>
         ))}
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------------------------
+// Your Attention (Strategic Systems phase 4, brief §9): where the founder personally spends
+// the week. Light modes: ONE Focus chip — a single bounded boost, tap to move it. Simulation:
+// the 8-point allocator with needs, crisis forcing and dependency read as words, never numbers
+// (§8.9: no formulas). Arena: attention is off — turn actions already price it — so no card.
+
+function AttentionCard() {
+  const game = useStore((s) => s.game)!
+  const setFocus = useStore((s) => s.setAttentionFocus)
+  const setAlloc = useStore((s) => s.setAttentionAllocation)
+  const depth = systemDepth(game, 'founderAttention')
+  if (depth === 'off') return null
+
+  const attn = game.attention ?? { focus: null, dependency: {} }
+  const deepOn = depth === 'deep' && !!attn.allocated
+  const bet = game.bigBet?.status === 'active' ? bigBetDef(game.bigBet.type) : null
+  const affinity = new Set(bet?.attentionAffinity ?? [])
+
+  // --- light (and deep before first allocation): one Focus chip-row ---
+  if (!deepOn) {
+    return (
+      <section className={`${PANEL} p-4 md:p-5`}>
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-extrabold tracking-tight">Your Focus</h2>
+          <span className="text-[11px] text-mut">where you personally spend the week</span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {ATTENTION_AREAS.map((area) => {
+            const meta = ATTENTION_META[area]
+            const active = attn.focus === area
+            return (
+              <button
+                key={area}
+                onClick={() => setFocus(active ? null : area)}
+                title={meta.moves + (affinity.has(area) ? ' · supports your Big Bet' : '')}
+                className={`rounded-full border px-2.5 py-1 text-[12px] font-bold transition-colors ${
+                  active
+                    ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 text-accent'
+                    : 'border-line2 bg-surface2 text-mut hover:text-ink'
+                }`}
+              >
+                {meta.icon} {meta.label}
+                {affinity.has(area) && <span className="ml-1 text-[10px] text-good">🎯</span>}
+              </button>
+            )
+          })}
+        </div>
+        <div className="mt-2 text-[11.5px] leading-snug text-mut">
+          {attn.focus
+            ? `${ATTENTION_META[attn.focus].moves} get your personal push this week.`
+            : 'Pick one. Founder time is leverage — a focused week moves that area more than money does.'}
+        </div>
+        {depth === 'deep' && (
+          <button
+            onClick={() => setAlloc({ product: 2 })}
+            className="mt-2 text-[11.5px] font-semibold text-accent hover:underline"
+          >
+            Switch to the full weekly allocator →
+          </button>
+        )}
+      </section>
+    )
+  }
+
+  // --- deep: the 8-point weekly allocator ---
+  const alloc = attn.allocated!
+  const spent = ATTENTION_AREAS.reduce((a, k) => a + (alloc[k] ?? 0), 0)
+  const forced = attn.forcedWeek === game.week ? (attn.forced ?? {}) : {}
+  const forcedSum = Object.values(forced).reduce((a: number, b) => a + (b ?? 0), 0)
+  const budget = ATTENTION_BUDGET - forcedSum
+  const needs = attentionNeeds(game)
+  const cover = delegationCover(game)
+  const signals = attentionSignals(game)
+  const step = (area: (typeof ATTENTION_AREAS)[number], d: number) => {
+    const cur = alloc[area] ?? 0
+    const next = Math.max(0, Math.min(6, cur + d))
+    if (next === cur) return
+    if (d > 0 && spent >= budget) return
+    setAlloc({ ...alloc, [area]: next })
+  }
+
+  return (
+    <section className={`${PANEL} p-4 md:p-5`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-[15px] font-extrabold tracking-tight">Your Week</h2>
+        <span className={`text-[12px] font-bold tnum ${spent >= budget ? 'text-warn' : 'text-accent'}`}>
+          {budget - spent} of {budget} left
+        </span>
+      </div>
+      {forcedSum > 0 && (
+        <div className="mt-1.5 rounded-lg border border-bad/40 bg-bad/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-bad">
+          🔥 Operations demanded {forcedSum} points this week — the fire eats your plan first.
+        </div>
+      )}
+      <div className="mt-2 divide-y divide-line/50">
+        {ATTENTION_AREAS.map((area) => {
+          const meta = ATTENTION_META[area]
+          const pts = alloc[area] ?? 0
+          const need = needs[area] ?? 0
+          const covered = (cover[area] ?? 0) > 0
+          const short = need - pts - (cover[area] ?? 0) > 0
+          return (
+            <div key={area} className="flex items-center gap-2 py-1.5">
+              <span className="w-[118px] shrink-0 text-[12.5px] font-semibold text-ink">
+                {meta.icon} {meta.label}
+                {affinity.has(area) && (
+                  <span className="ml-1 text-[10px] text-good" title="supports your Big Bet">🎯</span>
+                )}
+              </span>
+              <span className="flex min-w-0 flex-1 items-center gap-[3px]">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <span
+                    key={i}
+                    className={`h-2 w-2 rounded-full ${i < pts ? 'bg-accent' : i < need ? 'border border-warn/60' : 'border border-line2'}`}
+                  />
+                ))}
+              </span>
+              <span className="text-[10.5px] text-mut">
+                {covered ? 'delegated' : short ? <span className="text-warn">needs you</span> : ''}
+              </span>
+              <span className="flex shrink-0 gap-1">
+                <button onClick={() => step(area, -1)} disabled={pts === 0} className="h-6 w-6 rounded-md border border-line2 bg-surface2 text-[13px] font-bold text-mut disabled:opacity-30">−</button>
+                <button onClick={() => step(area, 1)} disabled={pts >= 6 || spent >= budget} className="h-6 w-6 rounded-md border border-line2 bg-surface2 text-[13px] font-bold text-mut disabled:opacity-30">+</button>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      {signals.length > 0 && (
+        <div className="mt-2 space-y-0.5">
+          {signals.map((line) => (
+            <div key={line} className="text-[11.5px] leading-snug text-warn">· {line}</div>
+          ))}
+        </div>
+      )}
+      <div className="mt-1.5 text-[11px] leading-snug text-mut">
+        Hollow rings are where the company needs you. Spreading thin is weak; senior hires can carry areas for you.
       </div>
     </section>
   )
@@ -540,13 +685,18 @@ export function Dashboard() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
         <div className="contents lg:block lg:min-w-0 lg:flex-[3]">
           {/* keyed by week: a new week's blocking decision must auto-expand even if the player
-              collapsed last week's rows — stale open/filter state dies with the old week */}
-          <div className="order-2"><InboxPanel key={game.week} /></div>
+              collapsed last week's rows — stale open/filter state dies with the old week.
+              Owner call 2026-08-23: the INBOX leads the phone — what's happening comes first,
+              interpretation second. */}
+          <div className="order-1"><InboxPanel key={game.week} /></div>
         </div>
         <div className="contents lg:block lg:min-w-0 lg:flex-[2] lg:space-y-4">
-          <div className="order-1"><CEOBriefCard /></div>
-          <div className="order-3"><CompanyPulseCard /></div>
-          <div className="order-4"><OnYourRadarCard /></div>
+          <div className="order-2"><CEOBriefCard /></div>
+          {/* attention sits right under the Brief: it's the one INPUT on this screen — the
+              decision the briefing is meant to inform (phase 4; arena renders nothing) */}
+          <div className="order-3"><AttentionCard /></div>
+          <div className="order-4"><CompanyPulseCard /></div>
+          <div className="order-5"><OnYourRadarCard /></div>
         </div>
       </div>
 

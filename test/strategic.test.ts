@@ -6,6 +6,7 @@ import { systemDepth } from '../src/game/modes'
 import { composeBonus, strategicModifiers } from '../src/game/strategic/effects'
 import { ROADMAP_POOLS, roadmapDef, roadmapPool } from '../src/game/strategic/content'
 import { availableInitiatives, effortRequired, startInitiative, tickRoadmap } from '../src/game/strategic/roadmap'
+import { ATTENTION_BUDGET, attentionEngagement, attentionShortfalls, effectiveAllocation } from '../src/game/strategic/attention'
 import type { GameConfig } from '../src/game/modes'
 import type { GameState } from '../src/game/types'
 
@@ -20,9 +21,24 @@ console.log('— Depth model (brief §3) —')
 const quick = newGame('Q', 'saas', 'technical', { config: cfg() })
 const career = newGame('C', 'saas', 'technical', { config: cfg({ mode: 'career' }) })
 const arena = newGame('A', 'saas', 'technical', { config: cfg({ mode: 'arena' }) })
-ok(systemDepth(quick, 'roadmap') === 'light' && systemDepth(career, 'roadmap') === 'deep' && systemDepth(arena, 'roadmap') === 'competitive', 'roadmap: light / deep / competitive by mode')
+// Owner simplification (2026-08-23): roadmap, big bets and the growth mix are SIMULATION-ONLY
+// for now — quick and arena run the classic engine. The light/competitive machinery stays
+// behind the depth switches, tested below through explicit depth arguments.
+ok(systemDepth(quick, 'roadmap') === 'off' && systemDepth(arena, 'roadmap') === 'off' && systemDepth(career, 'roadmap') === 'deep', 'roadmap: simulation-only (quick and arena off)')
+ok(systemDepth(quick, 'bigBets') === 'off' && systemDepth(arena, 'bigBets') === 'off' && systemDepth(career, 'bigBets') === 'deep', 'big bets: simulation-only')
+ok(systemDepth(quick, 'growthMix') === 'off' && systemDepth(arena, 'growthMix') === 'off' && systemDepth(career, 'growthMix') === 'deep', 'growth mix: simulation-only')
 ok(systemDepth(arena, 'founderAttention') === 'off' && systemDepth(arena, 'boardMeetings') === 'off', 'arena: attention and board meetings are OFF (the brief is explicit)')
-ok(systemDepth(quick, 'bigBets') === 'light' && systemDepth(career, 'bigBets') === 'deep', 'big bets exist in every mode at the right depth')
+ok(systemDepth(quick, 'founderAttention') === 'light', 'quick keeps the light Founder Focus')
+
+console.log('— The removal is exact: strategic journals are inert in quick and arena —')
+for (const g0 of [quick, arena]) {
+  const mode = g0.config!.mode
+  let g = structuredClone(g0)
+  g = applyJournaled(g, 'roadmap_start', { id: 'saas-onboarding-redesign' }).state
+  g = applyJournaled(g, 'bet_choose', { t: 'consumer_viral_engine' }).state
+  g = applyJournaled(g, 'growth_mix', { v: 0.3 }).state
+  ok(g.roadmap!.active.length === 0 && !g.bigBet && (g.growth?.performanceShare ?? 1) === 1, `${mode}: roadmap/bet/mix journals all no-op`)
+}
 
 console.log('— Content pools (brief §6.4) —')
 for (const [sector, pool] of Object.entries(ROADMAP_POOLS)) {
@@ -43,8 +59,8 @@ ok(deepPool.every((i) => !i.lateStage), 'pre-seed hides late-stage items even at
 
 console.log('— The tradeoff is physical (brief §1.1/§6.7) —')
 // same seed, one run starts an initiative, the other doesn't — the builder ships less product
-let ctrl = newGame('T', 'saas', 'technical', { config: cfg({ seed: 21 }) })
-let bldr = newGame('T', 'saas', 'technical', { config: cfg({ seed: 21 }) })
+let ctrl = newGame('T', 'saas', 'technical', { config: cfg({ seed: 21, mode: 'career' }) })
+let bldr = newGame('T', 'saas', 'technical', { config: cfg({ seed: 21, mode: 'career' }) })
 bldr = applyJournaled(bldr, 'roadmap_start', { id: 'saas-onboarding-redesign' }).state
 for (let i = 0; i < 4; i++) {
   ctrl = advanceWeek(ctrl)
@@ -54,7 +70,7 @@ ok(bldr.roadmap!.active.length === 1 && bldr.roadmap!.active[0].progress > 0, 't
 ok(bldr.features < ctrl.features, `roadmap work draws real build output (features ${bldr.features.toFixed(2)} < ${ctrl.features.toFixed(2)})`)
 
 console.log('— Completion changes the company (brief §6.13) —')
-let run = newGame('T', 'saas', 'technical', { config: cfg({ seed: 33 }) })
+let run = newGame('T', 'saas', 'technical', { config: cfg({ seed: 33, mode: 'career' }) })
 run = applyJournaled(run, 'roadmap_start', { id: 'saas-onboarding-redesign' }).state
 let completedWeek = 0
 for (let i = 0; i < 40 && !completedWeek; i++) {
@@ -86,7 +102,7 @@ const sso = roadmapDef('saas', 'saas-sso')!
 ok((sso.segmentImpact.enterprise ?? 0) > 1.2 && (sso.segmentImpact.freelancers ?? 1) < 0.5, 'SSO is an enterprise item, not a freelancer one')
 
 console.log('— Replay integrity —')
-const header = { name: 'T', sector: 'saas' as const, founderKind: 'technical' as const, config: cfg({ seed: 21 }) }
+const header = { name: 'T', sector: 'saas' as const, founderKind: 'technical' as const, config: cfg({ seed: 21, mode: 'career' }) }
 const journal = [
   { a: 'roadmap_start' as const, w: 1, p: { id: 'saas-onboarding-redesign' } },
   ...Array.from({ length: 4 }, () => ({ a: 'advance' as const, w: 0 })),
@@ -115,12 +131,12 @@ console.log('— Big Bets (brief §7): progress only from aligned execution —'
   ok(BIG_BETS.length === 6, 'six archetypes')
 
   // same seed, two twins: one declares a bet and DOES aligned work; one declares and does nothing
-  let doer = newGame('B', 'saas', 'technical', { config: cfg({ seed: 55 }) })
-  let talker = newGame('B', 'saas', 'technical', { config: cfg({ seed: 55 }) })
+  let doer = newGame('B', 'saas', 'technical', { config: cfg({ seed: 55, mode: 'career' }) })
+  let talker = newGame('B', 'saas', 'technical', { config: cfg({ seed: 55, mode: 'career' }) })
   doer = applyJournaled(doer, 'bet_choose', { t: 'consumer_viral_engine' }).state
   talker = applyJournaled(talker, 'bet_choose', { t: 'consumer_viral_engine' }).state
   doer = applyJournaled(doer, 'roadmap_start', { id: 'saas-onboarding-redesign' }).state // growth/acquisition-weighted → aligned
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 22; i++) {
     doer = advanceWeek(doer)
     talker = advanceWeek(talker)
   }
@@ -128,15 +144,15 @@ console.log('— Big Bets (brief §7): progress only from aligned execution —'
   ok(talker.bigBet!.progress === 0, 'declaring without executing advances NOTHING (§7.11)')
 
   // contradictory work is legal and simply does not advance the bet
-  let rebel = newGame('B', 'saas', 'technical', { config: cfg({ seed: 55 }) })
+  let rebel = newGame('B', 'saas', 'technical', { config: cfg({ seed: 55, mode: 'career' }) })
   rebel = applyJournaled(rebel, 'bet_choose', { t: 'enterprise_readiness' }).state
   rebel = applyJournaled(rebel, 'roadmap_start', { id: 'saas-onboarding-redesign' }).state // freelancer item vs enterprise bet
-  for (let i = 0; i < 8; i++) rebel = advanceWeek(rebel)
+  for (let i = 0; i < 22; i++) rebel = advanceWeek(rebel)
   ok(rebel.roadmap!.active.length + rebel.roadmap!.done.length > 0, 'contradictory work is legal (§7.8)')
   ok(rebel.bigBet!.progress < doer.bigBet!.progress, 'but it advances the bet less than aligned work')
 
-  // a light-depth bet with steady aligned work COMPLETES — and the edge is permanent
-  ok(doer.bigBet!.status === 'completed', 'the executed light bet completes inside its window')
+  // a deep bet with steady aligned work COMPLETES — and the edge is permanent
+  ok(doer.bigBet!.status === 'completed', 'the executed bet completes with sustained aligned work')
   ok(strategicModifiers(doer).acquisitionEff > strategicModifiers(talker).acquisitionEff, 'completion leaves a standing edge (§7.13)')
 
   // abandonment: shadow then recovery — on a bet still in flight
@@ -151,7 +167,7 @@ console.log('— Big Bets (brief §7): progress only from aligned execution —'
   ok(strategicModifiers(later).buildVelocity >= shadow.buildVelocity, 'and the shadow fades')
 
   // one bet at a time — against an ACTIVE bet; a settled one may be replaced
-  let holder = newGame('B', 'saas', 'technical', { config: cfg({ seed: 56 }) })
+  let holder = newGame('B', 'saas', 'technical', { config: cfg({ seed: 56, mode: 'career' }) })
   holder = applyJournaled(holder, 'bet_choose', { t: 'platform_play' }).state
   const again = applyJournaled(holder, 'bet_choose', { t: 'margin_expansion' }).state
   ok(again.bigBet!.type === 'platform_play', 'a second bet cannot displace an active one')
@@ -213,14 +229,107 @@ console.log('— Growth Engine (CRO + marketing mix brief) —')
   ok(mixAlignment('consumer_viral_engine', 0.2) === 'competes', 'an 80% brand mix competes with the viral engine')
 
   // journaled mix replays
-  let mixer = newGame('G', 'saas', 'technical', { config: cfg({ seed: 75 }) })
+  let mixer = newGame('G', 'saas', 'technical', { config: cfg({ seed: 75, mode: 'career' }) })
   mixer = applyJournaled(mixer, 'growth_mix', { v: 0.6 }).state
   for (let i = 0; i < 3; i++) mixer = advanceWeek(mixer)
   const replayedMix = replayRun(
-    { name: 'G', sector: 'saas', founderKind: 'technical', config: cfg({ seed: 75 }) } as never,
+    { name: 'G', sector: 'saas', founderKind: 'technical', config: cfg({ seed: 75, mode: 'career' }) } as never,
     [{ a: 'growth_mix', w: 1, p: { v: 0.6 } }, { a: 'advance', w: 0 }, { a: 'advance', w: 0 }, { a: 'advance', w: 0 }] as never,
   )
   ok(replayedMix.growth!.brand.pending.length === mixer.growth!.brand.pending.length && replayedMix.cash === mixer.cash, 'a journaled mix change replays identically')
+}
+
+console.log('— Founder Attention (brief §9): limited budget, real tradeoffs —')
+{
+  // INERT UNTIL ENGAGED: an untouched run has no attention parts anywhere
+  const idle = newGame('A', 'saas', 'technical', { config: cfg({ seed: 91, mode: 'career' }) })
+  const m0 = strategicModifiers(idle)
+  ok(m0.researchMult === 1 && m0.moraleDrift === 0, 'no focus, no allocation → research and morale channels exactly neutral')
+  ok(attentionEngagement(idle) === 'none', 'a fresh game has not engaged the system')
+
+  // light: one Focus = one bounded boost
+  let focused = newGame('A', 'saas', 'technical', { config: cfg({ seed: 91 }) })
+  focused = applyJournaled(focused, 'attention_focus', { a: 'product' }).state
+  const mF = strategicModifiers(focused)
+  ok(mF.buildVelocity > 1 && mF.buildVelocity <= 1.35, `Focus: Product lifts build velocity, bounded (${mF.buildVelocity.toFixed(3)})`)
+  focused = applyJournaled(focused, 'attention_focus', { a: 'customers' }).state
+  const mC = strategicModifiers(focused)
+  ok(mC.buildVelocity === 1 && mC.researchMult > 1 && mC.churnRelief < 1, 'moving the Focus moves the boost — one area at a time')
+
+  // light mode NEVER punishes: no allocation engaged → no shortfall maluses even in a mess
+  focused.bugs = 80
+  focused.employees = Array.from({ length: 14 }, (_, i) => ({ ...focused.employees[0] ?? { id: `e${i}`, name: 'E', role: 'engineer', skill: 5, salary: 1, morale: 70, weeks: 0, trait: null }, id: `e${i}` })) as never
+  ok(Object.keys(attentionShortfalls(focused)).length === 0, 'a Focus player is never billed for the deep allocator’s needs')
+
+  // deep: the allocator engages needs; journal sanitizes an over-budget allocation
+  let deep = newGame('A', 'saas', 'technical', { config: cfg({ seed: 92, mode: 'career' }) })
+  deep = applyJournaled(deep, 'attention_allocate', { alloc: { product: 20, customers: 20, leadership: 20 } }).state
+  const total = Object.values(deep.attention!.allocated!).reduce((a: number, b) => a + (b ?? 0), 0)
+  ok(total === ATTENTION_BUDGET, `an over-budget journal is truncated at the ${ATTENTION_BUDGET}-point budget (got ${total})`)
+  ok((deep.attention!.allocated!.product ?? 0) <= 6, 'no single area absorbs more than 6 points')
+
+  // neglect bites the starved axis — and ONLY once engaged
+  let neglect = newGame('A', 'saas', 'technical', { config: cfg({ seed: 93, mode: 'career' }) })
+  neglect = applyJournaled(neglect, 'attention_allocate', { alloc: { fundraising: 6, recruiting: 2 } }).state
+  neglect.bugs = 70 // operations need 2, product need 2 — both starved
+  const mN = strategicModifiers(neglect)
+  ok(mN.buildVelocity < 1, `starving Product while allocated elsewhere slows the build (${mN.buildVelocity.toFixed(3)})`)
+  ok(mN.bugPressure > 1, `starving Operations during a bug fire raises bug pressure (${mN.bugPressure.toFixed(3)})`)
+
+  // crisis forcing: bugs over 60 claim 3 operations points and squeeze the plan
+  let crisis = newGame('A', 'saas', 'technical', { config: cfg({ seed: 94, mode: 'career' }) })
+  crisis = applyJournaled(crisis, 'attention_allocate', { alloc: { product: 4, customers: 4 } }).state
+  crisis.bugs = 75
+  crisis = advanceWeek(crisis)
+  ok(crisis.attention!.forcedWeek === crisis.week && (crisis.attention!.forced?.operations ?? 0) === 3, 'a quality fire forces 3 points of Operations attention')
+  const eff = effectiveAllocation(crisis)
+  const effSum = (eff.product ?? 0) + (eff.customers ?? 0)
+  ok(effSum < 8 && effSum <= 5.01, `the discretionary plan is squeezed to the remaining budget (${effSum.toFixed(2)} of 8 planned)`)
+  ok(crisis.inbox.some((m) => m.title.includes('Quality crisis')), 'the crisis announces itself in the inbox once')
+
+  // dependency: sustained heavy involvement makes the org lean on you; delegation unwinds it
+  let dep = newGame('A', 'saas', 'technical', { config: cfg({ seed: 95, mode: 'career' }) })
+  dep = applyJournaled(dep, 'attention_allocate', { alloc: { product: 4 } }).state
+  for (let i = 0; i < 12; i++) dep = advanceWeek(dep)
+  const grown = dep.attention!.dependency.product ?? 0
+  ok(grown >= 30, `12 weeks of heavy Product involvement grows dependency (${grown.toFixed(0)})`)
+  dep = applyJournaled(dep, 'attention_allocate', { alloc: { customers: 2 } }).state
+  dep.employees.push({ id: 'vp', name: 'VP Eng', role: 'engineer', skill: 9, salary: 200000, morale: 80, weeks: 0, trait: null } as never)
+  for (let i = 0; i < 6; i++) dep = advanceWeek(dep)
+  ok((dep.attention!.dependency.product ?? 0) < grown, 'stepping back with a senior engineer aboard unwinds the dependency')
+
+  // big-bet integration (§13.3): attention on affinity areas trickles progress, but can NEVER
+  // complete a bet alone — attention accelerates work, it is not the work
+  let better = newGame('A', 'saas', 'technical', { config: cfg({ seed: 96, mode: 'career' }) })
+  better = applyJournaled(better, 'bet_choose', { t: 'consumer_viral_engine' }).state
+  better = applyJournaled(better, 'attention_focus', { a: 'product' }).state
+  let idler = newGame('A', 'saas', 'technical', { config: cfg({ seed: 96, mode: 'career' }) })
+  idler = applyJournaled(idler, 'bet_choose', { t: 'consumer_viral_engine' }).state
+  for (let i = 0; i < 10; i++) {
+    better = advanceWeek(better)
+    idler = advanceWeek(idler)
+  }
+  ok(better.bigBet!.progress > idler.bigBet!.progress, `aligned attention advances the bet (${better.bigBet!.progress.toFixed(1)} vs ${idler.bigBet!.progress.toFixed(1)})`)
+  ok(better.bigBet!.status === 'active' && better.bigBet!.progress < 40, 'attention alone cannot complete a bet inside its window')
+
+  // arena: the journal guard holds — attention effects cannot exist there
+  let ar = newGame('A', 'saas', 'technical', { config: cfg({ seed: 97, mode: 'arena' }) })
+  ar = applyJournaled(ar, 'attention_focus', { a: 'product' }).state
+  ar = applyJournaled(ar, 'attention_allocate', { alloc: { product: 4 } }).state
+  ok(!ar.attention?.focus && !ar.attention?.allocated, 'arena journals cannot set focus or allocation (attention is OFF there)')
+
+  // replay integrity: a run with attention decisions replays byte-identically
+  let live = newGame('R', 'saas', 'technical', { config: cfg({ seed: 98, mode: 'career' }) })
+  live = applyJournaled(live, 'attention_allocate', { alloc: { product: 3, leadership: 2 } }).state
+  for (let i = 0; i < 5; i++) live = applyJournaled(live, 'advance').state
+  const replayed = replayRun(
+    { name: 'R', sector: 'saas', founderKind: 'technical', config: cfg({ seed: 98, mode: 'career' }) } as never,
+    [
+      { a: 'attention_allocate', w: 1, p: { alloc: { product: 3, leadership: 2 } } },
+      ...Array.from({ length: 5 }, () => ({ a: 'advance', w: 0 })),
+    ] as never,
+  )
+  ok(replayed.cash === live.cash && replayed.features === live.features && JSON.stringify(replayed.attention) === JSON.stringify(live.attention), 'a journaled attention run replays identically')
 }
 
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)

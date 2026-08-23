@@ -20,6 +20,7 @@ import { strategicModifiers } from './strategic/effects'
 import { accrueAmbientDebt, tickRoadmap } from './strategic/roadmap'
 import { BIG_BET_SYNERGY, bigBetDef, initiativeAlignment, tickBigBet } from './strategic/bigbets'
 import { brandCacRelief, createDefaultGrowth, mixAlignment, tickBrand } from './strategic/growth'
+import { attentionBetPoints, attentionFundraisingMult, attentionRecruitingBonus, createDefaultAttention, tickAttention } from './strategic/attention'
 import { createDefaultRoadmap } from './strategic/types'
 import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
 // Rival aggression routes "who and why" through the same living-world record every other company
@@ -296,6 +297,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     pendingHires: [],
     roadmap: createDefaultRoadmap(),
     growth: createDefaultGrowth(),
+    attention: createDefaultAttention(),
     rivals: (opts.aiRivals ?? rules.capabilities.aiRivals) ? makeRivals(sec.tam, companyName) : [],
     climate: rand(-0.3, 0.5),
     inbox: [],
@@ -489,7 +491,9 @@ export function sharedCandidates(seed: number, week: number): Candidate[] {
 export function makeCandidate(s: GameState): Candidate {
   const role = pick<Role>(['engineer', 'engineer', 'engineer', 'designer', 'marketer', 'sales'])
   const stageBonus = STAGES.indexOf(s.stage) * 0.7
-  const skill = clamp(Math.round(rand(1, 6) + s.reputation / 25 + stageBonus), 1, 10)
+  // recruiting attention: the founder personally working the pipeline pulls in stronger people.
+  // Added inside the round — it changes no RNG draw, so untouched runs replay identically.
+  const skill = clamp(Math.round(rand(1, 6) + s.reputation / 25 + stageBonus + attentionRecruitingBonus(s)), 1, 10)
   const salary = Math.round((marketSalary(role, skill) + rand(-6000, 6000)) / 1000) * 1000
   return {
     id: uid(),
@@ -1396,7 +1400,10 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
     // processes, and closed candidates. A multiplier on the offered valuation, so it changes no
     // draw and no order.
     const pitchMult = s.founderKind === 'business' ? 1.18 : 1
-    const offeredVal = val * rand(0.7, 1.25) * climateMult * pitchMult
+    // fundraising attention: a founder running a warm, prepared process prices a little better.
+    // A multiplier like pitchMult — changes no draw and no order.
+    const attnMult = attentionFundraisingMult(s)
+    const offeredVal = val * rand(0.7, 1.25) * climateMult * pitchMult * attnMult
     // Investors chase growth: a company compounding fast gets offered a bigger check.
     const growthAppetite = 1 + clamp(growth, 0, 0.3) * 4
     const amount = Math.round(Math.max(ROUND_FLOORS[target], offeredVal * rand(0.15, 0.25) * growthAppetite) / 10_000) * 10_000
@@ -1627,7 +1634,21 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // means default, initialised here so no migration pass is ever needed (contract §2)
   s.roadmap ??= createDefaultRoadmap()
   s.growth ??= createDefaultGrowth()
+  s.attention ??= createDefaultAttention()
   sanitize(s) // a non-finite number anywhere would spread through every formula below and brick the save
+
+  // Founder attention runs FIRST so a crisis can force this week's budget before the strategic
+  // modifiers are derived below. Strict no-op until the deep allocator is engaged (phase 4).
+  const attnWeek = tickAttention(s, systemDepth(s, 'founderAttention'))
+  if (attnWeek.crisis) {
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: '🔥 Quality crisis demands your attention',
+      body: 'The bug load has become a fire. Operations claimed 3 points of your attention this week — your planned allocation is squeezed until the fire is out.',
+    })
+  }
 
   // --- the real economy turns over: rates, inflation, the market — and they drive the funding climate ---
   const m = s.macro
@@ -1709,6 +1730,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     const mixTrickle =
       s.marketingSpend >= 2_000 && mixAlignment(activeBet.type, s.growth?.performanceShare ?? 1) === 'supports' ? 0.25 : 0
     alignedPts += mixTrickle
+    // founder attention on the bet's affinity areas is aligned execution too (§13.3) — capped
+    // small enough that attention alone can never complete a bet inside its window
+    alignedPts += attentionBetPoints(s, activeBet.type)
     const alignedShips = rmWeek.completed.filter((d) => alignOf(d.id) >= 0.5).length
     const betWeek = tickBigBet(s, alignedPts, alignedShips, betDepth)
     if (betWeek.completed) {
@@ -1776,7 +1800,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // s.pmf it wrote was read by the milestone checks, so the research slider could tip a milestone
   // like `users-100` in one run and not another and quietly change hype for the rest of the game.
   if (!careerOn) {
-    const researchPoints = engPointsP * ar + designPoints * 0.3 + 0.5
+    const researchPoints = (engPointsP * ar + designPoints * 0.3 + 0.5) * smods.researchMult
     s.researchSignal += researchPoints
     s.totalResearch += researchPoints
     // RESEARCH DISCOVERS; BUILDING DELIVERS. Research's own fiction is already in the state:
@@ -1874,9 +1898,12 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // existing paid curve below, immediately) and BRAND (matures ~8 weeks later into a compounding
   // stock — tickBrand). Default share is 1.0 = exactly the old behaviour. Hype keeps reading the
   // FULL budget: both kinds of spend make noise this week; only brand leaves an asset.
-  const perfShare = s.growth?.performanceShare ?? 1
+  // Depth-gated (owner simplification 2026-08-23): quick and arena run the classic 100%-
+  // performance model — no split, no brand stock ticking, nothing to learn before playing.
+  const mixOn = systemDepth(s, 'growthMix') !== 'off'
+  const perfShare = mixOn ? (s.growth?.performanceShare ?? 1) : 1
   const perfSpend = totalGrowthSpend * perfShare
-  tickBrand(s, totalGrowthSpend * (1 - perfShare))
+  if (mixOn) tickBrand(s, totalGrowthSpend * (1 - perfShare))
   const adSpend = totalGrowthSpend
   const hypeGain =
     (Math.sqrt(adSpend / 250) * (1 + marketerPoints / 12) + marketerPoints * 0.35) *
@@ -2043,6 +2070,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     if (s.hype > 60) d += 1
     if (s.pmf > 60) d += 1
     d += cultureCarriers * 0.8 - dramaMagnets * 0.8
+    d += smods.moraleDrift // leadership attention lifts everyone a little; leadership neglect drains
     if (e.trait === 'mercenary' && expenses > revenue && runway < 12) d -= 3
     d += rand(-2, 2)
     e.morale = clamp(e.morale + d, 0, 100)

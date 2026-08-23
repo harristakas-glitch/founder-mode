@@ -55,6 +55,8 @@ import { repositionTo } from './career/tick'
 import { chooseInteractionOption } from './world/interactions'
 import { cancelInitiative, startInitiative } from './strategic/roadmap'
 import { abandonBigBet, chooseBigBet } from './strategic/bigbets'
+import { ATTENTION_AREA_MAX, ATTENTION_AREAS, ATTENTION_BUDGET, createDefaultAttention } from './strategic/attention'
+import type { FounderAttentionArea } from './strategic/types'
 import { systemDepth } from './modes'
 import type { GameConfig } from './modes'
 import type { ExperimentType, PricingStrategy, ProductFocus } from './career/types'
@@ -322,8 +324,37 @@ const REPLAY_ACTIONS = {
     abandonBigBet(g)
   },
 
-  /** Split the marketing budget between performance and brand (growth engine). */
+  /** Set the Founder Focus (attention, light depths) — one area or null to clear. Depth-guarded
+   *  so an arena journal can never smuggle an attention effect in (§ Attention — Off). */
+  attention_focus: (g, p) => {
+    if (systemDepth(g, 'founderAttention') === 'off') return
+    const a = str(p.a) as FounderAttentionArea
+    g.attention = { ...(g.attention ?? createDefaultAttention()), focus: ATTENTION_AREAS.includes(a) ? a : null }
+  },
+
+  /** Set the deep weekly attention allocation. Sanitized hard: only known areas, integer points
+   *  0..AREA_MAX, cumulative total truncated at the budget in canonical area order — a hand-edited
+   *  journal cannot allocate more founder than exists. */
+  attention_allocate: (g, p) => {
+    if (systemDepth(g, 'founderAttention') !== 'deep') return
+    const raw = (p.alloc ?? {}) as Record<string, unknown>
+    const alloc: Partial<Record<FounderAttentionArea, number>> = {}
+    let total = 0
+    for (const area of ATTENTION_AREAS) {
+      const v = Math.min(ATTENTION_AREA_MAX, Math.max(0, Math.round(num(raw[area]))))
+      const take = Math.min(v, ATTENTION_BUDGET - total)
+      if (take > 0) {
+        alloc[area] = take
+        total += take
+      }
+    }
+    g.attention = { ...(g.attention ?? createDefaultAttention()), allocated: alloc }
+  },
+
+  /** Split the marketing budget between performance and brand (growth engine). Depth-guarded:
+   *  in modes where the mix is off, marketing stays 100% performance — the classic model. */
   growth_mix: (g, p) => {
+    if (systemDepth(g, 'growthMix') === 'off') return
     const share = typeof p.v === 'number' && Number.isFinite(p.v) ? Math.min(1, Math.max(0, p.v)) : 1
     g.growth = { ...(g.growth ?? { performanceShare: 1, lastMixWeek: 0, brand: { stock: 0, pending: [] } }), performanceShare: share, lastMixWeek: g.week }
   },

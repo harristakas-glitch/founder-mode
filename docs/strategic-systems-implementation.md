@@ -131,14 +131,25 @@ initiative TYPE that competes for the same slots and is ceilinged by PMF. Defaul
 performance = the pre-expansion game. All effects through the same capped composer; reads in
 docs/balance-strategic.md.
 
+## 6.6 Owner simplification (2026-08-23, same day as phases 2–4)
+
+Roadmap, Big Bets and the growth mix are **SIMULATION-ONLY for now**: quick and arena depths
+went to `off` in modes.ts. The inert-until-engaged architecture made the removal exact — with
+the depths off those modes run the pre-expansion engine byte-for-byte (golden traces prove it),
+the journal handlers no-op, and the screens/panels gate out of the nav. All light/competitive
+content and gating logic remains behind the switches; re-adding a system to a mode is a
+one-word change. Quick keeps the light Founder Focus (attention); arena keeps attention off.
+
 ## 7. Phase plan (brief §25 order; one commit per phase, tests+goldens+probes each)
 
 1. ✅ **Foundation + Roadmap** — depth config, state+migration, effects module, tickStrategic,
    roadmap engine + content pools (6 sectors), Roadmap screen, tests.
 2. ✅ **Big Bets** — model, 6 archetypes, alignment, milestones, synergy (capped), selection +
    program UI, roadmap alignment labels, tests.
-3. ✅ **Growth Engine** (inserted — see §6.5) · then **Founder Attention** — focus (light) / points (deep), crisis forcing, dependency,
-   delegation hooks from executives, tests.
+3. ✅ **Growth Engine** (inserted — see §6.5) · ✅ **Founder Attention** — Focus chip (light,
+   quick), 8-point HQ allocator with needs/shortfalls, crisis forcing (bugs>60 claims 3 ops
+   points), dependency growth/decay, senior-hire delegation cover, recruiting/fundraising/
+   morale/research hooks, big-bet attention affinity, tests.
 4. **Management Capacity** — demand/supply derivation, overload states, executive leverage,
    mgmtDrag replacing coordinationDrag, tests.
 5. **AI Adoption** — areas, maturity ladder, initiatives, quality/resistance, effects,

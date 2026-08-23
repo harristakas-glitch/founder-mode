@@ -11,6 +11,9 @@ export type SystemDepth = 'off' | 'light' | 'deep' | 'competitive'
 export interface SystemDepthConfig {
   roadmap: SystemDepth
   bigBets: SystemDepth
+  /** the performance/brand marketing split (growth engine) — off = 100% performance, exactly
+   *  the classic acquisition model */
+  growthMix: SystemDepth
   aiAdoption: SystemDepth
   strategicCoherence: SystemDepth
   founderAttention: SystemDepth
@@ -102,7 +105,7 @@ export interface BigBetState {
   abandonedWeek?: number
 }
 
-// ---------- founder attention (brief §9) — phase 3 ----------
+// ---------- founder attention (brief §9) — phase 4 ----------
 
 export type FounderAttentionArea =
   | 'product'
@@ -115,10 +118,14 @@ export type FounderAttentionArea =
 export interface AttentionState {
   /** light depths: exactly one focus */
   focus: FounderAttentionArea | null
-  /** deep: weekly point allocation (sums to the budget) */
+  /** deep: weekly point allocation (sums to the budget). PRESENCE of this field = the player
+   *  has engaged the allocator; needs/dependency/crises only exist from that moment on. */
   allocated?: Partial<Record<FounderAttentionArea, number>>
   /** 0–100 per area — grows with sustained direct involvement, relieved by delegation */
   dependency: Partial<Record<FounderAttentionArea, number>>
+  /** crisis forcing (§8.6): points a fire demands this week; valid only while forcedWeek === week */
+  forced?: Partial<Record<FounderAttentionArea, number>>
+  forcedWeek?: number
 }
 
 // ---------- growth engine (CRO + marketing mix brief) ----------

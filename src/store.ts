@@ -432,6 +432,8 @@ interface Store {
   roadmapCancel: (id: string) => void
   betChoose: (t: string) => void
   setGrowthMix: (v: number) => void
+  setAttentionFocus: (a: string | null) => void
+  setAttentionAllocation: (alloc: Record<string, number>) => void
   betAbandon: () => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
@@ -1372,6 +1374,18 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'growth_mix', { v }).state })
+        },
+
+        setAttentionFocus: (a) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'attention_focus', { a }).state })
+        },
+
+        setAttentionAllocation: (alloc) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'attention_allocate', { alloc }).state })
         },
 
         betAbandon: () => {

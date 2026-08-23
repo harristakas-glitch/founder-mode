@@ -50,6 +50,7 @@ export function Roadmap() {
   const roadmapStart = useStore((s) => s.roadmapStart)
   const roadmapCancel = useStore((s) => s.roadmapCancel)
   const depth = systemDepth(game, 'roadmap')
+  if (depth === 'off') return null // stale persisted screen state in a mode without the roadmap
   const rm = game.roadmap ?? createDefaultRoadmap()
   const slots = roadmapSlots(depth)
   const pool = availableInitiatives(game, depth)
@@ -95,7 +96,7 @@ export function Roadmap() {
           {rm.active.map((item) => {
             const def = roadmapDef(game.sector, item.id)
             if (!def) return null
-            const pct = Math.min(100, Math.round((item.progress / effortRequired(def, depth === 'off' ? 'deep' : depth)) * 100))
+            const pct = Math.min(100, Math.round((item.progress / effortRequired(def, depth)) * 100))
             return (
               <div key={item.id} className="rounded-xl border border-line bg-surface p-4 shadow-[var(--elev-1)]">
                 <div className="flex flex-wrap items-start justify-between gap-2">

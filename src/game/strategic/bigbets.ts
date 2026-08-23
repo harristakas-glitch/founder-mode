@@ -8,7 +8,7 @@
 
 import type { GameState } from '../types'
 import { roadmapDef } from './content'
-import type { BigBetType, RoadmapImpact, SystemDepth } from './types'
+import type { BigBetType, FounderAttentionArea, RoadmapImpact, SystemDepth } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -26,6 +26,8 @@ export interface BigBetDef {
   typeAffinity?: Partial<Record<string, number>>
   /** career: the segment this bet is really about (alignment bonus when targeting it) */
   segment?: string
+  /** founder-attention areas whose attention counts as aligned execution (§13.3) */
+  attentionAffinity?: FounderAttentionArea[]
   /** the standing company effect when COMPLETED — parts fed into effects.ts, still capped */
   completionEffect: Partial<{
     buildVelocity: number
@@ -48,6 +50,7 @@ export const BIG_BETS: BigBetDef[] = [
     axisAffinity: { monetization: 1.5, reliability: 1.2, retention: 0.8 },
     typeAffinity: { platform: 0.8, internal_system: 0.5 },
     segment: 'enterprise',
+    attentionAffinity: ['customers', 'recruiting'],
     completionEffect: { arpu: 0.05, acquisitionEff: 0.03 },
     milestones: ['Ship an enterprise-grade initiative', 'Ship a second one', 'Hold retention while it lands'],
   },
@@ -60,6 +63,7 @@ export const BIG_BETS: BigBetDef[] = [
     weeks: { light: 5, deep: 10, competitive: 6 },
     axisAffinity: { acquisition: 1.8, retention: 0.7 },
     typeAffinity: { growth_system: 1.2 },
+    attentionAffinity: ['product', 'customers'],
     completionEffect: { acquisitionEff: 0.07 },
     milestones: ['Ship a growth loop', 'Ship a second loop', 'Sustain the new arrival rate'],
   },
@@ -72,6 +76,7 @@ export const BIG_BETS: BigBetDef[] = [
     weeks: { light: 6, deep: 16, competitive: 9 },
     axisAffinity: { developerVelocity: 1.0, retention: 1.0 },
     typeAffinity: { platform: 2.0 },
+    attentionAffinity: ['product'],
     completionEffect: { churnRelief: 0.05, buildVelocity: 0.04 },
     milestones: ['Ship the first platform surface', 'Ship a second', 'Keep the platform reliable'],
   },
@@ -84,6 +89,7 @@ export const BIG_BETS: BigBetDef[] = [
     weeks: { light: 6, deep: 16, competitive: 8 },
     axisAffinity: { developerVelocity: 1.6, operatingEfficiency: 1.4 },
     typeAffinity: { internal_system: 1.2, infrastructure: 0.8 },
+    attentionAffinity: ['operations', 'leadership'],
     completionEffect: { buildVelocity: 0.06, opex: 0.04 },
     milestones: ['Ship an efficiency system', 'Ship a second', 'Hold quality while the model changes'],
   },
@@ -96,6 +102,7 @@ export const BIG_BETS: BigBetDef[] = [
     weeks: { light: 5, deep: 12, competitive: 7 },
     axisAffinity: { operatingEfficiency: 1.8, monetization: 1.2 },
     typeAffinity: { internal_system: 1.0, technical_debt: 0.6 },
+    attentionAffinity: ['operations'],
     completionEffect: { opex: 0.07, arpu: 0.03 },
     milestones: ['Ship a cost system', 'Lift revenue per customer', 'Hold the lower burn'],
   },
@@ -107,6 +114,7 @@ export const BIG_BETS: BigBetDef[] = [
     tradeoff: 'Management complexity and cash burn; focus fragments.',
     weeks: { light: 6, deep: 14, competitive: 8 },
     axisAffinity: { acquisition: 1.4, operatingEfficiency: 0.8, reliability: 0.6 },
+    attentionAffinity: ['customers', 'operations'],
     completionEffect: { acquisitionEff: 0.05 },
     milestones: ['Ship market-entry capability', 'Ship operational support', 'Sustain growth through entry'],
   },

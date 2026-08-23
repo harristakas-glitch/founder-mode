@@ -301,11 +301,16 @@ console.log('— Overflow —')
 
 console.log('— Action-surface ledger —')
 const EXPECTED_ACTIONS = [
-  'accept_sheet', 'advance', 'allocation', 'bet_abandon', 'bet_choose', 'buy_rival', 'concede_price_war', 'decline_sheet',
+  'accept_sheet', 'advance', 'allocation', 'attention_allocate', 'attention_focus', 'bet_abandon', 'bet_choose',
+  'buy_rival', 'concede_price_war', 'decline_sheet',
   'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'growth_mix', 'incentives', 'interaction',
   'marketing', 'pay_debt', 'pitch', 'pivot', 'pricing', 'proposal_stance', 'raise', 'rally', 'recharge',
   'resolve_choice', 'roadmap_cancel', 'roadmap_start', 'run_experiment', 'secondary', 'sell_founder',
   'sell_treasury', 'send_offer', 'shelve_bet', 'start_bet', 'take_debt', 'target_segment', 'tokenise',
+  // `attention_focus` / `attention_allocate` — Strategic Systems phase 4 (2026-08-23): founder
+  // attention multiplies build/churn/bugs/morale/research/candidates/valuations, so where the
+  // founder spends the week is simulation-mutating and must replay. Both are depth-guarded in
+  // the handler (arena = off), so an arena journal cannot smuggle the effect in.
   // `roadmap_start` / `roadmap_cancel` — Strategic Systems Expansion phase 1 (2026-08-23): the
   // roadmap mutates simulation state (slots, progress, debt, completion effects), so both go
   // through the registry like every other player action. Depth resolves from the run's config.

@@ -22,16 +22,22 @@ import type { SystemDepth, SystemDepthConfig } from './strategic/types'
 // Quick = the strategic call, compressed. Simulation = run the company. Arena = outmanoeuvre
 // other founders (attention and board meetings OFF there by design — arena's turn clock is its
 // attention model, and board meetings interrupt competitive flow).
+//
+// OWNER SIMPLIFICATION (2026-08-23): roadmap, big bets and the growth mix are SIMULATION-ONLY
+// for now. Quick and arena run the classic engine — with these depths 'off' the systems are
+// provably inert (the golden traces are byte-identical), so the removal is exact, not
+// approximate. The light/competitive content and gating all still exist behind these switches;
+// re-adding a system to a mode is a one-word change here.
 const QUICK_SYSTEM_DEPTH: SystemDepthConfig = {
-  roadmap: 'light', bigBets: 'light', aiAdoption: 'light', strategicCoherence: 'light',
+  roadmap: 'off', bigBets: 'off', growthMix: 'off', aiAdoption: 'light', strategicCoherence: 'light',
   founderAttention: 'light', managementCapacity: 'light', livingWorld: 'light', boardMeetings: 'light',
 }
 const SIMULATION_SYSTEM_DEPTH: SystemDepthConfig = {
-  roadmap: 'deep', bigBets: 'deep', aiAdoption: 'deep', strategicCoherence: 'deep',
+  roadmap: 'deep', bigBets: 'deep', growthMix: 'deep', aiAdoption: 'deep', strategicCoherence: 'deep',
   founderAttention: 'deep', managementCapacity: 'deep', livingWorld: 'deep', boardMeetings: 'deep',
 }
 const ARENA_SYSTEM_DEPTH: SystemDepthConfig = {
-  roadmap: 'competitive', bigBets: 'competitive', aiAdoption: 'competitive', strategicCoherence: 'competitive',
+  roadmap: 'off', bigBets: 'off', growthMix: 'off', aiAdoption: 'competitive', strategicCoherence: 'competitive',
   founderAttention: 'off', managementCapacity: 'light', livingWorld: 'competitive', boardMeetings: 'off',
 }
 

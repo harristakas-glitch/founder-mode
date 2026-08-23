@@ -47,3 +47,26 @@ should be strong, not dominant)?
 - CRO: one shipped item ≈ +6% conversion at full PMF, ceilinged by fit (0.4 + 0.6·pmf/100):
   the same item at PMF 15 is worth less than half its PMF-85 value. Cap +18% total.
 - CRO items COMPETE for the same two roadmap slots as features — the §13 tradeoff is the slot.
+
+## Phase 4 — Founder Attention (2026-08-23)
+
+- Reference effect = one Focus: product +6% build, customers −4% churn & ×1.15 research,
+  leadership +1.0 morale/wk, operations −8% bug pressure, recruiting +1 candidate skill,
+  fundraising +5% offered valuations. Deep points scale by sqrt(pts/3) — 3 points ≈ one Focus,
+  6 (the per-area cap) ≈ 1.41×. Budget 8.
+- Neglect (deep, engaged only): −3% build / +6% bugs / −0.6 morale / −2% acq per shortfall
+  point; DOUBLED where founder dependency ≥ 60. A Focus player is never billed for needs.
+- Crisis: bugs > 60 forces operations 3 (counts at half weight — firefighting), squeezing the
+  plan proportionally. Deterministic, no new dice.
+- Dependency: +3/wk at ≥3 points (halved with senior cover), −2/wk at 0 points with cover.
+  12 heavy weeks ≈ 36; delegation unwinds it.
+- Bet trickle: focus on an affinity area = 0.15 aligned pts/wk (≈1.2%/wk deep) — measured 23%
+  progress over 10 weeks vs 0% idle; attention alone can never complete a bet.
+
+## Owner simplification (2026-08-23) — quick & arena revert to classic
+
+Roadmap, big bets and the growth mix OFF outside Simulation (see implementation doc §6.6).
+Balance effect: quick/arena return to their pre-expansion tuning exactly (goldens unchanged);
+the calibration problem the owner reported — quick too EASY, simulation too HARD — is now a
+pure classic-engine tuning question for quick, and a strategic-systems question only in
+Simulation. The full balance campaign (phase 9) measures both.

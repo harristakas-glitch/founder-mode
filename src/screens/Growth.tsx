@@ -167,7 +167,7 @@ export function Growth() {
         {/* ---------- THE GROWTH ENGINE (CRO + marketing mix brief): where the budget GOES ----
             Performance captures demand now; brand creates demand ~8 weeks out and compounds.
             The default is 100% performance — exactly the game before this system existed. */}
-        {systemDepth(game, 'roadmap') !== 'off' && (() => {
+        {systemDepth(game, 'growthMix') !== 'off' && (() => {
           const g = game.growth ?? { performanceShare: 1, lastMixWeek: 0, brand: { stock: 0, pending: [] } }
           const perf = Math.round(g.performanceShare * 100)
           const sig = growthSignals(game)
