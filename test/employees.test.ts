@@ -18,7 +18,7 @@ import {
   ALL_STAGES,
   ATTRIBUTE_BUDGET,
   ATTRIBUTE_IDS,
-  CARD_ATTRIBUTES,
+  cardAttributes,
   STAGE_WEIGHTS,
   TARGET_MIX,
   attributes,
@@ -305,9 +305,22 @@ console.log('\n— Team fit is a recommendation built only from printed numbers 
 
 console.log('\n— The display layer says only what the model knows —')
 {
-  ok(ROLES.every((r) => CARD_ATTRIBUTES[r].length === 3), 'every role puts exactly three attributes on the card')
-  ok(ROLES.every((r) => new Set(CARD_ATTRIBUTES[r]).size === 3), '...with no repeats')
-  ok(ROLES.every((r) => CARD_ATTRIBUTES[r].every((id) => ATTRIBUTE_IDS.includes(id))), '...and all of them are real attributes')
+  ok(ALL_STAGES.every((st) => cardAttributes(st).length === 3), 'every stage puts exactly three attributes on the card')
+  ok(ALL_STAGES.every((st) => new Set(cardAttributes(st)).size === 3), '...with no repeats')
+  ok(ALL_STAGES.every((st) => cardAttributes(st).every((id) => ATTRIBUTE_IDS.includes(id))), '...and all of them are real attributes')
+  // THE ONE THAT MATTERS. The card exists to make a grid scannable, so the three big figures must
+  // be the three the engine actually weights at that stage — otherwise the card ranks candidates
+  // backwards, which is what it did while these were keyed on role (measured: disagreed with the
+  // engine on 47% of Pre-seed pairs, 59% at Series C, where it hid the single heaviest weight).
+  ok(
+    ALL_STAGES.every((st) => {
+      const w = STAGE_WEIGHTS[st]
+      const shown = cardAttributes(st)
+      const hidden = ATTRIBUTE_IDS.filter((id) => !shown.includes(id))
+      return shown.every((s2) => hidden.every((h) => w[s2] >= w[h]))
+    }),
+    'the three shown are the three heaviest at that stage — no hidden attribute outweighs a shown one',
+  )
   ok(peopleMarketSalary('engineer', 5) === marketSalary('engineer', 5), 'the engine re-exports one definition of market salary, not a copy')
   ok(marketSalary('engineer', 0) === ROLE_BASE.engineer, '...and the base rate is still the one the rest of the engine uses')
 

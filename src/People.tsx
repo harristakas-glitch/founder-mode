@@ -22,7 +22,7 @@ import {
   ATTRIBUTE_IDS,
   ATTRIBUTE_META,
   ALL_STAGES,
-  CARD_ATTRIBUTES,
+  cardAttributes,
   ROLE_HELP,
   ROLE_LABEL,
   attributes,
@@ -213,7 +213,10 @@ export function PersonCard({
         <div className="mt-3.5">
           <SectionLabel>Attributes</SectionLabel>
           <div className="mt-2 grid grid-cols-3 gap-3">
-            {CARD_ATTRIBUTES[person.role].map((id) => (
+            {/* Keyed on the STAGE, not the role: the engine weights attributes by stage and has no
+                role term at all, so a role-keyed card printed numbers that ranked candidates
+                backwards. See `cardAttributes`. */}
+            {cardAttributes(ctx.stage).map((id) => (
               <AttrStat key={id} id={id} value={a[id]} />
             ))}
           </div>

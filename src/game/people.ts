@@ -316,7 +316,15 @@ export function burnRisk(p: Pick<Person, 'name' | 'role' | 'trait'>): number {
   // cash-crunch morale penalty 2.3% harsher for everyone than it was before this seam existed.
   // At 47 the mean lands within a tenth of 50 and the seam is genuinely neutral.
   const base =
-    47 + 0.45 * (a.velocity - 50) + 0.3 * (50 - a.adaptability) + 0.25 * (50 - a.culture) + (p.trait ? BURN_TRAIT[p.trait] : 0)
+    47 +
+    0.45 * (a.velocity - 50) +
+    0.3 * (50 - a.adaptability) +
+    0.25 * (50 - a.culture) +
+    // `?? 0`, not `BURN_TRAIT[p.trait]`: a trait string this table does not know — an older save,
+    // a future trait, a hand-edited save — yielded `undefined`, and `undefined` poisons the whole
+    // sum to NaN. `clamp(Math.round(NaN))` is NaN, so the person's burn risk stayed NaN forever
+    // and rendered as "NaN" on the card.
+    (p.trait ? (BURN_TRAIT[p.trait] ?? 0) : 0)
   return clamp(Math.round(base), 0, 100)
 }
 
@@ -463,11 +471,31 @@ export function skillChips(p: Pick<Person, 'name' | 'role' | 'trait'>): string[]
  * changes the decision for that job. The profile shows all five; a card that shows five numbers
  * shows none of them.
  */
-export const CARD_ATTRIBUTES: Record<Role, AttributeId[]> = {
-  engineer: ['velocity', 'quality', 'ownership'],
-  designer: ['quality', 'ownership', 'adaptability'],
-  marketer: ['velocity', 'adaptability', 'culture'],
-  sales: ['velocity', 'ownership', 'culture'],
+/**
+ * The three attributes the card puts in 21px figures — DERIVED FROM `STAGE_WEIGHTS`, never
+ * hand-written, and keyed on the STAGE rather than on the role.
+ *
+ * It used to be a hand-maintained `Record<Role, …>` justified as "the ones whose value actually
+ * changes the decision for that job". That was false, and measurably so: nothing the simulation
+ * does with an attribute is role-dependent. The only path attributes take into the engine is
+ * `stageOutputMultiplier`, which is a dot product against `STAGE_WEIGHTS[stage]` with no role term
+ * anywhere — role decides only which bucket the resulting output is summed into.
+ *
+ * The consequence was a card that ranked candidates BACKWARDS. At Pre-seed the designer card showed
+ * `quality` (stage weight 0.02) and hid `velocity` (0.38); ranking two designers by the three big
+ * figures disagreed with the engine's own ranking on 47% of pairs at Pre-seed and 59% at Series C,
+ * where `culture` is the single heaviest weight (0.42) and EVERY role's card hid it. The measured
+ * worst case printed the better hire's headline number in red and the worse hire's in green.
+ *
+ * Deriving it makes that drift impossible by construction, and it tells the truth the brief is
+ * actually about: what matters changes with the STAGE. Early you are reading velocity and
+ * ownership; from Series A the card switches to culture and quality, because that is the moment
+ * the simulation switches too.
+ */
+export function cardAttributes(stage: Stage): AttributeId[] {
+  const w = STAGE_WEIGHTS[stage] ?? STAGE_WEIGHTS['Pre-seed']
+  // ties break on ATTRIBUTE_IDS order, so the result is stable for a given weight table
+  return [...ATTRIBUTE_IDS].sort((a, b) => w[b] - w[a]).slice(0, 3)
 }
 
 export const ROLE_LABEL: Record<Role, string> = {

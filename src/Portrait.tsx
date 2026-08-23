@@ -231,10 +231,6 @@ export function Portrait({
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.13" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
-        <radialGradient id={id('key')} cx="0.32" cy="0.2" r="0.85">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.07" />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0.2" />
-        </radialGradient>
         <clipPath id={id('headclip')}>
           <path d={headPath(cx, headTop, headBot, w)} />
         </clipPath>
@@ -404,8 +400,13 @@ function backHair(L: Look, cx: number, top: number, bot: number, w: number, grad
     case 'curls':
       return (
         <g fill={fill}>
-          {[-1, -0.55, 0, 0.55, 1].map((t, i) => (
-            <circle key={i} cx={cx + t * (w + 0.5)} cy={top + 11 + Math.abs(t) * 7} r={7.2 - Math.abs(t) * 1} />
+          {/* The outermost pair sat at |t| = 1 with an extra +0.5 of width and a 7.2 radius, so
+              their centres landed ON the skull edge and most of each lobe hung in open air at
+              temple height — two floating balls beside the head. Pulled inside the silhouette
+              (0.86 of the half-width, no bonus) and dropped down the curve, so the crown reads as
+              hair growing from the head at every size. */}
+          {[-0.86, -0.5, 0, 0.5, 0.86].map((t, i) => (
+            <circle key={i} cx={cx + t * w} cy={top + 10 + Math.abs(t) * 9} r={7.2 - Math.abs(t) * 1.6} />
           ))}
         </g>
       )

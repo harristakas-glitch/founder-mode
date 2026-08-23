@@ -14,6 +14,18 @@ import type { TraitId } from './game/types'
  */
 export function useDialog(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null)
+  /**
+   * `onClose` is held in a ref so the effect below can depend on NOTHING.
+   *
+   * It used to depend on `[onClose]`, and every caller passes an inline arrow
+   * (`onClose={() => setOpen(null)}`), which is a fresh function identity on every parent render.
+   * So the effect tore down and re-ran whenever anything above it re-rendered — and its first act
+   * is `focusable()[0]?.focus()`. The result: opening a person profile yanked focus back to the
+   * Close button on every parent tick, so a keyboard user could never reach the content, and the
+   * `previouslyFocused` restore fired on renders rather than on close.
+   */
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null
     const focusable = () =>
@@ -22,7 +34,7 @@ export function useDialog(onClose: () => void) {
       ).filter((el) => el.offsetParent !== null)
     focusable()[0]?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose()
+      if (e.key === 'Escape') return closeRef.current()
       if (e.key !== 'Tab') return
       const items = focusable()
       if (items.length === 0) return
@@ -41,7 +53,8 @@ export function useDialog(onClose: () => void) {
       window.removeEventListener('keydown', onKey)
       previouslyFocused?.focus?.() // hand focus back where the player left it
     }
-  }, [onClose])
+    // mount/unmount only — see closeRef above
+  }, [])
   return ref
 }
 

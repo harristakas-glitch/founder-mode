@@ -85,10 +85,28 @@ export function Team() {
   const recharge = useStore((s) => s.recharge)
   const [open, setOpen] = useState<string | null>(null)
 
-  const ctx: TeamContext = useMemo(
-    () => ({ stage: game.stage, roles: game.employees.map((e) => e.role) }),
-    [game.stage, game.employees],
-  )
+  /**
+   * SCORED WITHOUT THE PERSON IN IT — one card, but two different questions.
+   *
+   * `teamFit` is 30% `roleGap`, and `roleGap` asks "how badly does this stage's team want one MORE
+   * of this role". On Hiring the subject is a candidate, so they are absent from `game.employees`
+   * and the question is the right one. On Team the subject IS in `game.employees`, so the identical
+   * unchanged person was being asked a question that no longer applied — and answered brutally: a
+   * solo engineer at Pre-seed scores roleGap 100 as a candidate and exactly 0 the week they start
+   * (target share 0.6 vs actual 1.0), so the same hire read `69% Strong fit` in green on Monday and
+   * `39% Off-stage` in red on Tuesday. Measured across a real seeded pool: all five candidates lost
+   * 21-30 points and every one of them flipped colour band on being hired.
+   *
+   * Building the context per card, minus that person, asks the counterfactual the number is
+   * actually about: what this roster wants given everyone ELSE on it.
+   */
+  const ctxWithout = useMemo(() => {
+    const roles = game.employees.map((e) => ({ id: e.id, role: e.role }))
+    return (id: string): TeamContext => ({
+      stage: game.stage,
+      roles: roles.filter((r) => r.id !== id).map((r) => r.role),
+    })
+  }, [game.stage, game.employees])
 
   // Sorted by distance to the person's own quit floor, so whoever is closest to handing in their
   // notice is the first card you see rather than whoever you happened to hire first. A copy —
@@ -172,7 +190,7 @@ export function Team() {
                 <PersonCard
                   key={e.id}
                   person={e}
-                  ctx={ctx}
+                  ctx={ctxWithout(e.id)}
                   badges={badgesFor(e)}
                   onOpen={() => setOpen(e.id)}
                   rows={
@@ -230,7 +248,7 @@ export function Team() {
       {openEmployee && (
         <PersonProfile
           person={openEmployee}
-          ctx={ctx}
+          ctx={ctxWithout(openEmployee.id)}
           onClose={() => setOpen(null)}
           status={
             <>
