@@ -16,6 +16,24 @@
 
 import type { SectorId } from './types'
 import type { LivingWorldDepth } from './world/types'
+import type { SystemDepth, SystemDepthConfig } from './strategic/types'
+
+// ---------- Strategic Systems Expansion: depth per mode (master brief v3 §3 table) ----------
+// Quick = the strategic call, compressed. Simulation = run the company. Arena = outmanoeuvre
+// other founders (attention and board meetings OFF there by design — arena's turn clock is its
+// attention model, and board meetings interrupt competitive flow).
+const QUICK_SYSTEM_DEPTH: SystemDepthConfig = {
+  roadmap: 'light', bigBets: 'light', aiAdoption: 'light', strategicCoherence: 'light',
+  founderAttention: 'light', managementCapacity: 'light', livingWorld: 'light', boardMeetings: 'light',
+}
+const SIMULATION_SYSTEM_DEPTH: SystemDepthConfig = {
+  roadmap: 'deep', bigBets: 'deep', aiAdoption: 'deep', strategicCoherence: 'deep',
+  founderAttention: 'deep', managementCapacity: 'deep', livingWorld: 'deep', boardMeetings: 'deep',
+}
+const ARENA_SYSTEM_DEPTH: SystemDepthConfig = {
+  roadmap: 'competitive', bigBets: 'competitive', aiAdoption: 'competitive', strategicCoherence: 'competitive',
+  founderAttention: 'off', managementCapacity: 'light', livingWorld: 'competitive', boardMeetings: 'off',
+}
 
 /**
  * How much of the tokenisation path a mode is meant to offer (brief §113, §55, §57, §58).
@@ -184,6 +202,9 @@ export interface GameRules {
   mode: GameMode
   format: GameFormat
   capabilities: GameCapabilities
+  /** Strategic Systems Expansion (master brief v3 §3): same simulation DNA, different depth
+   *  by mode. Engine code asks depth, NEVER `mode === 'career'`. */
+  systemDepth: SystemDepthConfig
   turnUnit: 'week' | 'month' | 'quarter'
   /** Run ends here. Undefined = open-ended. */
   maxTurns?: number
@@ -288,6 +309,7 @@ export const ALL_CAPABILITY_KEYS = Object.keys(NO_CAPABILITIES) as CapabilityKey
 const QUICK_BASE_RULES: GameRules = {
   mode: 'quick',
   format: 'standard',
+  systemDepth: QUICK_SYSTEM_DEPTH,
   turnUnit: 'week',
   startingCash: 200_000,
   progressionMultiplier: 1,
@@ -339,6 +361,7 @@ const QUICK_BASE_RULES: GameRules = {
 const CAREER_BASE_RULES: GameRules = {
   ...QUICK_BASE_RULES,
   mode: 'career',
+  systemDepth: SIMULATION_SYSTEM_DEPTH,
   simulationDepth: 'deep',
   pmfDepth: 'deep',
   livingWorldDepth: 'deep',
@@ -444,6 +467,7 @@ const CAREER_BASE_RULES: GameRules = {
 const ARENA_BASE_RULES: GameRules = {
   mode: 'arena',
   format: 'standard',
+  systemDepth: ARENA_SYSTEM_DEPTH,
   turnUnit: 'week',
   startingCash: 200_000,
   progressionMultiplier: 1,
@@ -550,6 +574,19 @@ export function defaultCapabilities(mode: GameMode, format: GameFormat = 'standa
 /** The one question the engine and UI should ask. Never `if (mode === 'career')`. */
 export function hasCapability(source: { capabilities?: Partial<GameCapabilities> } | null | undefined, key: CapabilityKey): boolean {
   return source?.capabilities?.[key] ?? false
+}
+
+/**
+ * Strategic-system depth for a running game (master brief v3 §3.4): resolved from the run's
+ * config so engine and UI ask DEPTH, never mode. A legacy save without a config plays as Quick.
+ */
+export function systemDepth(
+  source: { config?: GameConfig | null } | null | undefined,
+  system: keyof SystemDepthConfig,
+): SystemDepth {
+  const cfg = source?.config
+  if (!cfg) return QUICK_SYSTEM_DEPTH[system]
+  return resolveGameRules(cfg).systemDepth[system]
 }
 
 // ---------- presentation ----------

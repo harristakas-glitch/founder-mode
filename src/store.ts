@@ -93,6 +93,7 @@ import {
 
 export type ScreenId =
   | 'dashboard'
+  | 'roadmap'
   | 'team'
   | 'hiring'
   | 'product'
@@ -426,6 +427,8 @@ interface Store {
   recharge: () => void
   doSecondary: () => void
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
+  roadmapStart: (id: string) => void
+  roadmapCancel: (id: string) => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
   /**
@@ -1341,6 +1344,18 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'allocation', { k: key, v: value }).state })
+        },
+
+        roadmapStart: (id) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'roadmap_start', { id }).state })
+        },
+
+        roadmapCancel: (id) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'roadmap_cancel', { id }).state })
         },
 
         setMarketing: (value) => {

@@ -53,6 +53,8 @@ import {
 import { addJournal, experimentDef, segmentDef, startExperiment } from './career/pmf'
 import { repositionTo } from './career/tick'
 import { chooseInteractionOption } from './world/interactions'
+import { cancelInitiative, startInitiative } from './strategic/roadmap'
+import { systemDepth } from './modes'
 import type { GameConfig } from './modes'
 import type { ExperimentType, PricingStrategy, ProductFocus } from './career/types'
 import type { LaunchDraft } from './token/launch'
@@ -298,6 +300,16 @@ const REPLAY_ACTIONS = {
     const k = str(p.k) as (typeof ALLOC_KEYS)[number]
     if (!ALLOC_KEYS.includes(k)) return
     g.allocation = { ...g.allocation, [k]: num(p.v) }
+  },
+
+  /** Start (or queue) a roadmap initiative — Strategic Systems Expansion phase 1. Depth comes
+   *  from the run's own config, so a replayed quick run sees the quick pool. */
+  roadmap_start: (g, p) => {
+    startInitiative(g, str(p.id), systemDepth(g, 'roadmap'))
+  },
+
+  roadmap_cancel: (g, p) => {
+    cancelInitiative(g, str(p.id))
   },
 
   marketing: (g, p) => {

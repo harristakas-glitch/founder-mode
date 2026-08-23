@@ -12,10 +12,13 @@ import {
   sectorById,
 } from './data'
 import { ARC_DEFS } from './arcs'
-import { hasCapability, resolveGameRules, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
+import { hasCapability, resolveGameRules, systemDepth, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
+import { strategicModifiers } from './strategic/effects'
+import { accrueAmbientDebt, tickRoadmap } from './strategic/roadmap'
+import { createDefaultRoadmap } from './strategic/types'
 import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
 // Rival aggression routes "who and why" through the same living-world record every other company
 // fact uses, rather than inventing a parallel one. `stableCastId` is the replay-stable id the
@@ -289,6 +292,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     candidates: [],
     offersOut: [],
     pendingHires: [],
+    roadmap: createDefaultRoadmap(),
     rivals: (opts.aiRivals ?? rules.capabilities.aiRivals) ? makeRivals(sec.tam, companyName) : [],
     climate: rand(-0.3, 0.5),
     inbox: [],
@@ -892,7 +896,10 @@ export function unitEconomics(s: GameState): { cac: number; ltv: number; payback
 }
 
 export function weeklyBurn(s: GameState): number {
-  return weeklyPayroll(s) + weeklyOffice(s) + weeklyInfra(s) + s.marketingSpend + weeklyInterest(s)
+  // strategic opex relief applies to infra+office only — payroll and the marketing dial are
+  // the player's own levers, and discounting them would fight the choices they express
+  const opex = strategicModifiers(s).opexMult
+  return weeklyPayroll(s) + (weeklyOffice(s) + weeklyInfra(s)) * opex + s.marketingSpend + weeklyInterest(s)
 }
 
 export function runwayWeeks(s: GameState): number {
@@ -1612,6 +1619,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const sector = sectorById(s.sector)
   s.week += 1
   s.flash = null
+  // Strategic Systems Expansion: a save written before the expansion has no slices — absent
+  // means default, initialised here so no migration pass is ever needed (contract §2)
+  s.roadmap ??= createDefaultRoadmap()
   sanitize(s) // a non-finite number anywhere would spread through every formula below and brick the save
 
   // --- the real economy turns over: rates, inflation, the market — and they drive the funding climate ---
@@ -1641,6 +1651,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // Without this, headcount has no cost but payroll, and "hire everyone you can afford" is
   // strictly optimal forever — which removes the central question of how big to get.
   const coordination = coordinationDrag(s)
+  // Strategic Systems Expansion: ONE derivation per week, read wherever a strategic multiplier
+  // applies (docs/strategic-systems-implementation.md §3–§4). All caps live in effects.ts.
+  const smods = strategicModifiers(s)
   // SEAM 1 of the people model (src/game/people.ts). The ONE place five attributes reach the
   // weekly simulation. `stageOutputMultiplier` averages exactly 1.0 across the population at every
   // stage — attributes are a constant-sum shape, so the expected output of a randomly drawn team
@@ -1666,6 +1679,25 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     s.employees.filter((e) => e.role === 'designer').reduce((a, e) => a + eff(e), 0) * rallyMult * careerDrag
   const craftsmen = s.employees.filter((e) => e.trait === 'craftsman').length
   const careerOn = can(s, 'detailedPMF') && !!s.career
+
+  // --- the product roadmap draws its share BEFORE the sliders divide the rest -------------
+  // The tradeoff is physical: while initiatives build, allocation output visibly drops
+  // (brief §6.7/§6.9). Completions announce themselves in the inbox like any other event.
+  const rmDepth = systemDepth(s, 'roadmap')
+  const rmWeek =
+    rmDepth !== 'off' ? tickRoadmap(s, engPoints, smods.buildVelocity, rmDepth) : { draw: 0, completed: [] }
+  for (const def of rmWeek.completed) {
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: `🏗 Shipped: ${def.name}`,
+      body: `${def.blurb} The roadmap slot is free — the next priority starts now.`,
+    })
+    s.flash = `🏗 Shipped: ${def.name}`
+  }
+  const engPointsP = engPoints * (1 - rmWeek.draw) * smods.buildVelocity
+
   const a = s.allocation
   const hasBet = s.ventures.some((v) => !v.launched)
   const betAlloc = hasBet ? a.bet : 0
@@ -1681,13 +1713,14 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const ar = researchAlloc / allocSum
   const abet = betAlloc / allocSum
 
-  const featureGain = engPoints * af * 0.32 * (1 - s.features / 130)
+  const featureGain = engPointsP * af * 0.32 * (1 - s.features / 130)
   s.features = clamp(s.features + featureGain, 0, 100)
-  s.quality = clamp(s.quality + (engPoints * aq * 0.28 + designPoints * 0.22) * (1 - s.quality / 120), 0, 100)
+  s.quality = clamp(s.quality + (engPointsP * aq * 0.28 + designPoints * 0.22) * (1 - s.quality / 120), 0, 100)
   // Shipping fast creates bugs; bug-fixing focus burns them down; big codebases decay a little on their own.
   // Craftsmen scrub proportionally: decisive when the codebase is a mess, negligible when it's
   // clean. A flat rate let one hire permanently solo the bug mechanic.
-  s.bugs = clamp(s.bugs + featureGain * 0.55 + s.features * 0.012 - engPoints * ab * 0.5 - craftsmen * s.bugs * 0.04, 0, 100)
+  s.bugs = clamp(s.bugs + featureGain * 0.55 * smods.bugPressure + s.features * 0.012 - engPointsP * ab * 0.5 - craftsmen * s.bugs * 0.04, 0, 100)
+  accrueAmbientDebt(s, featureGain)
 
   // --- product-market fit: build the right thing, not just more things ---
   // Skipped entirely in Career, where tickCareerPMF derives PMF from segments and cohorts and
@@ -1695,7 +1728,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // s.pmf it wrote was read by the milestone checks, so the research slider could tip a milestone
   // like `users-100` in one run and not another and quietly change hype for the rest of the game.
   if (!careerOn) {
-    const researchPoints = engPoints * ar + designPoints * 0.3 + 0.5
+    const researchPoints = engPointsP * ar + designPoints * 0.3 + 0.5
     s.researchSignal += researchPoints
     s.totalResearch += researchPoints
     // RESEARCH DISCOVERS; BUILDING DELIVERS. Research's own fiction is already in the state:
@@ -1820,7 +1853,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const pmfAcq = 0.35 + (0.65 * s.pmf) / 100
   // paid acquisition: big budgets buy users directly, at a CAC that worsens with saturation and channel fatigue
   const paid = paidUsersPerWeek(s, adSpend) * room * rand(0.8, 1.2)
-  const acquired = sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2) + paid
+  const acquired = (sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2) + paid) * smods.acquisitionEff
   const wordOfMouth = s.users * sector.viral * Math.pow(s.pmf / 100, 1.5) * (1 + s.hype / 150) * room * rand(0.8, 1.2)
   // The craft terms are real money now: quality's full range is worth 0.83 of churn and bugs' is
   // worth 1.11, against PMF's 2.2 — they used to be 0.4 and 0.5, weak enough that the measured
@@ -1830,7 +1863,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // before — the CENTRE is preserved, the spread between a polished product and a neglected one
   // roughly doubles.
   const churnMult = clamp(2.5 - s.pmf / 45 - s.quality / 120 + s.bugs / 90, 0.3, 3)
-  const churned = s.users * sector.churn * churnMult
+  const churned = s.users * sector.churn * churnMult * smods.churnRelief
   s.users = Math.max(0, Math.round(s.users + acquired + wordOfMouth - churned))
   } // end Quick Play / Arena acquisition path
 
@@ -1845,7 +1878,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // ONE rate, both modes. See `arpuPerCustomer` in types.ts: the Quick Play rate was calibrated
   // for a scale the mode does not reach, which bankrupted E-commerce, Fintech and Social at every
   // setting a player could choose (docs/balance-deep-dive.md finding 1).
-  const arpu = sector.arpuPerCustomer
+  const arpu = sector.arpuPerCustomer * smods.arpuMult
   // A running hit piece bleeds hype and reputation weekly; a price war cuts revenue on both sides.
   const pvp = tickPvpEffects(s)
   if (pvp.prDamage) applyEffects(s, pvp.prDamage)

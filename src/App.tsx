@@ -34,6 +34,7 @@ import { Dashboard } from './screens/Dashboard'
 import { Team } from './screens/Team'
 import { Hiring } from './screens/Hiring'
 import { Product } from './screens/Product'
+import { Roadmap } from './screens/Roadmap'
 import { Growth } from './screens/Growth'
 import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
@@ -102,6 +103,7 @@ const AREAS: {
   { id: 'growth', label: 'Growth', icon: TrendingUp, screens: [{ id: 'growth', label: 'Growth' }] },
   { id: 'product', label: 'Product', icon: Package, screens: [
     { id: 'product', label: 'Build' },
+    { id: 'roadmap', label: 'Roadmap' },
     { id: 'discovery', label: 'Discovery', careerOnly: true },
     { id: 'cohorts', label: 'Cohorts', careerOnly: true },
   ] },
@@ -905,6 +907,7 @@ export default function App() {
             {screen === 'team' && <Team />}
             {screen === 'hiring' && <Hiring />}
             {screen === 'product' && <Product />}
+            {screen === 'roadmap' && <Roadmap />}
             {screen === 'growth' && <Growth />}
             {screen === 'market' && <Market />}
             {screen === 'finance' && <Finance />}

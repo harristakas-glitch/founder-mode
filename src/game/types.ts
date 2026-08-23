@@ -333,6 +333,15 @@ export interface GameState {
    */
   world?: import('./world/types').LivingWorldState
   /**
+   * Strategic Systems Expansion (master brief v3). Optional slices — absent means default, so
+   * no save is ever invalidated; the engine initialises them lazily. Depth comes from the run's
+   * config via `systemDepth()`, never from mode checks.
+   */
+  roadmap?: import('./strategic/types').RoadmapState
+  bigBet?: import('./strategic/types').BigBetState | null
+  attention?: import('./strategic/types').AttentionState
+  aiAdoption?: import('./strategic/types').AIAdoptionState
+  /**
    * Tokenisation / ICO. Absent on every save written before it existed and on every run that
    * never tokenised — and its ABSENCE is what `capitalPath: 'institutional'` means, which is why
    * a legacy save needs no migration write at all (ICO brief §74). There is deliberately no
