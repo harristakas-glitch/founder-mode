@@ -661,3 +661,56 @@ Two follow-ups, in order of value:
    distance; scale it also by destination-segment evidence confidence — "you knew where you were
    going." Thematic, small surface area, gives evidence a price in weeks. Balance-probe before and
    after; must not make serial repositioning free.
+
+---
+
+## 10. Added 2026-08-22 — the Team & Employee review's residue
+
+A 21-agent adversarial review of the feature branch before merge, every finding re-verified by
+execution against the committed tree. **Two criticals were fixed in `0e533fd`** (the roster card
+gave the same person the opposite verdict the week they started; the three headline attribute
+figures were keyed on role while the engine weights by stage, so they ranked candidates backwards
+on ~half of pairs). Four smaller confirmed bugs went with them: a permanent `NaN` burn risk on an
+unknown trait, a duplicate SVG gradient id, a focus trap that re-fired on every parent render, and
+the `curls` hairstyle drawing outside the skull.
+
+What is listed below is **confirmed and unfixed**. None of it makes the card lie about a
+comparison — that was the bar the two criticals failed — but each is real.
+
+### 10.1 The roster card's "contributing X pts/wk" omits the biggest per-person term
+It reports skill × trait × stage fit and drops `moraleFactor`, which the engine applies and which
+moves the number more than anything else on the card. A miserable employee and a thriving one can
+print the same contribution. Either fold the company-level factors in, or rename the figure to
+what it actually is (a capacity, not a contribution).
+
+### 10.2 `stageFit`'s "population mean exactly 50" invariant is violated
+The docstring claims it, `stageOutputMultiplier`'s neutrality argument depends on it, and it is not
+true — which produces a small systematic bias rather than the intended tiebreaker. Related:
+**seam 1's documented magnitude is ~4× its real one**, and the test guarding it cannot catch the
+gap. Fix the claims or fix the numbers, but they must agree; measure with `npm run bots -- all`.
+
+### 10.3 Neither determinism guard can see the three engine seams — proved by mutation
+The golden traces run 12 weeks with no employees, so the seams are never reached, and the
+employee suite does not exercise them either. **A mutation to any of the three passes everything.**
+The seams are currently correct; nothing would tell us if that changed. Needs a trace or an
+assertion that actually hires someone.
+
+### 10.4 A pre-branch in-flight save loads, but its replay verification flips to `unverifiable_desync`
+Expected for any engine change and consistent with how earlier ones behaved, but it should be a
+deliberate, recorded decision rather than a surprise — and it is worth knowing before the
+leaderboard carries proofs that predate it.
+
+### 10.5 Four hiring/roster badges are unreachable
+Some mathematically, all empirically across 50,000 generated candidates. Dead UI that reads as a
+live signal. Either move the thresholds into reach or delete them.
+
+### 10.6 Work location is derived and immutable, but a 1:1 still offers to change it
+The interaction implies a lever that no longer exists.
+
+### 10.7 Smaller, recorded for completeness
+"Runway after" ignores the desk cost the same card advertises · the `chip` portrait frame is
+generated, documented and used by nothing (it is what the circular-avatar work will want) · the
+sort comment claims a deadline-first ordering the code does not implement · two candidates sharing
+a name and role are the same person, face and CV included · the founder is the one row on the
+roster with no portrait · seam 2 never executes in the balance harness, so its neutrality is
+asserted but never exercised.
