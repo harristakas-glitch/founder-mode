@@ -42,7 +42,7 @@ import { attentionRegister } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers } from '../game/engine'
 import { MODE_META, hasCapability } from '../game/modes'
 import { BoardMeeting, Commitments, FounderBriefing, TeamOpinions, careerActive } from '../CareerUI'
-import { myId as myOnlineId } from '../net/online'
+import { MarketLeaderboard } from './Market'
 import { DecisionLens } from '../onboarding/DecisionLens'
 import { useStore, type ScreenId } from '../store'
 import type { Message } from '../game/types'
@@ -477,40 +477,14 @@ function InboxPanel() {
 
 // ---------------------------------------------------------------------------------------------
 
-function ArenaStandings() {
+
+
+function ArenaHqBoard() {
   const online = useStore((s) => s.online)
-  const game = useStore((s) => s.game)!
   if (!online || online.phase !== 'playing') return null
-  const everyone = online.players.filter((p) => p.playing !== false)
-  if (everyone.length < 2) return null
-  const total = Math.max(1, everyone.reduce((n, p) => n + Math.max(0, p.users), 0))
-  const rows = [...everyone].sort((a, b) => b.users - a.users)
-  const myRank = rows.findIndex((p) => p.id === myOnlineId()) + 1
   return (
-    <div className={`${PANEL} mb-4 p-4`}>
-      <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-[17px] font-extrabold tracking-tight">Standings</h2>
-        <span className="text-[11.5px] text-mut tnum">
-          you are #{myRank} of {rows.length} · week {game.week}
-        </span>
-      </div>
-      <div className="space-y-1">
-        {rows.map((p, i) => {
-          const me = p.id === myOnlineId()
-          return (
-            <div key={p.id} className={`flex items-baseline gap-3 rounded-[8px] px-2.5 py-1.5 text-[13px] ${me ? 'border border-line2 bg-surface3 font-bold' : ''}`}>
-              <span className="w-4 shrink-0 text-right text-[11px] text-mut tnum">{i + 1}</span>
-              <span className="min-w-0 flex-1 truncate">
-                {p.over ? '☠️ ' : ''}
-                {p.company}
-                {me ? ' (you)' : ''}
-              </span>
-              <span className="text-[11.5px] text-mut tnum">{Math.round((Math.max(0, p.users) / total) * 100)}% share</span>
-              <span className="w-16 shrink-0 text-right tnum">{num(Math.max(0, p.users))}</span>
-            </div>
-          )
-        })}
-      </div>
+    <div className="mb-4">
+      <MarketLeaderboard />
     </div>
   )
 }
@@ -556,7 +530,9 @@ export function Dashboard() {
         </div>
       </div>
 
-      <ArenaStandings />
+      {/* Arena: the FULL leaderboard on the HQ (owner call) — the same open-book board the
+          Market screen carries, not a share-only summary. One component, two homes. */}
+      <ArenaHqBoard />
 
       {/* the two-column core — Inbox dominant (~60%), the interpretation stack beside it.
           Mobile flattens to one column, CEO Brief first (brief §25/§27): the wrappers are

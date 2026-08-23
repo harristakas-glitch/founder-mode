@@ -54,6 +54,7 @@ import { addJournal, experimentDef, segmentDef, startExperiment } from './career
 import { repositionTo } from './career/tick'
 import { chooseInteractionOption } from './world/interactions'
 import { cancelInitiative, startInitiative } from './strategic/roadmap'
+import { abandonBigBet, chooseBigBet } from './strategic/bigbets'
 import { systemDepth } from './modes'
 import type { GameConfig } from './modes'
 import type { ExperimentType, PricingStrategy, ProductFocus } from './career/types'
@@ -310,6 +311,21 @@ const REPLAY_ACTIONS = {
 
   roadmap_cancel: (g, p) => {
     cancelInitiative(g, str(p.id))
+  },
+
+  /** Commit the company to a Big Bet — phase 2. One active at a time; the guard is in the fn. */
+  bet_choose: (g, p) => {
+    chooseBigBet(g, str(p.t) as never, systemDepth(g, 'bigBets'))
+  },
+
+  bet_abandon: (g) => {
+    abandonBigBet(g)
+  },
+
+  /** Split the marketing budget between performance and brand (growth engine). */
+  growth_mix: (g, p) => {
+    const share = typeof p.v === 'number' && Number.isFinite(p.v) ? Math.min(1, Math.max(0, p.v)) : 1
+    g.growth = { ...(g.growth ?? { performanceShare: 1, lastMixWeek: 0, brand: { stock: 0, pending: [] } }), performanceShare: share, lastMixWeek: g.week }
   },
 
   marketing: (g, p) => {

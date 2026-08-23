@@ -94,6 +94,7 @@ import {
 export type ScreenId =
   | 'dashboard'
   | 'roadmap'
+  | 'strategy'
   | 'team'
   | 'hiring'
   | 'product'
@@ -429,6 +430,9 @@ interface Store {
   setAllocation: (key: 'features' | 'quality' | 'bugs' | 'research' | 'bet', value: number) => void
   roadmapStart: (id: string) => void
   roadmapCancel: (id: string) => void
+  betChoose: (t: string) => void
+  setGrowthMix: (v: number) => void
+  betAbandon: () => void
   setMarketing: (value: number) => void
   resolveChoice: (messageId: string, choiceIndex: number) => void
   /**
@@ -1356,6 +1360,25 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'roadmap_cancel', { id }).state })
+        },
+
+        betChoose: (t) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'bet_choose', { t }).state })
+        },
+
+        setGrowthMix: (v) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'growth_mix', { v }).state })
+        },
+
+        betAbandon: () => {
+          const g = get().game
+          if (!g) return
+          if (!confirm('Abandon the Big Bet? Sunk effort stays sunk, and the company takes a few weeks to refocus.')) return
+          set({ game: applyJournaled(g, 'bet_abandon').state })
         },
 
         setMarketing: (value) => {

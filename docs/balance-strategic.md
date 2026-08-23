@@ -27,3 +27,23 @@ diminishing (0.06/extra part) and caps.
 **Open questions for the balance campaign (phase 9):** does the 22% draw make slot-2 usage
 rational in quick play? Is enterprise-item + enterprise-target the dominant career line (it
 should be strong, not dominant)?
+
+## Phase 2 — Big Bets (2026-08-23)
+
+- Progress ONLY from aligned execution: a light bet with one aligned quick item running at full
+  pace completes inside its window; declaring with no work = 0% forever (tested).
+- Synergy: +10% progress on aligned roadmap items while a bet is active — one bounded part.
+- Completion effects per archetype: 3–7% standing parts (arpu/acq/opex/build/churn), all through
+  the capped composer. Abandonment: −5% build velocity for 3 weeks, then clean.
+- The funded-mix trickle (0.25 aligned pts/wk) requires marketingSpend ≥ $2k — an untouched
+  default budget is not a growth motion.
+
+## Phase 3 — Growth Engine: CRO + marketing mix (2026-08-23)
+
+- Default mix = 100% performance = the pre-expansion game exactly; goldens unchanged again.
+- Brand: $3k/wk ≈ 1 stock point at zero, lag 8 weeks, decay 1.5%/wk (2.5% under 25). Sustained
+  $5k/wk plateaus ~53 ("Strong") — measured over 200 weeks, no runaway. Effects at stock 100:
+  acquisition +12%, CAC −12%, arpu +3% — all capped.
+- CRO: one shipped item ≈ +6% conversion at full PMF, ceilinged by fit (0.4 + 0.6·pmf/100):
+  the same item at PMF 15 is worth less than half its PMF-85 value. Cap +18% total.
+- CRO items COMPETE for the same two roadmap slots as features — the §13 tradeoff is the slot.

@@ -74,6 +74,8 @@ export interface RoadmapWeekResult {
   /** fraction of eng output the roadmap consumed this week (0–ROADMAP_MAX_DRAW) */
   draw: number
   completed: RoadmapInitiativeDef[]
+  /** effort points landed per item id this week (pre-synergy) — the bet tick reads it */
+  pointsByItem: Record<string, number>
 }
 
 /**
@@ -82,15 +84,24 @@ export interface RoadmapWeekResult {
  * (quality/bugs are stocks the engine already owns); standing effects derive from `done` via
  * strategicModifiers, so completing an item permanently changes the company.
  */
-export function tickRoadmap(s: GameState, engPoints: number, buildVelocity: number, depth: Exclude<SystemDepth, 'off'> = 'deep'): RoadmapWeekResult {
+export function tickRoadmap(
+  s: GameState,
+  engPoints: number,
+  buildVelocity: number,
+  depth: Exclude<SystemDepth, 'off'> = 'deep',
+  /** per-item synergy from an aligned Big Bet (bounded at the caller, §7.10) */
+  boostFor?: (id: string) => number,
+): RoadmapWeekResult {
   const rm = s.roadmap
-  if (!rm || rm.active.length === 0) return { draw: 0, completed: [] }
+  if (!rm || rm.active.length === 0) return { draw: 0, completed: [], pointsByItem: {} }
 
   const draw = Math.min(ROADMAP_MAX_DRAW, rm.active.length * ROADMAP_DRAW_PER_ITEM)
   const perItem = (engPoints * draw * buildVelocity) / rm.active.length
   const completed: RoadmapInitiativeDef[] = []
+  const pointsByItem: Record<string, number> = {}
+  for (const item of rm.active) pointsByItem[item.id] = perItem
 
-  for (const item of rm.active) item.progress += perItem
+  for (const item of rm.active) item.progress += perItem * (1 + (boostFor?.(item.id) ?? 0))
   // completions resolve after all progress lands, in slot order — deterministic
   for (const item of [...rm.active]) {
     const def = roadmapDef(s.sector, item.id)
@@ -111,7 +122,7 @@ export function tickRoadmap(s: GameState, engPoints: number, buildVelocity: numb
     const next = rm.queued.shift()
     if (next && !rm.active.some((a) => a.id === next)) rm.active.push({ id: next, startedWeek: s.week, progress: 0 })
   }
-  return { draw, completed }
+  return { draw, completed, pointsByItem }
 }
 
 /** Fast feature shipping quietly accrues debt even outside the roadmap: the existing bug

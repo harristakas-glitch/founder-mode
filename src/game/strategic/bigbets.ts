@@ -8,7 +8,7 @@
 
 import type { GameState } from '../types'
 import { roadmapDef } from './content'
-import type { BigBetState, BigBetType, RoadmapImpact, SystemDepth } from './types'
+import type { BigBetType, RoadmapImpact, SystemDepth } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 

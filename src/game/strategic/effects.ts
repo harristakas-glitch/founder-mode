@@ -13,6 +13,9 @@
 //   arpuMult          0…+12% (roadmap monetization items)
 //   churnRelief       0…15%  (roadmap retention items — multiplies churn DOWN, never up)
 //   bugPressure       ±25%   (tech debt raises it, reliability items lower it)
+//   conversionLift    0…+18% (CRO items, PMF-CEILINGED — optimisation cannot outrun weak fit)
+//   brand → acquisitionEff (≤+12% at stock 100) and arpu (≤+3%); its CAC relief lives in
+//   estimatedCac via brandCacRelief so paid economics improve at ONE choke point
 
 import type { GameState } from '../types'
 import { roadmapDef } from './content'
@@ -41,6 +44,8 @@ export interface StrategicModifiers {
   churnRelief: number
   /** multiplies bug generation (tech debt pushes up, reliability work pushes down) */
   bugPressure: number
+  /** multiplies the revenue conversion term — CRO work, ceilinged by PMF (growth brief §9) */
+  conversionLift: number
 }
 
 /** Impact points → bonus size. One point of impact ≈ 2% on its axis, before diminishing. */
@@ -61,6 +66,7 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
   const arpu: number[] = []
   const churn: number[] = []
   const bugs: number[] = []
+  const cro: number[] = []
 
   if (rm) {
     const target = s.career?.primaryTargetSegmentId
@@ -76,6 +82,12 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
       if (i.monetization) arpu.push(i.monetization * PT * 0.75 * rel)
       if (i.retention) churn.push(i.retention * PT * 0.9 * rel)
       if (i.developerVelocity) build.push(i.developerVelocity * PT)
+      // CRO items lift conversion, CEILINGED BY FIT: the same shipped work is worth less than
+      // half as much at PMF 20 as at PMF 80 — conversion tricks cannot manufacture fit.
+      if (def.type === 'cro') {
+        const ceiling = 0.4 + 0.6 * (s.pmf / 100)
+        cro.push(3 * PT * rel * ceiling)
+      }
       if (i.operatingEfficiency) opex.push(i.operatingEfficiency * PT * 0.75)
       if (i.reliability) bugs.push(-i.reliability * PT * 1.5)
     }
@@ -84,6 +96,14 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
       build.push(-0.15 * (rm.debt / 100))
       bugs.push(0.25 * (rm.debt / 100))
     }
+  }
+
+  // BRAND (growth engine): the compounding stock pulls organic demand and buys a little trust.
+  // Its third effect — cheaper paid acquisition — is applied inside estimatedCac, not here.
+  const brandStock = s.growth?.brand.stock ?? 0
+  if (brandStock > 0) {
+    acq.push((brandStock / 100) * 0.12)
+    arpu.push((brandStock / 100) * 0.03)
   }
 
   // a COMPLETED Big Bet leaves its archetype's standing effect (bigbets.ts, still capped here)
@@ -105,5 +125,6 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
     arpuMult: clamp(composeBonus(arpu, 0.12), 1, 1.12),
     churnRelief: clamp(composeBonus(churn.map((p) => -p), 0.15), 0.85, 1),
     bugPressure: composeBonus(bugs, 0.25),
+    conversionLift: clamp(composeBonus(cro, 0.18), 1, 1.18),
   }
 }

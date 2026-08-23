@@ -301,8 +301,8 @@ console.log('— Overflow —')
 
 console.log('— Action-surface ledger —')
 const EXPECTED_ACTIONS = [
-  'accept_sheet', 'advance', 'allocation', 'buy_rival', 'concede_price_war', 'decline_sheet',
-  'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'incentives', 'interaction',
+  'accept_sheet', 'advance', 'allocation', 'bet_abandon', 'bet_choose', 'buy_rival', 'concede_price_war', 'decline_sheet',
+  'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'growth_mix', 'incentives', 'interaction',
   'marketing', 'pay_debt', 'pitch', 'pivot', 'pricing', 'proposal_stance', 'raise', 'rally', 'recharge',
   'resolve_choice', 'roadmap_cancel', 'roadmap_start', 'run_experiment', 'secondary', 'sell_founder',
   'sell_treasury', 'send_offer', 'shelve_bet', 'start_bet', 'take_debt', 'target_segment', 'tokenise',

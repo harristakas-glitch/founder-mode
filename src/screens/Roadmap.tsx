@@ -9,6 +9,7 @@ import { roadmapDef } from '../game/strategic/content'
 import { availableInitiatives, effortRequired, ROADMAP_DRAW_PER_ITEM, roadmapSlots } from '../game/strategic/roadmap'
 import { createDefaultRoadmap, type RoadmapInitiativeDef } from '../game/strategic/types'
 import { segmentDef } from '../game/career/pmf'
+import { alignmentWord, bigBetDef, initiativeAlignment } from '../game/strategic/bigbets'
 import { useStore } from '../store'
 
 const fitWord = (m: number) => (m >= 1.3 ? 'Very high' : m >= 0.95 ? 'High' : m >= 0.55 ? 'Medium' : 'Low')
@@ -53,6 +54,7 @@ export function Roadmap() {
   const slots = roadmapSlots(depth)
   const pool = availableInitiatives(game, depth)
   const target = game.career?.primaryTargetSegmentId
+  const activeBet = game.bigBet?.status === 'active' ? game.bigBet : null
   const targetName = target ? segmentDef(game.sector, target).name : null
 
   const debtWord = rm.debt >= 70 ? 'Critical' : rm.debt >= 45 ? 'High' : rm.debt >= 20 ? 'Rising' : 'Low'
@@ -169,6 +171,16 @@ export function Roadmap() {
                 <div className="mt-2.5">
                   <ImpactChips def={def} />
                 </div>
+                {activeBet && (() => {
+                  const w = alignmentWord(initiativeAlignment(activeBet.type, game.sector, def.id))
+                  const label = { strongly_supports: 'Strongly supports', supports: 'Supports', neutral: 'Neutral to', competes: 'Competes with' }[w]
+                  const tone = w === 'strongly_supports' ? 'text-good' : w === 'supports' ? 'text-good/80' : w === 'neutral' ? 'text-mut' : 'text-warn'
+                  return (
+                    <div className={`mt-2 text-[11px] font-semibold ${tone}`}>
+                      {label} {bigBetDef(activeBet.type).name}
+                    </div>
+                  )
+                })()}
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <span className="text-[11.5px]">
                     <span className="text-mut">{targetName ? 'Target fit ' : 'Market fit '}</span>

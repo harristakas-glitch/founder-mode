@@ -4,11 +4,15 @@ import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
 import { effectiveChurn, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek, unitEconomics } from '../game/engine'
 import { useStore } from '../store'
+import { systemDepth } from '../game/modes'
+import { growthSignals, mixAlignment } from '../game/strategic/growth'
+import { bigBetDef } from '../game/strategic/bigbets'
 import { openGuide } from '../onboarding/guide'
 
 export function Growth() {
   const game = useStore((s) => s.game)!
   const setMarketing = useStore((s) => s.setMarketing)
+  const setGrowthMix = useStore((s) => s.setGrowthMix)
   const sector = sectorById(game.sector)
   const marketers = game.employees.filter((e) => e.role === 'marketer').length
   // One formula, one home: `effectiveChurn` in src/game/engine.ts — the same call the attention
@@ -159,6 +163,65 @@ export function Growth() {
             </div>
           </Disclosure>
         </Panel>
+
+        {/* ---------- THE GROWTH ENGINE (CRO + marketing mix brief): where the budget GOES ----
+            Performance captures demand now; brand creates demand ~8 weeks out and compounds.
+            The default is 100% performance — exactly the game before this system existed. */}
+        {systemDepth(game, 'roadmap') !== 'off' && (() => {
+          const g = game.growth ?? { performanceShare: 1, lastMixWeek: 0, brand: { stock: 0, pending: [] } }
+          const perf = Math.round(g.performanceShare * 100)
+          const sig = growthSignals(game)
+          const bet = game.bigBet?.status === 'active' ? game.bigBet : null
+          const align = bet ? mixAlignment(bet.type, g.performanceShare) : null
+          return (
+            <Panel title="Where the budget goes" className="mt-3.5">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="min-w-[220px] flex-1">
+                  <div className="mb-1 flex justify-between text-[12.5px]">
+                    <span className="font-semibold">Performance <span className="text-mut tnum">{perf}%</span></span>
+                    <span className="font-semibold">Brand <span className="text-mut tnum">{100 - perf}%</span></span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={perf}
+                    aria-label="Share of budget to performance marketing"
+                    style={{ ['--fill' as string]: `${perf}%` }}
+                    onChange={(e) => setGrowthMix(Number(e.target.value) / 100)}
+                  />
+                  <div className="mt-1 text-[11.5px] leading-snug text-mut">
+                    Performance buys users this week at the CAC above. Brand matures in ~8 weeks into an asset: organic pull,
+                    cheaper paid acquisition, a little pricing trust — and it decays if you stop feeding it.
+                  </div>
+                </div>
+                <div className="shrink-0 space-y-1.5 text-[12.5px] md:w-[230px]">
+                  <div>
+                    <span className="text-mut">Brand </span>
+                    <b className={g.brand.stock >= 25 ? 'text-good' : g.brand.stock >= 8 ? 'text-ink' : 'text-mut'}>{sig.brand}</b>
+                    {sig.brandMaturesIn !== null && (
+                      <span className="ml-1.5 text-[11px] text-mut tnum">next campaign lands in {sig.brandMaturesIn}w</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-mut">Paid channels </span>
+                    <b className={sig.saturation === 'Crowded' ? 'text-warn' : 'text-ink'}>{sig.saturation}</b>
+                  </div>
+                  {align && (
+                    <div className={align === 'supports' ? 'text-good' : align === 'competes' ? 'text-warn' : 'text-mut'}>
+                      {align === 'supports' ? 'Supports' : align === 'competes' ? 'Competes with' : 'Neutral to'} {bigBetDef(bet!.type).name}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2.5 border-t border-line/50 pt-2 text-[12.5px]">
+                <span className="text-[10px] font-bold tracking-wider text-mut uppercase">Constraint </span>
+                <span className="text-mut">{sig.constraint}</span>
+              </div>
+            </Panel>
+          )
+        })()}
       </div>
     </div>
   )

@@ -35,6 +35,7 @@ import { Team } from './screens/Team'
 import { Hiring } from './screens/Hiring'
 import { Product } from './screens/Product'
 import { Roadmap } from './screens/Roadmap'
+import { Strategy } from './screens/Strategy'
 import { Growth } from './screens/Growth'
 import { Market } from './screens/Market'
 import { Finance } from './screens/Finance'
@@ -94,7 +95,10 @@ const AREAS: {
 }[] = [
   // One screen: the stream merged into the HQ (owner call, after FM26's Portal — messages are a
   // third of the overview, not a separate page). The 'inbox' ScreenId survives as an alias.
-  { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [{ id: 'dashboard', label: 'This week' }] },
+  { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [
+    { id: 'dashboard', label: 'This week' },
+    { id: 'strategy', label: 'Strategy' },
+  ] },
   // Screen order within an area is PRIORITY: the first entry is where the area lands. Owner
   // re-cut, 2026-08-23: GROWTH — the budget slider you touch most weeks — is its own top-level
   // area now instead of hiding as the first tab of "Market"; and MARKET means the outside
@@ -908,6 +912,7 @@ export default function App() {
             {screen === 'hiring' && <Hiring />}
             {screen === 'product' && <Product />}
             {screen === 'roadmap' && <Roadmap />}
+            {screen === 'strategy' && <Strategy />}
             {screen === 'growth' && <Growth />}
             {screen === 'market' && <Market />}
             {screen === 'finance' && <Finance />}

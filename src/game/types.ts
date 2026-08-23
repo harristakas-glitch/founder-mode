@@ -341,6 +341,7 @@ export interface GameState {
   bigBet?: import('./strategic/types').BigBetState | null
   attention?: import('./strategic/types').AttentionState
   aiAdoption?: import('./strategic/types').AIAdoptionState
+  growth?: import('./strategic/types').GrowthState
   /**
    * Tokenisation / ICO. Absent on every save written before it existed and on every run that
    * never tokenised — and its ABSENCE is what `capitalPath: 'institutional'` means, which is why

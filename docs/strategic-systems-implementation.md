@@ -121,13 +121,23 @@ recorded in the commit message. A golden change without a probe read is a red fl
 | Coherence | qualitative signals only (CEO Brief line, character lines) | hidden |
 | Board meeting | full-screen locked event (`activeMajorEvent`), career only | deep |
 
+## 6.5 Addendum — the Growth Engine (second owner brief, same day)
+
+A ninth system arrived mid-expansion: "Growth Engine — CRO + Marketing Mix". Integrated as
+phase 3 (it builds directly on the roadmap): the marketing budget splits into PERFORMANCE
+(feeds the existing paid-acquisition curve immediately) and BRAND (a lagged, compounding,
+decaying stock: organic pull + cheaper CAC + a little pricing trust); CRO is a roadmap
+initiative TYPE that competes for the same slots and is ceilinged by PMF. Default mix 100%
+performance = the pre-expansion game. All effects through the same capped composer; reads in
+docs/balance-strategic.md.
+
 ## 7. Phase plan (brief §25 order; one commit per phase, tests+goldens+probes each)
 
-1. **Foundation + Roadmap** — depth config, state+migration, effects module, tickStrategic,
+1. ✅ **Foundation + Roadmap** — depth config, state+migration, effects module, tickStrategic,
    roadmap engine + content pools (6 sectors), Roadmap screen, tests.
-2. **Big Bets** — model, 6 archetypes, alignment, milestones, synergy (capped), selection +
+2. ✅ **Big Bets** — model, 6 archetypes, alignment, milestones, synergy (capped), selection +
    program UI, roadmap alignment labels, tests.
-3. **Founder Attention** — focus (light) / points (deep), crisis forcing, dependency,
+3. ✅ **Growth Engine** (inserted — see §6.5) · then **Founder Attention** — focus (light) / points (deep), crisis forcing, dependency,
    delegation hooks from executives, tests.
 4. **Management Capacity** — demand/supply derivation, overload states, executive leverage,
    mgmtDrag replacing coordinationDrag, tests.

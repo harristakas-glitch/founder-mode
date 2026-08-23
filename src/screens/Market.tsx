@@ -68,14 +68,15 @@ function StanceBadge({ stance }: { stance: RivalStance }) {
   )
 }
 
-export function Market() {
+/**
+ * The full leaderboard — every founder/rival with stage, open-book economics (arena), users and
+ * estimated valuation. Extracted from Market so the Arena HQ can carry the SAME board (owner,
+ * 2026-08-23: "in the arena have the full leaderboard in the HQ"): one component, two homes.
+ */
+export function MarketLeaderboard() {
   const game = useStore((s) => s.game)!
   const online = useStore((s) => s.online)
-  const sector = sectorById(game.sector)
   const netPlayers = online?.players ?? []
-  const otherPlayersUsers = netPlayers.reduce((a, p) => (p.id === myId() || p.over ? a : a + p.users), 0)
-  const saturation = marketSaturation(game, otherPlayersUsers)
-
   const playerRows = online
     ? netPlayers.map((p) => {
         const isMe = p.id === myId()
@@ -134,43 +135,8 @@ export function Market() {
       stance: r.alive ? rivalStance(game, r) : null,
     })),
   ].sort((a, b) => Number(b.alive) - Number(a.alive) || b.users - a.users)
-
   return (
-    <div>
-      <h1 className="text-[28px] font-bold tracking-tight">Market</h1>
-      <div className="mb-4 text-[13px] text-mut">
-        {sector.name} · addressable market ≈ {num(effectiveTam(game))} users (and growing) · winners take most
-      </div>
-
-      {/* A running price war takes a cut of revenue every single week and has a deadline attached,
-          so it opens the screen. It used to sit under the leaderboard, three panels down, which is
-          below the fold on every phone — the one thing here with a clock was the last thing seen. */}
-      {hasCapability(game, 'pvpActions') || hasCapability(game, 'rivalAggression') ? <PriceWarBanner /> : null}
-
-      <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
-        <StatCard
-          label="Market saturation"
-          icon={<Gauge size={13} />}
-          value={pct(saturation, 1)}
-          delta={saturation > 0.5 ? 'Growth gets harder as the market fills up' : 'Plenty of greenfield left'}
-          tone={saturation > 0.5 ? 'down' : 'up'}
-        />
-        <StatCard
-          label="Your market share"
-          icon={<UsersIcon size={13} />}
-          value={pct(
-            game.users /
-              Math.max(1, game.users + otherPlayersUsers + game.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)),
-            1,
-          )}
-          delta={online ? 'share of captured users, vs the other founders' : 'share of captured users, vs living rivals'}
-        />
-      </div>
-
-      {/* The segment table used to be rendered here too, under a second title. Discovery owns it —
-          it is the scoreboard that screen is built around, and one table cannot be two screens'. */}
-
-      <div className="mt-3.5">
+    <div className="mt-3.5">
         <Panel title="Leaderboard">
           {/* One list at every width — the same trade Hiring made. The desktop table kept valuation
               and posture in the far-right columns, which is exactly where a phone's horizontal
@@ -239,6 +205,54 @@ export function Market() {
           </Disclosure>
         </Panel>
       </div>
+  )
+}
+
+export function Market() {
+  const game = useStore((s) => s.game)!
+  const online = useStore((s) => s.online)
+  const sector = sectorById(game.sector)
+  const netPlayers = online?.players ?? []
+  const otherPlayersUsers = netPlayers.reduce((a, p) => (p.id === myId() || p.over ? a : a + p.users), 0)
+  const saturation = marketSaturation(game, otherPlayersUsers)
+
+
+  return (
+    <div>
+      <h1 className="text-[28px] font-bold tracking-tight">Market</h1>
+      <div className="mb-4 text-[13px] text-mut">
+        {sector.name} · addressable market ≈ {num(effectiveTam(game))} users (and growing) · winners take most
+      </div>
+
+      {/* A running price war takes a cut of revenue every single week and has a deadline attached,
+          so it opens the screen. It used to sit under the leaderboard, three panels down, which is
+          below the fold on every phone — the one thing here with a clock was the last thing seen. */}
+      {hasCapability(game, 'pvpActions') || hasCapability(game, 'rivalAggression') ? <PriceWarBanner /> : null}
+
+      <div className="mt-3.5 grid gap-3.5 md:grid-cols-2">
+        <StatCard
+          label="Market saturation"
+          icon={<Gauge size={13} />}
+          value={pct(saturation, 1)}
+          delta={saturation > 0.5 ? 'Growth gets harder as the market fills up' : 'Plenty of greenfield left'}
+          tone={saturation > 0.5 ? 'down' : 'up'}
+        />
+        <StatCard
+          label="Your market share"
+          icon={<UsersIcon size={13} />}
+          value={pct(
+            game.users /
+              Math.max(1, game.users + otherPlayersUsers + game.rivals.filter((r) => r.alive).reduce((a, r) => a + r.users, 0)),
+            1,
+          )}
+          delta={online ? 'share of captured users, vs the other founders' : 'share of captured users, vs living rivals'}
+        />
+      </div>
+
+      {/* The segment table used to be rendered here too, under a second title. Discovery owns it —
+          it is the scoreboard that screen is built around, and one table cannot be two screens'. */}
+
+      <MarketLeaderboard />
 
       {online && hasCapability(game, 'pvpActions') && <PvpOps />}
       {!online && hasCapability(game, 'rivalAggression') && <RivalOps />}

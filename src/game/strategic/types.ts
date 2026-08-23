@@ -23,6 +23,7 @@ export interface SystemDepthConfig {
 
 export type RoadmapInitiativeType =
   | 'customer_feature'
+  | 'cro'
   | 'platform'
   | 'infrastructure'
   | 'internal_system'
@@ -58,6 +59,8 @@ export interface RoadmapInitiativeDef {
   quickPool?: boolean
   /** only offered from Series A on */
   lateStage?: boolean
+  /** CRO items: the funnel stage they optimise (presentation + future funnel work) */
+  targetStage?: 'landing' | 'signup' | 'activation' | 'monetisation'
 }
 
 export interface ActiveRoadmapItem {
@@ -116,6 +119,21 @@ export interface AttentionState {
   allocated?: Partial<Record<FounderAttentionArea, number>>
   /** 0–100 per area — grows with sustained direct involvement, relieved by delegation */
   dependency: Partial<Record<FounderAttentionArea, number>>
+}
+
+// ---------- growth engine (CRO + marketing mix brief) ----------
+
+export interface GrowthState {
+  /** 0–1 of the marketing budget going to PERFORMANCE; the rest builds BRAND. Default 1 —
+   *  exactly the pre-expansion behaviour, so the system is inert until touched. */
+  performanceShare: number
+  lastMixWeek: number
+  brand: {
+    /** 0–100, the compounding demand-creation asset */
+    stock: number
+    /** investments in flight — they mature BRAND_LAG_WEEKS after the spend */
+    pending: { week: number; gain: number }[]
+  }
 }
 
 // ---------- AI adoption (brief §5) — phase 5 ----------

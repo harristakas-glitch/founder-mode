@@ -18,6 +18,8 @@ import { createCareerPMF, migrateCareerSave } from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
 import { strategicModifiers } from './strategic/effects'
 import { accrueAmbientDebt, tickRoadmap } from './strategic/roadmap'
+import { BIG_BET_SYNERGY, bigBetDef, initiativeAlignment, tickBigBet } from './strategic/bigbets'
+import { brandCacRelief, createDefaultGrowth, mixAlignment, tickBrand } from './strategic/growth'
 import { createDefaultRoadmap } from './strategic/types'
 import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
 // Rival aggression routes "who and why" through the same living-world record every other company
@@ -293,6 +295,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     offersOut: [],
     pendingHires: [],
     roadmap: createDefaultRoadmap(),
+    growth: createDefaultGrowth(),
     rivals: (opts.aiRivals ?? rules.capabilities.aiRivals) ? makeRivals(sec.tam, companyName) : [],
     climate: rand(-0.3, 0.5),
     inbox: [],
@@ -856,7 +859,8 @@ export function marketingMax(s: GameState): number {
 // Paid acquisition price per user: rises as the market saturates and falls with PMF.
 export function estimatedCac(s: GameState): number {
   const sector = sectorById(s.sector)
-  return Math.max(1, (sector.perUserVal / 4) * (1 + 2 * marketSaturation(s)) * (1.7 - s.pmf / 100))
+  // a known brand makes every paid dollar work harder (growth brief §27) — bounded at 12%
+  return Math.max(1, (sector.perUserVal / 4) * (1 + 2 * marketSaturation(s)) * (1.7 - s.pmf / 100) * (1 - brandCacRelief(s)))
 }
 
 // Channels saturate: every extra dollar past ~$150k/wk buys fewer users than the last.
@@ -1622,6 +1626,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // Strategic Systems Expansion: a save written before the expansion has no slices — absent
   // means default, initialised here so no migration pass is ever needed (contract §2)
   s.roadmap ??= createDefaultRoadmap()
+  s.growth ??= createDefaultGrowth()
   sanitize(s) // a non-finite number anywhere would spread through every formula below and brick the save
 
   // --- the real economy turns over: rates, inflation, the market — and they drive the funding climate ---
@@ -1684,8 +1689,51 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // The tradeoff is physical: while initiatives build, allocation output visibly drops
   // (brief §6.7/§6.9). Completions announce themselves in the inbox like any other event.
   const rmDepth = systemDepth(s, 'roadmap')
+  const betDepth = systemDepth(s, 'bigBets')
+  const activeBet = betDepth !== 'off' && s.bigBet?.status === 'active' ? s.bigBet : null
+  const alignOf = (id: string) => (activeBet ? initiativeAlignment(activeBet.type, s.sector, id) : 0)
   const rmWeek =
-    rmDepth !== 'off' ? tickRoadmap(s, engPoints, smods.buildVelocity, rmDepth) : { draw: 0, completed: [] }
+    rmDepth !== 'off'
+      ? tickRoadmap(s, engPoints, smods.buildVelocity, rmDepth, activeBet ? (id) => (alignOf(id) >= 0.5 ? BIG_BET_SYNERGY : 0) : undefined)
+      : { draw: 0, completed: [], pointsByItem: {} as Record<string, number> }
+  // the Big Bet advances ONLY on aligned execution (§7.11): points landed on aligned items,
+  // weighted by alignment, plus milestone jumps when an aligned item ships
+  if (activeBet && betDepth !== 'off') {
+    let alignedPts = 0
+    for (const [id, pts] of Object.entries(rmWeek.pointsByItem)) {
+      const a = alignOf(id)
+      if (a >= 0.5) alignedPts += pts * a
+    }
+    // the mix only counts as aligned EXECUTION when there is real money behind it — an
+    // untouched default budget is not a growth motion (test: declaring alone advances nothing)
+    const mixTrickle =
+      s.marketingSpend >= 2_000 && mixAlignment(activeBet.type, s.growth?.performanceShare ?? 1) === 'supports' ? 0.25 : 0
+    alignedPts += mixTrickle
+    const alignedShips = rmWeek.completed.filter((d) => alignOf(d.id) >= 0.5).length
+    const betWeek = tickBigBet(s, alignedPts, alignedShips, betDepth)
+    if (betWeek.completed) {
+      const def = bigBetDef(activeBet.type)
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `🎯 Big Bet complete: ${def.name}`,
+        body: `The company you set out to become, you became. ${def.blurb} Its edge is permanent now.`,
+      })
+      s.flash = `🎯 Big Bet complete: ${def.name}`
+      applyEffects(s, { morale: 6 })
+    } else if (betWeek.failed) {
+      const def = bigBetDef(activeBet.type)
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `🎯 Big Bet failed: ${def.name}`,
+        body: 'Twice the window has passed and the execution never followed the declaration. The company noticed.',
+      })
+      applyEffects(s, { morale: -5 })
+    }
+  }
   for (const def of rmWeek.completed) {
     s.inbox.unshift({
       id: uid(),
@@ -1821,7 +1869,15 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       (s.founderKind === 'business' ? 4 : 1) * energyMult) *
     rallyMult
   s.hype *= 0.92
-  const adSpend = Math.max(0, s.marketingSpend) // sqrt of a negative budget would NaN the whole run
+  const totalGrowthSpend = Math.max(0, s.marketingSpend) // sqrt of a negative budget would NaN the whole run
+  // GROWTH ENGINE (CRO + marketing mix brief): the budget splits into PERFORMANCE (feeds the
+  // existing paid curve below, immediately) and BRAND (matures ~8 weeks later into a compounding
+  // stock — tickBrand). Default share is 1.0 = exactly the old behaviour. Hype keeps reading the
+  // FULL budget: both kinds of spend make noise this week; only brand leaves an asset.
+  const perfShare = s.growth?.performanceShare ?? 1
+  const perfSpend = totalGrowthSpend * perfShare
+  tickBrand(s, totalGrowthSpend * (1 - perfShare))
+  const adSpend = totalGrowthSpend
   const hypeGain =
     (Math.sqrt(adSpend / 250) * (1 + marketerPoints / 12) + marketerPoints * 0.35) *
     (1 - s.hype / 115) *
@@ -1837,7 +1893,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     const r = tickCareerPMF(s, {
       sectorTam: sector.tam,
       sectorAcqBase: sector.acqBase,
-      marketingSpend: Math.max(0, adSpend - careerMarketingDrain(s)),
+      marketingSpend: Math.max(0, perfSpend - careerMarketingDrain(s)),
       rng: () => RNG.next(),
       uid,
     })
@@ -1852,7 +1908,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   room = Math.pow(1 - saturation, 1.2)
   const pmfAcq = 0.35 + (0.65 * s.pmf) / 100
   // paid acquisition: big budgets buy users directly, at a CAC that worsens with saturation and channel fatigue
-  const paid = paidUsersPerWeek(s, adSpend) * room * rand(0.8, 1.2)
+  const paid = paidUsersPerWeek(s, perfSpend) * room * rand(0.8, 1.2)
   const acquired = (sector.acqBase * Math.pow(s.hype / 10, 1.25) * (0.4 + pScore / 130) * pmfAcq * room * rand(0.8, 1.2) + paid) * smods.acquisitionEff
   const wordOfMouth = s.users * sector.viral * Math.pow(s.pmf / 100, 1.5) * (1 + s.hype / 150) * room * rand(0.8, 1.2)
   // The craft terms are real money now: quality's full range is worth 0.83 of churn and bugs' is
@@ -1872,7 +1928,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // 0.18, up from 0.08: the one direct revenue edge a business founder has, and at 8% it was
   // decoration against a 3.3x engineering-point gap.
   const salesBoost = 1 + salesPoints / 40 + (s.founderKind === 'business' ? 0.18 : 0)
-  const conversion = 0.25 + (0.75 * s.pmf) / 100
+  const conversion = (0.25 + (0.75 * s.pmf) / 100) * smods.conversionLift
   // Ad-driven models only monetize at scale: CPMs and fill rates climb with network size.
   const scaleBoost = s.sector === 'social' ? 1 + Math.log10(Math.max(10, s.users)) / 3 : 1
   // ONE rate, both modes. See `arpuPerCustomer` in types.ts: the Quick Play rate was calibrated
