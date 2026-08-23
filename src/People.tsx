@@ -151,55 +151,68 @@ export function PersonCard({
 
   return (
     <div className={`${CARD} flex h-full flex-col overflow-hidden transition-colors duration-[120ms] hover:border-line2`}>
-      <div className="relative">
-        {/* 5:4 is the mock's framing. On a phone the card is the full column width, and 5:4 of
-            375px is 300px of face before the player reaches a single number — so the crop widens
-            to 3:2 there. The portrait is one drawing behind `preserveAspectRatio="slice"`, which
-            is exactly what lets the frame change without redrawing anything. */}
+      {/* LinkedIn / X grammar: a small circular avatar beside the name, not a full-width banner.
+          Owner call, 2026-08-22 — a smaller circle makes the card shorter (the whole card now fits
+          a phone viewport, so the person and the CTA are on screen together) and reads the way
+          every professional network trained people to read a person. The head-centred `chip` crop
+          fills the circle; the shortlist star rides the avatar's corner. */}
+      <div className="flex items-start gap-3 p-4 pb-0">
         <button
           onClick={onOpen}
           aria-label={`Open ${person.name}'s profile`}
-          className="block aspect-[3/2] w-full cursor-pointer sm:aspect-[5/4]"
+          className="relative shrink-0 cursor-pointer"
         >
-          <Portrait person={person} frame="card" className="h-full w-full" />
+          <span className="block h-14 w-14 overflow-hidden rounded-full border border-line2/70 bg-black/30">
+            <Portrait person={person} frame="chip" className="h-full w-full" />
+          </span>
+          {onShortlist && (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-pressed={!!shortlisted}
+              aria-label={shortlisted ? `Remove ${person.name} from your shortlist` : `Shortlist ${person.name}`}
+              title={shortlisted ? 'On your shortlist' : 'Shortlist to compare'}
+              onClick={(e) => {
+                e.stopPropagation()
+                onShortlist()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onShortlist()
+                }
+              }}
+              className={`absolute -right-1 -bottom-1 flex h-6 w-6 items-center justify-center rounded-full border transition-colors ${
+                shortlisted ? 'border-warn/60 bg-warn/25 text-warn' : 'border-line2/70 bg-surface text-mut hover:text-ink'
+              }`}
+            >
+              <Star size={12} fill={shortlisted ? 'currentColor' : 'none'} aria-hidden />
+            </span>
+          )}
         </button>
-        {badges.length > 0 && (
-          <div className="pointer-events-none absolute top-2.5 left-2.5 flex flex-wrap gap-1.5">
-            {badges.map((b) => (
-              <span
-                key={b.text}
-                className={`rounded-full border px-2 py-[3px] text-[10px] font-bold backdrop-blur-[2px] ${BADGE_CLS[b.tone]}`}
-              >
-                {b.text}
-              </span>
-            ))}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <button onClick={onOpen} className="min-w-0 cursor-pointer text-left">
+              <div className="truncate text-[16px] font-bold leading-tight hover:underline">{person.name}</div>
+              <div className="truncate text-[12.5px] text-mut">{title(person)}</div>
+            </button>
+            <TraitChip trait={person.trait} />
           </div>
-        )}
-        {onShortlist && (
-          <button
-            onClick={onShortlist}
-            aria-pressed={!!shortlisted}
-            aria-label={shortlisted ? `Remove ${person.name} from your shortlist` : `Shortlist ${person.name}`}
-            title={shortlisted ? 'On your shortlist' : 'Shortlist to compare'}
-            className={`absolute top-2 right-2 flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur-[2px] transition-colors ${
-              shortlisted ? 'border-warn/60 bg-warn/25 text-warn' : 'border-line2/70 bg-black/35 text-mut hover:text-ink'
-            }`}
-          >
-            <Star size={15} fill={shortlisted ? 'currentColor' : 'none'} aria-hidden />
-          </button>
-        )}
+          {badges.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {badges.map((b) => (
+                <span key={b.text} className={`rounded-full border px-2 py-[2px] text-[10px] font-bold ${BADGE_CLS[b.tone]}`}>
+                  {b.text}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-[17px] font-bold leading-tight">{person.name}</div>
-            <div className="truncate text-[12.5px] text-mut">{title(person)}</div>
-          </div>
-          <TraitChip trait={person.trait} />
-        </div>
-
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-mut">
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-2.5">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-mut">
           <span className="inline-flex items-center gap-1">
             <Briefcase size={11} aria-hidden /> <span className="tnum">{yearsExperience(person)}</span> yrs
           </span>
@@ -332,9 +345,9 @@ export function PersonProfile({
         </button>
 
         <div className="sm:flex">
-          <div className="w-full shrink-0 sm:w-[240px]">
-            <div className="aspect-[5/4] w-full sm:aspect-square">
-              <Portrait person={person} frame="card" className="h-full w-full" />
+          <div className="flex w-full shrink-0 justify-center sm:w-[240px] sm:justify-start">
+            <div className="h-40 w-40 overflow-hidden rounded-full border border-line2/70 bg-black/30 sm:h-52 sm:w-52">
+              <Portrait person={person} frame="chip" className="h-full w-full" />
             </div>
           </div>
           <div className="min-w-0 flex-1 p-5">
