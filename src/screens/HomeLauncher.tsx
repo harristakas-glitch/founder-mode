@@ -75,7 +75,7 @@ function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
 export function FounderHistoryStrip({ createdAt }: { createdAt?: string }) {
   const h = founderHistory(createdAt)
   return (
-    <div className="home-in grid grid-cols-2 rounded-2xl border border-line/70 bg-[rgba(9,12,20,0.72)] backdrop-blur-[6px] sm:flex sm:items-stretch" style={vars({ '--d': '160ms' })}>
+    <div className="home-in grid grid-cols-2 rounded-2xl border border-line2/70 bg-[rgba(14,18,28,0.72)] backdrop-blur-[6px] sm:flex sm:items-stretch" style={vars({ '--d': '160ms' })}>
       <Stat icon={User} label="Founder since" value={h.since} />
       <span className="hidden w-px shrink-0 self-stretch bg-line/60 sm:block" aria-hidden />
       <Stat icon={Gem} label="Best result" value={h.best} />
@@ -91,44 +91,55 @@ export function FounderHistoryStrip({ createdAt }: { createdAt?: string }) {
 
 export function HomeHero({ name, children }: { name: string | null; children?: ReactNode }) {
   return (
-    <section className="relative -mx-4 overflow-hidden sm:-mx-6 md:-mx-8">
+    <section className="relative -mx-4 overflow-hidden bg-bg2 sm:-mx-6 md:-mx-8">
       {/* The image is a SECTION, not a card: it bleeds to the page edges and fades into the page
           background at the bottom, so it never reads as a picture pasted onto a screen. */}
       <img
         src={heroImg}
         alt=""
         aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_center]"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[68%_center] md:object-[62%_48%]"
         fetchPriority="high"
       />
-      {/* left-to-right for text legibility, then bottom fade into the page */}
+      {/* One deliberate overlay system, nothing stacked on top of it (V2 §23/§24): left third dark
+          enough for text, the office readable from the midpoint, the right edge nearly untouched —
+          then a short bottom fade into the page. */}
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden
         style={{
           background:
-            'linear-gradient(90deg, rgba(5,7,12,0.98) 0%, rgba(5,7,12,0.90) 34%, rgba(5,7,12,0.55) 62%, rgba(5,7,12,0.12) 100%)',
+            'linear-gradient(90deg, rgba(5,7,12,0.96) 0%, rgba(5,7,12,0.84) 30%, rgba(5,7,12,0.46) 56%, rgba(5,7,12,0.16) 78%, rgba(5,7,12,0.05) 100%)',
         }}
       />
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-20 md:h-32"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-14 md:h-24"
         aria-hidden
         style={{ background: 'linear-gradient(to bottom, rgba(5,7,12,0) 0%, var(--color-bg) 100%)' }}
       />
 
-      <div className="relative px-4 pt-10 pb-7 sm:px-6 md:px-8 md:pt-16 md:pb-10">
-        <div className="home-in" style={vars({ '--d': '0ms' })}>
+      <div className="home-hero-content relative px-4 sm:px-6 md:px-8">
+        {/* The hero owns the page chrome: brand top-left, profile top-right (overlaid by the
+            parent — see NewGame), so Home needs no separate header row (V2 §7/§9). */}
+        <div className="home-in flex items-center gap-2.5 text-[11.5px] font-extrabold tracking-[0.3em] text-ink uppercase" style={vars({ '--d': '0ms' })}>
+          <span className="h-2.5 w-2.5 rounded-[3px] bg-[var(--ha)]" aria-hidden />
+          Founder Mode
+        </div>
+
+        <div className="home-in home-hero-welcome" style={vars({ '--d': '40ms' })}>
           <div className="text-[10.5px] font-bold tracking-[0.28em] uppercase">
             <span className="text-[var(--ha)]">Welcome back</span>
             {name && <span className="text-ink">, {name}</span>}
           </div>
-          <h1 className="mt-3.5 text-[clamp(30px,6vw,64px)] leading-[1.02] font-extrabold tracking-[-0.02em]">
+          {/* font-size lives in .home-hero-title — the fold is a HEIGHT problem, and the height
+              breakpoints that shrink it live with it in index.css */}
+          <h1 className="home-hero-title mt-2.5 leading-[1.02] font-extrabold tracking-[-0.02em]">
             <span className="block">Build companies.</span>
             <span className="block">Make decisions.</span>
             <span className="block text-[var(--ha)]">Live with the consequences.</span>
           </h1>
         </div>
-        <div className="mt-6 max-w-[720px] md:mt-9">{children}</div>
+        <div className="home-hero-stats max-w-[720px]">{children}</div>
       </div>
     </section>
   )
@@ -176,7 +187,7 @@ export const HOME_MODES: (icons: Record<GameMode, LucideIcon>) => HomeModeCard[]
     icon: icons.career,
     meta: [
       { icon: Gem, label: 'Deep simulation' },
-      { icon: User, label: 'Solo / multi-session' },
+      { icon: CalendarDays, label: 'Multi-session' },
     ],
     badge: { text: 'Early access', tone: 'warn' },
     cta: 'Start Simulation',
@@ -204,22 +215,26 @@ export function ModeCard({ card, onPick, delay }: { card: HomeModeCard; onPick: 
       onClick={onPick}
       // No mode is pre-selected (brief §21/§22): the concept art highlighted Simulation, but there
       // is no recommendation system behind it, so all three rest at equal prominence.
-      className="home-in group relative flex min-h-[330px] flex-col overflow-hidden md:min-h-[400px] rounded-2xl border border-line/80 bg-surface text-left shadow-[0_20px_50px_rgba(0,0,0,0.35)] transition-[transform,border-color] duration-[180ms] hover:-translate-y-0.5 hover:border-[var(--ha)]/70 focus-visible:border-[var(--ha)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      // min-height lives in .home-mode-card (index.css) — the height breakpoints own it.
+      className="home-in home-mode-card group relative flex flex-col overflow-hidden rounded-2xl border border-line2/70 bg-surface text-left shadow-[0_20px_50px_rgba(0,0,0,0.35)] transition-[transform,border-color] duration-[180ms] hover:-translate-y-0.5 hover:border-[var(--ha)]/70 focus-visible:border-[var(--ha)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       style={vars({ '--d': `${delay}ms` })}
     >
+      {/* Cinematic mode artwork, not background texture (V2 §28–§30): a touch of base brightness
+          because the photographs were shot at midnight, a touch more on hover. */}
       <img
         src={card.image}
         alt=""
         aria-hidden
         loading="lazy"
-        className="pointer-events-none absolute inset-x-0 top-0 h-[52%] w-full object-cover md:h-[58%] transition-[filter] duration-[180ms] group-hover:brightness-110"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[52%] w-full object-cover md:h-[56%] brightness-[1.08] transition-[filter] duration-[180ms] group-hover:brightness-[1.16]"
       />
+      {/* dark where the copy is, open where the photograph is */}
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden
         style={{
           background:
-            'linear-gradient(to bottom, rgba(5,7,12,0.10) 0%, rgba(5,7,12,0.45) 30%, rgba(5,7,12,0.92) 58%, rgba(5,7,12,0.99) 100%)',
+            'linear-gradient(to bottom, rgba(5,7,12,0.04) 0%, rgba(5,7,12,0.18) 34%, rgba(5,7,12,0.80) 62%, rgba(5,7,12,0.97) 100%)',
         }}
       />
 
@@ -242,7 +257,7 @@ export function ModeCard({ card, onPick, delay }: { card: HomeModeCard; onPick: 
           )}
         </div>
 
-        <div className="mt-auto pt-12 md:pt-16">
+        <div className="home-card-spacer mt-auto">
           <div className="text-[21px] font-bold tracking-[-0.01em]">{card.title}</div>
           <div className="mt-1 text-[13.5px] font-bold">{card.tagline}</div>
           <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-mut">{card.description}</p>
@@ -277,7 +292,7 @@ export function DailyChallengeStrip({ onPlay, delay }: { onPlay: () => void; del
       type="button"
       onClick={onPlay}
       // Subordinate to the three worlds by construction: one short strip, no artwork (brief §26/§27).
-      className="home-in flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2.5 rounded-2xl border border-line/80 bg-surface px-4 py-3.5 text-left transition-colors duration-[180ms] hover:border-[var(--ha)]/60 hover:bg-surface2"
+      className="home-in flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2.5 rounded-2xl border border-line2/70 bg-surface px-4 py-3.5 text-left transition-colors duration-[180ms] hover:border-[var(--ha)]/60 hover:bg-surface2"
       style={vars({ '--d': `${delay}ms` })}
     >
       <span className="flex items-center gap-3">

@@ -244,37 +244,36 @@ function AuthCorner() {
     const avatar = profile?.avatar ?? authUser.avatar
     return (
       <div className="relative flex flex-col items-end">
+        {/* 36px pill (V2 §10); on phones the pill collapses to the avatar alone (V2 §13) */}
         <button
-          className="flex items-center gap-2 rounded-full border border-line bg-surface px-1.5 py-1 backdrop-blur transition-colors hover:border-[var(--ha)]"
+          className="flex min-h-[36px] items-center gap-2 rounded-full border border-line2 bg-surface px-1.5 backdrop-blur transition-colors hover:border-[var(--ha)]"
           title="Your profile"
           onClick={() => setOpen((v) => !v)}
         >
           {avatar ? (
-            <img src={avatar} alt="" className="h-6 w-6 rounded-full" referrerPolicy="no-referrer" />
+            <img src={avatar} alt="" className="h-[26px] w-[26px] rounded-full" referrerPolicy="no-referrer" />
           ) : (
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--ha)] text-[11px] font-bold text-bg">
+            <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-[var(--ha)] text-[11px] font-bold text-bg">
               {shownName[0]?.toUpperCase()}
             </span>
           )}
-          <span className="text-[13px] font-semibold">{shownName}</span>
+          <span className="hidden pr-1 text-[13px] font-semibold sm:inline">{shownName}</span>
         </button>
         {open && <ProfileCard onClose={() => setOpen(false)} onSignOut={() => void signOutUser()} />}
       </div>
     )
   }
+  // Google only for now — X and LinkedIn stay wired in the auth layer but are hidden here
+  // until their apps are approved, so nobody meets a login button that cannot work.
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex gap-1.5">
-        {(['google', 'twitter'] as const).map((p) => (
-          <button
-            key={p}
-            className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-semibold text-mut backdrop-blur transition-colors hover:border-[var(--ha)] hover:text-ink"
-            onClick={async () => setErr(await signIn(p))}
-          >
-            <LogIn size={12} /> {p === 'google' ? 'Google' : '𝕏'}
-          </button>
-        ))}
-      </div>
+      <button
+        className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-line2 bg-surface px-3.5 text-[12px] font-semibold text-mut backdrop-blur transition-colors hover:border-[var(--ha)] hover:text-ink"
+        onClick={async () => setErr(await signIn('google'))}
+      >
+        <LogIn size={12} />
+        <span className="hidden sm:inline">Log in with&nbsp;</span>Google
+      </button>
       {(err ?? authError) && <span className="max-w-[260px] text-right text-[11px] text-bad">{err ?? authError}</span>}
     </div>
   )
@@ -472,9 +471,10 @@ export function NewGame() {
       <div className="home-vignette" aria-hidden="true" />
 
       <div className={`relative z-[1] mx-auto w-full px-4 pt-5 pb-10 sm:px-6 md:px-8 md:pt-8 ${experience ? "max-w-[1060px]" : "max-w-[1440px]"}`}>
-        {/* ---------- top bar ---------- */}
-        <div className="flex min-h-[34px] items-start justify-between gap-3">
-          {experience ? (
+        {/* ---------- top bar — the BRIEFING's chrome only. On the launcher the hero owns the
+            chrome (brand top-left, profile top-right) so no separate row spends the fold. ---------- */}
+        {experience && (
+          <div className="flex min-h-[34px] items-start justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
               <button
                 className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold text-mut transition-colors hover:border-line2 hover:text-ink"
@@ -487,25 +487,32 @@ export function NewGame() {
               </span>
               <span className="hidden text-[12.5px] text-mut sm:inline">{MODE_META[experience].promise}</span>
             </div>
-          ) : (
-            <span />
-          )}
-          <AuthCorner />
-        </div>
+            <AuthCorner />
+          </div>
+        )}
 
         {/* ================= THE GATE — the launcher ================= */}
         {!experience && (
           <>
-            <HomeHero name={profile?.nickname ?? authUser?.name ?? null}>
-              <FounderHistoryStrip createdAt={profile?.createdAt} />
-            </HomeHero>
+            {/* The wrapper pulls the hero flush to the top of the page and overlays the profile
+                on it, top-right (V2 §7/§8). The profile lives OUTSIDE the hero <section> in the
+                DOM because the section clips (overflow-hidden) — inside it, the profile card
+                popover could never extend past the hero's bottom edge. */}
+            <div className="relative -mt-5 md:-mt-8">
+              <HomeHero name={profile?.nickname ?? authUser?.name ?? null}>
+                <FounderHistoryStrip createdAt={profile?.createdAt} />
+              </HomeHero>
+              <div className="home-in absolute top-2 right-0 z-10 md:top-2.5" style={vars({ '--d': '0ms' })}>
+                <AuthCorner />
+              </div>
+            </div>
 
-            <div className="home-in mt-9 flex items-center gap-3 md:mt-11" style={vars({ '--d': '220ms' })}>
+            <div className="home-in home-world-gap flex items-center gap-3" style={vars({ '--d': '220ms' })}>
               <h2 className={eyebrow}>Choose your world</h2>
               <span className="home-rule flex-1" aria-hidden="true" />
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div className="mt-3.5 grid gap-4 md:grid-cols-3">
               {HOME_MODES(MODE_ICON).map((card, i) => (
                 <ModeCard
                   key={card.id}

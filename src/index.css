@@ -453,7 +453,48 @@ input[type='range']::-moz-range-thumb {
 }
 
 .home-vignette {
-  background: radial-gradient(135% 100% at 50% 38%, transparent 42%, rgba(3, 6, 14, 0.7) 100%);
+  /* lightened from 0.7 — one of the stacked darkeners that crushed the page (V2 §20/§24) */
+  background: radial-gradient(135% 100% at 50% 38%, transparent 46%, rgba(3, 6, 14, 0.5) 100%);
+}
+
+/* ---------- above-the-fold discipline (V2 §14–§16, §52) ----------
+   The fold is a HEIGHT problem, so these classes own every value the height breakpoints
+   change — paddings, title size, card min-height. They are deliberately NOT Tailwind
+   utilities on the elements: plain classes beat @layer utilities, so a stray pt-* would
+   silently lose to them anyway. Acceptance viewport: 1366×768 must show the hero, the
+   founder stats, "Choose your world" and a clear cut of all three mode cards. */
+.home-hero-content { padding-top: 16px; padding-bottom: 22px; }
+.home-hero-welcome { margin-top: 22px; }
+.home-hero-title { font-size: clamp(31px, 8vw, 58px); }
+.home-hero-stats { margin-top: 16px; }
+.home-world-gap { margin-top: 22px; }
+.home-mode-card { min-height: 300px; }
+.home-card-spacer { padding-top: 30px; }
+@media (min-width: 768px) {
+  .home-hero-content { padding-top: 20px; padding-bottom: 34px; }
+  .home-hero-welcome { margin-top: 40px; }
+  .home-hero-title { font-size: clamp(38px, 4.6vw, 58px); }
+  .home-hero-stats { margin-top: 24px; }
+  .home-world-gap { margin-top: 28px; }
+  .home-mode-card { min-height: 355px; }
+  .home-card-spacer { padding-top: 40px; }
+}
+/* short laptops: compress, never hide (V2 §17) */
+@media (min-width: 768px) and (max-height: 850px) {
+  .home-hero-content { padding-top: 16px; padding-bottom: 24px; }
+  .home-hero-welcome { margin-top: 24px; }
+  .home-hero-title { font-size: clamp(34px, 4vw, 48px); }
+  .home-hero-stats { margin-top: 18px; }
+  .home-world-gap { margin-top: 20px; }
+  .home-mode-card { min-height: 325px; }
+  .home-card-spacer { padding-top: 24px; }
+}
+@media (min-width: 768px) and (max-height: 760px) {
+  .home-hero-welcome { margin-top: 18px; }
+  .home-hero-title { font-size: clamp(30px, 3.6vw, 42px); }
+  .home-hero-stats { margin-top: 14px; }
+  .home-mode-card { min-height: 300px; }
+  .home-card-spacer { padding-top: 18px; }
 }
 
 /* the global focus ring, retinted to whatever world the player is standing in */
