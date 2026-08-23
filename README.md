@@ -101,7 +101,9 @@ Shared by Quick Play and Career unless noted. Arena switches most of the narrati
 | **The board** | Investor money brings a growth target. First review 12 weeks after the round, then every 10. Pass on user growth, revenue growth, or (from Series B, at a >15% net margin) real profitability. A near miss is a warning; a real miss is a strike. **The ultimatum fires on the third strike** — submit to layoffs or defy the board and bet your job on the next review. |
 | **Macro economy** | A market index, central-bank rate and inflation tick weekly, driving the funding climate, pricing your debt and inflating salaries. Oil shocks, rate cuts, rallies, crashes. |
 | **Bank debt** | Borrow up to half your ARR, capped at $10M, at rate + spread, no dilution — against a revenue covenant stated up front. |
-| **Team** | Employees have skill, morale, salary and a trait: **10x** (×1.7 output, only rolls on skill ≥ 8), **Mercenary** (×1.15, and walks at morale 55 rather than 32), **Craftsman** (×1.1 and quietly kills bugs), **Culture carrier** (lifts morale weekly), **Drama magnet** (drains it). Offers can be declined, notice periods apply, recruiters take 15% of first-year salary. |
+| **Team** | Every person is a **shape, not a rank**. On top of skill, morale, salary and a trait — **10x** (×1.7 output, only rolls on skill ≥ 8), **Mercenary** (×1.15, walks at morale 55 rather than 32), **Craftsman** (×1.1 and quietly kills bugs), **Culture carrier** (lifts morale weekly), **Drama magnet** (drains it) — they carry five attributes (velocity, quality, ownership, adaptability, culture) and a **stage affinity curve**. The same person can be a great pre-seed hire and a poor Series B one, because the engine weights those attributes differently at every stage: velocity and ownership early, culture and quality from Series A. Hiring and Team render one shared card — portrait, background, the three attributes that decide it *at your stage*, skills, money, and a team-fit read — and a profile view behind it. Offers can be declined, notice periods apply, recruiters take 15% of first-year salary. Spec: [`docs/team-and-staff.md`](docs/team-and-staff.md). |
+| **Portraits** | Every candidate and employee has a face: a deterministic layered-SVG headshot seeded by who they are, so the same person always looks the same. No external asset, no licensing, and it works offline — which the strict CSP and the PWA both require. |
+| **Identity & profiles** | Optional Google sign-in. Signing in gets you a **generated nickname** — never your real name, which is never copied out of the auth layer — plus a badge wall, per-mode personal bests, and a leaderboard row that carries your handle. Anonymous play is untouched and always will be. |
 | **Coordination overhead** | Past 8 people, every extra head costs the whole org 1.5% effectiveness, down to a 60% floor. |
 | **All-hands pitch** | Three styles — Vision, Numbers, War — each with live success odds computed from the state of the business. 8-week cooldown. |
 | **New verticals** | Send a tiger team into a second sector with its own PMF journey and TAM. Multi-product companies stack S-curves. |
@@ -112,7 +114,7 @@ Shared by Quick Play and Career unless noted. Arena switches most of the narrati
 | **Catastrophes** | Late-game, sector-flavoured: the fintech breach, the social algorithm change, the e-commerce logistics meltdown, the dev-tools CVE. |
 | **Secondary sales** | From Series B: 2% of the company at a 30% discount, banked into your final payout however the run ends. Once per stage. The panel states the trade in your own numbers — 2% of the company for cash worth 1.4% of it — because it is a hedge that survives bankruptcy, not a value play (−24% on final score if the run goes well). |
 | **Events & achievements** | A 66-card event deck — every option shows its price — and 26 cross-run achievement badges. |
-| **Verifiable runs** | Every simulation-mutating action is journalled, and `replayRun` re-executes the log through the *same registry functions* live play uses — so coverage is architectural, not a discipline someone has to remember. A 90-week run journals to ~4.3 KB. The results screen reports `verified` / `desync` / `no decision log`, and a test proves the honesty property: an unjournalled mutation makes verification go **red**, never silently green. |
+| **Verifiable runs** | Every simulation-mutating action is journalled, and `replayRun` re-executes the log through the *same registry functions* live play uses — so coverage is architectural, not a discipline someone has to remember. A 90-week run journals to ~4.3 KB. The results screen reports `verified` / `desync` / `no decision log`, and a test proves the honesty property: an unjournalled mutation makes verification go **red**, never silently green. Since the v7 proof columns went live, a submitted daily score **carries its journal**, so any reader can audit it rather than taking the number on trust. |
 | **The run biography** | A chaptered Story screen assembled from what the run already recorded — inbox, company memory, promises, the Career journal, the token ledger, the ending — in the game's own voice. A pure read: building it 100× leaves the state byte-identical and draws from no RNG stream. Shares as a 1200×630 card off the same lazy canvas the results card uses. |
 
 ---
@@ -147,6 +149,17 @@ wrong for your seed. Which segment is best is a fact about your seed, and you ha
 **You never see those numbers.** You see beliefs: an estimate, a band that narrows as confidence
 rises, and a confidence label. Every segment starts with one metric given a *confident and badly
 wrong* prior. Confidence saturates — you cannot become certain from a chair.
+
+**Your own customers are evidence too.** Research is not the only instrument: every four weeks, each
+segment with real customers files what they are actually doing onto the hypothesis board — measured
+retention, whether they keep paying at your price, and how the live channel is converting. It goes
+through the same belief-updating pipe an experiment does, and when it contradicts you it says so:
+*"The board said 62; your customers say 38."* Two rules keep it honest. Retention is deconvolved
+through the fit, price and bug terms **as they were applied that week**, not as they can be
+reconstructed later — otherwise flipping your price on a reading week would fabricate evidence. And
+a censored reading never drags a belief down past its own blind spot: at a giveaway price, people
+staying proves they stay, not what they would pay, so the reading can only ever say *at least this
+much*. Customers a token incentive bought are excluded entirely.
 
 **Five experiments, on a reliability hierarchy.** Stated intent is cheap and weak; behaviour is slow
 and strong. Three can run at once (`src/game/career/pmf.ts:233`).
@@ -531,13 +544,17 @@ strategies over 24 seeds × 90 weeks in all six sectors. Measured on this tree, 
 
 | Strategy | Failed | Exits | Customers (median) | 4wk retention | Revenue/wk | Founder net |
 |---|---|---|---|---|---|---|
-| **Careless Growth** — spend, never research | 0 / 24 | 5 | 497 | 66% | $3,470 | $3.6M |
-| **Disciplined Discovery** — experiment first, scale late | 0 / 24 | 10 | 571 | 85% | $23,917 | **$16.2M** |
-| **Enterprise Bet** — pivot high, price premium, build to the bar | 0 / 24 | 5 | 242 | 74% | $7,938 | $4.6M |
+| **Careless Growth** — spend, never research | 0 / 24 | 1 | 588 | 65% | $4,323 | $3.8M |
+| **Disciplined Discovery** — experiment first, scale late | 0 / 24 | 9 | 469 | 87% | $31,484 | **$16.6M** |
+| **Enterprise Bet** — pivot high, price premium, build to the bar | 0 / 24 | 6 | 261 | 72% | $9,640 | $5.1M |
 
-Measured 2026-08-22, after operating evidence landed (BACKLOG §9.1: real customers now update the
-hypothesis board, so the disciplined bot stops paying for questions its own book has answered —
-only its rows moved; the other two strategies never read beliefs and were byte-identical).
+Re-measured 2026-08-22 on the merged tree, after two changes in one day: operating evidence
+(BACKLOG §9.1 — real customers now update the hypothesis board, so the disciplined bot stops paying
+for questions its own book has answered) and the Team & Employee system, whose per-person stage-fit
+multiplier compounds over 90 weeks. Disciplined Discovery is strongest in **all six sectors** before
+and after both, and widened its margin. Individual cells moved a lot — a per-person multiplier
+compounding across 90 weeks diverges seed trajectories — so read the ORDERING, which is the property
+the harness exists to protect, not any single number.
 Disciplined Discovery is strongest in **all six sectors** — that ordering is the property the
 harness exists to protect, and every balance change since has been checked against it.
 
@@ -586,11 +603,14 @@ All of these are verified. None is a plan; they are the state of the thing.
 2. **Peers are trusted for their own numbers.** `users`, `val`, `payout` and the open-book intel
    columns are self-reported. The receive path is hardened against crashes, NaN and hangs — not
    against a peer lying about how well it is doing.
-3. **The two security patches this list used to call unapplied are applied.** Verified 2026-08-19:
-   the incoming-attack rate limit now keys on `p.fromId` alone and drops a payload carrying no id
-   (an attacker-chosen company name is no longer a rate-limit key), and the host check now fails
-   **closed** — `if (!host || !p.hostId || p.hostId !== host.id) return null`, so omitting `hostId`
-   no longer skips it. See `docs/security-review-2026-08.md` for what is still open.
+3. **Two griefing attacks that used to work now do not** (2026-08-22 hostile audit). A peer could
+   track `users: 1e10` in presence — inside the wire's clamp, and 166× the largest sector's TAM — and
+   collapse every other player's market to zero for the rest of the match, with each victim's client
+   saving the wreckage. Each peer is now capped at the market's own size. And `concede`, the one
+   broadcast that ADDS users to the recipient's save, was rate-limited on a string the *sender*
+   chose, so rotating it minted unlimited allowances; it now keys on the recipient. Neither
+   authenticates peers — see item 1 — they remove the asymmetries that made lying overwhelming.
+   Everything still open is in [`SECURITY-BACKLOG.md`](SECURITY-BACKLOG.md).
 4. **There is no two-client Arena test harness.** Everything realtime — presence merge, commit/reveal
    across clients, attack delivery, catch-up, reconnect, forfeit — is verified only by unit tests over
    the validators and by playing. The realtime paths are **not** verified end to end.
@@ -606,16 +626,22 @@ All of these are verified. None is a plan; they are the state of the thing.
    cannot be verified… replay validation is blocked by the non-deterministic `uid()`". That is no
    longer true: the journal keys entities by **index at action time** rather than by id, which
    sidesteps `uid()` entirely, and `verifyRun` replays a submission and compares an end-state
-   fingerprint. A fabricated score cannot produce a log that replays to it. What is still missing is
-   the schema column to carry the proof to *other* players — an additive change nobody has made, so
-   the leaderboard still displays unverified numbers.
-8. **`display_name` is self-asserted** for signed-out players — on their own row only.
-9. **There is no rate limiting.** The client's inbound token buckets protect the honest player being
-   flooded; they do nothing about anyone hitting PostgREST directly with the public key. That needs
-   the edge.
-10. **The production table holds ~14 synthetic rows** written during the security review
-    (`SECTEST-*`, "Honest Inc" / "Victim Inc", at days 10000/10001/39901/39902). Removal is a manual
-    dashboard action — see `BACKLOG.md` 1.4.
+   fingerprint. A fabricated score cannot produce a log that replays to it. **The proof columns are
+   live as of 2026-08-22**, so a submitted score now carries its journal and any reader can audit
+   it. What is still missing is a reader that *rejects* an unverifiable row — the data is there, the
+   enforcement is not.
+8. **`display_name` is self-asserted for signed-out players** — on their own row only. Signed-in
+   players now carry a server-generated **nickname** from their profile instead, and the real name
+   never leaves the auth layer.
+9. **There is no rate limiting, and nothing in the client can add it.** The inbound token buckets
+   protect the honest player from a flood; they do nothing about anyone hitting PostgREST or
+   Realtime directly with the public key. Two confirmed unauthenticated cost/DoS vectors follow from
+   that (leaderboard insert flood, Realtime connection flood) — both need the edge, both are
+   detailed with their economics in [`SECURITY-BACKLOG.md`](SECURITY-BACKLOG.md) §3.
+10. **~~The production table holds ~14 synthetic rows~~ — GONE.** `leaderboard-v6.sql` deletes them
+    as its first act and was run on 2026-08-22; verified from outside with the public key that no
+    `SECTEST-*` row and no `day >= 10000` row remains. The leaderboard also **accepted its first
+    real score that day** — the shipped policy had been rejecting 100% of submissions since launch.
 
 **Balance — measured, and deliberately left alone**
 
@@ -645,50 +671,83 @@ All of these are verified. None is a plan; they are the state of the thing.
 
 **Career model**
 
-15. **`expansionPotential` and `salesCycleWeeks` are inert.** Both are generated with per-sector
-    variance, both have beliefs, and `expansionPotential` is one of four metrics a $28k / 7-week paid
-    pilot measures — but **no formula reads either**. Players pay real money to learn numbers that do
-    nothing.
+15. **~~`expansionPotential` and `salesCycleWeeks` are inert~~ — BOTH WIRED.** `expansionMultiplier`
+    now pays a capped, gentle lift on retained customers as their cohort matures, so the metric a
+    $28k pilot measures decides whether a segment is one you farm or merely hold. `salesCycleWeeks`
+    became a real pipeline: a deal won lands `salesCycleWeeks − 1` weeks later, which is what makes
+    Enterprise *slow* rather than merely expensive. A one-week cycle is byte-identical to the old
+    path, so the reachable low end is untouched.
 16. **A pivot in Career is pure loss.** It rerolls `s.resonance` (which Career never reads), zeroes
     `researchSignal`, and destroys quality, features, users, hype, morale and $15k — while never
     touching `segmentTruth`, the sector or the target segment. There is nothing to reroll. Use
     *reposition* instead. The Product screen still teaches Quick Play's model here.
-17. **`repositionTo` does not change `career.focus`.** Switch target segment and you keep optimising
-    for the old segment's first value: a silent swing from +18 to −8 product fit, permanently.
+17. **~~`repositionTo` does not change `career.focus`~~ — FIXED.** Repositioning now retunes the
+    roadmap to what the new segment values, unless the focus you already have is one of its top two
+    (which is a deliberate choice worth keeping). The old behaviour silently swung product fit from
+    +18 to −8 at the exact moment you committed to a new market.
 18. **PMF is flat for the first five weeks by construction** — the first four-week cohort snapshot
     lands in week 6, in 10 of 10 measured runs across all five sectors. Everything you do in weeks 1–5
     appears at once in week 6.
-19. **The 15-customer floor is a cliff, not a ramp** — 14 retained customers scored 40, 15 scored 82.
+19. **The 15-customer floor is a step, not the cliff it was.** Crossing it swaps a research-derived
+    score (capped ~40) for a behavioural one, and the behavioural side is now ramped by cohort size
+    AND maturity — so the handoff measures ~23 points rather than the old 40→82 jump, and the score
+    can legitimately *fall* as an honest measurement replaces a hopeful one. Measured 2026-08-22:
+    moving the floor to 8 or 30 changes the week PMF 60 is reached and the final score **not at
+    all**, so it is a noise guard, not a pacing dial.
 20. **The scale term is effectively unreachable** (7,091 retained customers for full marks in SaaS
     Small Teams; 1.3M in Social Creators), so the practical PMF ceiling is ~88, not 100.
-21. **The shipped default allocation is `research: 20`**, which in Career points a fifth of
-    engineering at a stat that cannot move PMF.
+21. **~~The shipped default allocation is `research: 20`~~ — FIXED for Career**, which now starts at
+    `{ features: 45, quality: 35, bugs: 20, research: 0 }`. Quick Play keeps research, where it is
+    the mechanic that reveals resonance.
+
+**Team & Employee system** (merged 2026-08-22; a 21-agent review's residue, `BACKLOG.md` §10)
+
+22. **Neither determinism guard can see the three new engine seams — proved by mutation.** The golden
+    traces run twelve weeks with *no employees*, so the stage-fit output multiplier, the burn-stress
+    term and the per-head desk cost are never reached, and the employee suite does not exercise them
+    either. A mutation to any of the three passes the entire suite. They are correct today; nothing
+    would tell us if that stopped being true.
+23. **`stageFit` is documented as "population mean exactly 50" and is not.** The output multiplier's
+    neutrality argument rests on that invariant, so what was meant as a tiebreaker carries a small
+    systematic bias. Related: seam 1's documented magnitude is ~4× its real one.
+24. **The roster card's "contributing X pts/wk" omits `moraleFactor`**, the largest per-person term
+    the engine applies — so a miserable employee and a thriving one can print the same contribution.
+25. **Four hiring/roster badges are unreachable** — some mathematically, all empirically across
+    50,000 generated candidates. Dead UI that reads as a live signal.
 
 **Engine and codebase**
 
-22. **`advanceWeekInner` is 456 lines and its correctness *is* the statement order.** The golden traces
+26. **`advanceWeekInner` is 456 lines and its correctness *is* the statement order.** The golden traces
     are the guard; there is nothing else. Do not extract `tickHype`/`tickMorale` into another file for
     tidiness — the failure mode is silent.
-23. **Founder energy cannot be eroded by cash stress**, despite the comment above the formula saying
+27. **Founder energy cannot be eroded by cash stress**, despite the comment above the formula saying
     "faster erosion under stress". `+3 - (stressed ? 3 : 0)` exactly cancels the weekly recharge;
     measured flat at 80.00 over 12 weeks with runway pinned under 8. Only founder *actions* reduce it.
-24. **The board's ultimatum fires on the second strike, while the in-game copy says three.**
-    `engine.ts:2446` is `strikes >= 2`; `engine.ts:2476` renders "strike N of 3". One of them is wrong.
-25. **Five copies of mulberry32, three of FNV-1a, ten of `clamp` in two incompatible signatures**
+28. **~~The board's ultimatum fires on the second strike~~ — FIXED.** It is `strikes >= 3`, which is
+    what every piece of copy in the game already claimed.
+29. **Five copies of mulberry32, three of FNV-1a, ten of `clamp` in two incompatible signatures**
     (`clamp(v, lo, hi)` vs `clamp(v, lo = 0, hi = 100)`). The PRNG copies are bit-identical today by
     luck, not by test.
-26. **UI screens re-derive simulation numbers and have drifted.** Six different runway-danger
+30. **UI screens re-derive simulation numbers and have drifted.** Six different runway-danger
     thresholds, three answers to "is the cash position dangerous?", two growth rates that disagree in
     weeks 1–4, and a market-share figure that excludes a second product line's users. Catalogued in
     `docs/architecture-review.md` §N; none reaches a test, because nothing covers presentation.
-27. **The `e.modes` / `e.formats` fields on event cards and achievements are a second gating axis
+31. **The `e.modes` / `e.formats` fields on event cards and achievements are a second gating axis
     alongside capabilities, and zero cards use them.** Prefer a capability.
 
-Full detail: [`docs/architecture-review.md`](docs/architecture-review.md),
-[`docs/security-review-2026-08.md`](docs/security-review-2026-08.md) (latest, and the one that
-lists what only you can do) and its predecessor [`docs/security-review.md`](docs/security-review.md),
-[`docs/gameplay-review.md`](docs/gameplay-review.md), and
-[`BACKLOG.md`](BACKLOG.md) for everything known-but-unfixed with what "done" looks like.
+Full detail:
+
+- [`BACKLOG.md`](BACKLOG.md) — everything known-but-unfixed, with what "done" looks like.
+- [`SECURITY-BACKLOG.md`](SECURITY-BACKLOG.md) — the maintained security list: owner actions, open
+  items, what is fixed, and — deliberately — what has been investigated and **refuted**, so a future
+  audit does not re-raise a vulnerability that never existed.
+- [`docs/roster-design.md`](docs/roster-design.md) — the fixed-cast design: ~200 named employees and
+  ~30 named VCs, so players learn who is worth hiring and carry that into the Arena.
+- [`docs/team-and-staff.md`](docs/team-and-staff.md) — the Team & Employee brief this shipped from.
+- [`docs/career-guide.md`](docs/career-guide.md) — the measured account of the Career model.
+- [`docs/architecture-review.md`](docs/architecture-review.md) · [`docs/gameplay-review.md`](docs/gameplay-review.md)
+  · [`docs/security-review-2026-08.md`](docs/security-review-2026-08.md) and its predecessor
+  [`docs/security-review.md`](docs/security-review.md).
 
 ---
 
