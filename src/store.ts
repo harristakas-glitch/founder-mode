@@ -31,7 +31,7 @@ import { haptic, sfx } from './sound'
 import { checkAchievements } from './game/achievements'
 import { submitDailyScore } from './net/leaderboard'
 import { currentProfile, oauthReturnError, onAuthChange, signInWith, signOut, type AuthProfile, type AuthProvider } from './net/auth'
-import { fetchMyProfile, pushProfileProgress, renameProfile, type ModeBest, type Profile, type ProfileBests } from './net/profile'
+import { fetchMyProfile, mergeHalls, pushProfileProgress, renameProfile, type ModeBest, type Profile, type ProfileBests } from './net/profile'
 import { earnedAchievements } from './game/achievements'
 
 // Evaluate achievement unlocks against a freshly-computed state and surface them in the flash banner.
@@ -114,6 +114,9 @@ export interface RunRecord {
   ending: 'bankrupt' | 'unicorn' | 'acquired' | 'fired' | 'timeup' | 'ipo' | 'network'
   weeks: number
   score: number // founder payout in $
+  /** ms epoch of the run's end. Absent on entries recorded before profiles-v2 (2026-08-23) —
+   *  the cross-device merge treats a run's identity as everything EXCEPT this field. */
+  at?: number
 }
 
 const HALL_KEY = 'founder-mode-hall'
@@ -149,6 +152,9 @@ const BESTS_KEY = 'founder-mode-bests'
  * number does not drop to zero on the day this shipped.
  */
 const RUNS_KEY = 'founder-mode-runs'
+/** The server's counter as of this device's last completed sync — the base the delta scheme in
+ *  nextRunCount adds on top of. Absent = this device never synced under profiles-v2. */
+const RUNS_SYNCED_KEY = 'founder-mode-runs-synced'
 
 export function readRunCount(): number {
   try {
@@ -156,6 +162,17 @@ export function readRunCount(): number {
     return Number.isFinite(n) && n > 0 ? n : readHall().length
   } catch {
     return 0
+  }
+}
+
+function readRunBase(): number | null {
+  try {
+    const v = localStorage.getItem(RUNS_SYNCED_KEY)
+    if (v === null) return null
+    const n = Number(v)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  } catch {
+    return null
   }
 }
 
@@ -225,23 +242,33 @@ function recordRun(g: GameState) {
       company: g.companyName,
       at: Date.now(),
     })
-    void useStore.getState().syncProfileProgress()
+    // sync moved BELOW: it reads the hall and the counter, which are written after this block —
+    // firing here shipped a profile that was always one run behind (fixed with profiles-v2)
   }
   try {
     localStorage.setItem(RUNS_KEY, String(readRunCount() + 1))
   } catch {
     // private mode / quota — the biography just does not count this one
   }
-  const runs = readHall()
-  runs.push({
-    company: g.companyName,
-    sector: sectorById(g.sector).name,
-    ending: g.gameOver.type,
-    weeks: g.gameOver.week,
-    score,
-  })
-  runs.sort((a, b) => b.score - a.score)
-  localStorage.setItem(HALL_KEY, JSON.stringify(runs.slice(0, 10)))
+  // Guarded like the counter write above: in private mode setItem THROWS, and an unguarded
+  // throw here used to skip the profile sync below entirely (review finding, 2026-08-23).
+  try {
+    const runs = readHall()
+    runs.push({
+      company: g.companyName,
+      sector: sectorById(g.sector).name,
+      ending: g.gameOver.type,
+      weeks: g.gameOver.week,
+      score,
+      at: Date.now(),
+    })
+    runs.sort((a, b) => b.score - a.score)
+    localStorage.setItem(HALL_KEY, JSON.stringify(runs.slice(0, 10)))
+  } catch {
+    // storage full / private mode — the hall misses this one, the sync below still runs
+  }
+  // AFTER the hall and the counter exist, so this run is in what gets pushed (profiles-v2)
+  void useStore.getState().syncProfileProgress()
   // daily challenge scores also go to the global leaderboard (no-op until Supabase is configured)
   // Brief §30: leaderboard availability is a CAPABILITY, not a format check. The label is
   // still parsed for the challenge number, but the capability decides whether we submit.
@@ -1006,7 +1033,14 @@ export const useStore = create<Store>()(
          * time; a signed-out player is a no-op.
          */
         syncProfileProgress: async () => {
-          const merged = await pushProfileProgress({ achievements: [...earnedAchievements()], bests: readLocalBests() })
+          const snapshotCount = readRunCount()
+          const merged = await pushProfileProgress({
+            achievements: [...earnedAchievements()],
+            bests: readLocalBests(),
+            hall: readHall(),
+            runCount: snapshotCount,
+            runBase: readRunBase(),
+          })
           if (!merged) return
           set({ profile: merged })
           try {
@@ -1017,6 +1051,21 @@ export const useStore = create<Store>()(
               if (remote && (!localBests[mode] || remote.score > localBests[mode]!.score)) localBests[mode] = remote
             }
             localStorage.setItem('founder-mode-bests', JSON.stringify(localBests))
+            // The hall and the counter come back DOWN too — this is what makes a second browser
+            // show the same "companies built" biography as the first (profiles-v2). Two rules,
+            // both from the 2026-08-23 review (it found the naive version wiping local halls):
+            //   1. ONLY when the server actually accepted the history this round — on the
+            //      fallback paths merged.hall is the server's pre-merge copy, and writing it
+            //      over localStorage deletes entries that exist nowhere else.
+            //   2. Never overwrite — RE-MERGE with the localStorage of NOW, so a run recorded
+            //      while this sync was in flight survives the write-back.
+            if (merged.historySynced) {
+              localStorage.setItem(HALL_KEY, JSON.stringify(mergeHalls(merged.hall, readHall())))
+              // runs recorded mid-flight keep their unsynced delta on top of the new base
+              const inFlight = Math.max(0, readRunCount() - snapshotCount)
+              localStorage.setItem(RUNS_KEY, String(merged.runCount + inFlight))
+              localStorage.setItem(RUNS_SYNCED_KEY, String(merged.runCount))
+            }
           } catch {
             // storage full or private mode — the server copy is still authoritative
           }

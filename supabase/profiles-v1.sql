@@ -198,6 +198,17 @@ revoke all on public.profiles from anon, authenticated;
 grant select on public.profiles to anon, authenticated;
 grant update (nickname, avatar_url, achievements, bests, updated_at) on public.profiles to authenticated;
 
+-- The revoke-all above must not strip LATER migrations' grants on a re-run — "idempotent" has
+-- to mean idempotent against the whole schema, not this file's slice of it (review finding,
+-- 2026-08-23: a v1 re-run after profiles-v2 silently killed history sync forever, and the
+-- client's fallback hid it). Re-grant v2's columns whenever they exist.
+do $$ begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'profiles' and column_name = 'hall') then
+    grant update (hall, run_count) on public.profiles to authenticated;
+  end if;
+end $$;
+
 revoke all on function private.generate_nickname() from public, anon, authenticated;
 
 -- ======================= 4. self-test =======================

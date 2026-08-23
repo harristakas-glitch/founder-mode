@@ -107,6 +107,22 @@ anonymity machinery in `src/analytics/*` governs our own client only — it does
 **Done when:** a project-level event cap / billing limit is set in PostHog, and someone knows to
 distrust the numbers if a spike appears. Rotating the key is a redeploy and does not fix it.
 
+### 2.5 Run `supabase/profiles-v2-history.sql` — enables cross-browser history
+Profiles v2 (2026-08-23) syncs the hall of fame and lifetime run counter to the profile row so
+the same account shows one biography across browsers. The client already merges both ways and
+falls back to the v1 shape until the columns exist — nothing breaks meanwhile, history just
+stays per-browser. The script is idempotent and self-testing (v6 discipline: attack matrix +
+honest path, per role).
+
+**Decision recorded, eyes open:** hall entries carry the player-typed COMPANY NAME on the
+world-readable profile row — owner's explicit call ("the history and historical data should be
+attached on profile"), same exposure class as the leaderboard, which has published company names
+next to nicknames since v6. Client scrubs the leaderboard character class (control/zero-width/
+bidi) on push AND on read; server caps the blob (8 KB, array-typed) and the counter (0..1M).
+This supersedes the 2026-08-22 "company never travels" rule for `bests` too.
+
+**Done when:** the script runs with "profiles v2 self-test passed" in the notices.
+
 ---
 
 ## 3. Open — code or architecture, not yet done
