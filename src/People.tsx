@@ -118,6 +118,10 @@ export function PersonCard({
   onOpen,
   shortlisted,
   onShortlist,
+  banner,
+  topRight,
+  note,
+  showAttributes = true,
 }: {
   person: Person
   ctx: TeamContext
@@ -127,6 +131,14 @@ export function PersonCard({
   onOpen: () => void
   shortlisted?: boolean
   onShortlist?: () => void
+  /** People-pages mockup (2026-08-24): one loud verdict strip across the card top. */
+  banner?: { label: string; text: string; bg: string }
+  /** replaces the fit% block top-right (Hiring puts the weekly cost there; fit moved to `rows`) */
+  topRight?: ReactNode
+  /** the founder-style one-liner under the stats — impactSummary, not marketing copy */
+  note?: ReactNode
+  /** the stage-attribute grid; the mockup cards trade it for tags + stats (Profile keeps all five) */
+  showAttributes?: boolean
 }) {
   const a = attributes(person)
   const fit = teamFit(person, ctx)
@@ -135,6 +147,11 @@ export function PersonCard({
 
   return (
     <div className={`${CARD} flex h-full flex-col overflow-hidden transition-colors duration-[120ms] hover:border-line2`}>
+      {banner && (
+        <div className={`border-b px-4 py-1.5 text-[10.5px] font-bold tracking-[0.09em] uppercase ${banner.bg} ${banner.text}`}>
+          {banner.label}
+        </div>
+      )}
       {/* LinkedIn / X grammar: a small circular avatar beside the name, not a full-width banner.
           Owner call, 2026-08-22 — a smaller circle makes the card shorter (the whole card now fits
           a phone viewport, so the person and the CTA are on screen together) and reads the way
@@ -182,13 +199,14 @@ export function PersonCard({
               <div className="truncate text-[16px] font-bold leading-tight hover:underline">{person.name}</div>
               <div className="truncate text-[12.5px] text-mut">{title(person)}</div>
             </button>
-            {/* CONCLUSION FIRST (brief §14, Rule 2): the fit percentage and its word sit at the top
-                right where the eye lands, instead of five bars near the bottom that the player had
-                to decode into the same conclusion. The "why" lives in Profile. */}
-            <div className="shrink-0 text-right">
-              <div className={`text-[17px] font-bold leading-none tnum ${TONE_TEXT[tone]}`}>{fit}%</div>
-              <div className="mt-0.5 text-[10px] whitespace-nowrap text-mut">{fitLabel(fit)}</div>
-            </div>
+            {/* CONCLUSION FIRST (brief §14, Rule 2). Default: the fit verdict. A caller with a
+                banner already carrying the verdict puts the cost here instead (mockup 2026-08-24). */}
+            {topRight ?? (
+              <div className="shrink-0 text-right">
+                <div className={`text-[17px] font-bold leading-none tnum ${TONE_TEXT[tone]}`}>{fit}%</div>
+                <div className="mt-0.5 text-[10px] whitespace-nowrap text-mut">{fitLabel(fit)}</div>
+              </div>
+            )}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {/* One archetype, one state label (brief §9, §15) — badge spam is the thing to avoid,
@@ -222,14 +240,16 @@ export function PersonCard({
           </span>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-3 border-t border-line/60 pt-3">
-          {/* Keyed on the STAGE, not the role: the engine weights attributes by stage and has no
-              role term at all, so a role-keyed card printed numbers that ranked candidates
-              backwards. See `cardAttributes`. */}
-          {cardAttributes(ctx.stage).map((id) => (
-            <AttrStat key={id} id={id} value={a[id]} />
-          ))}
-        </div>
+        {showAttributes && (
+          <div className="mt-3 grid grid-cols-3 gap-3 border-t border-line/60 pt-3">
+            {/* Keyed on the STAGE, not the role: the engine weights attributes by stage and has no
+                role term at all, so a role-keyed card printed numbers that ranked candidates
+                backwards. See `cardAttributes`. */}
+            {cardAttributes(ctx.stage).map((id) => (
+              <AttrStat key={id} id={id} value={a[id]} />
+            ))}
+          </div>
+        )}
 
         {/* Two skills and a count, on ONE line (brief §11). Three chips wrapped to two rows on a
             narrow card and pushed everything below it out of view. */}
@@ -239,6 +259,8 @@ export function PersonCard({
         </div>
 
         {rows && <div className="mt-2.5 border-t border-line/60 pt-2.5">{rows}</div>}
+
+        {note && <div className="mt-2.5 border-t border-line/60 pt-2.5 text-[12px] leading-snug text-mut">{note}</div>}
 
         {actions && <div className="mt-auto flex gap-1.5 pt-3">{actions}</div>}
       </div>

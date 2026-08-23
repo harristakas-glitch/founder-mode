@@ -1,24 +1,34 @@
-import { Search, Send, SlidersHorizontal, Star, Users } from 'lucide-react'
+// Hiring — "Find the right people to build your future." (owner brief + mockups, 2026-08-24).
+//
+// Desktop is a browsing experience: compact candidate CARDS under a KPI strip, with a right rail
+// that reads the recruiting picture (Hiring Insights, Talent Pool Health) and ties it back to the
+// org (Team Health). Mobile is a LIST — scanability over personality — with a small insights card
+// up top. The game does the ranking (fit-sorted by default); secondary controls live behind one
+// Filters button. Every number is an engine read: fit from the people model, costs from the
+// salary ledger, runway impact from runwayAfterHire, acceptance odds from the same function the
+// weekly tick rolls. Arena's sealed-bid market keeps its exact controls and copy.
+
+import { ChevronRight, Search, Send, SlidersHorizontal, Star } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Btn, Disclosure, Meter, NESTED, Panel } from '../components'
+import { Btn, Disclosure, Meter, Panel } from '../components'
 import { PersonCard, PersonProfile, SectionLabel, type CardBadge } from '../People'
+import { Portrait } from '../Portrait'
 import { money } from '../format'
-import { COORDINATION_FREE_HEADS, coordinationDrag, recruiterFee, runwayAfterHire, weeklyPayroll } from '../game/engine'
-import { hasCapability } from '../game/modes'
 import {
-  ROLE_HELP,
-  ROLE_LABEL,
-  TARGET_MIX,
-  deskCost,
-  fitLabel,
-  teamFit,
-  valueLabel,
-  valueRatio,
-  type TeamContext,
-} from '../game/people'
+  COORDINATION_FREE_HEADS,
+  coordinationDrag,
+  offerAcceptChance,
+  recruiterFee,
+  runwayAfterHire,
+  runwayWeeks,
+  weeklyPayroll,
+} from '../game/engine'
+import { hasCapability } from '../game/modes'
+import { ROLE_LABEL, fitTone, impactSummary, teamFit, title, type TeamContext } from '../game/people'
 import type { Candidate, GameState, Role } from '../game/types'
 import { myId } from '../net/online'
 import { useStore } from '../store'
+import { KpiStrip, fitTier, openRoles, roleNeeds, teamHealth, teamNudge, teamRunwayImpact, weeklyMoney } from './people-shared'
 
 const PREMIUMS = [0, 10, 25, 50]
 
@@ -41,7 +51,6 @@ function BidControl({ candidateId }: { candidateId: string }) {
   const locked = !!mine || !!elsewhere
 
   return (
-    // vertical rhythm belongs to the card's own CTA slot, so no top margin here
     <div className="w-full">
       <div className="flex flex-wrap items-center gap-1.5">
         {PREMIUMS.map((p) => (
@@ -77,120 +86,133 @@ function BidControl({ candidateId }: { candidateId: string }) {
   )
 }
 
-// ---------- the roster panel ----------
+// ---------- right rail ----------
 
 const ROLES: Role[] = ['engineer', 'designer', 'marketer', 'sales']
 
-/**
- * The hiring sidebar. The owner's mock puts a meta-progression panel here — "Elite Founder Status",
- * perks, capital, network access. This game has no such reward, and shipping a progress bar toward
- * a prize that does not exist is the exact defect the repo already has a name for.
- *
- * So the SHAPE survives and the content is replaced with things the simulation genuinely does:
- * what the payroll costs, which roles this stage's output terms actually reward (TARGET_MIX in
- * game/people.ts, which is the engine's own emphasis written down), and the one threshold that
- * really is a cliff — `COORDINATION_FREE_HEADS`, past which every extra head slows the whole
- * company by 1.5%. That last one is the honest version of "next unlock": it is the next thing that
- * changes, and it is a cost rather than a prize.
- */
-function TeamShape({ game }: { game: GameState }) {
+/** HIRING INSIGHTS — the recruiting picture, read like a smart people advisor (brief §6E). */
+function HiringInsights({ game, ctx }: { game: GameState; ctx: TeamContext }) {
+  const needs = roleNeeds(game).filter((n) => n.want - n.have > 0)
+  const priority = [...needs].sort((a, b) => b.want - b.have - (a.want - a.have))[0]
+  const best = [...game.candidates].sort((a, b) => teamFit(b, ctx) - teamFit(a, ctx))[0]
+  const runwayNow = Math.min(999, runwayWeeks(game))
+  const accept =
+    game.candidates.length > 0
+      ? game.candidates.reduce((a, c) => a + offerAcceptChance(game, c, runwayNow), 0) / game.candidates.length
+      : 0
   const heads = game.employees.length
-  const payroll = weeklyPayroll(game)
-  const target = TARGET_MIX[game.stage] ?? TARGET_MIX['Pre-seed']
-  const drag = coordinationDrag(game)
   const free = Math.max(0, COORDINATION_FREE_HEADS - heads)
-  const desks = game.employees.filter((e) => deskCost(e) > 0).length
+  const drag = coordinationDrag(game)
 
   return (
-    <Panel className="sticky top-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Users size={16} className="text-accent" aria-hidden />
-          <h3 className="text-[15px] font-semibold">Your team</h3>
+    <Panel>
+      <SectionLabel>Hiring insights</SectionLabel>
+      <div className="mt-2 space-y-2.5">
+        <div className="flex items-center justify-between gap-3 text-[12.5px]">
+          <span className="text-mut">Top priority role</span>
+          <span className="font-bold">{priority ? `${ROLE_LABEL[priority.role]}` : 'Covered'}</span>
         </div>
-        <span className="rounded-full border border-line2 bg-surface2 px-2 py-[3px] text-[11px] font-bold tnum">
-          {heads} {heads === 1 ? 'head' : 'heads'}
-        </span>
-      </div>
-
-      <div className="mt-3 text-[12.5px] leading-relaxed text-mut">
-        Payroll <span className="font-semibold text-ink tnum">{money(payroll)}</span>/wk
-        {desks > 0 && (
-          <>
-            {' · '}
-            <span className="tnum">{desks}</span> {desks === 1 ? 'desk' : 'desks'} in the office
-          </>
+        {priority && (
+          <div className="-mt-1.5 text-right text-[10.5px] text-mut">
+            {priority.want - priority.have} open — the {game.stage} output mix wants more
+          </div>
         )}
-      </div>
-
-      <div className="mt-4">
-        <SectionLabel>Roles this stage rewards</SectionLabel>
-        <div className="mt-2 space-y-2">
-          {ROLES.map((r) => {
-            const have = game.employees.filter((e) => e.role === r).length
-            // What the mix wants at THIS headcount, never below one engineer — a company of nobody
-            // needs an engineer before it needs a target ratio.
-            const want = Math.max(heads === 0 && r === 'engineer' ? 1 : 0, Math.round(target[r] * Math.max(heads, 3)))
-            // Three states, not two. A green tick against "0 / ~0" reads as "done" for a role the
-            // stage has not asked for yet, which is the opposite of true.
-            const state = want === 0 ? 'idle' : have >= want ? 'met' : 'short'
-            return (
-              <div key={r} className="flex items-center gap-2.5" title={ROLE_HELP[r]}>
-                <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
-                    state === 'met' ? 'border-good/60 bg-good/20 text-good' : state === 'short' ? 'border-warn/60 text-warn' : 'border-line2 text-mut'
-                  }`}
-                  aria-hidden
-                >
-                  {state === 'met' ? '✓' : state === 'short' ? '!' : '·'}
-                </span>
-                <span className={`flex-1 text-[12.5px] ${state === 'met' ? 'text-ink' : 'text-mut'}`}>{ROLE_LABEL[r]}</span>
-                <span className="text-[11.5px] tnum text-mut">
-                  {have}
-                  <span className="text-mut/60">{want === 0 ? ' · not yet' : ` / ~${want}`}</span>
-                </span>
-              </div>
-            )
-          })}
+        {best && (
+          <div className="flex items-center justify-between gap-3 text-[12.5px]">
+            <span className="text-mut">Best fit this week</span>
+            <span className="truncate font-bold">
+              {best.name.split(' ')[0]} <span className={`tnum ${fitTone(teamFit(best, ctx)) === 'good' ? 'text-good' : 'text-warn'}`}>{teamFit(best, ctx)}%</span>
+            </span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 text-[12.5px]">
+          <span className="text-mut">Offer acceptance</span>
+          <span className={`font-bold tnum ${accept >= 0.7 ? 'text-good' : accept >= 0.45 ? 'text-warn' : 'text-bad'}`}>
+            ~{Math.round(accept * 100)}%
+          </span>
         </div>
-        <div className="mt-2 text-[11px] leading-snug text-mut/80">
-          The mix each stage rewards, taken from the engine&apos;s own output terms — engineers build, a designer counts triple on customer
-          research, sales lifts revenue per customer.
+        <div className="-mt-1.5 text-right text-[10.5px] text-mut">
+          {runwayNow < 12 ? 'a thin runway scares candidates off' : 'odds the pool says yes at asking'}
         </div>
-      </div>
-
-      <div className="mt-4">
-        <SectionLabel>The next thing that changes</SectionLabel>
-        <div className={`mt-2 ${NESTED} p-3`}>
+        <div className="border-t border-line/60 pt-2.5">
           {free > 0 ? (
             <>
-              <div className="text-[13px] font-semibold">
+              <div className="text-[12.5px] font-semibold">
                 <span className="tnum">{free}</span> more {free === 1 ? 'hire' : 'hires'} before coordination overhead
               </div>
               <div className="mt-1.5">
                 <Meter value={(heads / COORDINATION_FREE_HEADS) * 100} tone="good" />
               </div>
-              <div className="mt-1.5 text-[11.5px] leading-snug text-mut">
-                Past {COORDINATION_FREE_HEADS} people every extra head costs the whole company 1.5% of its output. Headcount is not free, and
-                this is where it stops being cheap.
-              </div>
             </>
           ) : (
             <>
-              <div className="text-[13px] font-semibold text-warn">
+              <div className="text-[12.5px] font-semibold text-warn">
                 Coordination drag ×<span className="tnum">{drag.toFixed(3)}</span>
               </div>
-              <div className="mt-1.5">
-                <Meter value={(1 - drag) * 250} tone="warn" />
-              </div>
-              <div className="mt-1.5 text-[11.5px] leading-snug text-mut">
-                Everyone in the company is {Math.round((1 - drag) * 100)}% slower than they would be at {COORDINATION_FREE_HEADS} heads. The
-                next hire has to beat that, not just pay for themselves.
+              <div className="mt-1 text-[10.5px] leading-snug text-mut">
+                Everyone is {Math.round((1 - drag) * 100)}% slower past {COORDINATION_FREE_HEADS} heads — the next hire has to beat that.
               </div>
             </>
           )}
         </div>
       </div>
+    </Panel>
+  )
+}
+
+/** TALENT POOL HEALTH — the mockup's tier histogram, over the real pool. */
+function TalentPoolHealth({ game, ctx }: { game: GameState; ctx: TeamContext }) {
+  const tiers = [
+    { label: 'Strong fit', dot: 'bg-good', n: game.candidates.filter((c) => teamFit(c, ctx) >= 62).length },
+    { label: 'Good fit', dot: 'bg-accent', n: game.candidates.filter((c) => { const f = teamFit(c, ctx); return f >= 46 && f < 62 }).length },
+    { label: 'Risky', dot: 'bg-warn', n: game.candidates.filter((c) => teamFit(c, ctx) < 46).length },
+  ]
+  return (
+    <Panel className="mt-3.5">
+      <SectionLabel>Talent pool health</SectionLabel>
+      <div className="mt-2 space-y-1.5">
+        {tiers.map((t) => (
+          <div key={t.label} className="flex items-center justify-between text-[12.5px]">
+            <span className="inline-flex items-center gap-2 text-mut">
+              <span className={`h-2 w-2 rounded-full ${t.dot}`} aria-hidden /> {t.label}
+            </span>
+            <span className="font-bold tnum">{t.n}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 text-[10.5px] leading-snug text-mut">
+        {hasCapability(game, 'sharedHiringPool') ? 'One pool for the whole room — replaced every week.' : 'The pool turns over; everyone leaves eventually.'}
+      </div>
+    </Panel>
+  )
+}
+
+/** TEAM HEALTH — the org the hiring is for (brief §6F). Same derivations as the Team page. */
+function TeamHealthMini({ game }: { game: GameState }) {
+  const setScreen = useStore((s) => s.setScreen)
+  const h = teamHealth(game)
+  const nudge = teamNudge(game)
+  if (!h) return null
+  const tone = h.tone === 'good' ? 'text-good' : h.tone === 'warn' ? 'text-warn' : 'text-bad'
+  return (
+    <Panel className="mt-3.5">
+      <SectionLabel>Team health</SectionLabel>
+      <div className="mt-2 flex items-center justify-between text-[13px]">
+        <span className="text-mut">Overall</span>
+        <span className={`font-bold tnum ${tone}`}>
+          {h.score} <span className="text-[11px]">{h.word}</span>
+        </span>
+      </div>
+      {h.atRisk > 0 && (
+        <div className="mt-1 flex items-center justify-between text-[12.5px]">
+          <span className="text-mut">At risk</span>
+          <span className="font-bold text-bad tnum">{h.atRisk}</span>
+        </div>
+      )}
+      {nudge && <div className="mt-2 text-[11.5px] leading-snug text-warn">{nudge}</div>}
+      <button onClick={() => setScreen('team')} className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-accent hover:underline">
+        Manage the team <ChevronRight size={12} aria-hidden />
+      </button>
     </Panel>
   )
 }
@@ -217,6 +239,7 @@ export function Hiring() {
   const [sort, setSort] = useState<SortKey>('fit')
   const [role, setRole] = useState<Role | 'all'>('all')
   const [query, setQuery] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   // Shortlisting is pure local UI: a way to mark people while you compare them. It deliberately
   // starts no new hiring round and touches no engine state — the sealed-bid auction and the shared
   // pool stay exactly as `test/hiring-market.test.ts` pins them.
@@ -238,8 +261,6 @@ export function Hiring() {
       return `${c.name} ${c.role} ${ROLE_LABEL[c.role]}`.toLowerCase().includes(q)
     })
     const by: Record<SortKey, (a: Candidate, b: Candidate) => number> = {
-      // Deadline first inside every ordering, so a candidate on their last week is never buried:
-      // sort is stable, so the pool's own order survives inside each tie.
       fit: (a, b) => teamFit(b, ctx) - teamFit(a, ctx),
       expiry: (a, b) => a.weeksLeft - b.weeksLeft,
       skill: (a, b) => b.skill - a.skill,
@@ -249,103 +270,114 @@ export function Hiring() {
   }, [game.candidates, role, query, sort, onlyShortlist, shortlist, ctx])
 
   const openCandidate = game.candidates.find((c) => c.id === open) ?? null
+  const runwayNow = runwayWeeks(game)
 
-  /**
-   * ONE state label, in priority order (brief §15 — badge spam is the failure mode, and §46 —
-   * urgency is a state, not a row of text on every card).
-   *
-   * Scarcity outranks quality: a candidate about to leave is a decision you make THIS week, and a
-   * strong candidate who is not going anywhere can wait. Every label is read off real state — none
-   * is invented for decoration (Rule 8).
-   */
+  /** ONE state label, priority-ordered — scarcity outranks quality (a candidate about to leave is
+   *  a decision you make THIS week). Arena's pool refreshes whole, so expiry says nothing there. */
   const badgesFor = (c: Candidate): CardBadge[] => {
-    // Arena refreshes the whole pool every week, so expiry urgency would sit on every card and
-    // mean nothing; the shared-market line above says it once instead.
     if (!shared && c.weeksLeft <= 2) return [{ text: `Leaves in ${c.weeksLeft}w`, tone: 'warn' }]
-    if (teamFit(c, ctx) >= 70) return [{ text: 'Recommended', tone: 'accent' }]
-    const v = valueRatio(c, game.stage)
-    if (v >= 1.18) return [{ text: 'Best value', tone: 'good' }]
-    if (v <= 0.82) return [{ text: 'Overpriced', tone: 'bad' }]
     return []
   }
 
-  const moneyRows = (c: Candidate) => {
+  /** The runway cost of this hire — the mockup's "-2.9 wks". When the delta is bigger than a
+   *  year (a first hire against a small bank moves runway by 100+ weeks), the RESULTING runway
+   *  is the number a founder can actually reason about, so the display switches to "→ N wk". */
+  const runwayImpact = (c: Candidate): { text: string; cls: string } => {
     const after = runwayAfterHire(game, c)
-    const afterLabel = after === Infinity ? '∞' : `${Math.max(0, Math.floor(after))} wk`
-    // Amber is the mock's "tight" band, from 26 weeks down. Red keeps the engine's own cliff:
-    // under ~12 weeks candidates start declining, and the card says so in words ("overhiring!"),
-    // never in colour alone. Comfortable numbers stay plain — the value is the message.
-    const cls = after === Infinity ? '' : after < 12 ? 'font-bold text-bad' : after < 26 ? 'text-warn' : ''
-    // ONE LINE, salary dominant (brief §12): the recruiter fee had equal weight to an annual
-    // salary and to the runway, which is the only number here that can end the run. It is muted
-    // and secondary now, and the full breakdown is in Profile. Expiry left the card entirely —
-    // it is a state badge ("Last week") when it is urgent, and noise when it is not (§46).
+    if (after === Infinity) return { text: 'covered', cls: 'text-good' }
+    const cls = after < 12 ? 'font-bold text-bad' : after < 26 ? 'text-warn' : 'text-mut'
+    if (runwayNow === Infinity) return { text: `→ ${Math.floor(after)} wk`, cls }
+    const delta = after - runwayNow
+    if (Math.abs(delta) >= 52) return { text: `→ ${Math.floor(after)} wk`, cls }
+    return { text: `${delta > 0 ? '+' : ''}${delta.toFixed(1)} wks`, cls }
+  }
+
+  /** The mockup's three-stat row: Fit / Available / Runway impact. */
+  const statRow = (c: Candidate) => {
+    const fit = teamFit(c, ctx)
+    const ft = fitTone(fit)
+    const ri = runwayImpact(c)
     return (
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[12.5px]">
-        <span>
-          <span className="font-bold tnum">{money(c.salary)}</span>
-          <span className="text-mut">/yr</span>
-          <span className="ml-2 text-[11px] text-mut/80 tnum">+{money(recruiterFee(c))} fee</span>
-        </span>
-        <span className="text-mut">
-          Runway <span aria-hidden>→</span> <span className={`font-semibold tnum ${cls}`}>{afterLabel}</span>
-          {after !== Infinity && after < 12 && <span className="text-bad"> · overhiring!</span>}
-        </span>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div className="text-[9.5px] font-bold tracking-[0.08em] text-mut uppercase">Fit</div>
+          <div className={`text-[14px] font-bold tnum ${ft === 'good' ? 'text-good' : ft === 'warn' ? 'text-warn' : 'text-bad'}`}>{fit}%</div>
+        </div>
+        <div>
+          <div className="text-[9.5px] font-bold tracking-[0.08em] text-mut uppercase">Available</div>
+          <div className="text-[14px] font-bold tnum">
+            {c.notice} wk{c.notice === 1 ? '' : 's'}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9.5px] font-bold tracking-[0.08em] text-mut uppercase">Runway</div>
+          <div className={`text-[14px] font-bold tnum ${ri.cls}`}>{ri.text}</div>
+        </div>
       </div>
     )
   }
 
+  const kpis = [
+    { label: 'Open roles', value: String(openRoles(game)) },
+    {
+      label: 'In motion',
+      value: `${game.offersOut.length + game.pendingHires.length}`,
+      sub: game.pendingHires.length > 0 ? `${game.pendingHires.length} signed` : game.offersOut.length > 0 ? 'deciding…' : undefined,
+    },
+    { label: 'Team size', value: String(game.employees.length + 1) },
+    { label: 'Payroll / wk', value: money(weeklyPayroll(game)) },
+    { label: 'Runway impact', value: teamRunwayImpact(game).text, tone: teamRunwayImpact(game).tone === 'bad' ? 'text-bad' : teamRunwayImpact(game).tone === 'warn' ? 'text-warn' : '' },
+  ]
+
   return (
     <div>
-      {/* MOBILE IS ITS OWN COMPOSITION, not the desktop one squeezed (design brief §20, §29).
-          On a phone this header used to run past a thousand pixels — a 28px title, a subtitle, the
-          sort control, a four-line explainer and two rows of filter pills — so the first candidate
-          began below the fold and the compact cards below were invisible. The title shrinks, the
-          subtitle and the explainer are desktop-only (the explainer is teaching copy, and teaching
-          copy that costs a screenful of scrolling every visit stops teaching), and the count comes
-          along so the header still says what this screen is. */}
+      {/* header — title + one line of intent, per the mockup */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[20px] font-bold tracking-tight sm:text-[28px]">
-            Build your founding team
-            <span className="ml-2 align-middle text-[12px] font-semibold text-mut sm:hidden">{pool.length}</span>
-          </h1>
-          <div className="mt-0.5 hidden text-[13.5px] text-mut sm:block">
-            Every hire shapes what this company can become — and what it costs to run.
-          </div>
+          <h1 className="text-[22px] font-bold tracking-tight sm:text-[28px]">Hiring</h1>
+          <div className="mt-0.5 text-[13px] text-mut">Find the right people to build your future.</div>
         </div>
-        <label className="flex items-center gap-2 text-[12.5px] text-mut">
-          Sort by
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="min-h-[36px] rounded-lg border border-line2 bg-surface2 px-2.5 text-[12.5px] font-semibold text-ink"
-          >
-            {SORTS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
-      {/* Burn, revenue and runway are in the topbar rail on every screen; repeating them here only
-          gave the player a second place they could disagree. The one number this screen owes is
-          what a given hire does to the runway. */}
-      <div className="mt-3 mb-4 hidden text-[13px] leading-relaxed text-mut sm:block">
-        <b className="text-ink">Team fit</b> weighs how this person&apos;s shape suits <b className="text-ink">{game.stage}</b>, what your
-        roster is missing, and how much they lift the people around them. <b className="text-ink">Runway after</b> is what hiring them does to
-        your runway — under ~20 weeks is living dangerously, and candidates start declining offers below ~10.
+      {/* KPI strip (desktop and tablet; the phone gets the insights card instead) */}
+      <div className="mt-3 hidden sm:block">
+        <KpiStrip items={kpis} />
+      </div>
+
+      {/* MOBILE insights card — the brief asks for it explicitly at the top of the phone page */}
+      <div className="mt-3 rounded-xl border border-line bg-surface p-3 shadow-[var(--elev-1)] sm:hidden">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px]">
+          <div className="flex items-baseline justify-between">
+            <span className="text-mut">Open roles</span>
+            <span className="font-bold tnum">{openRoles(game)}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-mut">Payroll</span>
+            <span className="font-bold tnum">{money(weeklyPayroll(game))}/wk</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-mut">Acceptance</span>
+            <span className="font-bold tnum text-good">
+              ~
+              {Math.round(
+                (game.candidates.length
+                  ? game.candidates.reduce((a, c) => a + offerAcceptChance(game, c, Math.min(999, runwayNow)), 0) / game.candidates.length
+                  : 0) * 100,
+              )}
+              %
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-mut">Runway impact</span>
+            <span className={`font-bold tnum ${teamRunwayImpact(game).tone === 'bad' ? 'text-bad' : 'text-warn'}`}>{teamRunwayImpact(game).text}</span>
+          </div>
+        </div>
       </div>
 
       {shared && (
-        // The rules of the shared market are worth one sentence up front and a paragraph on
-        // demand. What is gone entirely is how the bid is transported: whether a number travels
-        // as a hash is not a decision the player makes on a hiring screen.
         <Disclosure
           label="One market, every founder — sealed offers, one candidate per round"
-          className="mb-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed"
+          className="mt-3.5 rounded-2xl border border-accent/30 bg-accent/[0.05] px-4 py-3 text-[13px] leading-relaxed"
         >
           <div className="mt-2 text-mut">
             These five people are the same five your rivals are looking at, and the whole pool is replaced next week. Choose a premium
@@ -357,7 +389,7 @@ export function Hiring() {
       )}
 
       {(game.offersOut.length > 0 || game.pendingHires.length > 0) && (
-        <div className="mb-3.5 grid gap-5 md:grid-cols-2">
+        <div className="mt-3.5 grid gap-5 md:grid-cols-2">
           {game.offersOut.length > 0 && (
             <Panel title="Offers out — they answer next week">
               {game.offersOut.map((c) => (
@@ -365,7 +397,7 @@ export function Hiring() {
                   <span>
                     <b>{c.name}</b> <span className="text-mut">· {c.role}</span>
                   </span>
-                  <span className="text-mut tnum">{money(c.salary)}/yr · deciding…</span>
+                  <span className="text-mut tnum">{weeklyMoney(c.salary)} · deciding…</span>
                 </div>
               ))}
             </Panel>
@@ -388,17 +420,18 @@ export function Hiring() {
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
         <div className="min-w-0">
-          {/* Filter row. Role tabs are the game's four real roles, one each — the mock's fifth
-              ("Operations") has no role behind it and would filter to an empty grid forever. */}
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          {/* Function chips + ONE Filters button (brief §6C: the game ranks; controls stay light).
+              The chips are the game's four real roles — a fifth "Ops" would filter to an empty
+              grid forever, because no such role exists in the simulation. */}
+          <div className="mb-3.5 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
-              {([['all', 'All candidates'], ...ROLES.map((r) => [r, ROLE_LABEL[r]] as const)] as [Role | 'all', string][]).map(([id, label]) => (
+              {([['all', 'All'], ...ROLES.map((r) => [r, ROLE_LABEL[r]] as const)] as [Role | 'all', string][]).map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setRole(id)}
-                  className={`min-h-[36px] rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
+                  className={`min-h-[34px] rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
                     role === id ? 'border-accent bg-accent/15 text-ink' : 'border-line2 bg-surface2 text-mut hover:border-accent hover:text-ink'
                   }`}
                 >
@@ -406,68 +439,149 @@ export function Hiring() {
                 </button>
               ))}
             </div>
-            <div className="relative min-w-[180px] flex-1">
-              <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-mut" aria-hidden />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name or role…"
-                aria-label="Search candidates"
-                className="min-h-[36px] w-full rounded-full border border-line2 bg-surface2 pr-3 pl-8 text-[12.5px] text-ink placeholder:text-mut/70"
-              />
-            </div>
             <button
-              onClick={() => setOnlyShortlist((v) => !v)}
-              aria-pressed={onlyShortlist}
-              className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
-                onlyShortlist ? 'border-warn/60 bg-warn/15 text-warn' : 'border-line2 bg-surface2 text-mut hover:text-ink'
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              className={`ml-auto inline-flex min-h-[34px] items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
+                filtersOpen || query || sort !== 'fit' || onlyShortlist
+                  ? 'border-accent bg-accent/15 text-ink'
+                  : 'border-line2 bg-surface2 text-mut hover:text-ink'
               }`}
             >
-              {onlyShortlist ? <Star size={13} fill="currentColor" aria-hidden /> : <SlidersHorizontal size={13} aria-hidden />}
-              Shortlist
-              {shortlist.length > 0 && <span className="tnum">({shortlist.length})</span>}
+              <SlidersHorizontal size={13} aria-hidden />
+              Filters
             </button>
           </div>
+
+          {filtersOpen && (
+            <div className="mb-3.5 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface p-2.5">
+              <div className="relative min-w-[170px] flex-1">
+                <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-mut" aria-hidden />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by name or role…"
+                  aria-label="Search candidates"
+                  className="min-h-[34px] w-full rounded-full border border-line2 bg-surface2 pr-3 pl-8 text-[12.5px] text-ink placeholder:text-mut/70"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-[12px] text-mut">
+                Sort
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  className="min-h-[34px] rounded-lg border border-line2 bg-surface2 px-2 text-[12.5px] font-semibold text-ink"
+                >
+                  {SORTS.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                onClick={() => setOnlyShortlist((v) => !v)}
+                aria-pressed={onlyShortlist}
+                className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-colors ${
+                  onlyShortlist ? 'border-warn/60 bg-warn/15 text-warn' : 'border-line2 bg-surface2 text-mut hover:text-ink'
+                }`}
+              >
+                <Star size={13} fill={onlyShortlist ? 'currentColor' : 'none'} aria-hidden />
+                Shortlist
+                {shortlist.length > 0 && <span className="tnum">({shortlist.length})</span>}
+              </button>
+            </div>
+          )}
 
           {pool.length === 0 ? (
             <Panel>
               <div className="text-[13px] text-mut">
-                Nobody in the pool matches that. {onlyShortlist ? 'Nothing is shortlisted yet — tap the star on a card.' : 'Try another role or clear the search.'}
+                Nobody in the pool matches that.{' '}
+                {onlyShortlist ? 'Nothing is shortlisted yet — tap the star on a card.' : 'Try another role or clear the search.'}
               </div>
             </Panel>
           ) : (
-            // One list at every width. The desktop table this replaced spent 40 cells on 5 people
-            // and put the only number that decides anything — runway after — sixth of eight
-            // columns, with "Send offer" off the right edge of a horizontal scroller on a phone.
-            <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
-              {pool.map((c) => (
-                <PersonCard
-                  key={c.id}
-                  person={c}
-                  ctx={ctx}
-                  badges={badgesFor(c)}
-                  rows={moneyRows(c)}
-                  onOpen={() => setOpen(c.id)}
-                  shortlisted={shortlist.includes(c.id)}
-                  onShortlist={() => setShortlist((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : [...s, c.id]))}
-                  actions={
-                    shared ? (
-                      <BidControl candidateId={c.id} />
-                    ) : (
-                      <>
-                        <Btn className="flex-1" onClick={() => setOpen(c.id)}>
-                          Profile
-                        </Btn>
-                        <Btn variant="primary" className="flex-1" onClick={() => sendOffer(c.id)}>
-                          <Send size={15} aria-hidden />
-                          Send offer
-                        </Btn>
-                      </>
-                    )
-                  }
-                />
-              ))}
-            </div>
+            <>
+              {/* DESKTOP: the mockup's compact cards — verdict banner, cost top-right, the
+                  three-stat row, one founder-style line, two CTAs. */}
+              <div className="hidden gap-4 sm:grid sm:grid-cols-2 2xl:grid-cols-2">
+                {pool.map((c) => (
+                  <PersonCard
+                    key={c.id}
+                    person={c}
+                    ctx={ctx}
+                    banner={fitTier(teamFit(c, ctx))}
+                    topRight={
+                      <div className="shrink-0 text-right">
+                        <div className="text-[15px] font-bold leading-none tnum">{money(c.salary / 52)}</div>
+                        <div className="mt-0.5 text-[10px] text-mut">/ week</div>
+                      </div>
+                    }
+                    badges={badgesFor(c)}
+                    showAttributes={false}
+                    rows={statRow(c)}
+                    note={impactSummary(c, game.stage)}
+                    onOpen={() => setOpen(c.id)}
+                    shortlisted={shortlist.includes(c.id)}
+                    onShortlist={() => setShortlist((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : [...s, c.id]))}
+                    actions={
+                      shared ? (
+                        <BidControl candidateId={c.id} />
+                      ) : (
+                        <>
+                          <Btn className="flex-1" onClick={() => setOpen(c.id)}>
+                            View profile
+                          </Btn>
+                          <Btn variant="primary" className="flex-1" onClick={() => sendOffer(c.id)}>
+                            <Send size={14} aria-hidden />
+                            Make offer
+                          </Btn>
+                        </>
+                      )
+                    }
+                  />
+                ))}
+              </div>
+
+              {/* MOBILE: compact list rows (brief §7D) — tap opens the full profile, where the
+                  offer/bid actions live. */}
+              <div className="space-y-2 sm:hidden">
+                {pool.map((c) => {
+                  const fit = teamFit(c, ctx)
+                  const ft = fitTone(fit)
+                  const ri = runwayImpact(c)
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setOpen(c.id)}
+                      className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left shadow-[var(--elev-1)] active:bg-surface2"
+                    >
+                      <span className="block h-10 w-10 shrink-0 overflow-hidden rounded-full border border-line2/70 bg-black/30">
+                        <Portrait person={c} frame="chip" className="h-full w-full" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-[14px] font-bold">{c.name}</span>
+                          <span className={`shrink-0 text-[14px] font-bold tnum ${ft === 'good' ? 'text-good' : ft === 'warn' ? 'text-warn' : 'text-bad'}`}>
+                            {fit}%
+                          </span>
+                        </span>
+                        <span className="flex items-baseline justify-between gap-2 text-[11.5px] text-mut">
+                          <span className="truncate">{title(c)}</span>
+                          <span className="shrink-0 tnum">{weeklyMoney(c.salary)}</span>
+                        </span>
+                        <span className="flex items-baseline justify-between gap-2 text-[11px]">
+                          <span className={!shared && c.weeksLeft <= 2 ? 'font-semibold text-warn' : 'text-mut'}>
+                            {shared ? 'shared pool' : `leaves in ${c.weeksLeft}w`}
+                          </span>
+                          <span className={`shrink-0 tnum ${ri.cls}`}>{ri.text}</span>
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
           )}
 
           <div className="mt-4 text-center text-[12px] text-mut">
@@ -475,13 +589,16 @@ export function Hiring() {
             {game.candidates.length === 1 ? 'candidate' : 'candidates'} in the pool
             {shortlist.length > 0 && <> · {shortlist.length} shortlisted</>}
           </div>
-          <div className="mt-1 text-center text-[11.5px] text-mut/70">
-            Tip: shortlist people to hold them side by side. The pool turns over — everyone leaves eventually.
-          </div>
         </div>
 
-        <div className="min-w-0">
-          <TeamShape game={game} />
+        {/* the right rail: insights → pool health → team health (desktop only; the phone got the
+            compact insights card at the top instead) */}
+        <div className="hidden min-w-0 xl:block">
+          <div className="sticky top-4">
+            <HiringInsights game={game} ctx={ctx} />
+            <TalentPoolHealth game={game} ctx={ctx} />
+            <TeamHealthMini game={game} />
+          </div>
         </div>
       </div>
 
@@ -492,10 +609,9 @@ export function Hiring() {
           onClose={() => setOpen(null)}
           status={
             <>
-              <b className="text-ink">{fitLabel(teamFit(openCandidate, ctx))}.</b> Asking {money(openCandidate.salary)}/yr —{' '}
-              {valueLabel(valueRatio(openCandidate, game.stage)).toLowerCase()} for the output. A {money(recruiterFee(openCandidate))}{' '}
-              recruiter fee lands the week they start, and they serve {openCandidate.notice} week
-              {openCandidate.notice === 1 ? '' : 's'} of notice first.
+              <b className="text-ink">{fitTier(teamFit(openCandidate, ctx)).label}.</b> Asking {money(openCandidate.salary)}/yr (
+              {weeklyMoney(openCandidate.salary)}) — a {money(recruiterFee(openCandidate))} recruiter fee lands the week they start, and
+              they serve {openCandidate.notice} week{openCandidate.notice === 1 ? '' : 's'} of notice first.
             </>
           }
           actions={
@@ -512,7 +628,7 @@ export function Hiring() {
                 }}
               >
                 <Send size={15} aria-hidden />
-                Send offer
+                Make offer
               </Btn>
             )
           }
