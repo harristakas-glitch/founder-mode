@@ -492,6 +492,39 @@ export function skillChips(p: Pick<Person, 'name' | 'role' | 'trait'>): string[]
  * ownership; from Series A the card switches to culture and quality, because that is the moment
  * the simulation switches too.
  */
+/**
+ * A one-phrase answer to "what KIND of person is this?" — the brief's §9 archetype.
+ *
+ * DERIVED, never stored and never rolled: it reads the same attribute shape, skill and experience
+ * the rest of the card reads, so it cannot disagree with the numbers printed under it. That is the
+ * whole design constraint — an archetype that were its own random draw would be a label the
+ * simulation does not believe, which is the `expansionPotential` defect wearing a nicer name.
+ *
+ * A flat shape gets a generalist label rather than a made-up specialism: someone genuinely
+ * balanced is a real and useful kind of hire, and pretending they have a spike would be a lie.
+ */
+export function archetype(p: Pick<Person, 'name' | 'role' | 'skill' | 'trait'>): string {
+  const a = attributes(p)
+  const vals = ATTRIBUTE_IDS.map((id) => a[id])
+  const spread = Math.max(...vals) - Math.min(...vals)
+  const top = ATTRIBUTE_IDS.reduce((best, id) => (a[id] > a[best] ? id : best), ATTRIBUTE_IDS[0])
+  // A senior generalist reads differently from a junior one, and both are common enough to name.
+  if (spread < 14) return p.skill >= 8 ? 'Experienced Operator' : 'Generalist Builder'
+  if (p.skill >= 9 && yearsExperience(p) >= 10) return 'Scaling Veteran'
+  switch (top) {
+    case 'velocity':
+      return 'Rapid Builder'
+    case 'quality':
+      return 'Systems Specialist'
+    case 'ownership':
+      return 'High-Ownership Operator'
+    case 'adaptability':
+      return 'Startup Athlete'
+    default:
+      return 'Team Anchor'
+  }
+}
+
 export function cardAttributes(stage: Stage): AttributeId[] {
   const w = STAGE_WEIGHTS[stage] ?? STAGE_WEIGHTS['Pre-seed']
   // ties break on ATTRIBUTE_IDS order, so the result is stable for a given weight table

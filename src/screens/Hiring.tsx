@@ -250,16 +250,23 @@ export function Hiring() {
 
   const openCandidate = game.candidates.find((c) => c.id === open) ?? null
 
+  /**
+   * ONE state label, in priority order (brief §15 — badge spam is the failure mode, and §46 —
+   * urgency is a state, not a row of text on every card).
+   *
+   * Scarcity outranks quality: a candidate about to leave is a decision you make THIS week, and a
+   * strong candidate who is not going anywhere can wait. Every label is read off real state — none
+   * is invented for decoration (Rule 8).
+   */
   const badgesFor = (c: Candidate): CardBadge[] => {
-    const out: CardBadge[] = []
-    if (teamFit(c, ctx) >= 70) out.push({ text: 'Top candidate', tone: 'accent' })
     // Arena refreshes the whole pool every week, so expiry urgency would sit on every card and
     // mean nothing; the shared-market line above says it once instead.
-    if (!shared && c.weeksLeft <= 1) out.push({ text: 'Last week', tone: 'warn' })
+    if (!shared && c.weeksLeft <= 2) return [{ text: `Leaves in ${c.weeksLeft}w`, tone: 'warn' }]
+    if (teamFit(c, ctx) >= 70) return [{ text: 'Recommended', tone: 'accent' }]
     const v = valueRatio(c, game.stage)
-    if (v >= 1.18) out.push({ text: 'Bargain', tone: 'good' })
-    else if (v <= 0.82) out.push({ text: 'Overpriced', tone: 'bad' })
-    return out.slice(0, 2)
+    if (v >= 1.18) return [{ text: 'Best value', tone: 'good' }]
+    if (v <= 0.82) return [{ text: 'Overpriced', tone: 'bad' }]
+    return []
   }
 
   const moneyRows = (c: Candidate) => {
@@ -269,36 +276,43 @@ export function Hiring() {
     // under ~12 weeks candidates start declining, and the card says so in words ("overhiring!"),
     // never in colour alone. Comfortable numbers stay plain — the value is the message.
     const cls = after === Infinity ? '' : after < 12 ? 'font-bold text-bad' : after < 26 ? 'text-warn' : ''
+    // ONE LINE, salary dominant (brief §12): the recruiter fee had equal weight to an annual
+    // salary and to the runway, which is the only number here that can end the run. It is muted
+    // and secondary now, and the full breakdown is in Profile. Expiry left the card entirely —
+    // it is a state badge ("Last week") when it is urgent, and noise when it is not (§46).
     return (
-      <>
-        <span className="text-mut">Salary</span>
-        <span className="text-right tnum">{money(c.salary)}/yr</span>
-        <span className="text-mut">Recruiter fee</span>
-        <span className="text-right tnum">{money(recruiterFee(c))}</span>
-        <span className="text-mut">Runway after</span>
-        <span className={`text-right tnum ${cls}`}>
-          {afterLabel}
-          {after !== Infinity && after < 12 && ' · overhiring!'}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[12.5px]">
+        <span>
+          <span className="font-bold tnum">{money(c.salary)}</span>
+          <span className="text-mut">/yr</span>
+          <span className="ml-2 text-[11px] text-mut/80 tnum">+{money(recruiterFee(c))} fee</span>
         </span>
-        {!shared && (
-          <>
-            <span className="text-mut">Leaves the pool in</span>
-            <span className={`text-right tnum ${c.weeksLeft <= 2 ? 'font-semibold text-warn' : ''}`}>
-              {c.weeksLeft <= 1 && <span aria-hidden>⏳ </span>}
-              {c.weeksLeft} wk
-            </span>
-          </>
-        )}
-      </>
+        <span className="text-mut">
+          Runway <span aria-hidden>→</span> <span className={`font-semibold tnum ${cls}`}>{afterLabel}</span>
+          {after !== Infinity && after < 12 && <span className="text-bad"> · overhiring!</span>}
+        </span>
+      </div>
     )
   }
 
   return (
     <div>
+      {/* MOBILE IS ITS OWN COMPOSITION, not the desktop one squeezed (design brief §20, §29).
+          On a phone this header used to run past a thousand pixels — a 28px title, a subtitle, the
+          sort control, a four-line explainer and two rows of filter pills — so the first candidate
+          began below the fold and the compact cards below were invisible. The title shrinks, the
+          subtitle and the explainer are desktop-only (the explainer is teaching copy, and teaching
+          copy that costs a screenful of scrolling every visit stops teaching), and the count comes
+          along so the header still says what this screen is. */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight">Build your founding team</h1>
-          <div className="mt-0.5 text-[13.5px] text-mut">Every hire shapes what this company can become — and what it costs to run.</div>
+          <h1 className="text-[20px] font-bold tracking-tight sm:text-[28px]">
+            Build your founding team
+            <span className="ml-2 align-middle text-[12px] font-semibold text-mut sm:hidden">{pool.length}</span>
+          </h1>
+          <div className="mt-0.5 hidden text-[13.5px] text-mut sm:block">
+            Every hire shapes what this company can become — and what it costs to run.
+          </div>
         </div>
         <label className="flex items-center gap-2 text-[12.5px] text-mut">
           Sort by
@@ -319,7 +333,7 @@ export function Hiring() {
       {/* Burn, revenue and runway are in the topbar rail on every screen; repeating them here only
           gave the player a second place they could disagree. The one number this screen owes is
           what a given hire does to the runway. */}
-      <div className="mt-3 mb-4 text-[13px] leading-relaxed text-mut">
+      <div className="mt-3 mb-4 hidden text-[13px] leading-relaxed text-mut sm:block">
         <b className="text-ink">Team fit</b> weighs how this person&apos;s shape suits <b className="text-ink">{game.stage}</b>, what your
         roster is missing, and how much they lift the people around them. <b className="text-ink">Runway after</b> is what hiring them does to
         your runway — under ~20 weeks is living dangerously, and candidates start declining offers below ~10.

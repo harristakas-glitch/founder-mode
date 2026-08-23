@@ -12,7 +12,7 @@
 // simulation reads through its three seams. Nothing here is decorative and nothing here is a
 // second opinion.
 
-import { Briefcase, MapPin, Star, X } from 'lucide-react'
+import { Briefcase, Gem, MapPin, Shield, Shuffle, Star, Users, X, Zap, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Btn, CARD, Meter, NESTED, TraitChip, useDialog } from './components'
@@ -22,6 +22,7 @@ import {
   ATTRIBUTE_IDS,
   ATTRIBUTE_META,
   ALL_STAGES,
+  archetype,
   cardAttributes,
   ROLE_HELP,
   ROLE_LABEL,
@@ -49,7 +50,7 @@ import {
   yearsExperience,
   type TeamContext,
 } from './game/people'
-import type { Person, Stage } from './game/types'
+import type { Person } from './game/types'
 
 const TONE_TEXT = { good: 'text-good', warn: 'text-warn', bad: 'text-bad' } as const
 
@@ -59,46 +60,30 @@ export function SectionLabel({ children }: { children: ReactNode }) {
   return <div className="text-[10px] font-bold uppercase tracking-[0.11em] text-mut">{children}</div>
 }
 
-/**
- * Stage affinity, drawn. Five bars, one per stage, with the company's current stage ringed.
- *
- * This is the brief's centre of gravity — "the same person should be a great pre-seed hire and a
- * mediocre Series A hire" — so it goes on the CARD rather than into the profile. A single number
- * cannot say "peaks now, fades later"; five bars say it without a sentence.
- */
-export function StageStrip({ person, stage }: { person: Person; stage: Stage }) {
-  const curve = stageCurve(person)
-  const best = bestStage(person)
-  return (
-    <div className="flex items-end gap-[3px]" aria-label={`Stage affinity, best at ${best}`}>
-      {curve.map(({ stage: s, fit }) => {
-        const here = s === stage
-        const h = Math.max(4, Math.round((fit / 100) * 26))
-        return (
-          <div key={s} className="flex flex-1 flex-col items-center gap-1" title={`${s}: ${Math.round(fit)}/100`}>
-            <div
-              className={`w-full rounded-[2px] ${here ? 'bg-accent' : fit >= 58 ? 'bg-good/55' : fit <= 42 ? 'bg-bad/45' : 'bg-line2'}`}
-              style={{ height: h }}
-            />
-            <span className={`text-[9px] leading-none ${here ? 'font-bold text-ink' : 'text-mut/70'}`}>
-              {s === 'Pre-seed' ? 'PS' : s === 'Seed' ? 'S' : s.replace('Series ', '')}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
+/** One of the three headline attributes: label, figure, and the bar that makes 82 look like 82. */
+/** One attribute, compact: icon + label above the figure, a thin meter under it. Brief §10 — three
+ *  of these in a row must read at a glance without a section of their own. */
+const ATTR_ICON: Record<(typeof ATTRIBUTE_IDS)[number], LucideIcon> = {
+  velocity: Zap,
+  quality: Gem,
+  ownership: Shield,
+  adaptability: Shuffle,
+  culture: Users,
 }
 
-/** One of the three headline attributes: label, figure, and the bar that makes 82 look like 82. */
 function AttrStat({ id, value }: { id: (typeof ATTRIBUTE_IDS)[number]; value: number }) {
   const meta = ATTRIBUTE_META[id]
+  const Icon = ATTR_ICON[id]
+  const tone = value >= 68 ? 'good' : value <= 32 ? 'bad' : 'accent'
   return (
     <div className="min-w-0" title={meta.blurb}>
-      <div className="truncate text-[9.5px] font-bold uppercase tracking-[0.08em] text-mut">{meta.label}</div>
-      <div className="mt-0.5 text-[21px] font-bold leading-none tnum">{value}</div>
-      <div className="mt-1.5">
-        <Meter value={value} tone={value >= 68 ? 'good' : value <= 32 ? 'bad' : 'accent'} />
+      <div className="flex items-center gap-1 text-mut">
+        <Icon size={10} aria-hidden className="shrink-0" />
+        <span className="truncate text-[9px] font-bold uppercase tracking-[0.07em]">{meta.label}</span>
+      </div>
+      <div className="mt-0.5 text-[19px] font-bold leading-none tnum">{value}</div>
+      <div className="mt-1">
+        <Meter value={value} tone={tone} />
       </div>
     </div>
   )
@@ -146,7 +131,6 @@ export function PersonCard({
   const a = attributes(person)
   const fit = teamFit(person, ctx)
   const tone = fitTone(fit)
-  const bio = background(person).bio
   const chips = skillChips(person)
 
   return (
@@ -194,24 +178,41 @@ export function PersonCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <button onClick={onOpen} className="min-w-0 cursor-pointer text-left">
+              {/* The name is the strongest text in the card (brief §35). */}
               <div className="truncate text-[16px] font-bold leading-tight hover:underline">{person.name}</div>
               <div className="truncate text-[12.5px] text-mut">{title(person)}</div>
             </button>
-            <TraitChip trait={person.trait} />
-          </div>
-          {badges.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {badges.map((b) => (
-                <span key={b.text} className={`rounded-full border px-2 py-[2px] text-[10px] font-bold ${BADGE_CLS[b.tone]}`}>
-                  {b.text}
-                </span>
-              ))}
+            {/* CONCLUSION FIRST (brief §14, Rule 2): the fit percentage and its word sit at the top
+                right where the eye lands, instead of five bars near the bottom that the player had
+                to decode into the same conclusion. The "why" lives in Profile. */}
+            <div className="shrink-0 text-right">
+              <div className={`text-[17px] font-bold leading-none tnum ${TONE_TEXT[tone]}`}>{fit}%</div>
+              <div className="mt-0.5 text-[10px] whitespace-nowrap text-mut">{fitLabel(fit)}</div>
             </div>
-          )}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {/* One archetype, one state label (brief §9, §15) — badge spam is the thing to avoid,
+                so `badges` is sliced to its single most important entry by the caller. */}
+            <span className="rounded-full border border-[var(--ha)]/45 bg-[var(--ha)]/12 px-2 py-[2px] text-[10.5px] font-semibold text-[var(--ha)]">
+              {archetype(person)}
+            </span>
+            <TraitChip trait={person.trait} />
+            {badges.slice(0, 1).map((b) => (
+              <span key={b.text} className={`rounded-full border px-2 py-[2px] text-[10px] font-bold ${BADGE_CLS[b.tone]}`}>
+                {b.text}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-2.5">
+      {/* A BROWSING CARD, NOT A PROFILE PAGE (design brief §5, Rule 1). What used to live here and
+          now lives one click away in Profile: the biography, the full skill list, the recruiter
+          fee, and the five-bar stage strip — five abstract bars the player had to decode to reach
+          a conclusion the percentage states outright. What is left is exactly the decision:
+          who they are, the three attributes this stage rewards, what they cost, and what it does
+          to the runway. */}
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-2">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-mut">
           <span className="inline-flex items-center gap-1">
             <Briefcase size={11} aria-hidden /> <span className="tnum">{yearsExperience(person)}</span> yrs
@@ -221,45 +222,25 @@ export function PersonCard({
           </span>
         </div>
 
-        <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-mut">{bio}</p>
-
-        <div className="mt-3.5">
-          <SectionLabel>Attributes</SectionLabel>
-          <div className="mt-2 grid grid-cols-3 gap-3">
-            {/* Keyed on the STAGE, not the role: the engine weights attributes by stage and has no
-                role term at all, so a role-keyed card printed numbers that ranked candidates
-                backwards. See `cardAttributes`. */}
-            {cardAttributes(ctx.stage).map((id) => (
-              <AttrStat key={id} id={id} value={a[id]} />
-            ))}
-          </div>
+        <div className="mt-3 grid grid-cols-3 gap-3 border-t border-line/60 pt-3">
+          {/* Keyed on the STAGE, not the role: the engine weights attributes by stage and has no
+              role term at all, so a role-keyed card printed numbers that ranked candidates
+              backwards. See `cardAttributes`. */}
+          {cardAttributes(ctx.stage).map((id) => (
+            <AttrStat key={id} id={id} value={a[id]} />
+          ))}
         </div>
 
-        <div className="mt-3.5">
-          <SectionLabel>Skills</SectionLabel>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {chips.map((c) => (
-              <span key={c} className="rounded-full border border-line2/70 bg-surface2 px-2 py-[3px] text-[10.5px] text-mut">
-                {c}
-              </span>
-            ))}
-          </div>
+        {/* Two skills and a count, on ONE line (brief §11). Three chips wrapped to two rows on a
+            narrow card and pushed everything below it out of view. */}
+        <div className="mt-3 truncate border-t border-line/60 pt-2.5 text-[11.5px] text-mut">
+          {chips.slice(0, 2).join(' · ')}
+          {chips.length > 2 && <span className="text-mut/70"> · +{chips.length - 2}</span>}
         </div>
 
-        {rows && <div className="mt-3.5 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-line/70 pt-3 text-[13px]">{rows}</div>}
+        {rows && <div className="mt-2.5 border-t border-line/60 pt-2.5">{rows}</div>}
 
-        <div className="mt-3.5 border-t border-line/70 pt-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <SectionLabel>Team fit</SectionLabel>
-            <span className={`text-[15px] font-bold tnum ${TONE_TEXT[tone]}`}>{fit}%</span>
-          </div>
-          <div className="mt-0.5 text-[11.5px] text-mut">{fitLabel(fit)}</div>
-          <div className="mt-2">
-            <StageStrip person={person} stage={ctx.stage} />
-          </div>
-        </div>
-
-        {actions && <div className="mt-auto flex gap-1.5 pt-3.5">{actions}</div>}
+        {actions && <div className="mt-auto flex gap-1.5 pt-3">{actions}</div>}
       </div>
     </div>
   )
