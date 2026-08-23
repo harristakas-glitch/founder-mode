@@ -786,14 +786,20 @@ export function repositionTo(s: GameState, newSegment: SegmentId, week: number):
   const b = career.segmentTruth[newSegment]
   // the further apart the two segments' requirements are, the longer the whiplash
   const distance = Math.abs(a.productRequirement - b.productRequirement) + Math.abs(a.willingnessToPay - b.willingnessToPay)
-  const weeks = Math.max(2, Math.min(6, Math.round(distance / 30)))
+  // BALANCE CAMPAIGN (2026-08-23, rank 7): cap 6→4 weeks, penalties 0.7/0.55 → 0.85/0.75. The
+  // old cost was measured as the difference between death and survival for a mid-game course
+  // correction: with it, the week-24 and week-48 pivots to the seed's RIGHT segment both went
+  // bankrupt (@95/@96); softened, both close acquired (@84, positive cash). The pivot stays a
+  // real cost — weeks of drag on everything — it just stops being a death sentence for the one
+  // move the game's own signposts now recommend.
+  const weeks = Math.max(2, Math.min(4, Math.round(distance / 30)))
   career.repositioning = {
     previousSegmentId: from,
     newSegmentId: newSegment,
     startWeek: week,
     remainingWeeks: weeks,
-    productPenalty: 0.7,
-    marketingPenalty: 0.55,
+    productPenalty: 0.85,
+    marketingPenalty: 0.75,
   }
   career.primaryTargetSegmentId = newSegment
 

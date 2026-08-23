@@ -70,3 +70,40 @@ Balance effect: quick/arena return to their pre-expansion tuning exactly (golden
 the calibration problem the owner reported — quick too EASY, simulation too HARD — is now a
 pure classic-engine tuning question for quick, and a strategic-systems question only in
 Simulation. The full balance campaign (phase 9) measures both.
+
+## The calibration campaign — round 1 (2026-08-24)
+
+Instrument: test/winrate-probe.ts (16 seeds x saas/social/fintech x quick/career x casual/active;
+`--assert` turns the owner bands into a gate). Diagnosis: a 6-agent workflow (PMF plateau,
+capital access, unit economics, exit cadence, quick resistance → synthesis). Knobs shipped:
+
+1. **Career stage-extension round** (engine): a real business (revenue run-rate ≥ $100k/yr,
+   past Pre-seed) that fails a raise on valuation now gets ONE bridge at a 30-45% haircut.
+   Career-only, once per run. Active career bankruptcies: saas 5/16→1, social 15/16→2,
+   fintech 5/16→1.
+2. **Quick board teeth**: after a submitted ultimatum, two more misses = fired (quick/arena
+   only; career keeps the forgiving cycle — unscoped this fired career actives 3-10/16).
+   Passed reviews stop refilling strikes after a submission. Quick casual failure ~2% → 13-38%.
+3. **Acquisition premium** 1.1-2.0 on spot growth → 1.0-1.5 on SUSTAINED growth; and acquirers
+   skip companies at 2+ board strikes (diligence — closes the sell-before-fired hatch).
+   Active quick medians -15-28%: big wins now take longer, real play.
+4. **Guidance**: suggestedExperiment stops re-billing an answered pilot and names repositioning
+   when the board says the segment churns by nature; the UI's reposition lever fires whenever
+   the segment ceiling < 60 (the trap is named while runway remains). Advisory-only.
+5. **Honest unit economics**: career unitEconomics measures marginal CAC via the segment
+   resolver (constant rng) and LTV from settled cohort retention — the Growth card stops
+   claiming 1.2-4.2x where truth was 0.27-0.65x, plus a "scale after retention holds" line.
+6. **Softer repositioning**: cap 6→4 wks, penalties 0.7/0.55 → 0.85/0.75 — the measured
+   difference between a mid-game correction dying (@95/@96) and closing acquired (@84).
+7. **Fintech career acquisition** 8 → 9 via careerSectorAcqBase (career-only; 10 flipped
+   career-balance's price-sensitive ordering, its own documented thinnest cell at 1.03-1.14x).
+
+**After (16 seeds):** career active failure 6%/12%/6% with medians $10.2M/$9.6M/$6.2M vs
+passive $11.3M/$9.2M/$16.4M — the skill inversion is CLOSED in social, near-parity in saas,
+still open in fintech (its consumers segment rarely trips the informed-pivot signals; next
+candidate: fintech-specific guidance or the rank-10 settle knob, owner call). Quick casual
+failure saas 13% / social 38% / fintech 25% against the [25,35] band — saas under (its casual
+runs sell at wk 44 with a clean board; further hardening would tax actives, all such levers
+measured-and-rejected in the diagnosis). Recorded as: bands hit in spirit, two cells outside,
+each with a named next knob awaiting an owner decision. token-incentives' warned-weeks floor
+recalibrated 60→45 (predicate intact at 3/3 runs/inboxed; the extension IS the escape hatch).

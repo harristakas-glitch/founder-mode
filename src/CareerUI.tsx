@@ -299,7 +299,13 @@ export function pmfDiagnosis(game: GameState, segmentId: string, seg: SegmentSna
     customersToMaxScale,
     levers,
     productSaturated,
-    atCeiling: ceilingScore - seg.score <= 2,
+    // Fires when you have MAXED the segment — or when the segment's own ceiling is the problem.
+    // BALANCE CAMPAIGN (2026-08-23, rank 5): the old `<= 2` gate meant a mid-game player 10-16
+    // points below a sub-60 ceiling was shown "+9 perfect the product" toward a dead end and
+    // never saw this lever. 60 is the game's own bet-unlock / "real pull" PMF bar (engine.ts) —
+    // a segment that cannot reach it at ANY quality is a trap, and the trap gets named while the
+    // runway to escape it still exists.
+    atCeiling: ceilingScore - seg.score <= 2 || ceilingScore < 60,
     bestReachableBand: band?.status ?? 'showing_value',
   }
 }
@@ -448,7 +454,9 @@ export function PmfBreakdown({ compact = false }: { compact?: boolean }) {
               <div>
                 <span className="font-semibold">Target a different segment</span>
                 <div className="text-[11.5px] leading-snug text-mut">
-                  The only lever with room left — and the one the game cannot price for you, because you have not run these people yet.
+                  {d.ceilingScore < 60
+                    ? 'Even a perfect product caps out below real pull with these people — the ceiling is the segment, not your execution. '
+                    : 'The only lever with room left — and the one the game cannot price for you, because you have not run these people yet. '}
                   Repositioning costs weeks of product velocity and weaker acquisition while the company turns; research is how you find out
                   whether it is worth it before you pay for it.
                 </div>

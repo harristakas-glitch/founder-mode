@@ -13,8 +13,17 @@ import {
 } from './data'
 import { ARC_DEFS } from './arcs'
 import { hasCapability, resolveGameRules, systemDepth, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
-import { careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
-import { createCareerPMF, migrateCareerSave } from './career/pmf'
+import { careerAcqScale, careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
+import {
+  createCareerPMF,
+  migrateCareerSave,
+  resolveCohortRetention,
+  resolveSegmentAcquisition,
+  segmentCeiling,
+  segmentPriceFit,
+  segmentProductFit,
+  totalCustomers as careerTotalCustomers,
+} from './career/pmf'
 import { livingWorldActive, tickLivingWorld } from './world/tick'
 import { strategicModifiers } from './strategic/effects'
 import { accrueAmbientDebt, tickRoadmap } from './strategic/roadmap'
@@ -895,7 +904,51 @@ export function paidUsersPerWeek(s: GameState, spend: number): number {
  *
  * Pure read, no RNG, unused by the simulation itself — the bots trace must not move.
  */
+/** The acqBase CAREER uses — fintech eased 8 → 10 (balance campaign 2026-08-23; see the
+ *  tickCareerPMF call site). One helper, two readers, so the Growth card's CAC and the weekly
+ *  tick can never disagree about what a marketing dollar buys. */
+const careerSectorAcqBase = (s: GameState): number => (s.sector === 'fintech' ? 9 : sectorById(s.sector).acqBase)
+
 export function unitEconomics(s: GameState): { cac: number; ltv: number; paybackWeeks: number; ratio: number } {
+  // BALANCE CAMPAIGN (2026-08-23, rank 6): in career, the sector-average formula below claimed
+  // LTV/CAC of 1.2-4.2 through the exact weeks where the segment engine's truth was 0.27-0.65 —
+  // the Growth card told the player to keep spending into a capped segment, which is the $12k/wk
+  // valley burn the winrate probe watched go bankrupt. Career now measures its OWN economics the
+  // way the balance probes always have: marginal CAC from the engine's segment-acquisition
+  // resolver called twice with a CONSTANT rng (no live draw — replays cannot move), LTV from the
+  // run's real revenue per customer less infra, discounted by the settled cohort keep rate.
+  if (s.career) {
+    const c = s.career
+    const sector = sectorById(s.sector)
+    const target = c.primaryTargetSegmentId
+    const truth = c.segmentTruth[target]
+    if (truth) {
+      const fixed = () => 0.5
+      const base = {
+        truth,
+        productFit: segmentProductFit(truth, s.quality, c.focus, s.sector, target),
+        priceFit: segmentPriceFit(truth, c.pricing),
+        hype: s.hype,
+        currentCustomers: careerTotalCustomers(c, target),
+        ceiling: segmentCeiling(truth, sector.tam),
+        marketingPenalty: c.repositioning ? c.repositioning.marketingPenalty : 1,
+        acqScale: careerAcqScale(careerSectorAcqBase(s)),
+        rng: fixed,
+      }
+      const bump = 1_000
+      const at = resolveSegmentAcquisition({ ...base, marketingSpend: Math.max(0, s.marketingSpend) })
+      const up = resolveSegmentAcquisition({ ...base, marketingSpend: Math.max(0, s.marketingSpend) + bump })
+      const marginal = up - at
+      const cac = marginal > 0 ? bump / marginal : Infinity
+      const keep = resolveCohortRetention({ truth, productFit: base.productFit, priceFit: base.priceFit, bugs: s.bugs, weeksSinceAcquired: 8 })
+      const users = Math.max(1, s.users)
+      const revPerCustomer = s.lastRevenue > 0 ? s.lastRevenue / users : 0
+      const weeklyValue = Math.max(0, revPerCustomer - sectorById(s.sector).infraCost)
+      const ltv = keep < 1 ? weeklyValue / (1 - keep) : weeklyValue * 200
+      const paybackWeeks = weeklyValue > 0 && Number.isFinite(cac) ? cac / weeklyValue : Infinity
+      return { cac, ltv, paybackWeeks, ratio: Number.isFinite(cac) && cac > 0 ? ltv / cac : 0 }
+    }
+  }
   const arpu = Math.max(0.01, sectorById(s.sector).arpuPerCustomer)
   const cac = estimatedCac(s)
   const ltv = arpu / effectiveChurn(s)
@@ -1002,6 +1055,9 @@ export function applyEffects(s: GameState, fx: Effects) {
     const cut = [...s.employees].sort((a, b) => a.skill - b.skill).slice(0, toCut)
     s.employees = s.employees.filter((e) => !cut.includes(e))
     s.board.strikes = 1
+    // the board remembers a submission — outside deep career, the NEXT slide is terminal
+    // (balance campaign 2026-08-23 rank 2: quick's board had no teeth, so nobody ever lost)
+    s.flags.boardSubmitted = (s.flags.boardSubmitted ?? 0) + 1
     applyEffects(s, { morale: -12 })
   }
   if (fx.special === 'board-defy' && s.board) {
@@ -1337,6 +1393,45 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
   const frozenOut = s.climate < -0.5 && RNG.next() < 0.7
   if (!target || val < threshold || frozenOut) {
     s.raiseCooldown = 4 // a failed roadshow stings, but you can get back out there fast
+
+    // BALANCE CAMPAIGN (2026-08-23, plan rank 1): the stage-extension round. The winrate probe
+    // measured the old binary gate killing exactly the players it shouldn't — an ACTIVE career
+    // player below the next stage bar got ZERO sheets at ANY price, and went bankrupt ~wk 90-100
+    // in 15/16 social runs while a passive early-raiser never died. Real companies in that spot
+    // raise an extension: a smaller, WORSE-priced round at the current stage. Career-only
+    // (detailedPMF is the career marker; quick/arena keep their own difficulty), once per run,
+    // and only for a real business — trailing revenue at a $100k/yr run-rate. Pre-seed is
+    // excluded: with no priced round behind you there is nothing to extend.
+    const extensionEligible =
+      !!target &&
+      val < threshold &&
+      !frozenOut &&
+      can(s, 'detailedPMF') &&
+      !!s.career &&
+      s.stage !== 'Pre-seed' &&
+      trailingRevenue(s, VALUATION_SMOOTHING) * 52 >= 100_000 &&
+      (s.extensionsTaken ?? 0) < 1
+    if (extensionEligible) {
+      s.extensionsTaken = (s.extensionsTaken ?? 0) + 1
+      const climateMult = 1 + 0.35 * s.climate
+      // priced 30-45% below fair value — the lifeline is real and so is the haircut
+      const pre = val * rand(0.55, 0.7) * climateMult
+      const amount = Math.round((pre * rand(0.15, 0.25)) / 10_000) * 10_000
+      const equity = clamp(amount / (pre + amount), 0.05, 0.4)
+      const sheet: TermSheet = { id: uid(), investor: 'Meridian Capital (extension)', amount, equity, weeksLeft: 3 }
+      const message: Message = {
+        id: uid(),
+        week: s.week,
+        kind: 'system',
+        title: 'One fund stayed at the table',
+        body:
+          `Every partner passed on the ${target} — "come back at $${threshold / 1e6}M." But one fund offered a stage extension instead: ` +
+          `$${(amount / 1e3).toFixed(0)}k at a valuation well below your last conversation. Expensive money, real runway. ` +
+          `Extensions don't repeat — the next raise has to be the real round.`,
+      }
+      s.flash = `${message.title} — an extension offer is on the table for 3 weeks.`
+      return { sheets: [sheet], message }
+    }
     const message: Message = {
       id: uid(),
       week: s.week,
@@ -1919,7 +2014,14 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   if (careerOn) {
     const r = tickCareerPMF(s, {
       sectorTam: sector.tam,
-      sectorAcqBase: sector.acqBase,
+      // BALANCE CAMPAIGN (2026-08-23): fintech's CAREER acquisition eased 8 → 9 (see the
+      // careerSectorAcqBase helper), expressed here rather than in data.ts so quick/arena's
+      // hype-driven acquisition (which reads sector.acqBase directly) is untouched. Measured
+      // problem: fintech career actives finished 9-13/16 runs alive-but-tiny ($3-5M timeups) —
+      // trust-heavy customers arrived too slowly for any strategy to compound inside the horizon.
+      // 10 flipped career-balance.test.ts's price-sensitive pricing ordering (its own documented
+      // thinnest cell, fintech low-vs-market ~1.03-1.14x at 48 seeds); 9 is the middle.
+      sectorAcqBase: careerSectorAcqBase(s),
       marketingSpend: Math.max(0, perfSpend - careerMarketingDrain(s)),
       rng: () => RNG.next(),
       uid,
@@ -2158,16 +2260,30 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // company whose users can be rented and whose community co-owns the roadmap pays less. Only the
   // COEFFICIENTS change — the draw and its order are identical, so no institutional run moves.
   const maDiscounted = acquisitionDiscounted(s)
+  // BALANCE CAMPAIGN (2026-08-23): acquirers do diligence — a company whose own board is on
+  // strike watch does not get bid on. This closes quick's "sell before the board fires you"
+  // hatch (8/16 casual saas runs ended in a wk-44 sale the board never got a window to test)
+  // without making any offer bigger. The strikes check sits AFTER the RNG term in the chain, so
+  // the draw fires for exactly the states it always did — draw count and order are unchanged
+  // and the golden traces cannot move.
   if (
     val > 8_000_000 &&
     s.pmf > 50 &&
     RNG.next() < (maDiscounted ? TOKEN_ACQUISITION.offerChance : 0.03) &&
+    (!s.board || s.board.strikes <= 1) &&
     !s.inbox.some((m) => !m.resolved && m.kind === 'choice')
   ) {
-    // Premium tracks momentum: a hot company gets bid up ~2x, a stalling one gets a lowball.
+    // Premium tracks momentum: a hot company gets bid up, a stalling one gets a lowball.
     // Flat noise made every offer strictly worse than holding, so the button was pure bait.
+    // BALANCE CAMPAIGN (2026-08-23, rank 3): band 1.1-2.0 on SPOT growth made selling at week 44
+    // a coin-flip-optimal easy win — the probe measured casual players exiting 8/16 quick runs at
+    // $17.5M median. Now 1.0-1.5 on SUSTAINED growth: an offer is only rich when the compounding
+    // is real, so holding a growing company beats taking the first cheque. Floor stays exactly
+    // 1.0 (an always-worse offer is pure bait — the line above earned that rule). Same draws,
+    // same order; token coefficients untouched.
     const premium =
-      (maDiscounted ? TOKEN_ACQUISITION.premiumBase : 1.1) + (maDiscounted ? TOKEN_ACQUISITION.premiumSpan : 0.9) * clamp(growthRate(s) * 20, 0, 1)
+      (maDiscounted ? TOKEN_ACQUISITION.premiumBase : 1.0) +
+      (maDiscounted ? TOKEN_ACQUISITION.premiumSpan : 0.5) * clamp(sustainedGrowthRate(s) * 20, 0, 1)
     // A business founder runs the sale as a process — competing bidders, a banker, a deadline —
     // and processes clear higher. Part of the deal-game column that offsets the technical
     // founder's engineering points; see the term-sheet note.
@@ -3386,7 +3502,13 @@ function boardReview(s: GameState) {
 
   if (passedByUsers || passedByRevenue || passedByProfit) {
     if (s.board.defied) s.board.defied = false
-    s.board.strikes = Math.max(0, s.board.strikes - 1)
+    // BALANCE CAMPAIGN (2026-08-23, rank 9): outside deep career, a board you already submitted
+    // to once stops forgetting strikes on a good quarter — passing reviews keeps you alive, it
+    // no longer refills the tank. (Career's board keeps the forgiving cycle; its difficulty
+    // lives in the PMF game.)
+    if (!((s.flags.boardSubmitted ?? 0) >= 1 && systemDepth(s, 'boardMeetings') !== 'deep')) {
+      s.board.strikes = Math.max(0, s.board.strikes - 1)
+    }
     s.reputation = clamp(s.reputation + 2, 0, 100)
     applyEffects(s, { morale: 2 })
     s.inbox.unshift({
@@ -3421,6 +3543,15 @@ function boardReview(s: GameState) {
     return
   }
   s.board.strikes += 1
+  // BALANCE CAMPAIGN (2026-08-23, rank 2): after a submitted ultimatum, quick's board does not
+  // grant a second three-strike cycle — two more misses and you're out. Career deep keeps the
+  // forgiving cycle (its difficulty lives in the PMF game, and this teeth-check measured 3-10/16
+  // extra career firings when unscoped — anti-skill there). The ultimatum copy below promises
+  // exactly this, so the player was warned in-fiction.
+  if (s.board.strikes >= 2 && (s.flags.boardSubmitted ?? 0) >= 1 && systemDepth(s, 'boardMeetings') !== 'deep') {
+    s.gameOver = { type: 'fired', week: s.week, payout: Math.round(founderStanding(s, { equityMultiplier: 0.5 })) }
+    return
+  }
   // Three, not two: the ultimatum's own body says "Three reviews, three misses", the strike news
   // says "of 3", and the Dashboard renders three dots. The gate was the only place that said two,
   // so a player who had been promised one more chance got the ultimatum a review early.
@@ -3433,7 +3564,10 @@ function boardReview(s: GameState) {
       title: 'Board ultimatum',
       body:
         `Three reviews, three misses. The board's patience is spent: "Cut the burn and refocus, or we will find a CEO who can." ` +
-        `Submit, and they expect layoffs this week. Defy them, and you had better deliver ${(target * 100).toFixed(1)}%/wk growth by the next review — or clean out your desk.`,
+        `Submit, and they expect layoffs this week. Defy them, and you had better deliver ${(target * 100).toFixed(1)}%/wk growth by the next review — or clean out your desk.` +
+        (systemDepth(s, 'boardMeetings') !== 'deep'
+          ? ' And understand: submission spends the last of their patience. Miss twice more after this and there is no second ultimatum — just a press release with a new CEO in it.'
+          : ''),
       choices: [
         {
           label: 'Submit — emergency layoffs',

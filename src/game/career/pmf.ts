@@ -1265,14 +1265,39 @@ export function suggestedExperiment(
       candidates.push({ type: rung.type, segmentId: seg.id, why: rung.why(segmentDef(sector, seg.id).name), score: gap * weight })
       break // one rung per segment: answer the cheapest open question first
     }
-    // A target that retains badly needs a pilot regardless of confidence.
+    // A target that retains badly needs a pilot — but only while the pilot is still a QUESTION.
+    // BALANCE CAMPAIGN (2026-08-23, rank 4): this override skipped the `experimentAnswered` gate
+    // the ladder rungs use, so the one recommendation slot re-billed a $28k/7wk pilot every week
+    // of the mid-game plateau on a question answered at 72-93% confidence since week ~24 — while
+    // never once naming the actual move. Now: once the pilot is answered AND the board's own
+    // beliefs say the segment churns BY NATURE (confident-and-low retentionPotential), the slot
+    // recommends studying the best-believed OTHER segment instead — repositioning is the move,
+    // and the window to make it closes around week 40.
     if (isTarget && customers > 40 && (career.retentionBySegment[seg.id] ?? 0) < 0.7 && !running.has(`${seg.id}:pilot`)) {
-      candidates.push({
-        type: 'pilot',
-        segmentId: seg.id,
-        why: `${segmentDef(sector, seg.id).name} are churning. A pilot is the only way to find out whether that is the product or the price.`,
-        score: 0.9,
-      })
+      if (!experimentAnswered(career, 'pilot', seg.id)) {
+        candidates.push({
+          type: 'pilot',
+          segmentId: seg.id,
+          why: `${segmentDef(sector, seg.id).name} are churning. A pilot is the only way to find out whether that is the product or the price.`,
+          score: 0.9,
+        })
+      } else if (b.retentionPotential.confidence >= 0.6 && b.retentionPotential.estimate < 35 && (career.retentionBySegment[seg.id] ?? 0) < 0.62) {
+        const other = segmentsForSector(sector)
+          .filter((o) => o.id !== seg.id)
+          .map((o) => ({ o, belief: career.segmentBeliefs[o.id] }))
+          .filter((x) => !!x.belief)
+          .sort((a, b2) => (b2.belief!.retentionPotential.estimate ?? 0) - (a.belief!.retentionPotential.estimate ?? 0))[0]
+        if (other && !running.has(`${other.o.id}:interview`) && !experimentAnswered(career, 'interview', other.o.id)) {
+          candidates.push({
+            type: 'interview',
+            segmentId: other.o.id,
+            why:
+              `${segmentDef(sector, seg.id).name} churn by nature — the board already says so with confidence. ` +
+              `The question worth paying for now is whether ${segmentDef(sector, other.o.id).name} are the company you should be building.`,
+            score: 0.95,
+          })
+        }
+      }
     }
   }
 

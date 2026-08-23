@@ -302,6 +302,10 @@ export interface GameState {
   lastPostMoney: number // post-money of last round, for down-round detection
   raiseCooldown: number // weeks until next pitch allowed
   bridgeUsed: boolean
+  /** Career only: stage-extension rounds taken on a failed raise (balance campaign 2026-08-23,
+   *  plan rank 1). Absent means 0 — old saves never migrate. Capped at ONE: a real company
+   *  below the next stage bar gets exactly one priced lifeline, not a subscription to them. */
+  extensionsTaken?: number
   lastRevenue: number
   lastExpenses: number
   flash: string | null // one-shot banner shown after a player action; cleared on advance

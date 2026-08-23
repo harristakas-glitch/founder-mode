@@ -662,8 +662,15 @@ console.log('\n— The §53 warning still discriminates —')
   //
   // So the floor moves with the measurement, and the weeks count carries the real weight: 94 is a
   // far tighter bound than 3, and it is the number that collapses if the predicate stops working.
+  //
+  // A THIRD measured move (balance campaign, 2026-08-24): the career stage-extension round and the
+  // softened repositioning give exactly this arm's stuck companies a way OUT of the warned state —
+  // an extension changes the trajectory the warning was watching. Measured 94 → 59 warned weeks
+  // with runs/inboxed steady at 3/3; a broken predicate collapses to ~0, not 59. Floor 60 → 45,
+  // same reasoning as both earlier recalibrations: the warning firing for fewer weeks IS the
+  // corrected behaviour when the game starts offering the escape hatch.
   ok(
-    heavy.firedRuns >= 3 && heavy.inboxed >= 3 && heavy.weeks >= 60,
+    heavy.firedRuns >= 3 && heavy.inboxed >= 3 && heavy.weeks >= 45,
     `and it still fires on the policy it exists to catch (${heavy.firedRuns}/${heavy.runs} runs, ${heavy.weeks} warned weeks; ${heavy.inboxed} reached the inbox)`,
   )
 }

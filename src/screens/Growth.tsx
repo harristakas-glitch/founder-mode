@@ -125,6 +125,14 @@ export function Growth() {
                   <b className="tnum">{num(Math.round(paidUsersPerWeek(game, game.marketingSpend)))}/wk</b>
                 </span>
               </div>
+              {/* Career reads its REAL segment economics now (engine unitEconomics, rank 6) —
+                  an honest sub-1x mid-game means "not yet", and this line says what changes it. */}
+              {game.career && econ.ratio < 1 && (
+                <div className="mt-1.5 text-[11.5px] leading-snug text-warn">
+                  Every marketing dollar currently buys less than it returns — retention is what changes that. Scale spend after your
+                  settled cohorts hold, not before.
+                </div>
+              )}
             </div>
             <div className={`${NESTED} flex shrink-0 flex-col gap-3 px-3.5 py-3 md:w-[210px]`}>
               <div>

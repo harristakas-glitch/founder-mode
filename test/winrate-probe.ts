@@ -15,8 +15,10 @@ import { segmentsForSector, startExperiment, canRunExperiment, experimentDef } f
 import { repositionTo } from '../src/game/career/tick'
 import type { GameState, SectorId } from '../src/game/types'
 
-const SEEDS = Number(process.argv[2]) || 16
-const SECTORS = (process.argv.slice(3).length ? process.argv.slice(3) : ['saas', 'social']) as SectorId[]
+const ASSERT = process.argv.includes('--assert')
+const argRest = process.argv.slice(2).filter((a) => a !== '--assert')
+const SEEDS = Number(argRest[0]) || 16
+const SECTORS = (argRest.slice(1).length ? argRest.slice(1) : ['saas', 'social']) as SectorId[]
 const WEEKS = { quick: 104, career: 120 } as const
 
 let ids = 0
@@ -71,6 +73,33 @@ function active(s: GameState): void {
     if (s.week % 10 === 3 && canRunExperiment(s.career, 'interview', seg, s.cash).ok) {
       startExperiment(s.career, s.week, 'interview', seg, uid())
       s.cash -= experimentDef('interview').cashCost
+    }
+    // THE INFORMED MID-GAME CORRECTION. The active player reads the game's own signals — the
+    // hypothesis board saying the target churns by nature while another segment's believed
+    // retention is far higher — and repositions once, inside the window. This is exactly the
+    // move the guidance now signposts (plan ranks 4/5) and the softened pivot (rank 7) prices;
+    // a probe bot that ignores the game's own advice measures stubbornness, not difficulty.
+    if (s.week >= 24 && s.week <= 40 && !s.career.repositioning && !(s as GameState & { _pivoted?: boolean })._pivoted) {
+      const b = s.career.segmentBeliefs[seg]
+      const measured = s.career.retentionBySegment[seg] ?? 1
+      // signal 1 (the rank-4 signpost): the board says the target churns by nature
+      const churnTrap = !!b && b.retentionPotential.confidence >= 0.5 && b.retentionPotential.estimate < 35 && measured < 0.62
+      // signal 2 (the rank-5 signpost): mid-game stagnation — PMF stuck below real pull while
+      // another segment's believed retention is far above the target's
+      const stagnant = s.week >= 30 && s.pmf < 50 && !!b
+      if (churnTrap || stagnant) {
+        const bar = churnTrap ? 55 : (b!.retentionPotential.estimate ?? 0) + 25
+        const better = segmentsForSector(s.sector)
+          .filter((o) => o.id !== seg)
+          .map((o) => ({ o, belief: s.career!.segmentBeliefs[o.id] }))
+          .filter((x) => !!x.belief && x.belief.retentionPotential.estimate > bar)
+          .sort((a, b2) => b2.belief!.retentionPotential.estimate - a.belief!.retentionPotential.estimate)[0]
+        if (better) {
+          repositionTo(s, better.o.id, s.week)
+          s.career.pricing = better.belief!.willingnessToPay.estimate > 60 ? 'premium' : 'market'
+          ;(s as GameState & { _pivoted?: boolean })._pivoted = true
+        }
+      }
     }
   }
 }
@@ -132,4 +161,30 @@ for (const r of rows) {
   console.log(
     `${r.mode.padEnd(7)} ${r.sector.padEnd(7)} ${r.player.padEnd(7)}| ${String(r.bankrupt).padStart(5)} ${String(r.fired).padStart(5)} ${String(r.unicorn).padStart(7)} ${String(r.exits).padStart(5)} ${String(r.alive).padStart(5)} | ${String(med(r.deathWeeks) || '—').padStart(8)} ${String(med(r.exitWeeks) || '—').padStart(7)}  ${money(med(r.vals)).padStart(12)}`,
   )
+}
+
+// ---- the calibration gate (balance plan rank 8) ------------------------------------------
+// The owner's bands, as assertions: `--assert` turns every future balance edit into a measured
+// pass/fail instead of an ad-hoc probe read. Bands widen only with an owner decision.
+if (ASSERT) {
+  const fails: string[] = []
+  const pct = (n: number) => (100 * n) / SEEDS
+  for (const sector of SECTORS) {
+    const get = (mode: string, player: string) => rows.find((r) => r.mode === mode && r.sector === sector && r.player === player)!
+    const qc = get('quick', 'casual')
+    const ca = get('career', 'active')
+    const cc = get('career', 'casual')
+    const qcFail = pct(qc.bankrupt + qc.fired)
+    if (qcFail < 25 || qcFail > 35) fails.push(`${sector}: quick casual failure ${qcFail.toFixed(0)}% outside [25,35]`)
+    const caFail = pct(ca.bankrupt + ca.fired)
+    if (caFail < 20 || caFail > 30) fails.push(`${sector}: career active failure ${caFail.toFixed(0)}% outside [20,30]`)
+    if (med(cc.vals) > med(ca.vals)) fails.push(`${sector}: passive coasting beats active play (${money(med(cc.vals))} > ${money(med(ca.vals))})`)
+    if (ca.fired + cc.fired > 0) fails.push(`${sector}: career firings ${ca.fired + cc.fired} — the quick board-teeth gate leaked into career`)
+  }
+  if (fails.length) {
+    console.log('\nCALIBRATION GATE: FAIL')
+    for (const f of fails) console.log('  ✗ ' + f)
+    process.exit(1)
+  }
+  console.log('\nCALIBRATION GATE: PASS')
 }
