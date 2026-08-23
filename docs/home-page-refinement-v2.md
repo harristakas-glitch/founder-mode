@@ -100,6 +100,21 @@ Authentication, profile state and menu, badges, personal bests, routing for all 
 Challenge, saves, active-run handling, Zustand stores, localStorage, Supabase. Golden traces
 byte-identical (18 assertions pass), `tsc` clean, production build clean.
 
+## V2.1 addendum — mobile compaction (owner, 2026-08-23)
+
+The owner overrode V2's mobile treatment: "everything more compact — the 3 choices above the
+fold — we don't need the statistic above the fold in mobile." As shipped:
+
+- **Phone mode cards are ~100px horizontal rows** (icon chip · title + tagline + meta · arrow),
+  the photograph filling the row behind a left-to-right gradient. The card itself is the tap
+  target — no inner CTA button spends height. The full art cards return at `md:`.
+- **The founder stats strip leaves the mobile hero** and re-renders below the daily-challenge
+  strip (compressed placement, not hidden — V2 §17 survives in spirit).
+- **Mobile hero shrank** to ~190px: title clamp(27px, 7.2vw), 14px paddings.
+- Result at 375×812: brand, hero, `CHOOSE YOUR WORLD`, **all three complete mode cards, and the
+  daily challenge** sit above the fold, stats half-visible at the fold line.
+- Desktop is untouched by V2.1.
+
 ## Where the code lives
 
 - `src/screens/HomeLauncher.tsx` — hero (brand row, overlays, crops), history strip, mode cards,

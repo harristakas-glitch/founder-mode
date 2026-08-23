@@ -36,6 +36,10 @@ import quickRunImg from '../assets/home/quick-run.webp'
 import simulationImg from '../assets/home/simulation.webp'
 import arenaImg from '../assets/home/arena.webp'
 
+// The launch pages continue each Home card's photograph into its mode (launch brief §4 — the
+// continuity is deliberate), so the launch shell imports the images from here.
+export { arenaImg, quickRunImg, simulationImg }
+
 // ---------- founder history ----------
 
 /**
@@ -72,10 +76,12 @@ function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
   )
 }
 
-export function FounderHistoryStrip({ createdAt }: { createdAt?: string }) {
+export function FounderHistoryStrip({ createdAt, delay = 160 }: { createdAt?: string; delay?: number }) {
   const h = founderHistory(createdAt)
   return (
-    <div className="home-in grid grid-cols-2 rounded-2xl border border-line2/70 bg-[rgba(14,18,28,0.72)] backdrop-blur-[6px] sm:flex sm:items-stretch" style={vars({ '--d': '160ms' })}>
+    // delay is a prop because the strip renders in two slots (hero on md+, below the cards on
+    // phones) and the entrance must settle top-to-bottom in BOTH choreographies
+    <div className="home-in grid grid-cols-2 rounded-2xl border border-line2/70 bg-[rgba(14,18,28,0.72)] backdrop-blur-[6px] sm:flex sm:items-stretch" style={vars({ '--d': `${delay}ms` })}>
       <Stat icon={User} label="Founder since" value={h.since} />
       <span className="hidden w-px shrink-0 self-stretch bg-line/60 sm:block" aria-hidden />
       <Stat icon={Gem} label="Best result" value={h.best} />
@@ -139,7 +145,9 @@ export function HomeHero({ name, children }: { name: string | null; children?: R
             <span className="block text-[var(--ha)]">Live with the consequences.</span>
           </h1>
         </div>
-        <div className="home-hero-stats max-w-[720px]">{children}</div>
+        {/* hidden on phones (owner, 2026-08-23: "we don't need the statistic above the fold in
+            mobile") — NewGame renders the same strip below the mode cards there instead */}
+        <div className="home-hero-stats hidden max-w-[720px] md:block">{children}</div>
       </div>
     </section>
   )
@@ -220,17 +228,27 @@ export function ModeCard({ card, onPick, delay }: { card: HomeModeCard; onPick: 
       style={vars({ '--d': `${delay}ms` })}
     >
       {/* Cinematic mode artwork, not background texture (V2 §28–§30): a touch of base brightness
-          because the photographs were shot at midnight, a touch more on hover. */}
+          because the photographs were shot at midnight, a touch more on hover. On phones the
+          image fills the whole compact row; on md+ it is the card's top band. */}
       <img
         src={card.image}
         alt=""
         aria-hidden
         loading="lazy"
-        className="pointer-events-none absolute inset-x-0 top-0 h-[52%] w-full object-cover md:h-[56%] brightness-[1.08] transition-[filter] duration-[180ms] group-hover:brightness-[1.16]"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover brightness-[1.08] transition-[filter] duration-[180ms] group-hover:brightness-[1.16] md:bottom-auto md:h-[56%]"
       />
-      {/* dark where the copy is, open where the photograph is */}
+      {/* dark where the copy is, open where the photograph is — left-to-right on the phone row,
+          top-to-bottom on the desktop card */}
       <div
-        className="pointer-events-none absolute inset-0"
+        className="pointer-events-none absolute inset-0 md:hidden"
+        aria-hidden
+        style={{
+          background:
+            'linear-gradient(90deg, rgba(5,7,12,0.94) 0%, rgba(5,7,12,0.86) 42%, rgba(5,7,12,0.55) 70%, rgba(5,7,12,0.18) 100%)',
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 hidden md:block"
         aria-hidden
         style={{
           background:
@@ -238,7 +256,39 @@ export function ModeCard({ card, onPick, delay }: { card: HomeModeCard; onPick: 
         }}
       />
 
-      <div className="relative flex flex-1 flex-col p-5">
+      {/* ---- phone layout: one compact row, the card itself is the button — no inner CTA
+           spending height (owner, 2026-08-23: all three choices above the fold) ---- */}
+      <div className="relative flex flex-1 items-center gap-3 p-3.5 pr-4 md:hidden">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--ha)]/45 bg-[rgba(24,16,48,0.75)]" aria-hidden>
+          <Icon size={19} className="text-[var(--ha)]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[17px] font-bold tracking-[-0.01em]">{card.title}</span>
+            {card.badge && (
+              <span
+                className={`rounded-full border px-1.5 py-px text-[9px] font-bold ${
+                  card.badge.tone === 'warn' ? 'border-warn/40 bg-warn/10 text-warn' : 'border-[var(--ha)]/40 bg-[var(--ha)]/10 text-[var(--ha)]'
+                }`}
+              >
+                {card.badge.text}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 line-clamp-2 text-[12.5px] font-bold">{card.tagline}</span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] font-semibold tracking-[0.08em] text-mut uppercase">
+            {card.meta.map((m) => (
+              <span key={m.label} className="inline-flex items-center gap-1">
+                <m.icon size={11} aria-hidden /> {m.label}
+              </span>
+            ))}
+          </span>
+        </span>
+        <ArrowRight size={18} className="shrink-0 text-[var(--ha)]" aria-hidden />
+      </div>
+
+      {/* ---- md+ layout: the full art card ---- */}
+      <div className="relative hidden flex-1 flex-col p-5 md:flex">
         <div className="flex items-start justify-between gap-2">
           <span
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[var(--ha)]/45 bg-[rgba(24,16,48,0.75)]"

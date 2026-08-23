@@ -463,12 +463,15 @@ input[type='range']::-moz-range-thumb {
    utilities on the elements: plain classes beat @layer utilities, so a stray pt-* would
    silently lose to them anyway. Acceptance viewport: 1366×768 must show the hero, the
    founder stats, "Choose your world" and a clear cut of all three mode cards. */
-.home-hero-content { padding-top: 16px; padding-bottom: 22px; }
-.home-hero-welcome { margin-top: 22px; }
-.home-hero-title { font-size: clamp(31px, 8vw, 58px); }
-.home-hero-stats { margin-top: 16px; }
-.home-world-gap { margin-top: 22px; }
-.home-mode-card { min-height: 300px; }
+/* Phone base is COMPACT by owner decree (2026-08-23): the three worlds above the fold beat a
+   grand hero. Small title, tight gaps, mode cards as ~100px rows (the md media below restores
+   the full art cards on desktop). */
+.home-hero-content { padding-top: 14px; padding-bottom: 18px; }
+.home-hero-welcome { margin-top: 14px; }
+.home-hero-title { font-size: clamp(27px, 7.2vw, 58px); }
+.home-hero-stats { margin-top: 14px; }
+.home-world-gap { margin-top: 20px; }
+.home-mode-card { min-height: 96px; }
 .home-card-spacer { padding-top: 30px; }
 @media (min-width: 768px) {
   .home-hero-content { padding-top: 20px; padding-bottom: 34px; }
@@ -495,6 +498,14 @@ input[type='range']::-moz-range-thumb {
   .home-hero-stats { margin-top: 14px; }
   .home-mode-card { min-height: 300px; }
   .home-card-spacer { padding-top: 18px; }
+}
+
+/* ---------- launch pages: per-mode intentional crops (launch brief §64) ----------
+   Each mode hero names its own mobile and desktop object-position via CSS vars — the
+   photograph's subject (notebook / analytics screens / trophy) stays in frame at every width. */
+.launch-hero-img { object-position: var(--pos-m, center); }
+@media (min-width: 768px) {
+  .launch-hero-img { object-position: var(--pos-d, center); }
 }
 
 /* the global focus ring, retinted to whatever world the player is standing in */

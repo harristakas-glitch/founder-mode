@@ -19,6 +19,7 @@ import {
   LogIn,
   LogOut,
   Rocket,
+  Settings,
   Swords,
   Trophy,
   Zap,
@@ -36,6 +37,7 @@ import { dailyInfo, readHall, readLocalBests, useStore } from '../store'
 import { DailyLeaderboard } from './DailyLeaderboard'
 import { FirstRunBriefingNote, useFirstTimer } from '../onboarding/FirstRun'
 import { DailyChallengeStrip, FounderHistoryStrip, HOME_MODES, HomeHero, ModeCard } from './HomeLauncher'
+import { LaunchHero, LaunchSummaryBar, SetupSection } from './LaunchShell'
 import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
@@ -71,9 +73,10 @@ const SECTOR_TRAITS: Record<string, { k: string; label: string; v: number }[]> =
 )
 
 const FOUNDER_META: Record<FounderKind, { name: string; blurb: string }> = {
-  // Both lines are what the engine actually does with founderKind.
-  technical: { name: 'Technical founder', blurb: 'You build. Your own hands add real engineering output every week.' },
-  business: { name: 'Business founder', blurb: 'You sell. Your pitching drives the sales engine and closes harder.' },
+  // Both lines are what the engine actually does with founderKind — shortened to the launch
+  // brief's §29 rhythm ("Build faster / Sell harder") without losing the mechanical truth.
+  technical: { name: 'Technical founder', blurb: 'Build faster. Your own hands add engineering output.' },
+  business: { name: 'Business founder', blurb: 'Sell harder. Your pitching drives sales and closes deals.' },
 }
 
 const eyebrow = 'text-[10.5px] font-bold uppercase tracking-[0.16em] text-mut'
@@ -92,6 +95,7 @@ function Opt({
   blurb,
   accent,
   disabled,
+  compact,
   children,
 }: {
   on: boolean
@@ -100,6 +104,8 @@ function Opt({
   blurb: string
   accent?: string
   disabled?: boolean
+  /** phone-tight tile (launch brief §40): the blurb yields to the title below sm */
+  compact?: boolean
   children?: ReactNode
 }) {
   return (
@@ -108,7 +114,7 @@ function Opt({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={on}
-      className={`relative flex min-h-[44px] flex-col rounded-xl border p-5 pr-10 text-left transition-[border-color,background-color,transform] duration-[120ms] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40 ${
+      className={`relative flex min-h-[44px] flex-col rounded-xl border p-3.5 pr-8 text-left transition-[border-color,background-color,transform] duration-[120ms] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40 sm:p-4 sm:pr-10 ${
         on
           ? 'border-[var(--oc,var(--ha))] bg-surface3 shadow-[var(--elev-2)]'
           : 'border-line bg-surface hover:border-line2 hover:bg-surface2'
@@ -125,25 +131,9 @@ function Opt({
         <Check size={11} strokeWidth={3.5} />
       </span>
       <span className="text-[14px] font-bold">{title}</span>
-      <span className="mt-0.5 text-[12.5px] leading-relaxed text-mut">{blurb}</span>
+      <span className={`mt-0.5 text-[12.5px] leading-relaxed text-mut ${compact ? 'hidden sm:block' : ''}`}>{blurb}</span>
       {children}
     </button>
-  )
-}
-
-/** Numbered setup step — the briefing reads as a sequence, not a wall of controls. */
-function Step({ n, title, hint, children }: { n: number; title: string; hint?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="mt-7">
-      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[var(--ha)]/40 bg-[var(--ha)]/10 text-[11px] font-bold tnum text-[var(--ha)]">
-          {n}
-        </span>
-        <h2 className="text-[15px] font-extrabold tracking-tight">{title}</h2>
-        {hint && <span className="text-[12px] text-mut">{hint}</span>}
-      </div>
-      <div className="mt-3">{children}</div>
-    </section>
   )
 }
 
@@ -440,6 +430,7 @@ export function NewGame() {
   const [joinCode, setJoinCode] = useState(ROOM_PARAM)
   const [scenario, setScenario] = useState('standard')
   const [netError, setNetError] = useState<string | null>(null)
+  const [pipHelp, setPipHelp] = useState(false)
 
   const netAction = async (fn: () => Promise<void>) => {
     setNetError(null)
@@ -460,34 +451,38 @@ export function NewGame() {
   const startLabel = daily_
     ? `Play Daily #${daily.id}`
     : experience === 'career'
-      ? 'Start Career'
+      ? 'Start Simulation'
       : format === 'scenario'
         ? 'Start Scenario'
-        : 'Start Run'
+        : 'Start Quick Run'
 
   return (
     <div className={`home-root relative min-h-screen overflow-x-hidden ${experience ? 'home-briefing' : ''}`} style={vars({ '--ha': ha, '--ha2': ha2 })}>
       <div className="home-bg" aria-hidden="true" />
       <div className="home-vignette" aria-hidden="true" />
 
-      <div className={`relative z-[1] mx-auto w-full px-4 pt-5 pb-10 sm:px-6 md:px-8 md:pt-8 ${experience ? "max-w-[1060px]" : "max-w-[1440px]"}`}>
-        {/* ---------- top bar — the BRIEFING's chrome only. On the launcher the hero owns the
-            chrome (brand top-left, profile top-right) so no separate row spends the fold. ---------- */}
+      <div className={`relative z-[1] mx-auto w-full px-4 pt-5 pb-10 sm:px-6 md:px-8 md:pt-8 ${experience ? "max-w-[1140px]" : "max-w-[1440px]"}`}>
+        {/* ---------- top bar — the launch shell's chrome (launch brief §13): back left, mode
+            pill centred, profile right. One anatomy for all three modes; the promise line the
+            old bar carried now lives in the hero, where it reads once instead of twice. ---------- */}
         {experience && (
-          <div className="flex min-h-[34px] items-start justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold text-mut transition-colors hover:border-line2 hover:text-ink"
-                onClick={() => setExperience(null)}
-              >
-                <ArrowLeft size={14} /> All experiences
-              </button>
-              <span className="flex items-center gap-1.5 rounded-full border border-[var(--ha)]/40 bg-[var(--ha)]/10 px-3 py-1 text-[12.5px] font-bold text-[var(--ha)]">
-                <span aria-hidden="true">{MODE_META[experience].icon}</span> {MODE_META[experience].name}
-              </span>
-              <span className="hidden text-[12.5px] text-mut sm:inline">{MODE_META[experience].promise}</span>
+          <div className="grid min-h-[40px] grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <button
+              className="flex min-h-[36px] items-center gap-1.5 justify-self-start rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold text-mut transition-colors hover:border-line2 hover:text-ink"
+              onClick={() => setExperience(null)}
+            >
+              <ArrowLeft size={14} /> <span className="hidden sm:inline">All experiences</span>
+            </button>
+            <span className="flex items-center gap-1.5 rounded-full border border-[var(--ha)]/40 bg-[var(--ha)]/10 px-3.5 py-1.5 text-[12.5px] font-bold text-[var(--ha)]">
+              {(() => {
+                const MI = MODE_ICON[experience]
+                return <MI size={13} aria-hidden />
+              })()}
+              {MODE_META[experience].name}
+            </span>
+            <div className="justify-self-end">
+              <AuthCorner />
             </div>
-            <AuthCorner />
           </div>
         )}
 
@@ -512,7 +507,7 @@ export function NewGame() {
               <span className="home-rule flex-1" aria-hidden="true" />
             </div>
 
-            <div className="mt-3.5 grid gap-4 md:grid-cols-3">
+            <div className="mt-3.5 grid gap-3 md:grid-cols-3 md:gap-4">
               {HOME_MODES(MODE_ICON).map((card, i) => (
                 <ModeCard
                   key={card.id}
@@ -527,7 +522,7 @@ export function NewGame() {
             </div>
 
             {/* Daily stays one tap away without becoming a fourth pillar: Quick mode, Daily format. */}
-            <div className="mt-4">
+            <div className="mt-3 md:mt-4">
               <DailyChallengeStrip
                 delay={460}
                 onPlay={() => {
@@ -537,6 +532,13 @@ export function NewGame() {
               />
             </div>
 
+            {/* On phones the founder history lives HERE, below the choices — the hero hides it
+                (owner, 2026-08-23: the stats don't need the fold; the three worlds do). Delay
+                after the daily strip's 460ms so the page still settles top-to-bottom. */}
+            <div className="mt-3 md:hidden">
+              <FounderHistoryStrip createdAt={profile?.createdAt} delay={520} />
+            </div>
+
             <div className="home-in mt-10 grid gap-7 md:grid-cols-2" style={vars({ '--d': '520ms' })}>
               <HallOfFame />
               <AchievementGallery />
@@ -544,24 +546,20 @@ export function NewGame() {
           </>
         )}
 
-        {/* ================= THE BRIEFING ================= */}
+        {/* ================= THE BRIEFING — the unified launch shell ================= */}
         {experience && (
-          <div className="home-in mt-5" style={vars({ '--d': '0ms' })}>
-            {experience === 'career' && (
-              <div className="rounded-xl border border-[var(--ha)]/25 bg-[var(--ha)]/[0.06] p-5">
-                {/* the "Early access" badge is on the Career card on the gate, one click behind
-                    this panel — the paragraph below says the same thing in full sentences */}
-                <div className="text-[15px] font-extrabold">{MODE_META.career.promise}</div>
-                <p className="mt-1 text-[13px] leading-relaxed text-mut">
-                  {MODE_META.career.blurb} Career runs on the same simulation as Quick Play today — the deeper systems (customer
-                  discovery, founder attention, executives, board politics) are being built and will switch on here first.
-                </p>
-              </div>
-            )}
+          <div className="home-in mt-3 pb-2 md:mt-4" style={vars({ '--d': '0ms' })}>
+            {/* One hero anatomy for all three modes (launch brief §15): the Home card's
+                photograph continues into its world, the promise reads once, and Simulation's
+                "Early access" is a hero badge — the old dev-facing paragraph about unfinished
+                systems is gone (brief §19/§47). */}
+            <div className="mb-1 md:mb-2">
+              <LaunchHero mode={experience} />
+            </div>
 
             {experience === 'quick' && (
-              <Step n={1} title="Pick a format">
-                <div className="grid gap-2.5 sm:grid-cols-3">
+              <SetupSection step={1} title="Pick a format" hint="Choose how you want to play.">
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
                   {(['standard', 'daily_challenge', 'scenario'] as GameFormat[]).map((f) => {
                     const meta = QUICK_FORMAT_META[f]
                     return (
@@ -571,15 +569,19 @@ export function NewGame() {
                         onClick={() => setFormat(f)}
                         title={f === 'daily_challenge' ? `${meta.name} #${daily.id}` : meta.name}
                         blurb={`${meta.promise} ${meta.blurb}`}
+                        compact
                       />
                     )
                   })}
                 </div>
-              </Step>
+              </SetupSection>
             )}
 
-            <Step n={experience === 'quick' ? 2 : 1} title="Name your company" hint="and decide what kind of founder you are">
-              {/* stacks on phones — a 12-character-wide name field is not a name field */}
+            <SetupSection
+              step={experience === 'quick' ? 2 : 1}
+              title="Name your company"
+              hint={experience === 'arena' ? 'Your brand in the Arena.' : 'This is your startup.'}
+            >
               <input
                 type="text"
                 placeholder="e.g. Hyperloop for Cats, Inc."
@@ -589,23 +591,31 @@ export function NewGame() {
                 onChange={(e) => setName(e.target.value)}
                 className={inputCls}
               />
-              <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+            </SetupSection>
+
+            <SetupSection
+              step={experience === 'quick' ? 3 : 2}
+              title="Pick your founder role"
+              hint="Your strengths shape your starting edge."
+            >
+              {/* two compact cards side-by-side at every width (brief §30) */}
+              <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
                 {(['technical', 'business'] as FounderKind[]).map((f) => (
                   <Opt key={f} on={founder === f} onClick={() => setFounder(f)} title={FOUNDER_META[f].name} blurb={FOUNDER_META[f].blurb} />
                 ))}
               </div>
-            </Step>
+            </SetupSection>
 
             {daily_ && (
-              <div className="mt-6">
+              <div className="mt-3.5 md:mt-4">
                 <DailyLeaderboard day={daily.id} />
               </div>
             )}
 
             {solo && (
               <>
-                <Step
-                  n={experience === 'quick' ? 3 : 2}
+                <SetupSection
+                  step={experience === 'quick' ? 4 : 3}
                   title="Choose your market"
                   hint={
                     daily_ ? (
@@ -613,29 +623,36 @@ export function NewGame() {
                         <Lock size={11} /> locked by today&apos;s challenge
                       </span>
                     ) : (
-                      'it decides how you grow, what you earn and who leaves'
+                      'Every market has different rules.'
                     )
                   }
                 >
-                  {/* The key to the pips used to sit BELOW the grid it explains and vanish for
-                      good once a run finished. It now sits above the grid and never leaves: a
-                      returning player reading six markets against each other needs it more than a
-                      first-timer does. The two forms never stack — the first-run note is the long
-                      version of this same key, so the compact one takes over when it retires. */}
-                  {firstTimer ? (
-                    <FirstRunBriefingNote mode={experience === 'career' ? 'career' : 'quick'} />
-                  ) : (
-                    <div className="mb-2.5 text-[12px] leading-relaxed text-mut">
-                      {TRAITS.map((t, i) => (
-                        <span key={t.k}>
-                          {i > 0 && ' · '}
-                          <b className="text-[10px] font-bold tracking-wider text-ink uppercase">{t.k}</b> {t.label.toLowerCase()}
-                        </span>
-                      ))}{' '}
-                      — five pips each, ranked across the {SECTORS.length} markets and read off the simulation.
-                    </div>
-                  )}
-                  <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {/* Quick Run scans (name + one-line identity, brief §32); Simulation reads
+                      (the same cards plus the three pips, §33). The pip key is behind a toggle
+                      (§34) so the setup stays quiet; first-timers on Simulation still get the
+                      long-form note. */}
+                  {experience === 'career' &&
+                    (firstTimer ? (
+                      <FirstRunBriefingNote mode="career" />
+                    ) : (
+                      <div className="mb-2.5 text-[12px] leading-relaxed">
+                        <button type="button" className="font-semibold text-[var(--ha)] hover:underline" onClick={() => setPipHelp((v) => !v)}>
+                          What do the pips mean?
+                        </button>
+                        {pipHelp && (
+                          <span className="ml-2 text-mut">
+                            {TRAITS.map((t, i) => (
+                              <span key={t.k}>
+                                {i > 0 && ' · '}
+                                <b className="text-[10px] font-bold tracking-wider text-ink uppercase">{t.k}</b> {t.label.toLowerCase()}
+                              </span>
+                            ))}{' '}
+                            — five pips each, read off the simulation.
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  <div className="grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-3">
                     {SECTORS.map((s) => {
                       const [c] = sectorAccent(s.id)
                       const traits = SECTOR_TRAITS[s.id]
@@ -654,92 +671,102 @@ export function NewGame() {
                           }
                           blurb={s.blurb}
                         >
-                          <span className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5">
-                            {traits.map((t) => (
-                              <span key={t.k} className="flex items-center gap-1.5">
-                                <span className="text-[9.5px] font-bold tracking-wider text-mut uppercase">{t.k}</span>
-                                <span className="flex gap-[3px]" aria-hidden="true">
-                                  {[1, 2, 3, 4, 5].map((n) => (
-                                    <span key={n} className="pip" data-on={n <= t.v} />
-                                  ))}
+                          {experience === 'career' && (
+                            <span className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5">
+                              {traits.map((t) => (
+                                <span key={t.k} className="flex items-center gap-1.5">
+                                  <span className="text-[9.5px] font-bold tracking-wider text-mut uppercase">{t.k}</span>
+                                  <span className="flex gap-[3px]" aria-hidden="true">
+                                    {[1, 2, 3, 4, 5].map((n) => (
+                                      <span key={n} className="pip" data-on={n <= t.v} />
+                                    ))}
+                                  </span>
+                                  <span className="sr-only">
+                                    {t.label}: {t.v} of 5
+                                  </span>
                                 </span>
-                                <span className="sr-only">
-                                  {t.label}: {t.v} of 5
-                                </span>
-                              </span>
-                            ))}
-                          </span>
+                              ))}
+                            </span>
+                          )}
                         </Opt>
                       )
                     })}
                   </div>
-                </Step>
+                </SetupSection>
 
                 {format === 'scenario' && experience === 'quick' && (
-                  <Step n={4} title="Pick your starting hand">
-                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  <SetupSection step={5} title="Pick your starting hand">
+                    <div className="grid gap-2 sm:grid-cols-2 sm:gap-2.5 lg:grid-cols-3">
                       {SCENARIOS.map((sc) => (
                         <Opt key={sc.id} on={scenario === sc.id} onClick={() => setScenario(sc.id)} title={sc.name} blurb={sc.blurb} />
                       ))}
                     </div>
-                  </Step>
+                  </SetupSection>
                 )}
 
-                {/* sticky, so the way into the game stays on screen however far down
-                    the option list the player has scrolled */}
-                <div className="sticky bottom-3 z-20 mt-8">
-                  <div className="flex items-center gap-3 rounded-xl border border-[var(--ha)]/25 bg-surface2 p-2 shadow-[var(--elev-3)] backdrop-blur-md">
-                    <div className="ml-2 hidden min-w-0 flex-1 text-[12.5px] text-mut sm:block">
-                      <b className="text-ink">{name.trim() || 'Untitled Inc.'}</b> · {sectorById(activeSector).name} ·{' '}
-                      {founder === 'technical' ? 'Technical' : 'Business'} founder
-                    </div>
-                    {/* the storefront's one CTA: primary, at large size */}
-                    <Btn
-                      variant="primary"
-                      className="h-12 flex-1 px-6 sm:flex-none"
-                      onClick={() =>
-                        startGame({
-                          mode: experience === 'career' ? 'career' : 'quick',
-                          format: experience === 'career' ? 'standard' : format,
-                          sector,
-                          name: name.trim(),
-                          founder,
-                          scenario: format === 'scenario' ? scenario : 'standard',
-                        })
-                      }
-                    >
-                      {daily_ ? <CalendarDays size={17} aria-hidden="true" /> : <Rocket size={17} aria-hidden="true" />}
-                      {startLabel}
-                    </Btn>
-                  </div>
-                </div>
+                <LaunchSummaryBar
+                  summary={
+                    <>
+                      <b>{name.trim() || 'Untitled Inc.'}</b>
+                      <span className="text-mut">
+                        {' '}
+                        · {sectorById(activeSector).name} · {founder === 'technical' ? 'Technical' : 'Business'}
+                      </span>
+                    </>
+                  }
+                  meta={
+                    experience === 'career'
+                      ? 'Solo · Multi-session'
+                      : daily_
+                        ? `Daily #${daily.id} · One shot · Solo`
+                        : '30–60 min · Solo'
+                  }
+                  ctaLabel={startLabel}
+                  ctaIcon={daily_ ? <CalendarDays size={17} aria-hidden="true" /> : <Rocket size={17} aria-hidden="true" />}
+                  onLaunch={() =>
+                    startGame({
+                      mode: experience === 'career' ? 'career' : 'quick',
+                      format: experience === 'career' ? 'standard' : format,
+                      sector,
+                      name: name.trim(),
+                      founder,
+                      scenario: format === 'scenario' ? scenario : 'standard',
+                    })
+                  }
+                />
               </>
             )}
 
             {/* ---------- Arena ---------- */}
             {experience === 'arena' && (
-              <Step n={2} title="Open a room" hint="or join one with a friend's code">
-                <div className="rounded-xl border border-line bg-surface p-5">
+              <>
+                <SetupSection step={3} title="Open a room or join" hint="Play with your friends.">
                   {!onlineConfigured ? (
                     /* the build-time setup steps that used to live here were a README addressed to
                        whoever deploys the game, printed to a player who cannot act on them */
                     <div className="text-[13px] leading-relaxed text-mut">
-                      <b className="text-warn">Online play isn&apos;t available in this build.</b> Quick Play and Career run entirely on
-                      this device and need nothing.
+                      <b className="text-warn">Online play isn&apos;t available in this build.</b> Quick Play and Simulation run entirely
+                      on this device and need nothing.
                     </div>
                   ) : (
-                    <>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {/* this screen state's one action, same primary treatment as Start Run */}
+                    /* the section IS the card (brief §21) — the old card-inside-card wrapper is gone */
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-line2/70 bg-surface2 p-3.5">
+                        <div className="text-[13.5px] font-bold">Create a room</div>
+                        <div className="mt-0.5 text-[12px] text-mut">Get an invite code to challenge friends.</div>
                         <Btn
                           variant="primary"
                           disabled={connecting}
-                          className="h-12 px-4"
+                          className="mt-3 h-11 w-full px-4"
                           onClick={() => netAction(() => hostRoom(name.trim(), founder))}
                         >
-                          <Globe size={17} aria-hidden="true" /> {connecting ? 'Connecting…' : 'Create a room'}
+                          <Globe size={16} aria-hidden="true" /> {connecting ? 'Connecting…' : 'Create Room'}
                         </Btn>
-                        <div className="flex gap-2">
+                      </div>
+                      <div className="rounded-xl border border-line2/70 bg-surface2 p-3.5">
+                        <div className="text-[13.5px] font-bold">Join a room</div>
+                        <div className="mt-0.5 text-[12px] text-mut">Enter a room code to join the action.</div>
+                        <div className="mt-3 flex gap-2">
                           <input
                             type="text"
                             placeholder="CODE"
@@ -747,24 +774,48 @@ export function NewGame() {
                             maxLength={5}
                             aria-label="Room code"
                             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                            className={`${inputCls} text-center font-mono text-lg tracking-[0.28em] uppercase`}
+                            className={`${inputCls} h-11 py-0 text-center font-mono text-[16px] tracking-[0.28em] uppercase`}
                           />
                           <Btn
                             disabled={connecting || joinCode.length < 5}
-                            className="h-12 shrink-0 px-5"
+                            className="h-11 shrink-0 px-5"
                             onClick={() => netAction(() => joinRoom(joinCode, name.trim(), founder))}
                           >
                             Join
                           </Btn>
                         </div>
                       </div>
-                    </>
+                    </div>
                   )}
                   {netError && (
                     <div className="mt-3 rounded-lg border border-bad/50 bg-bad/10 px-3 py-2 text-[13px] text-bad">{netError}</div>
                   )}
-                </div>
-              </Step>
+                </SetupSection>
+
+                {/* Game settings, collapsed to facts (brief §54): everything here is real —
+                    2–4 players, online, and the market is decided when the room starts. No
+                    invented difficulty/pace controls. */}
+                {onlineConfigured && (
+                  <div className="mt-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-2xl border border-line/80 bg-surface px-4 py-3 md:mt-4">
+                    <Settings size={14} className="shrink-0 text-mut" aria-hidden />
+                    <span className="text-[13px] font-bold">Game settings</span>
+                    <span className="text-[12px] text-mut">2–4 players · Online · Market chosen when the room starts</span>
+                  </div>
+                )}
+
+                {onlineConfigured && (
+                  /* readiness, not a dead end (brief §55): the CTA arms in the lobby — creating
+                     or joining a room navigates there, so this bar's job is to say what's missing */
+                  <LaunchSummaryBar
+                    summary="Ready to compete"
+                    meta="Online · 2–4 players"
+                    ctaLabel="Enter Arena"
+                    disabled
+                    disabledReason="Create or join a room to continue."
+                    onLaunch={() => {}}
+                  />
+                )}
+              </>
             )}
           </div>
         )}
