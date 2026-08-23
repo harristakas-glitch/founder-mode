@@ -467,6 +467,21 @@ export default function App() {
   const advanceDisabled = online ? pending || myReady || !!game.gameOver || matchOver : pending || !!game.gameOver
   // once the run is over, the big button IS the exit — no hunting for a way out
   const runDone = !!game.gameOver && (!online || matchOver)
+  /**
+   * ADVANCE WEEK STEPS BACK WHERE A CONTEXTUAL ACTION OWNS THE SCREEN (design brief §25, Rule 5).
+   *
+   * The full-width green block is right on HQ, where advancing the week IS the primary verb and
+   * nothing competes with it. On a feature screen it is not: Recruiting's primary action is Send
+   * Offer, and a permanent full-width global CTA directly under it inverts the hierarchy — the
+   * brief's words, "do not use a massive green Advance Week block inside every feature page".
+   *
+   * So it shrinks to a right-aligned pill on feature screens and keeps its full weight on HQ. Two
+   * states deliberately KEEP full weight everywhere, because in both the global control is the
+   * contextual one: a blocking decision (the button turns amber and routes to the Inbox — the week
+   * genuinely cannot continue) and a finished run (there is nothing else to do).
+   */
+  const compactAdvance = !runDone && !pending && screen !== 'dashboard'
+
   const advanceBtn = runDone ? (
     <button
       onClick={abandonGame}
@@ -509,10 +524,16 @@ export default function App() {
         }
         advance()
       }}
-      className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl px-4 text-[15px] font-bold transition-[filter,transform,background-color] duration-[120ms] ${
+      className={`flex items-center justify-center gap-1.5 rounded-xl font-bold transition-[filter,transform,background-color] duration-[120ms] ${
+        compactAdvance ? 'min-h-[42px] w-auto px-3.5 text-[13.5px]' : 'min-h-[48px] w-full px-4 text-[15px]'
+      } ${
         advanceDisabled
           ? 'cursor-not-allowed bg-surface2 text-mut'
-          : 'bg-good text-bg shadow-[var(--glow-good)] hover:brightness-110 active:scale-[0.98]'
+          : compactAdvance
+            ? // muted on feature screens: still obviously the global verb, no longer the loudest
+              // thing on a screen whose own primary action sits right above it
+              'border border-good/45 bg-good/15 text-good hover:bg-good/25 active:scale-[0.98]'
+            : 'bg-good text-bg shadow-[var(--glow-good)] hover:brightness-110 active:scale-[0.98]'
       }`}
     >
       {online ? (
@@ -527,7 +548,7 @@ export default function App() {
         )
       ) : (
         <>
-          Advance Week <ChevronsRight size={18} />
+          {compactAdvance ? 'Advance' : 'Advance Week'} <ChevronsRight size={compactAdvance ? 15 : 18} />
         </>
       )}
     </button>
@@ -871,7 +892,13 @@ export default function App() {
             blocking the week — so the action bar is never a dead control the player has to reason
             about. Both sit above the home indicator via the safe-area pad on the tab bar. */}
         <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
-          <div className="inset-x-safe bg-gradient-to-t from-bg via-bg/95 to-transparent px-4 pt-6 pb-2">{advanceBtn}</div>
+          <div
+            className={`inset-x-safe bg-gradient-to-t from-bg via-bg/95 to-transparent px-4 pb-2 ${
+              compactAdvance ? 'flex justify-end pt-3' : 'pt-6'
+            }`}
+          >
+            {advanceBtn}
+          </div>
           <nav
             aria-label="Sections"
             className="inset-x-safe pad-bottom-safe flex items-stretch border-t border-line/60 bg-bg"
