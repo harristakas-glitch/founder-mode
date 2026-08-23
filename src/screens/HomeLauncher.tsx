@@ -19,7 +19,22 @@ import { dailyInfo, readHall, readRunCount } from '../store'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
 
-const HOME_ASSETS = '/assets/home'
+/**
+ * IMPORTED, not referenced by path. These lived in `public/` behind a root-absolute
+ * `/assets/home/...` string and 404'd on the deployed site: `vite.config.ts` sets `base: './'`
+ * (so the build also runs from `file://`), and the game is served from a SUB-PATH —
+ * `…github.io/founder-mode/` — where a leading slash resolves to the domain root, not the app.
+ * Importing hands the URL to Vite, which rewrites it for whatever base is in force and adds a
+ * content hash for cache-busting. It also makes a missing file a BUILD error instead of a blank
+ * card nobody notices until it is live — which is exactly how the broken paths shipped.
+ *
+ * WebP, encoded from the original PNGs rather than from the intermediate JPEGs, so there is only
+ * one lossy generation: 136 KB for all four against 492 KB as JPEG and ~6 MB raw.
+ */
+import heroImg from '../assets/home/hero-founder-office.webp'
+import quickRunImg from '../assets/home/quick-run.webp'
+import simulationImg from '../assets/home/simulation.webp'
+import arenaImg from '../assets/home/arena.webp'
 
 // ---------- founder history ----------
 
@@ -80,7 +95,7 @@ export function HomeHero({ name, children }: { name: string | null; children?: R
       {/* The image is a SECTION, not a card: it bleeds to the page edges and fades into the page
           background at the bottom, so it never reads as a picture pasted onto a screen. */}
       <img
-        src={`${HOME_ASSETS}/hero-founder-office.jpg`}
+        src={heroImg}
         alt=""
         aria-hidden
         className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[72%_center]"
@@ -144,7 +159,7 @@ export const HOME_MODES: (icons: Record<GameMode, LucideIcon>) => HomeModeCard[]
     title: 'Quick Run',
     tagline: 'Build a unicorn tonight.',
     description: 'Fast startup management. Start a company, make the big decisions and see how far you can take it.',
-    image: `${HOME_ASSETS}/quick-run.jpg`,
+    image: quickRunImg,
     icon: icons.quick,
     meta: [
       { icon: Clock, label: '30–60 min' },
@@ -157,7 +172,7 @@ export const HOME_MODES: (icons: Record<GameMode, LucideIcon>) => HomeModeCard[]
     title: 'Simulation',
     tagline: 'Build the company. Become the CEO.',
     description: 'A deeper founder simulation about product, people, strategy and capital.',
-    image: `${HOME_ASSETS}/simulation.jpg`,
+    image: simulationImg,
     icon: icons.career,
     meta: [
       { icon: Gem, label: 'Deep simulation' },
@@ -171,7 +186,7 @@ export const HOME_MODES: (icons: Record<GameMode, LucideIcon>) => HomeModeCard[]
     title: 'Arena',
     tagline: 'Outbuild your friends.',
     description: 'Compete against other founders in the same market.',
-    image: `${HOME_ASSETS}/arena.jpg`,
+    image: arenaImg,
     icon: icons.arena,
     meta: [
       { icon: Users, label: '2–4 players' },
