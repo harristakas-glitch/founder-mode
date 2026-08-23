@@ -25,7 +25,7 @@ import {
   updateBelief,
 } from '../src/game/career/pmf'
 import { careerProductDrag, repositionTo } from '../src/game/career/tick'
-import type { ActiveExperiment, SegmentTruth } from '../src/game/career/types'
+import type { ActiveExperiment, SegmentBeliefs, SegmentTruth } from '../src/game/career/types'
 
 const fails: string[] = []
 const ok = (cond: boolean, msg: string) => {
@@ -71,12 +71,36 @@ const mkExp = (type: (typeof EXPERIMENTS)[number]['type']): ActiveExperiment => 
   cashCost: 0, productCapacityCost: 0, marketingCapacityCost: 0,
   sampleSize: experimentDef(type).sampleSize, expectedEvidenceMetrics: experimentDef(type).metrics, status: 'active',
 })
-const interviewEv = resolveExperiment(mkExp('interview'), truth, 0.7, prng(1), uid, 5)
-const pilotEv = resolveExperiment(mkExp('pilot'), truth, 0.7, prng(1), uid, 5)
+// a flat mid-scale prior for the factory calls — direction is toned against THIS, never truth
+const flatPriors = Object.fromEntries(TRUTH_METRICS.map((m) => [m, { estimate: 50, confidence: 0.3, evidenceCount: 0 }])) as SegmentBeliefs
+const priorsAt = (estimate: number) =>
+  Object.fromEntries(TRUTH_METRICS.map((m) => [m, { estimate, confidence: 0.3, evidenceCount: 0 }])) as SegmentBeliefs
+const interviewEv = resolveExperiment(mkExp('interview'), truth, 0.7, prng(1), uid, 5, flatPriors)
+const pilotEv = resolveExperiment(mkExp('pilot'), truth, 0.7, prng(1), uid, 5, flatPriors)
 ok(pilotEv[0].reliability > interviewEv[0].reliability, `a pilot is more reliable than interviews (${pilotEv[0].reliability} vs ${interviewEv[0].reliability})`)
-const evA = resolveExperiment(mkExp('pricing_test'), truth, 0.7, prng(55), uid, 5)
-const evB = resolveExperiment(mkExp('pricing_test'), truth, 0.7, prng(55), uid, 5)
+const evA = resolveExperiment(mkExp('pricing_test'), truth, 0.7, prng(55), uid, 5, flatPriors)
+const evB = resolveExperiment(mkExp('pricing_test'), truth, 0.7, prng(55), uid, 5, flatPriors)
 ok(JSON.stringify(evA.map((e) => e.signal)) === JSON.stringify(evB.map((e) => e.signal)), 'same seed → same evidence')
+
+console.log('— Evidence direction is toned against BELIEF, never the hidden truth (audit fix, 2026-08-23) —')
+{
+  // Same rng seed → identical signals; only the prior differs. If direction were still toned
+  // against truth, these two would agree — the glyph would leak the answer within ±8.
+  const believedLow = resolveExperiment(mkExp('pilot'), truth, 0.7, prng(7), uid, 5, priorsAt(10))
+  const believedHigh = resolveExperiment(mkExp('pilot'), truth, 0.7, prng(7), uid, 5, priorsAt(90))
+  ok(
+    JSON.stringify(believedLow.map((e) => e.signal)) === JSON.stringify(believedHigh.map((e) => e.signal)),
+    'the signal itself never depends on the prior',
+  )
+  ok(
+    believedLow.every((e) => (e.signal > 18 ? e.direction === 'positive' : e.direction !== 'negative')),
+    'a read far above a low belief points up',
+  )
+  ok(
+    believedHigh.every((e) => (e.signal < 82 ? e.direction === 'negative' : e.direction !== 'positive')),
+    'the SAME read against a high belief points down — direction carries no information about truth',
+  )
+}
 
 let b = { estimate: 10, confidence: 0.1, evidenceCount: 0 }
 const strong = { ...pilotEv[0], metric: 'retentionPotential' as const, signal: 80, reliability: 0.9 }
@@ -92,8 +116,8 @@ let interviewDelta = 0
 let pricingDelta = 0
 const N = 60
 for (let i = 0; i < N; i++) {
-  const iv = resolveExperiment(mkExp('interview'), truth, 0.7, prng(i + 100), uid, 5).find((e) => e.metric === 'willingnessToPay')!
-  const pt = resolveExperiment(mkExp('pricing_test'), truth, 0.7, prng(i + 900), uid, 5).find((e) => e.metric === 'willingnessToPay')!
+  const iv = resolveExperiment(mkExp('interview'), truth, 0.7, prng(i + 100), uid, 5, flatPriors).find((e) => e.metric === 'willingnessToPay')!
+  const pt = resolveExperiment(mkExp('pricing_test'), truth, 0.7, prng(i + 900), uid, 5, flatPriors).find((e) => e.metric === 'willingnessToPay')!
   interviewDelta += iv.signal - truth.willingnessToPay
   pricingDelta += pt.signal - truth.willingnessToPay
 }

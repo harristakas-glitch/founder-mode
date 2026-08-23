@@ -250,7 +250,7 @@ export function tickCareerPMF(
 
     exp.status = 'complete'
     const truth = career.segmentTruth[exp.segmentId]
-    const evidence = resolveExperiment(exp, truth, executionQuality, rng, uid, s.week)
+    const evidence = resolveExperiment(exp, truth, executionQuality, rng, uid, s.week, career.segmentBeliefs[exp.segmentId])
     const segName = segmentDef(sector, exp.segmentId).name
     const def = experimentDef(exp.type)
 

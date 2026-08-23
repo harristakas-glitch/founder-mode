@@ -283,6 +283,22 @@ console.log('\n— The marketing cap is what you can fund, not what you raised �
   )
 }
 
+console.log('\n— A rival never wears the player\'s company name (audit fix, 2026-08-23) —')
+{
+  // 'Nimbus Labs' is in RIVAL_NAMES: pre-fix, seed 42 could seat a rival with the player's own
+  // name and the leaderboard showed the company at #1 and #4 simultaneously.
+  for (const seed of [1, 7, 42, 99]) {
+    const g = newGame('Nimbus Labs', 'saas', 'technical', { seed })
+    ok(g.rivals.every((r) => r.name.toLowerCase() !== 'nimbus labs'), `seed ${seed}: no rival is named Nimbus Labs`)
+    ok(g.rivals.length === 3, `seed ${seed}: still exactly three rivals`)
+  }
+  // and a non-colliding name draws the SAME world it always did — the filter must not shift
+  // the RNG stream (the golden traces in modes.test.ts pin this too, but say it here by name)
+  const a = newGame('Totally Original Co', 'saas', 'technical', { seed: 42 })
+  const b = newGame('Another Name Inc', 'saas', 'technical', { seed: 42 })
+  ok(JSON.stringify(a.rivals.map((r) => r.name)) === JSON.stringify(b.rivals.map((r) => r.name)), 'non-colliding names build identical rival sets')
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)
 

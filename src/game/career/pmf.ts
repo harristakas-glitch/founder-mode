@@ -296,6 +296,8 @@ export function resolveExperiment(
   rng: () => number,
   uid: () => string,
   week: number,
+  /** the player's CURRENT beliefs for this segment — what `direction` is toned against */
+  priors: SegmentBeliefs,
 ): EvidenceItem[] {
   const def = experimentDef(exp.type)
   const sampleQuality = clamp01(0.55 + Math.log10(Math.max(2, exp.sampleSize)) / 6)
@@ -322,7 +324,12 @@ export function resolveExperiment(
     }
 
     signal = clamp(signal)
-    const direction: EvidenceItem['direction'] = signal > trueValue + 8 ? 'positive' : signal < trueValue - 8 ? 'negative' : 'mixed'
+    // Toned against the PRIOR BELIEF, matching the operating reads' convention — NEVER against
+    // the hidden truth (game-feel audit, 2026-08-23): a truth-toned glyph next to a visible
+    // signal number leaked the answer within ±8, and it wore green on exactly the reads whose
+    // rosy bias the fog-of-war exists to make you doubt.
+    const prior = priors[metric].estimate
+    const direction: EvidenceItem['direction'] = signal > prior + 8 ? 'positive' : signal < prior - 8 ? 'negative' : 'mixed'
     return {
       id: uid(),
       week,

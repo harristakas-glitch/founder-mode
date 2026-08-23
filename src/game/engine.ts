@@ -289,7 +289,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     candidates: [],
     offersOut: [],
     pendingHires: [],
-    rivals: (opts.aiRivals ?? rules.capabilities.aiRivals) ? makeRivals(sec.tam) : [],
+    rivals: (opts.aiRivals ?? rules.capabilities.aiRivals) ? makeRivals(sec.tam, companyName) : [],
     climate: rand(-0.3, 0.5),
     inbox: [],
     termSheets: [],
@@ -373,9 +373,16 @@ function sanitize(s: GameState) {
   for (const v of s.ventures) v.users = Math.max(0, finite(v.users, 0))
 }
 
-function makeRivals(tam: number): Rival[] {
-  // seeded shuffle — daily challenges and online matches must build identical worlds
-  const pool = [...RIVAL_NAMES]
+function makeRivals(tam: number, exclude: string): Rival[] {
+  // seeded shuffle — daily challenges and online matches must build identical worlds.
+  // The player's own company name is excluded (audit fix, 2026-08-23: naming your company
+  // "Nimbus Labs" produced a RIVAL Nimbus Labs — the leaderboard showed you at #1 and #4).
+  // Filtered BEFORE the draws so the RNG call count is unchanged: a run whose name is not in
+  // the pool builds a byte-identical world, and rival stats are drawn after names either way.
+  // typeof-guarded, not just truthiness: replay headers can hand newGame an undefined name,
+  // and the engine has always tolerated that — the exclusion must not become a new requirement
+  const excludeKey = typeof exclude === 'string' ? exclude.trim().toLowerCase() : ''
+  const pool = RIVAL_NAMES.filter((n) => n.toLowerCase() !== excludeKey)
   const names: string[] = []
   for (let i = 0; i < 3; i++) names.push(pool.splice(Math.floor(RNG.next() * pool.length), 1)[0])
   return names.map((name) => ({

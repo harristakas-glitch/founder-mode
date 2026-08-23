@@ -4,9 +4,11 @@ import { Btn, Disclosure, LineChart, NESTED, Panel, Td, Th } from '../components
 import { money } from '../format'
 import {
   committedCosts,
+  covenantConversion,
   debtApr,
   debtCapacity,
   recruiterFee,
+  valuation,
   weeklyInfra,
   weeklyInterest,
   weeklyOffice,
@@ -151,12 +153,19 @@ function DebtPanel() {
             Repay
           </Btn>
         </div>
-        {/* Never behind the disclosure. This is the only place in the game a player is told that
-            15% of the company is on the table, and a rule you can lose the company to is not an
-            explainer — it is the price on the button directly above it. */}
+        {/* Never behind the disclosure — a rule you can lose the company to is not an explainer,
+            it is the price on the button directly above it. And the price is LIVE (audit fix,
+            2026-08-23: the old copy quoted a flat 15% the engine stopped charging when
+            covenantConversion landed — a breach is priced by the shortfall against the company's
+            value, floored and capped, and the number below moves with the slider). */}
         <div className="mt-2 text-xs leading-relaxed text-mut">
           The condition, stated up front: the covenant locks at 70% of your revenue when you draw — fall below it and the bank calls
-          the loan, seizing cash first and <b className="text-ink">15% of the company</b> for anything it can't collect.
+          the loan, seizing cash first and converting what it can&apos;t collect into your equity at distressed terms.{' '}
+          <b className="text-ink">
+            Defaulting on the full {money(shownAmount)} today would cost ~
+            {Math.round(covenantConversion(shownAmount, valuation(game)) * 100)}% of your stake
+          </b>{' '}
+          — never under 3%, never over 60%, and the deeper the hole, the worse the terms.
         </div>
         <Disclosure label="How the cap, the rate and the trade-off work">
           The cap is half your annual revenue; the rate is the central-bank rate plus a spread for your risk. In exchange you get
