@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BookOpen,
   Check,
-  ChevronDown,
   ChevronsRight,
-  Globe,
   HandCoins,
   Hourglass,
   DoorOpen,
@@ -21,16 +18,16 @@ import {
   Activity,
   Target,
   TrendingUp,
-  Rocket,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
 import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn, growthRate } from './game/engine'
 import { money, num } from './format'
 import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
-import { MODE_META, hasCapability } from './game/modes'
+import { hasCapability } from './game/modes'
 import { verifyRun, type VerifyResult } from './game/replay'
 import { isMuted, setMuted } from './sound'
 import { shareNative, shareRunText, shareTargets } from './share'
+import { BottomNavItem, FounderModeBrand, RailItem, UtilityButton } from './GameShell'
 import { NewGame } from './screens/NewGame'
 import { Lobby } from './screens/Lobby'
 import { Dashboard } from './screens/Dashboard'
@@ -97,15 +94,12 @@ const AREAS: {
   // One screen: the stream merged into the HQ (owner call, after FM26's Portal — messages are a
   // third of the overview, not a separate page). The 'inbox' ScreenId survives as an alias.
   { id: 'hq', label: 'HQ', icon: LayoutDashboard, screens: [{ id: 'dashboard', label: 'This week' }] },
-  // Screen order within an area is PRIORITY: the first entry is where the area lands, so it must
-  // be the screen with the weekly lever, never the report. Growth (the budget slider you touch
-  // most weeks) outranks Rivals (reading); Hiring (send an offer) outranks Team (upkeep); Raise
-  // (term sheets, board, votes — the decisions) outranks Finance (~90% report by the audit's own
-  // measure). Owner call, 2026-08-20.
-  { id: 'market', label: 'Market', icon: Swords, screens: [
-    { id: 'growth', label: 'Growth' },
-    { id: 'market', label: 'Rivals' },
-  ] },
+  // Screen order within an area is PRIORITY: the first entry is where the area lands. Owner
+  // re-cut, 2026-08-23: GROWTH — the budget slider you touch most weeks — is its own top-level
+  // area now instead of hiding as the first tab of "Market"; and MARKET means the outside
+  // world: your rivals first, then the story of your company unfolding against them (the old
+  // single-screen Company area folded in here).
+  { id: 'growth', label: 'Growth', icon: TrendingUp, screens: [{ id: 'growth', label: 'Growth' }] },
   { id: 'product', label: 'Product', icon: Package, screens: [
     { id: 'product', label: 'Build' },
     { id: 'discovery', label: 'Discovery', careerOnly: true },
@@ -119,15 +113,18 @@ const AREAS: {
     { id: 'fundraising', label: 'Raise' },
     { id: 'finance', label: 'Finance' },
   ] },
-  { id: 'company', label: 'Company', icon: BookOpen, screens: [
-    { id: 'story', label: 'Story' },
+  { id: 'market', label: 'Market', icon: Swords, screens: [
+    { id: 'market', label: 'Rivals' },
+    { id: 'story', label: 'Company story' },
   ] },
 ]
 
 const areaOf = (screen: ScreenId) => AREAS.find((a) => a.screens.some((sc) => sc.id === screen))
 
-/** Five areas fit the tab bar; Company — the record, never urgent — rides behind More. */
-const MOBILE_TABS: string[] = ['hq', 'market', 'product', 'people', 'capital']
+/** All six areas fit the tab bar (owner, 2026-08-23: a More holding exactly one destination
+ *  is a door to one room — Market took the seat). The hamburger sheet keeps the company card
+ *  and the utility actions. */
+const MOBILE_TABS: string[] = ['hq', 'growth', 'product', 'people', 'capital', 'market']
 
 
 interface RevealRow {
@@ -188,17 +185,15 @@ function MuteButton() {
   const [muted, setM] = useState(isMuted())
   const Icon = muted ? VolumeX : Volume2
   return (
-    <button
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:h-9 md:w-9"
-      aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
-      title={muted ? 'Unmute sounds' : 'Mute sounds'}
+    <UtilityButton
+      label={muted ? 'Unmute sounds' : 'Mute sounds'}
       onClick={() => {
         setMuted(!muted)
         setM(!muted)
       }}
     >
-      <Icon size={17} />
-    </button>
+      <Icon size={18} />
+    </UtilityButton>
   )
 }
 
@@ -347,49 +342,8 @@ export default function App() {
     (game.flash?.includes('🏆') || game.flash?.startsWith('🏁') || game.flash?.startsWith('🚀') || false) ||
     (!!game.gameOver && ['unicorn', 'ipo', 'acquired'].includes(game.gameOver.type))
 
-  // One renderer, two callers. The desktop rail shows everything; the phone's More sheet shows
-  // everything that is NOT already a tab, because repeating the four tabs inside the sheet they
-  // sit under is how a "More" menu becomes a list of everything and stops meaning anything.
   // Which screens inside an area actually exist for this run (Career-only ones gate out).
   const eligible = (a: (typeof AREAS)[number]) => a.screens.filter((sc) => !sc.careerOnly || hasCapability(game, 'hypothesisBoard'))
-
-  const navList = (omit: readonly string[] = []) => (
-    <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-      {AREAS.filter((a) => !omit.includes(a.id) && eligible(a).length > 0).map((a) => {
-        const Icon = a.icon
-        const active = areaOf(screen)?.id === a.id
-        return (
-          <button
-            key={a.id}
-            onClick={() => {
-              // Entering an area lands on its first screen unless you are already inside it —
-              // re-clicking the area you are in is a "take me to the front of it" gesture.
-              setScreen(eligible(a)[0].id)
-              setNavOpen(false)
-            }}
-            aria-current={active ? 'page' : undefined}
-            className={`relative flex min-h-[44px] w-full items-center gap-3 rounded-xl py-2 pr-3 pl-4 text-left text-[14px] transition-colors duration-[120ms] md:min-h-[42px] ${
-              active ? 'bg-accent/12 font-semibold text-ink shadow-[var(--glow-accent)]' : 'text-mut hover:bg-surface2 hover:text-ink'
-            }`}
-          >
-            {/* a quiet accent rail marks the place; the accent itself stays reserved for actions */}
-            {active && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent" />}
-            <Icon size={18} strokeWidth={2} className={active ? 'text-accent' : ''} />
-            {a.label}
-            {/* ONE badge in the whole nav: the blocking-decision count on HQ. The audit killed the
-                other two — the candidates badge read a constant 5 forever (the engine refills the
-                pool weekly), a notification affordance carrying zero bits that trains the player
-                to ignore badges; and term sheets duplicate a list the register now surfaces by
-                name. Company never badges: it is the record, nothing in it is ever urgent. */}
-            {a.id === 'hq' && unread > 0 && (
-              <span className="ml-auto rounded-full bg-bad px-1.5 py-px text-[10px] font-bold text-bg tnum">{unread}</span>
-            )}
-          </button>
-        )
-      })}
-    </nav>
-  )
-  const nav = navList()
 
   // The sibling row: primary area -> screen, and never deeper. Only rendered when the area has
   // more than one screen this run, so Quick Play's Product area (one screen) shows no chrome.
@@ -431,37 +385,72 @@ export default function App() {
   // was the rail's one unique number) and the match timer online. Users, PMF, revenue, burn,
   // valuation and morale each now have exactly one home — the HQ or their owning area — which is
   // the audit's actual fix: a number with one home can be loud there.
+  // ONE ARRAY, three renderings (shell brief §31): the desktop top bar, the mobile metric rail
+  // and the mobile stats sheet all read these entries, so a metric cannot exist in one and not
+  // the others.
+  //
+  // The two DRIVERS join the money clock — owner call, from the causal review: PMF is in every
+  // compounding formula and the growth rate is what the board fires you over. Five entries, the
+  // audit's ceiling; the number and nothing else (owner call, 2026-08-22 — sparklines and the
+  // PMF donut were decoration at rail scale). The HQ owns the meter, the trend and the drawer.
+  const railMetrics: { k: string; icon?: React.ReactNode; tone?: 'good' | 'bad' | 'warn'; body: React.ReactNode }[] = [
+    {
+      k: 'Cash',
+      icon: <Wallet size={12} />,
+      tone: game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined,
+      body: (
+        <>
+          <Ticker value={game.cash} format={money} />
+          <TrendBadge value={cashDelta} format={money} />
+        </>
+      ),
+    },
+    {
+      k: 'Runway',
+      icon: <Hourglass size={12} />,
+      tone: runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good',
+      body: <>{runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}</>,
+    },
+    {
+      k: 'Net /wk',
+      icon: <Activity size={12} />,
+      tone: game.lastRevenue - burn >= 0 ? 'good' : 'bad',
+      body: <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />,
+    },
+    {
+      k: 'PMF',
+      icon: <Target size={12} />,
+      tone: game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined,
+      body: (
+        <>
+          <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
+          <span className="ml-0.5 text-[11px] text-mut">/100</span>
+        </>
+      ),
+    },
+    {
+      k: 'Growth',
+      icon: <TrendingUp size={12} />,
+      tone: growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined,
+      body: <Ticker value={growthTrend * 100} format={(n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`} />,
+    },
+    ...(online && secondsLeft !== null && !matchOver
+      ? [
+          {
+            k: `Room ${online.code}`,
+            tone: secondsLeft < 30 ? ('bad' as const) : undefined,
+            body: <>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}</>,
+          },
+        ]
+      : []),
+  ]
   const statRail = (
     <>
-      <Stat k="Cash" icon={<Wallet size={12} />} tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
-        <Ticker value={game.cash} format={money} />
-        <TrendBadge value={cashDelta} format={money} />
-      </Stat>
-      <Stat k="Runway" icon={<Hourglass size={12} />} tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
-        {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
-      </Stat>
-      <Stat k="Net /wk" icon={<Activity size={12} />} tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
-        <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
-      </Stat>
-      {/* The two DRIVERS join the money clock — owner call, from the causal review: PMF is in
-          every compounding formula (word-of-mouth at ^1.5, acquisition, churn's dominant term)
-          and the growth rate is what the board fires you over. Five entries, the audit's ceiling.
-          The rail shows the NUMBER AND NOTHING ELSE (owner call, 2026-08-22: the sparklines and the
-          PMF donut "don't add value"). They were decoration at rail scale — a 64px line with no
-          axis, no scale and no label cannot be read, and it stole width from the figure that can.
-          The HQ owns the meter, the trend and the drawer, where there is room to mean something. */}
-      <Stat k="PMF" icon={<Target size={12} />} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
-        <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
-        <span className="ml-0.5 text-[11px] text-mut">/100</span>
-      </Stat>
-      <Stat k="Growth" icon={<TrendingUp size={12} />} tone={growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined}>
-        <Ticker value={growthTrend * 100} format={(n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`} />
-      </Stat>
-      {online && secondsLeft !== null && !matchOver && (
-        <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
-          {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
+      {railMetrics.map((m) => (
+        <Stat key={m.k} k={m.k} icon={m.icon} tone={m.tone}>
+          {m.body}
         </Stat>
-      )}
+      ))}
     </>
   )
 
@@ -482,6 +471,71 @@ export default function App() {
    * genuinely cannot continue) and a finished run (there is nothing else to do).
    */
   const compactAdvance = !runDone && !pending && screen !== 'dashboard'
+
+  // One handler for every advance control: shift-click fast-forwards up to five weeks through
+  // the same journaled advance() a plain click runs, stopping on a decision, the ending, or
+  // online play (a rival's round clock is not ours to fast-forward).
+  const onAdvanceClick = (e: React.MouseEvent) => {
+    if (e.shiftKey && !online) {
+      let hops = 0
+      const step = () => {
+        const g = useStore.getState().game
+        if (!g || g.gameOver || hasPendingDecision(g) || hops >= 5) return
+        hops++
+        advance()
+        setTimeout(step, 90)
+      }
+      step()
+      return
+    }
+    advance()
+  }
+
+  /**
+   * The desktop shell's advance control — the top bar's one action, next to the utilities
+   * (shell brief: the rail is pure navigation, so the game's primary verb lives on the top
+   * information bar where it is visible from every screen). Same states as the mobile CTA:
+   * green to advance, amber when a decision blocks the week (and it routes there), accent when
+   * the run is over and leaving is the only verb left.
+   */
+  const topAdvance = runDone ? (
+    <button
+      onClick={abandonGame}
+      className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 text-[13.5px] font-bold whitespace-nowrap text-bg shadow-[var(--elev-2)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+    >
+      <DoorOpen size={15} /> {online ? 'Leave match' : 'New company'}
+    </button>
+  ) : pending ? (
+    <button
+      onClick={() => {
+        setScreen('inbox')
+        setNavOpen(false)
+      }}
+      className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-warn px-4 text-[13.5px] font-bold whitespace-nowrap text-bg shadow-[var(--elev-2)] transition-[filter,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+    >
+      <Hourglass size={15} /> Decide{unread > 1 ? ` (${unread})` : ''} <ChevronsRight size={16} />
+    </button>
+  ) : online && myReady ? (
+    // waiting IS cancellable — the control that put you in the state takes you back out
+    <button
+      onClick={cancelReady}
+      title="Cancel ready"
+      className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-warn/50 bg-warn/10 px-4 text-[13px] font-bold whitespace-nowrap text-warn transition-colors duration-[120ms] hover:bg-warn/20"
+    >
+      <Hourglass size={15} /> Waiting… <span className="font-semibold opacity-70">tap to cancel</span>
+    </button>
+  ) : (
+    <button
+      disabled={advanceDisabled}
+      title={online ? undefined : 'Hold Shift to fast-forward up to 5 weeks'}
+      onClick={onAdvanceClick}
+      className={`flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-4 text-[13.5px] font-bold whitespace-nowrap transition-[filter,transform] duration-[120ms] ${
+        advanceDisabled ? 'cursor-not-allowed bg-surface2 text-mut' : 'bg-good text-bg shadow-[var(--glow-good)] hover:brightness-110 active:scale-[0.98]'
+      }`}
+    >
+      {online ? 'Ready — end my week' : 'Advance Week'} <ChevronsRight size={16} />
+    </button>
+  )
 
   const advanceBtn = runDone ? (
     <button
@@ -505,26 +559,7 @@ export default function App() {
   ) : (
     <button
       disabled={advanceDisabled}
-      onClick={(e) => {
-        // The mock's "Hold Shift to fast forward": a shift-click advances up to five weeks, and it
-        // is AUTOMATION OF THE EXISTING ACTION, not a new mechanic — each week runs through the
-        // same journaled advance() a plain click runs, and the loop stops the moment a decision
-        // blocks the week, the run ends, or the mode is online (a rival's round clock is not ours
-        // to fast-forward). Five keeps a slip of the finger from eating a quarter of the game.
-        if (e.shiftKey && !online) {
-          let hops = 0
-          const step = () => {
-            const g = useStore.getState().game
-            if (!g || g.gameOver || hasPendingDecision(g) || hops >= 5) return
-            hops++
-            advance()
-            setTimeout(step, 90)
-          }
-          step()
-          return
-        }
-        advance()
-      }}
+      onClick={onAdvanceClick}
       className={`flex items-center justify-center gap-1.5 rounded-xl font-bold transition-[filter,transform,background-color] duration-[120ms] ${
         compactAdvance ? 'min-h-[42px] w-auto px-3.5 text-[13.5px]' : 'min-h-[48px] w-full px-4 text-[15px]'
       } ${
@@ -607,118 +642,100 @@ export default function App() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden">
       {runwayRule}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-      {/* sidebar — desktop */}
-      <aside className="hidden w-[240px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
-        {/* The wordmark row — the mock's brand header, above the player's own company. */}
-        <div className="flex items-center gap-2 border-b border-line/60 px-4 py-3">
-          <Rocket size={18} className="text-accent" />
-          <div className="min-w-0 leading-tight">
-            <div className="text-[13px] font-extrabold uppercase tracking-[0.08em]">Founder Mode</div>
-            <div className="text-[10.5px] text-mut">The startup game.</div>
-          </div>
+
+      {/* ---------- desktop top information bar (shell brief §8–§15) ----------
+          The company heartbeat, full width: brand zone sized to the rail below so the vertical
+          seam runs through the bar, then the five canonical metrics, then the advance verb and
+          the utility squares. Persistent and identical on every in-game screen. */}
+      <header className="hidden h-[64px] shrink-0 items-stretch border-b border-line/60 bg-bg md:flex">
+        <div className="flex w-[104px] shrink-0 items-center justify-center border-r border-line/60">
+          <FounderModeBrand stacked />
         </div>
-        <div className="border-b border-line/60 px-4 pb-4 pt-4">
-          {/* The mock's company card: monogram centred with a soft brand ring, identity beneath.
-              The sidebar is the one place the game says "this is YOUR company" — it earns the
-              screen's second decorative element (the hero's glow being the first). */}
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl p-1" style={{ boxShadow: '0 0 0 1px rgb(139 92 246 / 0.35), 0 0 24px rgb(139 92 246 / 0.18)' }}>
-              <Monogram name={game.companyName} size={44} />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[15px] font-extrabold tracking-tight">{game.companyName}</div>
-              <div className="text-xs text-mut">
-                {game.stage} · Week {game.week}
-              </div>
-            </div>
-          </div>
-          {/* Brief §38: a quiet mode indicator — same brand, different experience. */}
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-mut">
-            <span className="rounded-full border border-line2 px-1.5 py-px font-semibold">
-              {MODE_META[game.config?.mode ?? 'quick'].icon} {MODE_META[game.config?.mode ?? 'quick'].name}
-            </span>
-            {game.challenge && (
-              <span>
-                {game.challenge.label} · ends wk {game.challenge.cap}
+        <div className="fade-r flex min-w-0 flex-1 items-center gap-6 overflow-x-auto px-5 [&::-webkit-scrollbar]:hidden">
+          {statRail}
+        </div>
+        <div className="flex shrink-0 items-center gap-2 px-4">
+          {topAdvance}
+          <UtilityButton label="Product-market fit breakdown" onClick={() => setFitOpen(true)}>
+            <Target size={18} />
+          </UtilityButton>
+          <FieldGuideButton />
+          <MuteButton />
+          <UtilityButton
+            danger
+            label={online ? 'Leave match' : 'Abandon run & start over'}
+            onClick={() => {
+              if (game.gameOver || confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?'))
+                abandonGame()
+            }}
+          >
+            <DoorOpen size={18} />
+          </UtilityButton>
+        </div>
+      </header>
+
+      {/* ---------- mobile top bar + metric rail (shell brief §29–§33) ---------- */}
+      <header className="inset-x-safe shrink-0 border-b border-line/60 bg-bg md:hidden">
+        <div className="flex h-[52px] items-center justify-between px-1.5">
+          <button
+            aria-label="Menu"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen(true)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink"
+          >
+            <Menu size={20} />
+          </button>
+          <FounderModeBrand />
+          {/* the avatar seat wears YOUR COMPANY — tapping it opens the full status sheet */}
+          <button
+            aria-label="Company status"
+            aria-expanded={statsOpen}
+            onClick={() => setStatsOpen(true)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl"
+          >
+            <Monogram name={game.companyName} size={30} />
+          </button>
+        </div>
+        {/* the heartbeat in equal columns; PMF taps open the fit breakdown, the rest the sheet */}
+        <div className="flex items-stretch border-t border-line/40">
+          {railMetrics.map((m) => (
+            <button
+              key={m.k}
+              onClick={() => (m.k === 'PMF' ? setFitOpen(true) : setStatsOpen(true))}
+              aria-label={`${m.k} — all stats`}
+              className="min-w-0 flex-1 px-1 pt-1.5 pb-2 text-center transition-colors hover:bg-surface2"
+            >
+              <span className="block truncate text-[8.5px] font-semibold tracking-[0.06em] text-mut uppercase">{m.k}</span>
+              <span
+                className={`block truncate text-[12.5px] font-bold tnum ${
+                  m.tone === 'good' ? 'text-good' : m.tone === 'bad' ? 'text-bad' : m.tone === 'warn' ? 'text-warn' : ''
+                }`}
+              >
+                {m.body}
               </span>
-            )}
-          </div>
-          {hasCapability(game, 'founderEnergy') && (
-          <div className="mt-2 flex items-center gap-1.5" title="Founder energy — big moves drain it, low energy weakens your weekly contribution. Recharge on the Team screen.">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-mut">Energy</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/40">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${game.energy}%`,
-                  background: game.energy < 25 ? 'var(--color-bad)' : game.energy < 50 ? 'var(--color-warn)' : 'var(--color-good)',
-                }}
-              />
-            </div>
-            <span className="text-[10px] font-bold tnum">{Math.round(game.energy)}</span>
-          </div>
-          )}
-          {online && (
-            <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-accent/15 px-2 py-1 text-[11px] font-bold text-accent">
-              <Globe size={11} /> Room {online.code}
-              {secondsLeft !== null && !matchOver && (
-                <span className={`ml-auto tnum ${secondsLeft < 30 ? 'text-bad' : ''}`}>
-                  {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        {nav}
-        <div className="border-t border-line/60 p-3">
-          {online && (
-            <div className="mb-2 space-y-1">
-              {online.players.map((p) => (
-                <div key={p.id} className="flex items-center justify-between text-[12px]">
-                  <span className={`truncate ${p.id === myId() ? 'font-bold' : 'text-mut'}`}>
-                    {p.over ? '☠️ ' : hasForfeited(p) ? '🚪 ' : ''}
-                    {p.company}
-                  </span>
-                  {p.over ? (
-                    <span className="text-mut tnum" title="They have finished. This is the figure you are playing against.">
-                      {p.payout > 0 ? money(p.payout) : 'out'}
-                    </span>
-                  ) : hasForfeited(p) ? (
-                    <span className="text-mut">left</span>
-                  ) : p.absent ? (
-                    <span className="text-warn" title="Lost their connection — they have a little while to come back.">
-                      ⟳
-                    </span>
-                  ) : p.ready ? (
-                    <Check size={13} className="text-good" />
-                  ) : (
-                    <span className="text-mut">…</span>
-                  )}
-                </div>
-              ))}
-              <div className="flex justify-between pt-1">
-                {EMOTES.map((e) => (
-                  <button key={e} className="rounded p-0.5 text-[15px] transition-transform hover:scale-125" onClick={() => sendEmote(e)}>
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="mb-2 text-center text-[11px] text-mut">{weekDate(game.week)}</div>
-          {advanceBtn}
-          {!online && !game.gameOver && (
-            <div className="mt-1.5 text-center text-[10.5px] text-mut">
-              Hold <kbd className="rounded border border-line2 bg-surface2 px-1 py-px font-semibold">Shift</kbd> to fast forward
-            </div>
-          )}
-          {online && myReady && !matchOver && !game.gameOver && (
-            <button className="mt-1.5 w-full text-center text-[12px] text-mut hover:text-ink" onClick={cancelReady}>
-              Cancel ready
             </button>
-          )}
+          ))}
         </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+      {/* ---------- desktop navigation rail (shell brief §16–§22) ----------
+          Pure navigation: icon over label, one selected treatment, nothing else. The company
+          card the old 240px sidebar carried lives on the HQ header now, where the mock puts it. */}
+      <aside className="hidden w-[104px] shrink-0 flex-col border-r border-line/60 bg-bg md:flex">
+        <nav aria-label="Sections" className="flex-1 space-y-2 overflow-y-auto px-2 py-3">
+          {AREAS.filter((a) => eligible(a).length > 0).map((a) => (
+            <RailItem
+              key={a.id}
+              icon={a.icon}
+              label={a.label}
+              active={areaOf(screen)?.id === a.id}
+              badge={a.id === 'hq' ? unread : 0}
+              onClick={() => setScreen(eligible(a)[0].id)}
+            />
+          ))}
+        </nav>
+        <div className="border-t border-line/60 px-2 py-2 text-center text-[9.5px] text-mut">{weekDate(game.week)}</div>
       </aside>
 
       {/* sidebar — mobile drawer */}
@@ -745,72 +762,84 @@ export default function App() {
                 <X size={18} />
               </button>
             </div>
-            {navList(MOBILE_TABS)}
+            {/* Every area lives on the tab bar now, so the sheet is the company card above and
+                the utility actions the desktop top bar carries (shell brief §39) — the phone
+                top bar stays brand + avatar. */}
+            <div className="flex items-center justify-around border-t border-line/60 px-4 py-3">
+              <UtilityButton
+                label="Product-market fit breakdown"
+                onClick={() => {
+                  setNavOpen(false)
+                  setFitOpen(true)
+                }}
+              >
+                <Target size={18} />
+              </UtilityButton>
+              <FieldGuideButton />
+              <MuteButton />
+              <UtilityButton
+                danger
+                label={online ? 'Leave match' : 'Abandon run & start over'}
+                onClick={() => {
+                  if (game.gameOver || confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?')) {
+                    setNavOpen(false)
+                    abandonGame()
+                  }
+                }}
+              >
+                <DoorOpen size={18} />
+              </UtilityButton>
+            </div>
           </aside>
         </div>
       )}
 
-      {/* right side */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* topbar */}
-        {/* `h-[60px]` is the BAR's height; the notch pad is added on top of it rather than eaten
-            out of it, or the controls sit half under the Dynamic Island on a modern iPhone. */}
-        <header className="inset-x-safe flex shrink-0 items-center gap-2 border-b border-line/60 bg-bg px-2 md:gap-4 md:px-5">
-          <div className="flex h-[56px] min-w-0 flex-1 items-center gap-2 md:gap-4">
-          {/* the metric rail scrolls if it must; the soft right edge is the
-              affordance, so a value is never chopped off mid-word — desktop only,
-              phones get the two vitals plus the tap-to-expand sheet below */}
-          <div className="fade-r hidden flex-1 items-center gap-4 overflow-x-auto pr-6 md:flex md:gap-6 [&::-webkit-scrollbar]:hidden">
-            {statRail}
+      {/* Arena, desktop: the rivals' readiness and the emotes — the old wide sidebar carried
+          these; the 104px rail cannot, so they float above the corner where that sidebar was. */}
+      {online && (
+        <div className="fixed bottom-3 left-[112px] z-30 hidden w-[210px] rounded-xl border border-line2 bg-surface/95 p-2.5 shadow-[var(--elev-3)] backdrop-blur-md md:block">
+          <div className="space-y-1">
+            {online.players.map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-[12px]">
+                <span className={`truncate ${p.id === myId() ? 'font-bold' : 'text-mut'}`}>
+                  {p.over ? '☠️ ' : hasForfeited(p) ? '🚪 ' : ''}
+                  {p.company}
+                </span>
+                {p.over ? (
+                  <span className="text-mut tnum" title="They have finished. This is the figure you are playing against.">
+                    {p.payout > 0 ? money(p.payout) : 'out'}
+                  </span>
+                ) : hasForfeited(p) ? (
+                  <span className="text-mut">left</span>
+                ) : p.absent ? (
+                  <span className="text-warn" title="Lost their connection — they have a little while to come back.">
+                    ⟳
+                  </span>
+                ) : p.ready ? (
+                  <Check size={13} className="text-good" />
+                ) : (
+                  <span className="text-mut">…</span>
+                )}
+              </div>
+            ))}
           </div>
-          {/* mobile: cash + runway always visible, everything else one tap away */}
-          <button
-            className="flex min-h-[44px] min-w-0 flex-1 items-center gap-4 overflow-hidden rounded-xl px-1.5 text-left transition-colors hover:bg-surface2 md:hidden"
-            aria-label="Show all stats"
-            aria-expanded={statsOpen}
-            onClick={() => setStatsOpen(true)}
-          >
-            <Stat k="Cash" tone={game.cash < Math.max(burn * 8, 40_000) ? 'bad' : undefined}>
-              <Ticker value={game.cash} format={money} />
-            </Stat>
-            <Stat k="Runway" tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
-              {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
-            </Stat>
-            {online && secondsLeft !== null && !matchOver && (
-              <Stat k="Ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
-                {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
-              </Stat>
-            )}
-            <ChevronDown size={16} className="ml-auto shrink-0 text-mut" />
-          </button>
-          {/* Spec §5: the PMF breakdown, one click from any screen. Target icon — the same
-              symbol the rail and the HQ card already use for fit. */}
-          <button
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:h-9 md:w-9"
-            aria-label="Product-market fit breakdown"
-            title="Fit — the breakdown, from any screen"
-            onClick={() => setFitOpen(true)}
-          >
-            <Target size={17} />
-          </button>
-          <FieldGuideButton />
-          <MuteButton />
-          <button
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-bad md:h-9 md:w-9"
-            aria-label={online ? 'Leave match' : 'Abandon run & start over'}
-            title={online ? 'Leave match' : 'Abandon run & start over'}
-            onClick={() => {
-              if (game.gameOver || confirm(online ? 'Leave the match and abandon your company?' : 'Abandon this company and start over?'))
-                abandonGame()
-            }}
-          >
-            <DoorOpen size={18} />
-          </button>
+          <div className="mt-1 flex justify-between border-t border-line/50 pt-1.5">
+            {EMOTES.map((e) => (
+              <button key={e} className="rounded p-0.5 text-[15px] transition-transform hover:scale-125" onClick={() => sendEmote(e)}>
+                {e}
+              </button>
+            ))}
           </div>
-        </header>
+        </div>
+      )}
 
+      {/* right side — the page viewport; the shell's bars live above and beside it */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* main */}
-        <main id="app-scroll" className="inset-x-safe min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-[calc(132px+env(safe-area-inset-bottom))] md:px-6 md:pt-5 md:pb-8">
+        <main
+          id="app-scroll"
+          className="inset-x-safe min-h-0 flex-1 overflow-y-auto pt-4 pb-[calc(132px+env(safe-area-inset-bottom))] [--px:16px] md:pt-5 md:pb-8 md:[--px:28px]"
+        >
           <FounderNotes />
           {online && game.gameOver && !matchOver && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/50 bg-bad/10 px-4 py-3 text-[14px]">
@@ -894,7 +923,7 @@ export default function App() {
             about. Both sit above the home indicator via the safe-area pad on the tab bar. */}
         <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
           <div
-            className={`inset-x-safe bg-gradient-to-t from-bg via-bg/95 to-transparent px-4 pb-2 ${
+            className={`inset-x-safe bg-gradient-to-t from-bg via-bg/95 to-transparent pb-2 [--px:16px] ${
               compactAdvance ? 'flex justify-end pt-3' : 'pt-6'
             }`}
           >
@@ -906,46 +935,17 @@ export default function App() {
           >
             {MOBILE_TABS.map((id) => {
               const item = AREAS.find((a) => a.id === id)!
-              const Icon = item.icon
-              const active = areaOf(screen)?.id === id
-              const badge = id === 'hq' ? unread : 0
               return (
-                <button
+                <BottomNavItem
                   key={id}
+                  icon={item.icon}
+                  label={item.label}
+                  active={areaOf(screen)?.id === id}
+                  badge={id === 'hq' ? unread : 0}
                   onClick={() => setScreen(eligible(item)[0].id)}
-                  aria-current={active ? 'page' : undefined}
-                  className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 pt-1.5 pb-1 text-[10px] font-semibold transition-colors duration-[120ms] ${
-                    active ? 'text-accent' : 'text-mut'
-                  }`}
-                >
-                  <span className="relative">
-                    <Icon size={20} strokeWidth={active ? 2.4 : 2} />
-                    {badge > 0 && (
-                      <span className="absolute -top-1 -right-2 min-w-[15px] rounded-full bg-bad px-1 text-[9px] font-bold leading-[15px] text-bg tnum">
-                        {badge}
-                      </span>
-                    )}
-                  </span>
-                  {item.label}
-                </button>
+                />
               )
             })}
-            <button
-              onClick={() => setNavOpen(true)}
-              aria-label="More sections"
-              aria-expanded={navOpen}
-              className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 pt-1.5 pb-1 text-[10px] font-semibold transition-colors duration-[120ms] ${
-                navOpen || !MOBILE_TABS.includes(areaOf(screen)?.id ?? 'hq') ? 'text-accent' : 'text-mut'
-              }`}
-            >
-              <span className="relative">
-                <Menu size={20} strokeWidth={2} />
-                {/* No dot. Only Company lives back here now, and Company is the record — nothing
-                    in it is ever urgent. The old dot counted term sheets and candidates, which the
-                    attention register now surfaces BY NAME on the HQ instead. */}
-              </span>
-              More
-            </button>
           </nav>
         </div>
       </div>

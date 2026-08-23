@@ -23,6 +23,7 @@ import { Meter, RadialGauge, RAISED, Sparkline, StatCard } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister, type AttentionItem } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers, unitEconomics, weeklyBurn } from '../game/engine'
+import { MODE_META, hasCapability } from '../game/modes'
 import { useState } from 'react'
 import { DollarSign, Target as TargetIcon, TrendingUp as TrendIcon, Users as UsersIcon } from 'lucide-react'
 import { BoardMeeting, Commitments, FounderBriefing, PMF_CAUSAL_CHAIN, TeamOpinions, careerActive } from '../CareerUI'
@@ -503,9 +504,40 @@ export function Dashboard() {
   // are just the wrappers side by side. No duplicated markup, no JS.
   return (
     <div>
-      <h1 className="text-[28px] font-bold tracking-tight">Weekly Briefing</h1>
-      <div className="mb-4 text-[13px] text-mut">
-        Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
+      {/* The page header carries the COMPANY IDENTITY the old 240px sidebar used to (shell
+          brief: the shell is heartbeat + navigation only; who you are lives on the HQ, which is
+          where the mock puts the mode chip and the energy bar). */}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <h1 className="text-[28px] font-bold tracking-tight">Weekly Briefing</h1>
+          <div className="text-[13px] text-mut">
+            Week {game.week} · {game.stage} · you own {pct(game.founderEquity, 1)}
+            {game.challenge && ` · ${game.challenge.label}, ends wk ${game.challenge.cap}`}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-2.5 py-1 text-[12px] font-bold text-accent">
+            {MODE_META[game.config?.mode ?? 'quick'].icon} {MODE_META[game.config?.mode ?? 'quick'].name}
+          </span>
+          {hasCapability(game, 'founderEnergy') && (
+            <span
+              className="flex items-center gap-1.5"
+              title="Founder energy — big moves drain it, low energy weakens your weekly contribution. Recharge on the Team screen."
+            >
+              <span className="text-[10px] font-bold tracking-wider text-mut uppercase">Energy</span>
+              <span className="h-1.5 w-24 overflow-hidden rounded-full bg-black/40">
+                <span
+                  className="block h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${game.energy}%`,
+                    background: game.energy < 25 ? 'var(--color-bad)' : game.energy < 50 ? 'var(--color-warn)' : 'var(--color-good)',
+                  }}
+                />
+              </span>
+              <span className="text-[10px] font-bold tnum">{Math.round(game.energy)}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6 xl:gap-8">

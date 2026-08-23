@@ -163,9 +163,14 @@ label {
 .pad-bottom-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
+/* Safe-area padding that COMPOSES with a design padding instead of silently replacing it.
+   The old form set padding-left/right directly, and — being an unlayered class — it beat any
+   px-* utility on the same element, so `inset-x-safe px-6` rendered with ZERO horizontal
+   padding on desktop (env() is 0 there). Found during the shell migration, 2026-08-23.
+   Elements opt into design padding via the --px custom property: `[--px:16px] md:[--px:24px]`. */
 .inset-x-safe {
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  padding-left: max(env(safe-area-inset-left), var(--px, 0px));
+  padding-right: max(env(safe-area-inset-right), var(--px, 0px));
 }
 
 body {

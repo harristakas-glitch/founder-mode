@@ -17,6 +17,7 @@ import { BookOpen, PenLine, X } from 'lucide-react'
 import { useStore } from '../store'
 import { term } from './glossary'
 import { closeGuide, openGuide, useGuide } from './guide'
+import { UtilityButton } from '../GameShell'
 import { setNotesEnabled } from './progress'
 import { FieldGuide } from './FieldGuide'
 import { safeText, useActiveNote } from './useOnboarding'
@@ -131,13 +132,9 @@ export function FounderNotes() {
  */
 export function FieldGuideButton() {
   return (
-    <button
-      onClick={() => openGuide()}
-      aria-label="Open the field guide"
-      title="Field guide — what every number means (?)"
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-mut transition-colors hover:bg-surface2 hover:text-ink md:h-9 md:w-9"
-    >
-      <BookOpen size={17} />
-    </button>
+    // the shell's utility grammar (GameShell.UtilityButton): raised square, subtle border
+    <UtilityButton label="Field guide — what every number means (?)" onClick={() => openGuide()}>
+      <BookOpen size={18} />
+    </UtilityButton>
   )
 }
