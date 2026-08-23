@@ -428,11 +428,19 @@ input[type='range']::-moz-range-thumb {
   background:
     radial-gradient(900px 560px at 16% 4%, color-mix(in oklab, var(--ha) 26%, transparent), transparent 62%),
     radial-gradient(760px 520px at 88% 26%, color-mix(in oklab, var(--ha2) 20%, transparent), transparent 60%);
+  /* Halved on the launcher: purple is identity, not a wash (brief §37), and the photographs are
+     already carrying the mood. The briefing keeps the full aurora — it has no imagery. */
+  opacity: 0.45;
   transition: background 420ms var(--e-out);
 }
 
-/* hairline grid, faded out below the fold so it never fights the content */
-.home-bg::after {
+/* The hairline grid is GONE from the launcher (home redesign brief §39: "the current homepage
+   grid background should be removed or reduced materially if it makes the screen feel like an AI
+   concept"). It did — a tech-grid laid over photographic office imagery is the single strongest
+   "generated concept" signal on the page, and the atmosphere now comes from the photographs.
+   Kept on the BRIEFING, where there is no photography and the grid is the only texture there is. */
+.home-briefing .home-bg::before { opacity: 1; }
+.home-briefing .home-bg::after {
   content: '';
   position: absolute;
   inset: 0;

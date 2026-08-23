@@ -11,7 +11,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   ArrowLeft,
-  ArrowRight,
   CalendarDays,
   Check,
   Globe,
@@ -35,7 +34,8 @@ import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
 import { dailyInfo, readHall, readLocalBests, useStore } from '../store'
 import { DailyLeaderboard } from './DailyLeaderboard'
-import { FirstRunBriefingNote, recommendedMode, useFirstTimer } from '../onboarding/FirstRun'
+import { FirstRunBriefingNote, useFirstTimer } from '../onboarding/FirstRun'
+import { DailyChallengeStrip, FounderHistoryStrip, HOME_MODES, HomeHero, ModeCard } from './HomeLauncher'
 import { MODE_ACCENTS, endingEmoji, sectorAccent } from '../theme'
 
 const vars = (o: Record<string, string>) => o as CSSProperties
@@ -423,6 +423,8 @@ function ProfileCard({ onClose, onSignOut }: { onClose: () => void; onSignOut: (
 }
 
 export function NewGame() {
+  const profile = useStore((s) => s.profile)
+  const authUser = useStore((s) => s.authUser)
   const startGame = useStore((s) => s.startGame)
   const hostRoom = useStore((s) => s.hostRoom)
   const joinRoom = useStore((s) => s.joinRoom)
@@ -465,11 +467,11 @@ export function NewGame() {
         : 'Start Run'
 
   return (
-    <div className="home-root relative min-h-screen overflow-x-hidden" style={vars({ '--ha': ha, '--ha2': ha2 })}>
+    <div className={`home-root relative min-h-screen overflow-x-hidden ${experience ? 'home-briefing' : ''}`} style={vars({ '--ha': ha, '--ha2': ha2 })}>
       <div className="home-bg" aria-hidden="true" />
       <div className="home-vignette" aria-hidden="true" />
 
-      <div className="relative z-[1] mx-auto w-full max-w-[1060px] px-4 pt-5 pb-10 sm:px-6 md:px-8 md:pt-8">
+      <div className={`relative z-[1] mx-auto w-full px-4 pt-5 pb-10 sm:px-6 md:px-8 md:pt-8 ${experience ? "max-w-[1060px]" : "max-w-[1440px]"}`}>
         {/* ---------- top bar ---------- */}
         <div className="flex min-h-[34px] items-start justify-between gap-3">
           {experience ? (
@@ -491,107 +493,44 @@ export function NewGame() {
           <AuthCorner />
         </div>
 
-        {/* ================= THE GATE ================= */}
+        {/* ================= THE GATE — the launcher ================= */}
         {!experience && (
           <>
-            <header className="home-in mt-8 md:mt-12" style={vars({ '--d': '0ms' })}>
-              <div className="flex items-center gap-3">
-                <span className="home-rule w-10 shrink-0" aria-hidden="true" />
-                <span className="text-[10.5px] font-bold tracking-[0.3em] text-mut uppercase">A startup simulator</span>
-              </div>
-              <h1 className="home-title mt-3.5">
-                <span className="block">Founder</span>
-                <span className="l2 block">Mode</span>
-              </h1>
-              <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-mut md:text-[16.5px]">
-                Build companies. Make decisions. Live with the consequences.
-              </p>
-            </header>
+            <HomeHero name={profile?.nickname ?? authUser?.name ?? null}>
+              <FounderHistoryStrip createdAt={profile?.createdAt} />
+            </HomeHero>
 
-            <div className="home-in mt-9 flex items-center gap-3 md:mt-12" style={vars({ '--d': '90ms' })}>
+            <div className="home-in mt-9 flex items-center gap-3 md:mt-11" style={vars({ '--d': '220ms' })}>
               <h2 className={eyebrow}>Choose your world</h2>
               <span className="home-rule flex-1" aria-hidden="true" />
             </div>
 
-            <div className="mt-3.5 grid gap-3 md:grid-cols-3">
-              {(['quick', 'career', 'arena'] as GameMode[]).map((m, i) => {
-                const meta = MODE_META[m]
-                const Icon = MODE_ICON[m]
-                const [c] = MODE_ACCENTS[m]
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => {
-                      setExperience(m)
-                      setFormat('standard')
-                    }}
-                    className="mode-card home-in flex flex-col"
-                    style={vars({ '--mc': c, '--d': `${130 + i * 70}ms` })}
-                  >
-                    <span className="relative flex h-full flex-1 flex-col p-6">
-                      <span className="flex items-start justify-between gap-2">
-                        <span className={`${NESTED} flex h-10 w-10 shrink-0 items-center justify-center`} aria-hidden="true">
-                          <Icon size={20} className="text-accent" />
-                        </span>
-                        {m === 'career' && (
-                          <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] font-bold text-warn">
-                            Early access
-                          </span>
-                        )}
-                        {recommendedMode(m) && (
-                          <span
-                            className="rounded-full border px-2 py-0.5 text-[10px] font-bold"
-                            style={{ borderColor: `${c}66`, color: c, background: `${c}14` }}
-                          >
-                            Start here
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-4 block text-[16px] font-bold">{meta.name}</span>
-                      <span className="mt-1 block text-[13.5px] leading-relaxed text-mut">{meta.promise}</span>
-                      <span className="mt-1.5 block text-[12.5px] leading-relaxed text-mut">{meta.blurb}</span>
-                      <span className="mt-auto block pt-6">
-                        <span className={`${eyebrow} block`}>{meta.meta}</span>
-                        <span className="mt-2 flex items-center gap-1.5 text-[13.5px] font-bold" style={{ color: c }}>
-                          {meta.cta} <ArrowRight size={15} />
-                        </span>
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {HOME_MODES(MODE_ICON).map((card, i) => (
+                <ModeCard
+                  key={card.id}
+                  card={card}
+                  delay={260 + i * 60}
+                  onPick={() => {
+                    setExperience(card.id)
+                    setFormat('standard')
+                  }}
+                />
+              ))}
             </div>
 
-            {/* Daily stays one tap away without becoming a fourth pillar. */}
-            <button
-              type="button"
-              onClick={() => {
-                setExperience('quick')
-                setFormat('daily_challenge')
-              }}
-              className="home-in mt-3 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3.5 text-left transition-colors hover:border-[var(--ha)]/60 hover:bg-surface2"
-              style={vars({ '--d': '340ms' })}
-            >
-              <span className="flex items-center gap-3">
-                <span className={`${NESTED} flex h-10 w-10 shrink-0 items-center justify-center`} aria-hidden="true">
-                  <CalendarDays size={20} className="text-[var(--ha)]" />
-                </span>
-                <span>
-                  <span className={`${eyebrow} block`}>Today&apos;s challenge</span>
-                  {/* the seed's public face (#id) and its locked market, as fact chips */}
-                  <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span className={CHIP}>#{daily.id}</span>
-                    <span className={CHIP}>{sectorById(daily.sector).name}</span>
-                  </span>
-                </span>
-              </span>
-              <span className="flex items-center gap-1.5 text-[13px] font-bold text-[var(--ha)]">
-                Same world for everyone <ArrowRight size={14} />
-              </span>
-            </button>
+            {/* Daily stays one tap away without becoming a fourth pillar: Quick mode, Daily format. */}
+            <div className="mt-4">
+              <DailyChallengeStrip
+                delay={460}
+                onPlay={() => {
+                  setExperience('quick')
+                  setFormat('daily_challenge')
+                }}
+              />
+            </div>
 
-            <div className="home-in mt-10 grid gap-7 md:grid-cols-2" style={vars({ '--d': '400ms' })}>
+            <div className="home-in mt-10 grid gap-7 md:grid-cols-2" style={vars({ '--d': '520ms' })}>
               <HallOfFame />
               <AchievementGallery />
             </div>

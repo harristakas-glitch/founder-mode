@@ -554,9 +554,14 @@ export function hasCapability(source: { capabilities?: Partial<GameCapabilities>
 
 // ---------- presentation ----------
 
+/**
+ * The names the PLAYER sees. The keys stay `quick` / `career` / `arena` — a mode id is written into
+ * every save, journal and shared Arena config, so renaming one to change a label would break saves
+ * to fix a caption (home redesign brief §1/§2: new visible naming, untouched internal identifiers).
+ */
 export const MODE_META: Record<GameMode, { name: string; promise: string; blurb: string; cta: string; meta: string; icon: string }> = {
   quick: {
-    name: 'Quick Play',
+    name: 'Quick Run',
     promise: 'Build a unicorn tonight.',
     blurb: 'Fast startup management. Start a company, make the big decisions and see how far you can take it.',
     cta: 'Play',
@@ -564,10 +569,10 @@ export const MODE_META: Record<GameMode, { name: string; promise: string; blurb:
     icon: '⚡',
   },
   career: {
-    name: 'Career',
+    name: 'Simulation',
     promise: 'Build the company. Become the CEO.',
     blurb: 'A deeper founder simulation about product, people, strategy and capital.',
-    cta: 'Start Career',
+    cta: 'Start Simulation',
     meta: 'Deep Simulation · Solo · Multi-session',
     icon: '🏛',
   },

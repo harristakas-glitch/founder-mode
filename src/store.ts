@@ -142,6 +142,23 @@ export function readHall(): RunRecord[] {
 // and "your best Career run" as separate facts.
 const BESTS_KEY = 'founder-mode-bests'
 
+/**
+ * Lifetime finished-run count. The hall of fame keeps the TOP TEN by score, so `readHall().length`
+ * silently stops counting at ten — fine for a leaderboard, wrong for "companies built", which is a
+ * biography. Absent means "no counter yet": fall back to the hall's length so an existing player's
+ * number does not drop to zero on the day this shipped.
+ */
+const RUNS_KEY = 'founder-mode-runs'
+
+export function readRunCount(): number {
+  try {
+    const n = Number(localStorage.getItem(RUNS_KEY))
+    return Number.isFinite(n) && n > 0 ? n : readHall().length
+  } catch {
+    return 0
+  }
+}
+
 export function readLocalBests(): ProfileBests {
   try {
     const v = JSON.parse(localStorage.getItem(BESTS_KEY) ?? '{}')
@@ -209,6 +226,11 @@ function recordRun(g: GameState) {
       at: Date.now(),
     })
     void useStore.getState().syncProfileProgress()
+  }
+  try {
+    localStorage.setItem(RUNS_KEY, String(readRunCount() + 1))
+  } catch {
+    // private mode / quota — the biography just does not count this one
   }
   const runs = readHall()
   runs.push({
