@@ -43,7 +43,7 @@ import { Fundraising } from './screens/Fundraising'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
-import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge, RadialGauge, Sparkline, useDialog } from './components'
+import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge, useDialog } from './components'
 import { runMarkers } from './runMarkers'
 import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
 import { FitPeek } from './FitPeek'
@@ -438,34 +438,23 @@ export default function App() {
       </Stat>
       <Stat k="Runway" icon={<Hourglass size={12} />} tone={runway < 10 ? 'bad' : runway < 20 ? 'warn' : 'good'}>
         {runway === Infinity ? '∞' : `${Math.max(0, Math.floor(runway))} wk`}
-        {/* the runway series is DERIVED per history point — cash over that week's own net — so the
-            line is honest rather than a relabelled cash chart */}
-        <span className="ml-2 hidden w-16 md:inline-block">
-          <Sparkline data={game.history.map((h) => (h.expenses > h.revenue ? h.cash / (h.expenses - h.revenue) : 104))} tone={runway < 10 ? 'bad' : 'good'} />
-        </span>
       </Stat>
       <Stat k="Net /wk" icon={<Activity size={12} />} tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'}>
         <Ticker value={game.lastRevenue - burn} format={(n) => `${n >= 0 ? '+' : ''}${money(n)}`} />
-        <span className="ml-2 hidden w-16 md:inline-block">
-          <Sparkline data={game.history.map((h) => h.revenue - h.expenses)} tone={game.lastRevenue - burn >= 0 ? 'good' : 'bad'} />
-        </span>
       </Stat>
       {/* The two DRIVERS join the money clock — owner call, from the causal review: PMF is in
           every compounding formula (word-of-mouth at ^1.5, acquisition, churn's dominant term)
           and the growth rate is what the board fires you over. Five entries, the audit's ceiling.
-          The rail shows the number; the HQ owns its meter, sparkline and drawer. */}
+          The rail shows the NUMBER AND NOTHING ELSE (owner call, 2026-08-22: the sparklines and the
+          PMF donut "don't add value"). They were decoration at rail scale — a 64px line with no
+          axis, no scale and no label cannot be read, and it stole width from the figure that can.
+          The HQ owns the meter, the trend and the drawer, where there is room to mean something. */}
       <Stat k="PMF" icon={<Target size={12} />} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : undefined}>
         <Ticker value={game.pmf} format={(n) => `${Math.round(n)}`} />
         <span className="ml-0.5 text-[11px] text-mut">/100</span>
-        <span className="ml-2 hidden md:inline-block">
-          <RadialGauge value={game.pmf} size={26} tone={game.pmf >= 60 ? 'good' : game.pmf < 30 ? 'warn' : 'accent'} />
-        </span>
       </Stat>
       <Stat k="Growth" icon={<TrendingUp size={12} />} tone={growthTrend > 0 ? 'good' : growthTrend < 0 ? 'bad' : undefined}>
         <Ticker value={growthTrend * 100} format={(n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`} />
-        <span className="ml-2 hidden w-16 md:inline-block">
-          <Sparkline data={game.history.map((h) => h.users)} tone={growthTrend > 0 ? 'good' : 'mut'} />
-        </span>
       </Stat>
       {online && secondsLeft !== null && !matchOver && (
         <Stat k="Round ends" tone={secondsLeft < 30 ? 'bad' : undefined}>
