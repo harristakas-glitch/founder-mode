@@ -60,6 +60,16 @@ composes: `padding: max(env(safe-area-inset-*), var(--px, 0px))`, with elements 
 design padding as `[--px:16px] md:[--px:28px]`. Main content finally has the brief's §27
 padding.
 
+## Design-system rules added later the same day
+
+- **The floating advance pill is the standard** (owner): on phones, feature screens keep the
+  compact Advance pill floating bottom-right above the tab bar; the HQ (and any screen where
+  advancing is the primary verb, or where a decision blocks / the run is over) uses the
+  full-width sticky CTA. Do not invent a third treatment.
+- **HQ content** was rebuilt to the "HQ / Weekly Briefing Final" brief (Inbox = what is
+  happening · CEO Brief = what it means · Company Pulse = where you stand · On Your Radar =
+  what's coming). The shell was reused untouched, per that brief's own scope rule.
+
 ## Not done, deliberately
 
 - Sidebar collapse (§23): no current architecture for it; the brief's own out-clause applies.

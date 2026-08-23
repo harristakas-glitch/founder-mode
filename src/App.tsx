@@ -393,7 +393,7 @@ export default function App() {
   // compounding formula and the growth rate is what the board fires you over. Five entries, the
   // audit's ceiling; the number and nothing else (owner call, 2026-08-22 — sparklines and the
   // PMF donut were decoration at rail scale). The HQ owns the meter, the trend and the drawer.
-  const railMetrics: { k: string; icon?: React.ReactNode; tone?: 'good' | 'bad' | 'warn'; body: React.ReactNode }[] = [
+  const railMetrics: { k: string; icon?: React.ReactNode; tone?: 'good' | 'bad' | 'warn'; body: React.ReactNode; compact?: React.ReactNode }[] = [
     {
       k: 'Cash',
       icon: <Wallet size={12} />,
@@ -404,6 +404,9 @@ export default function App() {
           <TrendBadge value={cashDelta} format={money} />
         </>
       ),
+      // the phone cell is ~70px: the delta badge truncated to "▼ …", which reads as breakage —
+      // the number alone carries the cell there, the full sheet keeps the badge
+      compact: <Ticker value={game.cash} format={money} />,
     },
     {
       k: 'Runway',
@@ -711,7 +714,7 @@ export default function App() {
                   m.tone === 'good' ? 'text-good' : m.tone === 'bad' ? 'text-bad' : m.tone === 'warn' ? 'text-warn' : ''
                 }`}
               >
-                {m.body}
+                {m.compact ?? m.body}
               </span>
             </button>
           ))}
