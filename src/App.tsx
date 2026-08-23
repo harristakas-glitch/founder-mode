@@ -30,6 +30,7 @@ import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
 import { MODE_META, hasCapability } from './game/modes'
 import { verifyRun, type VerifyResult } from './game/replay'
 import { isMuted, setMuted } from './sound'
+import { shareNative, shareRunText, shareTargets } from './share'
 import { NewGame } from './screens/NewGame'
 import { Lobby } from './screens/Lobby'
 import { Dashboard } from './screens/Dashboard'
@@ -1042,40 +1043,47 @@ function Stat({ k, tone, title, icon, children }: { k: string; tone?: 'good' | '
   )
 }
 
+/**
+ * The primary share: the SYSTEM share sheet, which lists whatever is actually installed —
+ * WhatsApp, Viber, Slack, Messages, all of it (owner, 2026-08-23: "directly open the apps").
+ * Works on phones and on desktop Chrome/Edge/Safari; where the sheet does not exist the text
+ * lands on the clipboard and the app row below is the door. A cancelled sheet is a change of
+ * mind, not an error — the button says nothing.
+ */
 function ShareButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+  const [state, setState] = useState<'idle' | 'shared' | 'copied'>('idle')
   return (
     <button
-      className="rounded-xl border border-line bg-surface2 px-5 py-3 font-bold transition-all hover:border-accent active:scale-[0.98]"
-      onClick={() => {
-        navigator.clipboard?.writeText(text).then(() => {
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1800)
-        })
+      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98]"
+      onClick={async () => {
+        const r = await shareNative(text)
+        if (r === 'shared') setState('shared')
+        else if (r === 'unavailable') {
+          await navigator.clipboard?.writeText(text).catch(() => {})
+          setState('copied')
+        }
+        if (r !== 'cancelled') setTimeout(() => setState('idle'), 2200)
       }}
     >
-      {copied ? 'Copied! 📋' : 'Copy text'}
+      {state === 'idle' ? '📣 Share' : state === 'shared' ? 'Shared!' : 'Copied — pick an app below'}
     </button>
   )
 }
 
-// One-tap posts to the big networks, prefilled with the run's story.
+// One-tap doors to the named apps and networks. Universal links (wa.me, t.me) open the
+// installed app directly; Viber is a scheme-only app so its button navigates rather than
+// popping a window; Slack has no public compose URL — the share sheet above covers it.
 function SocialShareRow({ text }: { text: string }) {
-  const enc = encodeURIComponent(text)
-  const encUrl = encodeURIComponent(GAME_URL)
-  const targets: { label: string; href: string }[] = [
-    { label: '𝕏', href: `https://twitter.com/intent/tweet?text=${enc}` },
-    { label: 'WhatsApp', href: `https://wa.me/?text=${enc}` },
-    { label: 'Telegram', href: `https://t.me/share/url?url=${encUrl}&text=${enc}` },
-    { label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encUrl}&quote=${enc}` },
-  ]
   return (
     <div className="mt-3 flex flex-wrap justify-center gap-2">
-      {targets.map((t) => (
+      {shareTargets(text).map((t) => (
         <button
           key={t.label}
           className="rounded-lg border border-line bg-surface2 px-3.5 py-1.5 text-[13px] font-semibold text-mut transition-all hover:border-accent hover:text-ink active:scale-[0.97]"
-          onClick={() => window.open(t.href, '_blank', 'noopener,width=640,height=560')}
+          onClick={() => {
+            if (t.scheme) window.location.href = t.href
+            else window.open(t.href, '_blank', 'noopener,width=640,height=560')
+          }}
         >
           {t.label}
         </button>
@@ -1088,9 +1096,11 @@ function ShareImageButton({ game, text }: { game: NonNullable<ReturnType<typeof 
   const [state, setState] = useState<'idle' | 'shared' | 'downloaded' | 'failed'>('idle')
   const [busy, setBusy] = useState(false)
   return (
+    // secondary now — the text share above is the primary door (it opens the actual apps);
+    // the image is the flex for people who want the card
     <button
       disabled={busy}
-      className="rounded-xl bg-gradient-to-br from-accent to-accent2 px-5 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+      className="rounded-xl border border-line bg-surface2 px-5 py-3 font-bold transition-all hover:border-accent active:scale-[0.98] disabled:opacity-60"
       onClick={async () => {
         if (busy) return // a second tap mid-share sheet would fire a stray download
         setBusy(true)
@@ -1487,14 +1497,11 @@ function GameOver({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {/* ONE base text everywhere — the story and the score (shareRunText: outcome line,
+            the run's two defining beats, the challenge) — instead of three near-duplicates */}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <ShareImageButton
-            game={game}
-            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${endingEmoji(go.type)}. Play: ${GAME_URL}`}
-          />
-          <ShareButton
-            text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''}\n${game.companyName}: ${money(go.payout ?? 0)} ${endingEmoji(go.type)} · ${go.week} wks · ${game.pivots} pivot${game.pivots === 1 ? '' : 's'}\nPlay${game.challenge ? ' the same world' : ''}: ${GAME_URL}`}
-          />
+          <ShareButton text={shareRunText(game)} />
+          <ShareImageButton game={game} text={shareRunText(game)} />
           <button
             className="rounded-xl bg-accent px-6 py-3 font-bold text-bg shadow-[var(--elev-2)] transition-all hover:brightness-110 active:scale-[0.98]"
             onClick={abandonGame}
@@ -1502,9 +1509,7 @@ function GameOver({ onClose }: { onClose: () => void }) {
             New company
           </button>
         </div>
-        <SocialShareRow
-          text={`Founder Mode${game.challenge ? ` ${game.challenge.label}` : ''} — ${game.companyName}: ${money(go.payout ?? 0)} ${endingEmoji(go.type)} in ${go.week} weeks. Beat that: ${GAME_URL}`}
-        />
+        <SocialShareRow text={shareRunText(game)} />
       </div>
     </div>
   )
