@@ -156,3 +156,28 @@ social 11.3 vs 7.2, fintech 11.2 vs 9.0). The `--assert` gate now pins: quick ca
   untouched (no PMF hook, §5.10).
 - Calibration gate re-run after both phases: PASS (bots don't adopt AI; the systems are
   opt-in pressure/leverage — a dedicated AI-line probe belongs to the next balance round).
+
+## Business Simulation V2 — first calibration (2026-08-24, phase 8)
+
+Instrument: test/v2-balance-probe.ts (16 seeds x saas/social/fintech x casual/active x 120wk).
+Casual = default allocation, eng hire every 9wk, market pricing, says yes to money. Active =
+quality-led allocation, research-informed pricing to the DOMINANT SERVED segment, balanced
+hires (eng/sales/designer), service-aware spend scaling.
+
+Defects the first runs found and fixed:
+1. security/integrations/service attributes had NO SOURCE (only decay) — fintech and
+   enterprise fits were permanently threshold-gated. Quality work now hardens+serves,
+   feature work integrates.
+2. Social's ad-model economics were missing (7.4k users, $528k ARR) — adModel templates now
+   compound revenue/user with network scale (same shape as the classic engine).
+3. The traction chapter's churn bar (≤5%) was impossible for social's nature — now ≤12%
+   ("not hemorrhaging"), with the 200-customer floor carrying the idle-run guard.
+4. The 0.75 collection floor made pricing 10x above a mass segment's WTP nearly free —
+   floor now 0.45: overpricing genuinely leaks, underpricing genuinely converts.
+
+Reading after fixes: saas rewards the informed b2b profile (active $15.5M vs casual $12.5M,
+category_fight reached 9/16); social and fintech reward the eng-heavy mass profile (casual
+edges active — sector personality: engineering + market pricing is the right consumer motion,
+and a sales/designer-balanced roster pays where sales-led segments are the money). No cell
+mass-dies; every sector progresses through chapters. V2 stays opt-in beta: hard win-rate
+bands get set from real playtesting before V2 becomes the Simulation default (contract D1).

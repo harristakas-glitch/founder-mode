@@ -41,6 +41,8 @@ export interface MarketTemplate {
   attributes: { id: string; label: string; start: Band; ceiling: number; decayRate: number }[]
   /** how winner-take-all the category is (softmax temperature; lower = more extreme) */
   choiceTemperature: number
+  /** ad-funded archetype: revenue per user compounds with network scale */
+  adModel?: boolean
   segments: SegmentBlueprint[]
 }
 
@@ -158,6 +160,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
   },
 
   social: {
+    adModel: true,
     attributes: [
       attr(CORE, { lo: 25, hi: 40 }),
       attr(EASE, { lo: 25, hi: 40 }),

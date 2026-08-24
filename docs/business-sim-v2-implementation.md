@@ -111,7 +111,7 @@ existing `seeded()` discipline; Math.random is banned (tested).
    company timeline, emergent identity.
 7. ✅ **Postmortem + scenarios** — end-of-run story from snapshots, scenario library as V2
    initial states.
-8. **Balance + polish** — headless V2 bot lanes in the winrate probe, tuning, reveal polish,
+8. ✅ **Balance (first calibration; polish backlog remains)** — — headless V2 bot lanes in the winrate probe, tuning, reveal polish,
    progressive disclosure audit.
 
 ## 8. Testing gates (every phase)

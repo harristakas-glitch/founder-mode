@@ -80,7 +80,7 @@ function chapterReached(id: string, now: SimV2Snapshot, history: SimV2Snapshot[]
   const g4 = history.length >= 5 ? Math.pow(Math.max(1, now.revenue) / Math.max(1, history[history.length - 5].revenue), 1 / 4) - 1 : 0
   switch (id) {
     case 'early_traction':
-      return now.customers >= 200 && bestFit >= 0.55 && now.churnedCustomers <= now.customers * 0.05
+      return now.customers >= 200 && bestFit >= 0.55 && now.churnedCustomers <= now.customers * 0.12
     case 'scaling':
       return now.customers >= 1_000 && g4 > 0.02 && now.cac > 0 && now.revenue / Math.max(1, now.customers) > 0
     case 'category_fight':

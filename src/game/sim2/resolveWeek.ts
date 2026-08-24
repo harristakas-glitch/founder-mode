@@ -86,6 +86,12 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     if (a.id === 'reliability') gain = inp.engPointsP * (inp.aq * 0.09 + inp.ab * 0.1) - inp.bugs * 0.012
     if (a.id === 'performance') gain = inp.engPointsP * inp.ab * 0.06
     if (a.id === 'content') gain = inp.engPointsP * inp.af * 0.08
+    // every attribute needs a SOURCE (first probe run: security/integrations/service only ever
+    // decayed, so fintech and enterprise fits were permanently threshold-gated — nothing the
+    // player did could move them). Quality work hardens and serves; feature work integrates.
+    if (a.id === 'security') gain = inp.engPointsP * inp.aq * 0.05
+    if (a.id === 'service') gain = inp.engPointsP * inp.aq * 0.035
+    if (a.id === 'integrations') gain = inp.engPointsP * inp.af * 0.05
     if (a.id === 'network') gain = 0 // network value accrues from customers below, not from code
     a.value = clamp(a.value + gain * headroom - a.decayRate, 0, a.technicalCeiling)
   }
@@ -239,13 +245,19 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
 
   // ---- 18-19: revenue truth --------------------------------------------------------------
   const customers = v2.cohorts.reduce((x, c) => x + c.size, 0)
+  const adScale = tpl.adModel ? 1 + Math.log10(Math.max(10, customers)) / 3 : 1
   let expansionRevenue = 0
   const revenue = v2.cohorts.reduce((x, c) => {
     const seg = v2.segments.find((sg) => sg.id === c.segmentId)
     if (!seg) return x
     // customers pay the price, but a segment priced far over its head quietly downgrades/laps
-    const collect = 0.75 + 0.25 * priceFit(inp.price, effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock), seg.priceSensitivity)
-    const base = c.size * inp.price * collect
+    // collection floor 0.45 (was 0.75 — measured hole: pricing 10x above a mass segment's WTP
+    // still collected three-quarters, making overpricing free money). Below-WTP pricing now
+    // genuinely converts better; above-WTP pricing genuinely leaks to downgrades and laps.
+    const collect = 0.45 + 0.55 * priceFit(inp.price, effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock), seg.priceSensitivity)
+    // ad-model archetypes (social): revenue per user compounds with network scale — CPMs and
+    // fill rates climb, same shape the classic engine uses. Config-driven, not sector-coded.
+    const base = c.size * inp.price * collect * adScale
     expansionRevenue += base * ((c.expansion ?? 1) - 1)
     return x + base * (c.expansion ?? 1)
   }, 0)
