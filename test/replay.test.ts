@@ -302,7 +302,9 @@ console.log('— Overflow —')
 console.log('— Action-surface ledger —')
 const EXPECTED_ACTIONS = [
   'accept_sheet', 'advance', 'ai_cancel', 'ai_start', 'allocation', 'attention_allocate', 'attention_focus', 'bet_abandon', 'bet_choose',
-  'buy_rival', 'concede_price_war', 'decline_sheet',
+  'buy_rival', 'concede_price_war', 'decline_sheet', 'v2_research',
+  // `v2_research` — Business Simulation V2 phase 4 (2026-08-24): a study bills cash now and
+  // narrows knowledge later, so it must replay; gate-guarded to V2 runs in the handler.
   // `ai_start` / `ai_cancel` — Strategic Systems phase 5 (2026-08-24): an AI rollout spends cash,
   // draws engineering output and permanently changes area maturity/quality — simulation-mutating,
   // so it replays. Depth-guarded in startAIInitiative (quick/arena: aiAdoption off).

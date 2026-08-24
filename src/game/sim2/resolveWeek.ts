@@ -11,6 +11,7 @@ import { attrRecord, choiceShares, effectiveWtp, priceFit, productFit, weeklyDem
 import { marketTemplate } from './config/markets'
 import { rankEvents } from './rank'
 import { tickConfidence } from './confidence'
+import { tickResearch } from './research'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => clamp(v, 0, 1)
@@ -410,6 +411,9 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     boardTarget: inp.boardTarget,
   })
   events.push(...confEvents)
+
+  // ---- 27: due research lands — knowledge narrows, truth never moves (phase 4) --------------
+  events.push(...tickResearch(v2, inp.week))
   snap.eventIds = events.filter((e) => e.visibility === 'known').map((e) => e.id)
 
   const visibleEvents = rankEvents(v2, inp.week)

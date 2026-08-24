@@ -2132,6 +2132,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         if (e.type === 'plan_variance_miss') return `▼ ${Math.abs(Number(f.variancePct))}% under plan${f.controllable ? '' : ' — mostly the market, not you'}`
         if (e.type === 'board_confidence_up' || e.type === 'board_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Board confidence: ${f.word}`
         if (e.type === 'investor_confidence_up' || e.type === 'investor_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Investor sentiment: ${f.word}`
+        if (e.type.endsWith('_completed') && e.category === 'research') return `🔬 ${f.study} done: ${f.segment} ${f.metric} confidence ${f.confidenceBefore}% → ${f.confidenceAfter}%`
         return e.type
       })
       s.inbox.unshift({

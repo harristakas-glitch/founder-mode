@@ -57,6 +57,8 @@ import { cancelInitiative, startInitiative } from './strategic/roadmap'
 import { abandonBigBet, chooseBigBet } from './strategic/bigbets'
 import { ATTENTION_AREA_MAX, ATTENTION_AREAS, ATTENTION_BUDGET, createDefaultAttention } from './strategic/attention'
 import { cancelAIInitiative, startAIInitiative } from './strategic/ai'
+import { startResearchV2 } from './sim2/research'
+import { usesBusinessSimulationV2 } from './modes'
 import type { FounderAttentionArea } from './strategic/types'
 import { systemDepth } from './modes'
 import type { GameConfig } from './modes'
@@ -350,6 +352,13 @@ const REPLAY_ACTIONS = {
       }
     }
     g.attention = { ...(g.attention ?? createDefaultAttention()), allocated: alloc }
+  },
+
+  /** Commission a V2 market study (Business Simulation V2 phase 4). Bills cash, completes
+   *  weeks later; gate-guarded — journals of classic runs cannot start one. */
+  v2_research: (g, p) => {
+    if (!usesBusinessSimulationV2(g)) return
+    startResearchV2(g, str(p.k), str(p.seg))
   },
 
   /** Start an AI adoption rollout (phase 5). Depth-guarded inside startAIInitiative — an arena

@@ -23,6 +23,9 @@ import {
 } from '../game/career/pmf'
 import type { ExperimentType, SegmentId } from '../game/career/types'
 import { CustomerInterview, PmfBreakdown, SegmentHealth } from '../CareerUI'
+import { usesBusinessSimulationV2 } from '../game/modes'
+import { RESEARCH_CATALOG, confidenceLabel as v2ConfidenceLabel, describeEstimate } from '../game/sim2/research'
+import { num } from '../format'
 import { useStore } from '../store'
 
 // The catalogue's icon grammar from the sample mock: one lucide glyph per way of learning,
@@ -172,9 +175,105 @@ function SegmentHypotheses({ segmentId }: { segmentId: SegmentId }) {
   )
 }
 
+/** V2 runs: the knowledge board (spec §14.6). What you KNOW about each segment — as ranges and
+ *  confidence words, never the truth — and the plain-language studies that narrow it. */
+function V2Discovery() {
+  const game = useStore((s) => s.game)!
+  const v2Research = useStore((s) => s.v2Research)
+  const v2 = game.simV2!
+  const fmtMoney = (n: number) => money(n)
+  return (
+    <div>
+      <h1 className="text-[22px] font-bold tracking-tight sm:text-[28px]">Discovery</h1>
+      <div className="mb-4 text-[13px] text-mut">
+        The market has truths you can only estimate. Research narrows the range — it never changes the market.
+      </div>
+      {v2.pendingResearch.length > 0 && (
+        <Panel title="Studies in the field" className="mb-4">
+          {v2.pendingResearch.map((p2) => {
+            const def = RESEARCH_CATALOG.find((r) => r.kind === p2.kind)
+            const seg = v2.segments.find((x) => x.id === p2.targetId)
+            const left = Math.max(0, p2.completesWeek - game.week)
+            return (
+              <div key={p2.id} className="flex items-baseline justify-between gap-3 py-1 text-[13px]">
+                <span>
+                  <b>{def?.name}</b> <span className="text-mut">· {seg?.name}</span>
+                </span>
+                <span className="text-mut tnum">{left === 0 ? 'lands this week' : `${left} wk${left === 1 ? '' : 's'} out`}</span>
+              </div>
+            )
+          })}
+        </Panel>
+      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {v2.segments.map((seg) => {
+          const size = describeEstimate(seg.knowledge.size, (n) => num(Math.round(n)))
+          const wtp = describeEstimate(seg.knowledge.wtp, (n) => `${money(Math.max(0, n))}/wk`)
+          const ret = describeEstimate(seg.knowledge.retention, (n) => `${(Math.min(0.999, Math.max(0, n)) * 100).toFixed(1)}%`)
+          const confCls = (c: number) => (c >= 0.75 ? 'text-good' : c >= 0.45 ? 'text-warn' : 'text-mut')
+          return (
+            <Panel key={seg.id} title={seg.name}>
+              <div className="space-y-1.5 text-[12.5px]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-mut">How many exist</span>
+                  <span>
+                    <b className="tnum">{size.text}</b>{' '}
+                    <span className={`text-[10.5px] font-bold uppercase ${confCls(seg.knowledge.size.confidence)}`}>{size.confidence}</span>
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-mut">What they'd pay</span>
+                  <span>
+                    <b className="tnum">{wtp.text}</b>{' '}
+                    <span className={`text-[10.5px] font-bold uppercase ${confCls(seg.knowledge.wtp.confidence)}`}>{wtp.confidence}</span>
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-mut">Weekly staying power</span>
+                  <span>
+                    <b className="tnum">{ret.text}</b>{' '}
+                    <span className={`text-[10.5px] font-bold uppercase ${confCls(seg.knowledge.retention.confidence)}`}>{ret.confidence}</span>
+                  </span>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-1.5 border-t border-line/50 pt-2.5">
+                {RESEARCH_CATALOG.map((r) => {
+                  const pending = v2.pendingResearch.some((x) => x.kind === r.kind && x.targetId === seg.id)
+                  const conf = seg.knowledge[r.improves].confidence
+                  return (
+                    <div key={r.kind} className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="min-w-0">
+                        <span className="font-semibold">{r.name}</span>
+                        <span className="block truncate text-[10.5px] text-mut">{r.what}</span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="text-[10.5px] text-mut tnum">
+                          {fmtMoney(r.cost)} · {r.weeks}wk · now {v2ConfidenceLabel(conf)}
+                        </span>
+                        <Btn
+                          className="!min-h-[26px] !px-2 !text-[11px]"
+                          disabled={pending || game.cash < r.cost || conf >= 0.9}
+                          onClick={() => v2Research(r.kind, seg.id)}
+                        >
+                          {pending ? 'In field' : conf >= 0.9 ? 'Known' : 'Commission'}
+                        </Btn>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </Panel>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function Discovery() {
   const game = useStore((s) => s.game)!
   const career = game.career
+  if (usesBusinessSimulationV2(game)) return <V2Discovery />
   const runExperiment = useStore((s) => s.runExperiment)
   const setExperimentStanding = useStore((s) => s.setExperimentStanding)
   const setTargetSegment = useStore((s) => s.setTargetSegment)

@@ -435,6 +435,7 @@ interface Store {
   betChoose: (t: string) => void
   setGrowthMix: (v: number) => void
   aiStart: (id: string) => void
+  v2Research: (kind: string, segmentId: string) => void
   aiCancel: (id: string) => void
   setAttentionFocus: (a: string | null) => void
   setAttentionAllocation: (alloc: Record<string, number>) => void
@@ -1380,6 +1381,12 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'growth_mix', { v }).state })
+        },
+
+        v2Research: (kind, segmentId) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'v2_research', { k: kind, seg: segmentId }).state })
         },
 
         aiStart: (id) => {

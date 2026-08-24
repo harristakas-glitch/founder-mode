@@ -103,7 +103,7 @@ existing `seeded()` discipline; Math.random is banned (tested).
    retention/expansion, revenue/COGS/OpEx, cash, unit economics; Capital reads V2 truth.
 3. ✅ **Forecast/Budget/Board** — planning horizons, forecast, budget, commitments, Plan vs
    Actual with controllability, Board+Investor confidence, board objectives.
-4. **Research + fog of war** — EstimatedValue everywhere player-visible, research catalog,
+4. ✅ **Research + fog of war** — EstimatedValue everywhere player-visible, research catalog,
    delayed studies, competitor intelligence, Discovery integration.
 5. **Functional capacity + Major Moments** — capacity domains, overload, crisis triggers,
    price war/cash crisis/board intervention/capacity crisis experiences.

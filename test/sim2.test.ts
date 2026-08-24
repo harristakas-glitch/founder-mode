@@ -211,6 +211,40 @@ console.log('— Phase 3: commitments, Plan vs Actual, the two confidences —')
   ok(typeof confidenceWord(due.boardConfidence.value) === 'string', 'confidence speaks in words, not decimals')
 }
 
+console.log('— Phase 4: research narrows knowledge, never the market —')
+{
+  const { applyJournaled } = await import('../src/game/replay')
+  let g = newGame('R', 'saas', 'technical', { config: v2cfg(88) })
+  g.journal = []
+  g.marketingSpend = 3000
+  const seg = g.simV2!.segments[3] // enterprise — the one worth studying
+  const truthBefore = seg.knowledge.wtp.truth
+  const confBefore = seg.knowledge.wtp.confidence
+  const rangeBefore = seg.knowledge.wtp.uncertaintyRange[1] - seg.knowledge.wtp.uncertaintyRange[0]
+  const cashBefore = g.cash
+
+  g = applyJournaled(g, 'v2_research', { k: 'pricing_study', seg: 'enterprise' }).state
+  ok(g.cash === cashBefore - 12_000, 'the study bills its cash up front')
+  ok(g.simV2!.pendingResearch.length === 1, 'and goes into the field')
+  g = applyJournaled(g, 'advance').state
+  const midConf = g.simV2!.segments[3].knowledge.wtp.confidence
+  ok(Math.abs(midConf - confBefore) < 1e-9, 'nothing is learned before the study lands (delayed truth, spec §14.4)')
+  g = applyJournaled(g, 'advance').state
+  const after = g.simV2!.segments[3].knowledge.wtp
+  ok(after.truth === truthBefore, 'RESEARCH NEVER CHANGES THE MARKET — truth is byte-identical')
+  ok(after.confidence > confBefore + 0.2, `confidence rises (${Math.round(confBefore * 100)}% → ${Math.round(after.confidence * 100)}%)`)
+  ok(after.uncertaintyRange[1] - after.uncertaintyRange[0] < rangeBefore * 0.6, 'the uncertainty band narrows hard')
+  ok(after.uncertaintyRange[0] <= after.truth && after.truth <= after.uncertaintyRange[1], 'the narrowed band actually contains the truth')
+  ok(g.simV2!.weeklyHistory.some((s2) => s2.eventIds.some((id) => id.includes('research'))), 'the completion is an explicit event (spec §0A.13)')
+
+  // classic runs cannot start a study
+  let c = newGame('C', 'saas', 'technical', { config: { mode: 'career', format: 'standard', sector: 'saas', seed: 88 } as GameConfig })
+  c.journal = []
+  const cCash = c.cash
+  c = applyJournaled(c, 'v2_research', { k: 'pricing_study', seg: 'enterprise' }).state
+  ok(c.cash === cCash && c.simV2 === undefined, 'a classic run’s journal cannot commission V2 research (gate holds)')
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))
