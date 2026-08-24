@@ -34,6 +34,7 @@ import { money } from '../format'
 import { onlineConfigured } from '../net/config'
 import type { FounderKind, SectorId } from '../game/types'
 import { dailyInfo, readHall, readLocalBests, useStore } from '../store'
+import { V2_SCENARIOS } from '../game/sim2/scenarios'
 import { DailyLeaderboard } from './DailyLeaderboard'
 import { FirstRunBriefingNote, useFirstTimer } from '../onboarding/FirstRun'
 import { DailyChallengeStrip, FounderHistoryStrip, HOME_MODES, HomeHero, ModeCard } from './HomeLauncher'
@@ -433,6 +434,7 @@ export function NewGame() {
   const [pipHelp, setPipHelp] = useState(false)
   // Business Simulation V2 (beta) — Simulation-only opt-in while the deeper engine is built out
   const [engineV2, setEngineV2] = useState(false)
+  const [v2Scenario, setV2Scenario] = useState('standard')
 
   const netAction = async (fn: () => Promise<void>) => {
     setNetError(null)
@@ -707,16 +709,36 @@ export function NewGame() {
                 )}
 
                 {experience === 'career' && (
-                  <label className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-line2/70 bg-surface2 px-3.5 py-2.5">
-                    <input type="checkbox" checked={engineV2} onChange={(e) => setEngineV2(e.target.checked)} className="mt-0.5 accent-[var(--color-accent)]" />
-                    <span className="text-[12.5px] leading-snug">
-                      <b>New market engine (beta).</b>{' '}
-                      <span className="text-mut">
-                        Customers choose between you, your rivals and doing nothing — based on what your product actually is, what each
-                        segment values, and what you charge. Deeper causality, still under construction.
+                  <div className="mb-3">
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line2/70 bg-surface2 px-3.5 py-2.5">
+                      <input type="checkbox" checked={engineV2} onChange={(e) => setEngineV2(e.target.checked)} className="mt-0.5 accent-[var(--color-accent)]" />
+                      <span className="text-[12.5px] leading-snug">
+                        <b>New market engine (beta).</b>{' '}
+                        <span className="text-mut">
+                          Customers choose between you, your rivals and doing nothing — based on what your product actually is, what each
+                          segment values, and what you charge. Deeper causality, still under construction.
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                    {engineV2 && (
+                      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                        {[{ id: 'standard', name: 'Week one', blurb: 'The classic start: an idea, $200k, and nobody knows if the market wants it.' }, ...V2_SCENARIOS].map((sc) => (
+                          <button
+                            key={sc.id}
+                            type="button"
+                            aria-pressed={v2Scenario === sc.id}
+                            onClick={() => setV2Scenario(sc.id)}
+                            className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                              v2Scenario === sc.id ? 'border-accent bg-accent/10' : 'border-line2/70 bg-surface2 hover:border-accent/50'
+                            }`}
+                          >
+                            <div className="text-[12.5px] font-bold">{sc.name}</div>
+                            <div className="mt-0.5 text-[11px] leading-snug text-mut">{sc.blurb}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
                 <LaunchSummaryBar
                   summary={
@@ -744,7 +766,14 @@ export function NewGame() {
                       sector,
                       name: name.trim(),
                       founder,
-                      scenario: format === 'scenario' ? scenario : 'standard',
+                      scenario:
+                        experience === 'career'
+                          ? engineV2 && v2Scenario !== 'standard'
+                            ? v2Scenario
+                            : 'standard'
+                          : format === 'scenario'
+                            ? scenario
+                            : 'standard',
                       engineV2: experience === 'career' && engineV2,
                     })
                   }

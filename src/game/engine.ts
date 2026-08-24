@@ -15,6 +15,7 @@ import { ARC_DEFS } from './arcs'
 import { hasCapability, resolveGameRules, systemDepth, usesBusinessSimulationV2, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { createSimV2 } from './sim2/init'
 import { companyIdentity } from './sim2/story'
+import { applyV2Scenario, isV2Scenario } from './sim2/scenarios'
 import { resolveWeekV2 } from './sim2/resolveWeek'
 import { careerAcqScale, careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import {
@@ -355,8 +356,10 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
   // draws happen inside those runs only, so every classic run's stream is untouched.
   if (usesBusinessSimulationV2(state)) {
     state.simV2 = createSimV2(sector, sec.arpuPerCustomer, () => RNG.next())
+    // V2 scenario library (spec §0A.17): real starting state, then the ordinary engine
+    if (isV2Scenario(opts.scenario)) applyV2Scenario(state, opts.scenario!)
   }
-  if (opts.scenario && opts.scenario !== 'standard') applyScenario(state, opts.scenario)
+  if (opts.scenario && opts.scenario !== 'standard' && !isV2Scenario(opts.scenario)) applyScenario(state, opts.scenario)
   // Career: research has no path to PMF, so shipping a default that points a fifth of engineering
   // at it taught the wrong causal model from week 1. Quality is the lever that actually reaches
   // fit, and through fit, retention — so the freed share goes there.

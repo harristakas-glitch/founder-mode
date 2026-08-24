@@ -272,6 +272,37 @@ console.log('— Phase 6: milestones fire once, chapters are earned, identity is
   ok(idle.simV2!.chapter === 'searching_for_fit', 'forty idle weeks earn no chapter — state advances chapters, never time')
 }
 
+console.log('— Phase 7: the postmortem is the run’s own story; scenarios are real state —')
+{
+  const { buildPostmortem } = await import('../src/game/sim2/postmortem')
+  const { companyIdentity } = await import('../src/game/sim2/story')
+
+  let g = newGame('P7', 'saas', 'technical', { config: v2cfg(41) })
+  g.marketingSpend = 4000
+  g.allocation = { ...g.allocation, features: 40, quality: 35, bugs: 15, research: 10 }
+  g = playWeeks(g, 45)
+  const pm = buildPostmortem(g, companyIdentity(g.simV2!, 0))!
+  ok(pm !== null && pm.identity.length > 0, `the postmortem derives (${pm.identity})`)
+  ok(pm.chapterPath.length >= 2, `the chapter path is the run's real eras (${pm.chapterPath.map((c) => c.name).join(' → ')})`)
+  ok(pm.turningPoints.length >= 3 && pm.turningPoints.every((t) => t.week >= 0 && t.text.length > 0), `${pm.turningPoints.length} turning points, all from persisted events`)
+  ok(pm.reveals.some((r) => /would have paid|real pool|willingness/.test(r)), 'the fog lifts exactly once — at the end')
+
+  // scenarios initialise REAL state, deterministically, then the ordinary engine runs
+  const p1 = newGame('S1', 'saas', 'technical', { config: { ...v2cfg(9), scenario: 'v2_pivot' } as GameConfig, scenario: 'v2_pivot' as never })
+  ok(p1.users === 600 && p1.simV2!.cohorts.length === 8, 'The Pivot starts with 600 inherited customers in real cohorts')
+  const worstSeg = [...p1.simV2!.segments].sort((a, b) => a.retentionBaseline - b.retentionBaseline)[0]
+  ok(p1.simV2!.cohorts.every((c) => c.segmentId === worstSeg.id), '…all in the genuinely worst-retaining segment (truth-derived, not scripted)')
+  const p2 = newGame('S2', 'saas', 'technical', { config: { ...v2cfg(9), scenario: 'v2_burn_machine' } as GameConfig, scenario: 'v2_burn_machine' as never })
+  ok(p2.cash === 2_500_000 && p2.simV2!.planning.commitments.length === 1 && p2.board !== null, 'The Burn Machine starts funded, promised, and boarded')
+  const a1 = playWeeks(newGame('S1', 'saas', 'technical', { config: { ...v2cfg(9), scenario: 'v2_pivot' } as GameConfig, scenario: 'v2_pivot' as never }), 10)
+  const a2 = playWeeks(newGame('S1', 'saas', 'technical', { config: { ...v2cfg(9), scenario: 'v2_pivot' } as GameConfig, scenario: 'v2_pivot' as never }), 10)
+  ok(JSON.stringify(a1.simV2) === JSON.stringify(a2.simV2), 'scenario runs stay deterministic')
+  // the pivot's clock is real: the INHERITED cohorts bleed by their segment's truth — total
+  // users may still rise (new acquisition outpacing rot is exactly the scenario's trap)
+  const inherited = a1.simV2!.cohorts.filter((c) => c.id.includes('inherited')).reduce((x, c) => x + c.size, 0)
+  ok(inherited < 480, `the inherited base bleeds as the truth dictates (600 → ${Math.round(inherited)} inherited left by week 10)`)
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))

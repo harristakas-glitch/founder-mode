@@ -109,7 +109,7 @@ existing `seeded()` discipline; Math.random is banned (tested).
    price war/cash crisis/board intervention/capacity crisis experiences.
 6. ✅ **Chapters + milestones + identity** — state-driven chapters, milestone detection,
    company timeline, emergent identity.
-7. **Postmortem + scenarios** — end-of-run story from snapshots, scenario library as V2
+7. ✅ **Postmortem + scenarios** — end-of-run story from snapshots, scenario library as V2
    initial states.
 8. **Balance + polish** — headless V2 bot lanes in the winrate probe, tuning, reveal polish,
    progressive disclosure audit.

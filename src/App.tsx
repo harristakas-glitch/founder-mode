@@ -20,6 +20,8 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
+import { buildPostmortem } from './game/sim2/postmortem'
+import { companyIdentity } from './game/sim2/story'
 import { hasPendingDecision, runwayWeeks, valuation, weekDate, weeklyBurn, growthRate } from './game/engine'
 import { money, num } from './format'
 import { hasForfeited, isContesting, myId, type NetPlayer } from './net/online'
@@ -1319,6 +1321,16 @@ function go2Premium(game: GameState): number {
   return game.gameOver?.type === 'network' ? networkExitPremium(game) : 1
 }
 
+interface RunRecord {
+  k: string
+  name: string
+  sector: string
+  weeks: number
+  outcome: string
+  payout: number
+  identity: string
+}
+
 function GameOver({ onClose }: { onClose: () => void }) {
   const { game, abandonGame, setScreen } = useStore()
   const dialogRef = useDialog(onClose)
@@ -1326,6 +1338,36 @@ function GameOver({ onClose }: { onClose: () => void }) {
   // end-state fingerprint. Memoized — the replay costs real work and `game` is stable while
   // this dialog is open. Before the early return: hooks must run unconditionally.
   const replay: VerifyResult | null = useMemo(() => (game?.gameOver ? verifyRun(game) : null), [game])
+  // V2 postmortem (spec §0A.16): the run's own story, derived from its snapshots — plus the
+  // cross-run history ledger (engagement §17), recorded exactly once per finished run.
+  const pm = useMemo(() => {
+    if (!game?.gameOver || !game.simV2) return null
+    const aiAvg = game.aiAdoption ? Object.values(game.aiAdoption.areas).reduce((a, x) => a + (x?.maturity ?? 0), 0) / 5 : 0
+    return buildPostmortem(game, companyIdentity(game.simV2, aiAvg))
+  }, [game])
+  const pastRuns = useMemo(() => {
+    if (!game?.gameOver) return []
+    try {
+      const key = 'fm-run-history'
+      const list: RunRecord[] = JSON.parse(localStorage.getItem(key) ?? '[]')
+      const k = `${game.config?.seed ?? 0}_${game.companyName}`
+      if (!list.some((r) => r.k === k)) {
+        list.unshift({
+          k,
+          name: game.companyName,
+          sector: game.sector,
+          weeks: game.gameOver.week,
+          outcome: game.gameOver.type,
+          payout: game.gameOver.payout ?? 0,
+          identity: pm?.identity ?? '',
+        })
+        localStorage.setItem(key, JSON.stringify(list.slice(0, 20)))
+      }
+      return list.slice(0, 4)
+    } catch {
+      return []
+    }
+  }, [game, pm])
   if (!game?.gameOver) return null
   const go = game.gameOver
   const peakUsers = Math.max(...game.history.map((h) => h.users), game.users)
@@ -1434,6 +1476,75 @@ function GameOver({ onClose }: { onClose: () => void }) {
         </div>
 
         <TokenPostmortem />
+
+        {/* V2: the company's own postmortem — derived, honest, and the ONE place the market's
+            hidden truth is finally shown (spec §0A.16). Screenshotable by design. */}
+        {pm && (
+          <div className="mt-5 rounded-2xl border border-line bg-surface2/60 p-4 text-left">
+            <div className="text-center text-[13px] font-bold tracking-wide text-accent uppercase">{pm.identity}</div>
+            <div className="mt-1 text-center text-[11.5px] text-mut">
+              {pm.chapterPath.map((c, i) => (i === 0 ? c.name : ` → ${c.name} (wk ${c.week})`)).join('')}
+            </div>
+            {pm.turningPoints.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">Weeks that changed the company</div>
+                <div className="mt-1 space-y-0.5">
+                  {pm.turningPoints.map((t) => (
+                    <div key={`${t.week}_${t.text}`} className="flex gap-2 text-[12px]">
+                      <span className="w-12 shrink-0 text-right text-mut tnum">wk {t.week}</span>
+                      <span>{t.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(pm.promisesKept > 0 || pm.promisesMissed > 0) && (
+              <div className="mt-2 text-[12px] text-mut">
+                Board promises: <b className="text-good tnum">{pm.promisesKept} kept</b> ·{' '}
+                <b className={`tnum ${pm.promisesMissed > 0 ? 'text-bad' : 'text-mut'}`}>{pm.promisesMissed} missed</b>
+              </div>
+            )}
+            {pm.mistakes.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">What hurt</div>
+                <div className="mt-1 space-y-0.5">
+                  {pm.mistakes.map((m) => (
+                    <div key={m} className="text-[12px] leading-snug text-warn">
+                      · {m}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {pm.reveals.length > 0 && (
+              <div className="mt-3 border-t border-line/50 pt-2.5">
+                <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">The fog lifts — what was true all along</div>
+                <div className="mt-1 space-y-0.5">
+                  {pm.reveals.map((r) => (
+                    <div key={r} className="text-[12px] leading-snug">
+                      · {r}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {pastRuns.length > 1 && (
+          <div className="mt-3 text-left">
+            <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">Your companies</div>
+            <div className="mt-1 space-y-0.5">
+              {pastRuns.map((r) => (
+                <div key={r.k} className="flex items-baseline justify-between gap-3 text-[12px]">
+                  <span className="min-w-0 truncate">
+                    <b>{r.name}</b> <span className="text-mut">· {r.outcome} · {r.weeks} wks</span>
+                  </span>
+                  <span className="shrink-0 text-mut tnum">{money(r.payout)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {replay && (
           <div
