@@ -1060,6 +1060,28 @@ export function applyEffects(s: GameState, fx: Effects) {
       })
     }
   }
+  // V2 Major-Moment actions (spec §0A.6) — each IS the real lever, nothing extra
+  if (fx.special === 'v2-price-match' && s.career) {
+    s.career.pricing = 'low'
+  }
+  if (fx.special === 'v2-stability-sprint') {
+    s.allocation = {
+      ...s.allocation,
+      bugs: Math.min(60, s.allocation.bugs + 25),
+      features: Math.max(5, s.allocation.features - 15),
+    }
+    // the one direct write: the war-room week clears the queue's worst backlog
+    if (s.simV2) s.simV2.serviceQuality = Math.min(100, (s.simV2.serviceQuality ?? 70) + 8)
+  }
+  if (fx.special === 'v2-cut-marketing') {
+    s.marketingSpend = Math.round(s.marketingSpend / 2)
+  }
+  if (fx.special === 'v2-emergency-layoffs') {
+    const toCut = Math.max(1, Math.floor(s.employees.length * 0.2))
+    const cut = [...s.employees].sort((a, b) => a.skill - b.skill).slice(0, toCut)
+    s.employees = s.employees.filter((e) => !cut.includes(e))
+    applyEffects(s, { morale: -10 })
+  }
   if (fx.special === 'board-layoffs' && s.board) {
     const toCut = Math.max(1, Math.floor(s.employees.length * 0.3))
     const cut = [...s.employees].sort((a, b) => a.skill - b.skill).slice(0, toCut)
@@ -2104,6 +2126,12 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       churnRelief: smods.churnRelief,
       acquisitionEff: smods.acquisitionEff,
       salesPoints: s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0),
+      servicePoints:
+        s.employees.reduce(
+          (a2, e) => a2 + eff(e) * (e.role === 'designer' ? 0.7 : e.role === 'marketer' ? 0.5 : e.role === 'sales' ? 0.3 : 0.2),
+          0,
+        ) + 1.2,
+      aiSupportMult: 1 + (s.aiAdoption?.areas.support ? s.aiAdoption.areas.support.maturity * (0.4 + s.aiAdoption.areas.support.quality / 200) * 0.12 : 0),
       founderKind: s.founderKind,
       runwayWeeks: Math.min(999, runwayWeeks(s)),
       boardTarget: s.board ? boardEffectiveTarget(s) : 0,
@@ -2142,6 +2170,65 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         title: `Week ${s.week} resolved — what moved`,
         body: lines.join('\n'),
       })
+    }
+
+    // ---- MAJOR MOMENTS (engagement roadmap §5, spec §0A.10-12): rare, triggered by REAL
+    // simulation state, at most one per week with an 8-week cooldown — and every option maps to
+    // a real domain action. Presenting the situation applies NO economics (no double counting);
+    // only the player's chosen action changes state.
+    const lastMoment = (s.flags.v2MomentWeek ?? -99) as number
+    const hasOpenChoice = s.inbox.some((m) => m.kind === 'choice' && !m.resolved)
+    if (s.week - lastMoment >= 8 && !hasOpenChoice) {
+      const runwayNow2 = runwayWeeks(s)
+      const priceCut = v2wk.visibleEvents.find(
+        (e) => e.type === 'competitor_price_change' && Number(e.facts.newPrice) < Number(e.facts.oldPrice) * 0.85,
+      )
+      const capCrisis = v2wk.visibleEvents.find((e) => e.type === 'service_capacity_critical')
+      if (runwayNow2 !== Infinity && runwayNow2 < 8 && s.termSheets.length === 0) {
+        s.flags.v2MomentWeek = s.week
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: '🔥 CASH CRISIS — the company has weeks, not months',
+          body: `Runway is ${Math.max(0, Math.floor(runwayNow2))} weeks and nothing is signed. Every option below is a real lever — none of them is painless.`,
+          choices: [
+            { label: 'Cut growth spend in half', resultText: 'The pipeline thins. The clock slows.', effects: { special: 'v2-cut-marketing' } },
+            { label: 'Emergency layoffs (bottom 20%)', resultText: 'The office is quieter, in every sense.', effects: { special: 'v2-emergency-layoffs' } },
+            { label: 'Push on — the plan is the plan', resultText: 'No lever pulled. The runway keeps counting.', effects: {} },
+          ],
+        })
+      } else if (capCrisis) {
+        s.flags.v2MomentWeek = s.week
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: '🎧 SERVICE IS DROWNING — the queue outgrew the team',
+          body: `Support utilisation is ${capCrisis.facts.utilizationPct}% for the third straight week, and service quality is sliding (${capCrisis.facts.quality}/100). Customers feel it before you do.`,
+          choices: [
+            {
+              label: 'Stability & service sprint — the whole team swarms',
+              resultText: 'Features wait. The queue drains. The team is tired but the customers noticed.',
+              effects: { special: 'v2-stability-sprint' },
+            },
+            { label: 'Push through — growth first', resultText: 'The queue keeps growing. So does the churn risk.', effects: {} },
+          ],
+        })
+      } else if (priceCut) {
+        s.flags.v2MomentWeek = s.week
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: `⚔️ PRICE WAR — ${priceCut.facts.competitor} just cut to $${priceCut.facts.newPrice}`,
+          body: `${priceCut.facts.competitor} moved from $${priceCut.facts.oldPrice} to $${priceCut.facts.newPrice} in your market. Match and protect share at the cost of margin — or hold your positioning and let the product argue.`,
+          choices: [
+            { label: 'Match the cut (move to low pricing)', resultText: 'Your price drops. The margin goes with it.', effects: { special: 'v2-price-match' } },
+            { label: 'Hold premium positioning', resultText: 'You hold. Now the product has to be worth it.', effects: {} },
+          ],
+        })
+      }
     }
   } else if (careerOn) {
     const r = tickCareerPMF(s, {

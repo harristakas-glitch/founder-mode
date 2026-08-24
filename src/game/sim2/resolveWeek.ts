@@ -49,6 +49,10 @@ export interface V2WeekInputs {
   acquisitionEff: number
   /** the sales team's weekly effectiveness points (engine's eff() sum for sales role) */
   salesPoints: number
+  /** the whole team's service-capable effort (everyone answers tickets at a startup) */
+  servicePoints: number
+  /** AI support leverage multiplier (≥1) — strategic/ai support maturity, folded once */
+  aiSupportMult: number
   founderKind: 'technical' | 'business'
   /** projected runway in weeks (engine's own read) and the live board growth target (0 = none) */
   runwayWeeks: number
@@ -105,14 +109,21 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
         // a rival's product level spreads around their single product score, stably per attribute
         attributes[a.id] = clamp(r.product * (0.75 + 0.5 * hash01(r.name + a.id)), 5, 95)
       }
-      const price = inp.price * (0.75 + 0.6 * posture)
+      // aggressive rivals run periodic discount campaigns (spec §21.2) — deterministic from the
+      // seeded name, so replays agree; the cut is REAL in the same choice market, no script
+      let discountUntil = prev?.discountUntil
+      if (posture > 0.65 && inp.week > 12 && (inp.week + Math.floor(hash01(r.name, 3) * 34)) % 34 === 0) {
+        discountUntil = inp.week + 6
+      }
+      const discounted = discountUntil !== undefined && inp.week < discountUntil
+      const price = inp.price * (0.75 + 0.6 * posture) * (discounted ? 0.75 : 1)
       const brand = clamp(15 + 70 * (r.users / (r.users + 80_000)), 0, 100)
       const segmentFocus: Record<string, number> = {}
       for (const seg of v2.segments) {
         // each rival genuinely courts 1-2 segments; others get scraps
         segmentFocus[seg.id] = hash01(r.name + seg.id, 7) > 0.55 ? 1 : 0.25
       }
-      const c = { id: key, name: r.name, price, attributes, brand, segmentFocus, lastShare: prev?.lastShare ?? {} }
+      const c = { id: key, name: r.name, price, attributes, brand, segmentFocus, lastShare: prev?.lastShare ?? {}, discountUntil }
       // a material competitor price move is an EVENT (they cut, the market noticed)
       if (prev && Math.abs(price - prev.price) / Math.max(1, prev.price) > 0.12) {
         events.push({
@@ -213,7 +224,8 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     const seg = v2.segments.find((x) => x.id === c.segmentId)
     if (!seg) continue
     const fitNow = fitBySegment[c.segmentId] ?? 0.5
-    const keepBase = clamp(seg.retentionBaseline + 0.03 * (fitNow - 0.6), 0.85, 0.998)
+    const service = ((v2.serviceQuality ?? 70) - 70) / 100 // −0.55..+0.3 → ±0.005 on keep
+    const keepBase = clamp(seg.retentionBaseline + 0.03 * (fitNow - 0.6) + service * 0.017, 0.85, 0.998)
     // churnRelief is V1's ≤1 churn multiplier (retention roadmap work) — folded exactly once:
     // the part of the cohort that would leave, leaves churnRelief as often
     const kept = c.size * clamp(1 - (1 - keepBase) * inp.churnRelief, 0.85, 0.999)
@@ -249,6 +261,42 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
       expansion: expansionRevenue,
       churnLoss: -churnedTotal * inp.price,
     },
+  }
+
+  // ---- 17: functional operating capacity, v1 domain: SERVICE (spec §19) ---------------------
+  // Load: every customer takes touch, high-WTP customers take far more. Capacity: the team's
+  // service-capable effort, multiplied by support AI. Sustained overload degrades REAL service
+  // quality, which folds into cohort retention (exactly once — this IS the V2 service→churn
+  // path); slack heals it. Three overloaded weeks make the situation crisis-eligible.
+  v2.serviceQuality ??= 70
+  v2.overloadWeeks ??= 0
+  const load = v2.cohorts.reduce((x, c) => {
+    const sg = v2.segments.find((q) => q.id === c.segmentId)
+    return x + c.size * (0.5 + Math.min(6, (sg?.baseWtp ?? 10) / 30))
+  }, 0)
+  const serviceCapacity = Math.max(1, inp.servicePoints) * 320 * inp.aiSupportMult
+  const utilization = load / serviceCapacity
+  if (utilization > 1.2) {
+    v2.serviceQuality = clamp(v2.serviceQuality - 3 - 2 * Math.min(1, utilization - 1.2), 15, 100)
+    v2.overloadWeeks += 1
+  } else {
+    if (utilization < 0.9) v2.serviceQuality = clamp(v2.serviceQuality + 2, 15, 88)
+    v2.overloadWeeks = 0
+  }
+  // raises at week 3 of the episode, and re-raises every 10 overloaded weeks it stays unfixed
+  if (v2.overloadWeeks >= 3 && (v2.overloadWeeks - 3) % 10 === 0 && utilization > 1.3) {
+    events.push({
+      id: eid('service_overload'),
+      week: inp.week,
+      category: 'capacity',
+      type: 'service_capacity_critical',
+      magnitude: clamp01((utilization - 1) / 1.5),
+      urgency: 0.85,
+      strategicRelevance: 0.7,
+      facts: { utilizationPct: Math.round(utilization * 100), weeks: v2.overloadWeeks, quality: Math.round(v2.serviceQuality) },
+      visibility: 'known',
+      eligibleForMajorMoment: true,
+    })
   }
 
   // ---- events for the week's real movements ------------------------------------------------
@@ -385,6 +433,8 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     churnedCustomers: Math.round(churnedTotal),
     paidSpend: inp.perfSpend,
     cac: Math.round(cac),
+    serviceUtilization: Math.round(utilization * 100) / 100,
+    serviceQuality: Math.round(v2.serviceQuality),
     productFit: fitBySegment,
     attributes: attrs,
     brand: inp.brandStock,

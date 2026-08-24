@@ -75,6 +75,10 @@ const EQUITY_SPECIAL: Partial<Record<NonNullable<Effects['special']>, number>> =
 
 /** What each `special` actually does, in one phrase. Kept in step with `applyEffects`. */
 const SPECIAL_LABEL: Record<NonNullable<Effects['special']>, string> = {
+  'v2-price-match': 'drops your pricing to LOW — share protected, margin sacrificed',
+  'v2-stability-sprint': 'shifts allocation hard toward bugs & stability for the crunch',
+  'v2-cut-marketing': 'halves the growth budget — the pipeline thins, the runway slows',
+  'v2-emergency-layoffs': 'cuts the bottom 20% of the team; morale takes the hit',
   acquired: 'ends the run — the company is sold',
   'lose-best': 'your strongest employee walks',
   accelerator: 'gives up 7% of the company',

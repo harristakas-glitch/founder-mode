@@ -160,6 +160,8 @@ export interface CompetitorV2 {
   segmentFocus: Record<string, number>
   /** last week's realized choice share by segment (for events + intel) */
   lastShare: Record<string, number>
+  /** an aggressive reprice window: price runs 25% under posture until this week (phase 5) */
+  discountUntil?: number
 }
 
 // ---------- cohorts (spec §20, filled in phase 2) --------------------------------------------
@@ -254,6 +256,8 @@ export interface SimV2Snapshot {
   investorConfidence: number
   /** this week's actual vs the 4-week-old projection, as a fraction (0 = on plan) */
   planVariance: number
+  serviceUtilization: number
+  serviceQuality: number
   /** ids of this week's KNOWN events, for the postmortem's turning points */
   eventIds: string[]
 }
@@ -273,6 +277,10 @@ export interface BusinessSimulationV2State {
   boardConfidence: ConfidenceState
   investorConfidence: ConfidenceState
   pendingResearch: PendingResearchV2[]
+  /** functional operating capacity, v1 domain: SERVICE (spec §19). Quality 0-100 degrades under
+   *  sustained overload and heals under slack; folds into cohort retention exactly once. */
+  serviceQuality: number
+  overloadWeeks: number
   /** this week's emissions (replaced each resolution) */
   events: SimulationEvent[]
   explanations: SimulationExplanation[]

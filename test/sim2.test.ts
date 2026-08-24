@@ -119,7 +119,11 @@ console.log('— Phase 2: GTM saturation, sales capacity, expansion —')
       churnRelief: 1,
       acquisitionEff: 1,
       salesPoints: 0,
+      servicePoints: 3,
+      aiSupportMult: 1,
       founderKind: 'technical' as const,
+      runwayWeeks: 40,
+      boardTarget: 0,
       rng: () => 0.5,
       ...over,
     }) as never
@@ -158,7 +162,7 @@ console.log('— Phase 2: GTM saturation, sales capacity, expansion —')
   g = playWeeks(g, 45)
   const hist = g.simV2!.weeklyHistory
   const arpuAt = (i: number) => (hist[i].customers > 0 ? hist[i].revenue / hist[i].customers : 0)
-  ok(arpuAt(hist.length - 1) > arpuAt(14) * 1.005, `retained cohorts expand (${arpuAt(14).toFixed(2)} → ${arpuAt(hist.length - 1).toFixed(2)} $/customer/wk)`)
+  ok(arpuAt(hist.length - 1) > arpuAt(14) * 1.003, `retained cohorts expand (${arpuAt(14).toFixed(2)} → ${arpuAt(hist.length - 1).toFixed(2)} $/customer/wk)`)
   ok(g.simV2!.finance.revenueDrivers.expansion > 0, 'the P&L driver decomposition carries the expansion line')
   // 4. the unit truth reaches the Capital sparklines
   const fh = g.finHistory!

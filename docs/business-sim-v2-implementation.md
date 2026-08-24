@@ -105,7 +105,7 @@ existing `seeded()` discipline; Math.random is banned (tested).
    Actual with controllability, Board+Investor confidence, board objectives.
 4. ✅ **Research + fog of war** — EstimatedValue everywhere player-visible, research catalog,
    delayed studies, competitor intelligence, Discovery integration.
-5. **Functional capacity + Major Moments** — capacity domains, overload, crisis triggers,
+5. ✅ **Functional capacity + Major Moments** — capacity domains, overload, crisis triggers,
    price war/cash crisis/board intervention/capacity crisis experiences.
 6. **Chapters + milestones + identity** — state-driven chapters, milestone detection,
    company timeline, emergent identity.

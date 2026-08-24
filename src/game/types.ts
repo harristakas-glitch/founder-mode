@@ -137,6 +137,13 @@ export interface Effects {
     // bar. A CHOICE and not an automatic terminus — see `offerNetworkEnding` in engine.ts for the
     // measurement that made it one.
     | 'network-exit'
+    // Business Simulation V2 Major Moments (spec §0A.6): every option maps to a REAL domain
+    // action — never an outcome modifier. Match a price war via the pricing system; sprint on
+    // stability via the allocation the player already owns; cut the burn via real budget lines.
+    | 'v2-price-match'
+    | 'v2-stability-sprint'
+    | 'v2-cut-marketing'
+    | 'v2-emergency-layoffs'
 }
 
 export interface Choice {
