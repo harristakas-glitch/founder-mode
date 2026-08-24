@@ -46,6 +46,9 @@ import { ATTENTION_AREAS, ATTENTION_BUDGET, ATTENTION_META, attentionNeeds, atte
 import { bigBetDef } from '../game/strategic/bigbets'
 import { coherence } from '../game/strategic/coherence'
 import { confidenceWord } from '../game/sim2/confidence'
+import { rankEvents } from '../game/sim2/rank'
+import { objectivesFor } from '../game/sim2/objectives'
+import { CHAPTER_META } from '../game/sim2/story'
 import { BoardMeeting, Commitments, FounderBriefing, TeamOpinions, careerActive } from '../CareerUI'
 import { MarketLeaderboard } from './Market'
 import { DecisionLens } from '../onboarding/DecisionLens'
@@ -403,6 +406,100 @@ function AttentionCard() {
 // ---------------------------------------------------------------------------------------------
 // On Your Radar (brief §22): the top three dated things, each a link to where it is acted on.
 
+/** The V2 Weekly Briefing (engagement roadmap §1, spec §51): what moved, what the era asks of
+ *  you, what's coming due. Consumes the SAME ranker every other surface uses — one importance
+ *  model, no bespoke logic. Renders nothing outside a V2 run. */
+function V2BriefingCard() {
+  const game = useStore((s) => s.game)!
+  if (!usesBusinessSimulationV2(game) || !game.simV2) return null
+  const v2 = game.simV2
+  const events = rankEvents(v2, game.week, 5)
+  const objectives = objectivesFor(v2)
+  const chapterName = CHAPTER_META[v2.chapter]?.name ?? v2.chapter
+  const due: { week: number; text: string }[] = []
+  for (const c of v2.planning.commitments) {
+    if ((c.status === 'on_track' || c.status === 'at_risk') && c.dueWeek - game.week <= 6)
+      due.push({ week: c.dueWeek, text: `Board commitment settles${c.status === 'at_risk' ? ' — AT RISK' : ''}` })
+  }
+  for (const p of v2.pendingResearch) due.push({ week: p.completesWeek, text: 'Study lands' })
+  due.sort((a, b) => a.week - b.week)
+
+  const line = (e: (typeof events)[number]): string => {
+    const f = e.facts
+    if (e.type === 'segment_share_gain' || e.type === 'segment_share_loss') return `${f.segment}: share ${f.sharePct}% (${Number(f.deltaPct) > 0 ? '+' : ''}${f.deltaPct}pp)`
+    if (e.type === 'fit_threshold_crossed') return `${f.segment} rate the product ${f.level}`
+    if (e.type === 'competitor_price_change') return `${f.competitor} moved to $${f.newPrice}`
+    if (e.type === 'revenue_up' || e.type === 'revenue_down') return `Revenue ${Number(f.pct) > 0 ? '+' : ''}${f.pct}%`
+    if (e.type === 'customer_base_crossed') return `${Number(f.count).toLocaleString()} customers`
+    if (e.type === 'sales_capacity_constrained') return `${f.segment}: deals waiting on sales capacity`
+    if (e.type === 'service_capacity_critical') return `Service at ${f.utilizationPct}% — drowning`
+    if (e.type === 'cac_spike') return `CAC $${f.cac} (+${f.pct}%)`
+    if (e.type === 'commitment_missed') return 'Board commitment missed'
+    if (e.type === 'commitment_delivered') return 'Board commitment delivered'
+    if (e.type === 'chapter_entered') return `New chapter: ${f.chapter}`
+    if (e.type.startsWith('milestone_')) return String(f.headline)
+    if (e.category === 'research') return `${f.study} completed`
+    return e.type.replace(/_/g, ' ')
+  }
+
+  return (
+    <div className="rounded-[14px] border border-line bg-surface p-4 shadow-[var(--elev-2)]">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[13px] font-bold tracking-wide uppercase">Weekly briefing</h3>
+        <span className="text-[11px] font-semibold text-accent">{chapterName}</span>
+      </div>
+      {events.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {events.map((e) => (
+            <div key={e.id} className="flex items-start gap-2 text-[12.5px] leading-snug">
+              <span
+                className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${
+                  e.category === 'crisis' || e.urgency >= 0.7 ? 'bg-bad' : e.urgency >= 0.5 ? 'bg-warn' : 'bg-good'
+                }`}
+              />
+              <span>{line(e)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {objectives.length > 0 && (
+        <div className="mt-3 border-t border-line/50 pt-2.5">
+          <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">This chapter asks</div>
+          <div className="mt-1.5 space-y-1.5">
+            {objectives.map((o) => (
+              <div key={o.id}>
+                <div className="flex items-baseline justify-between gap-2 text-[12px]">
+                  <span className={o.done ? 'text-good' : ''}>{o.done ? '✓ ' : ''}{o.text}</span>
+                  <span className="shrink-0 text-[10.5px] text-mut tnum">{Math.round(o.progress * 100)}%</span>
+                </div>
+                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-black/40">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.round(o.progress * 100)}%`, background: o.done ? 'var(--color-good)' : 'var(--color-accent)' }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {due.length > 0 && (
+        <div className="mt-3 border-t border-line/50 pt-2.5">
+          <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">Coming due</div>
+          <div className="mt-1 space-y-0.5">
+            {due.slice(0, 3).map((d) => (
+              <div key={`${d.week}_${d.text}`} className="flex items-baseline justify-between gap-2 text-[12px]">
+                <span className="text-mut">{d.text}</span>
+                <span className="shrink-0 tnum">wk {d.week}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function OnYourRadarCard() {
   const game = useStore((s) => s.game)!
   const setScreen = useStore((s) => s.setScreen)
@@ -708,6 +805,9 @@ export function Dashboard() {
         </div>
         <div className="contents lg:block lg:min-w-0 lg:flex-[2] lg:space-y-4">
           <div className="order-2"><CEOBriefCard /></div>
+          {/* V2 Weekly Briefing (engagement §1): the week's ranked consequences, the chapter's
+              live objectives, and what's coming due — read BEFORE deciding. Null outside V2. */}
+          <div className="order-2"><V2BriefingCard /></div>
           {/* attention sits right under the Brief: it's the one INPUT on this screen — the
               decision the briefing is meant to inform (phase 4; arena renders nothing) */}
           <div className="order-3"><AttentionCard /></div>

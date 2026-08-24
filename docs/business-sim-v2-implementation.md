@@ -138,3 +138,21 @@ existing `seeded()` discipline; Math.random is banned (tested).
 - D5 (Week Resolution): inline reveal, never a modal — the no-modals-in-the-weekly-loop house
   rule outranks the brief's "may temporarily lock" for routine weeks; locking is reserved for
   the rare Major Moments that genuinely take over (phase 5).
+
+## Close-out (2026-08-24, owner: "close all the game for the simulation")
+
+Every remaining Simulation-scoped gap landed in one pass: the price DIAL (journaled,
+authoritative once touched) with per-segment value reads off ESTIMATES; positioning
+declaration (communication relevance); competitive-intelligence studies + the Market panel
+(rival offers at your intel level); the Product truth panel (attributes + per-segment fit
+words, knowledge-gated 'what they value'); the WEEKLY BRIEFING card (ranked events + chapter
+objectives with progress + coming-due); chapter OBJECTIVES (pure, state-read); segment-needs
+evolution (slow deterministic drift, downturns raise price sensitivity); competitor auction
+pressure on paid reach; research quality scaled by AI analytics; BOARD INTERVENTION moment
+whose recovery plan IS a reforecast (§15.10); the price war's differentiation option; V2 world
+candidates so characters speak real V2 facts; bespoke devtools/ecommerce/aiml market
+templates (probed: all alive, exits + chapters everywhere). Canary 47.
+
+Remaining, deliberately: negotiations, multi-channel GTM UI, additional capacity domains,
+cohort delayed-truth, reveal polish/sound, founder cross-run profile, Arena/Daily V2 — all
+post-playtest, per the polish backlog.

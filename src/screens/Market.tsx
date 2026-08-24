@@ -24,6 +24,8 @@ import {
   type RivalStance,
 } from '../game/engine'
 import { CONCEDE_USER_SHARE } from '../game/pvp'
+import { usesBusinessSimulationV2 } from '../game/modes'
+import { describeEstimate } from '../game/sim2/research'
 import { hasCapability } from '../game/modes'
 import { hasForfeited, myId } from '../net/online'
 import { useStore } from '../store'
@@ -535,6 +537,74 @@ function Acquisitions() {
           before the next.
         </Disclosure>
       </Panel>
+      <V2MarketPanel />
     </div>
+  )
+}
+
+/** V2 runs (spec §50.1, §21.4): the market as you KNOW it — segment demand as ranges, your
+ *  preference share, and each rival's offer at your current intel level. Buying intelligence
+ *  reveals a rival's real price and focus; without it they read as 'unknown'. */
+function V2MarketPanel() {
+  const game = useStore((s) => s.game)!
+  const v2Research = useStore((s) => s.v2Research)
+  if (!usesBusinessSimulationV2(game) || !game.simV2) return null
+  const v2 = game.simV2
+  const snap = v2.weeklyHistory[v2.weeklyHistory.length - 1]
+  return (
+    <Panel title="The market as you know it" className="mt-3.5">
+      <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {v2.segments.map((seg) => {
+          const size = describeEstimate(seg.knowledge.size, (n) => num(Math.round(n)))
+          const share = snap?.choiceShare[seg.id] ?? 0
+          return (
+            <div key={seg.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+              <span className="min-w-0">
+                <span>{seg.name}</span>
+                <span className="block truncate text-[10.5px] text-mut">
+                  ~{size.text} out there · {size.confidence.toLowerCase()} confidence
+                </span>
+              </span>
+              <b className="shrink-0 tnum">{(share * 100).toFixed(1)}% prefer you</b>
+            </div>
+          )
+        })}
+      </div>
+      {v2.competitors.length > 0 && (
+        <div className="mt-3.5 border-t border-line/50 pt-3">
+          <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">Rival offers — at your intel level</div>
+          <div className="mt-1.5 space-y-1.5">
+            {v2.competitors.map((c) => {
+              const intel = v2.intel?.[c.id]
+              const pending = v2.pendingResearch.some((x) => x.kind === 'competitor_intel' && x.targetId === c.id)
+              const stale = intel && game.week - intel.revealedWeek > 16
+              return (
+                <div key={c.id} className="flex items-center justify-between gap-3 text-[12.5px]">
+                  <span className="min-w-0">
+                    <b>{c.name}</b>
+                    {intel ? (
+                      <span className="block truncate text-[10.5px] text-mut">
+                        ${intel.price}/wk · courting {v2.segments.find((x) => x.id === intel.focusSegment)?.name ?? intel.focusSegment}
+                        {stale && ' · intel is getting old'}
+                      </span>
+                    ) : (
+                      <span className="block text-[10.5px] text-mut/70">price & focus unknown</span>
+                    )}
+                  </span>
+                  <Btn
+                    className="!min-h-[26px] shrink-0 !px-2 !text-[11px]"
+                    disabled={pending || game.cash < 8_000}
+                    onClick={() => v2Research('competitor_intel', c.id)}
+                    title="Competitive intelligence: $8k, 2 weeks — their real price and who they court"
+                  >
+                    {pending ? 'In field' : intel ? 'Refresh intel ($8k)' : 'Buy intel ($8k)'}
+                  </Btn>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </Panel>
   )
 }

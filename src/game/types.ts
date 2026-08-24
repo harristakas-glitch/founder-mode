@@ -144,6 +144,8 @@ export interface Effects {
     | 'v2-stability-sprint'
     | 'v2-cut-marketing'
     | 'v2-emergency-layoffs'
+    | 'v2-reforecast' // recovery plan: commitments re-cut low, an honest new promise installed
+    | 'v2-differentiate' // the price-war counter that fights on product, not margin
 }
 
 export interface Choice {

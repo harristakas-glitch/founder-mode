@@ -436,6 +436,8 @@ interface Store {
   setGrowthMix: (v: number) => void
   aiStart: (id: string) => void
   v2Research: (kind: string, segmentId: string) => void
+  v2SetPrice: (v: number) => void
+  v2SetPositioning: (seg: string) => void
   aiCancel: (id: string) => void
   setAttentionFocus: (a: string | null) => void
   setAttentionAllocation: (alloc: Record<string, number>) => void
@@ -1381,6 +1383,18 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'growth_mix', { v }).state })
+        },
+
+        v2SetPrice: (v) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'v2_price', { v }).state })
+        },
+
+        v2SetPositioning: (seg) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'v2_position', { seg }).state })
         },
 
         v2Research: (kind, segmentId) => {

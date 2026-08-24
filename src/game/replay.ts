@@ -361,6 +361,23 @@ const REPLAY_ACTIONS = {
     startResearchV2(g, str(p.k), str(p.seg))
   },
 
+  /** Set the V2 price DIAL (spec §13.4). Once touched, the dial is authoritative. Clamped to a
+   *  sane band around the sector reference so a hostile journal cannot set $1e9. */
+  v2_price: (g, p) => {
+    if (!usesBusinessSimulationV2(g) || !g.simV2) return
+    const v = num(p.v)
+    if (v <= 0) return
+    const ref = g.simV2.pricing.price || 1
+    g.simV2.pricing = { price: Math.min(Math.max(v, ref * 0.1, 0.1), Math.max(ref * 20, 1000)), lastChangedWeek: g.week, manual: true }
+  },
+
+  /** Declare positioning (spec §12): who the story is for. Null clears it. */
+  v2_position: (g, p) => {
+    if (!usesBusinessSimulationV2(g) || !g.simV2) return
+    const seg = str(p.seg)
+    g.simV2.positioning = { targetSegmentId: g.simV2.segments.some((x) => x.id === seg) ? seg : null }
+  },
+
   /** Start an AI adoption rollout (phase 5). Depth-guarded inside startAIInitiative — an arena
    *  or quick journal cannot smuggle a transformation in while the system is off there. */
   ai_start: (g, p) => {

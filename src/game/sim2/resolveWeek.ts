@@ -54,6 +54,8 @@ export interface V2WeekInputs {
   servicePoints: number
   /** AI support leverage multiplier (≥1) — strategic/ai support maturity, folded once */
   aiSupportMult: number
+  /** analytics capability (≥1): AI maturity sharpens research (spec §14.5) */
+  analyticsMult: number
   founderKind: 'technical' | 'business'
   /** projected runway in weeks (engine's own read) and the live board growth target (0 = none) */
   runwayWeeks: number
@@ -100,6 +102,14 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
   if (netAttr) {
     const base = v2.cohorts.reduce((x, c) => x + c.size, 0)
     netAttr.value = clamp(Math.max(netAttr.value, 100 * (base / (base + 400_000))), 0, netAttr.technicalCeiling)
+  }
+
+  // ---- 07: segment needs EVOLVE (spec §8.2) — slowly, deterministically, from state ---------
+  // Adoption matures a hair every week (categories normalise); a sour macro makes every
+  // segment a little more price-sensitive, a hot one relaxes them. Gradual, never a reshuffle.
+  for (const seg of v2.segments) {
+    seg.adoptionMaturity = clamp01(seg.adoptionMaturity + 0.0006)
+    seg.priceSensitivity = clamp01(seg.priceSensitivity + (inp.macroFactor < 0.95 ? 0.0012 : inp.macroFactor > 1.02 ? -0.0006 : 0))
   }
 
   // ---- 08-09: competitors participate in the SAME market (spec §21.3) -----------------------
@@ -154,6 +164,8 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
   // The paid channel REMEMBERS: sustained heavy spend saturates (EMA), and the next dollar buys
   // less. Brand and the installed base open organic doors paid money cannot.
   v2.gtm ??= { paidSaturationEma: 0, lastCac: 0 }
+  v2.intel ??= {}
+  v2.positioning ??= { targetSegmentId: null }
   v2.gtm.paidSaturationEma = v2.gtm.paidSaturationEma * 0.85 + inp.perfSpend * 0.15
   const saturation = v2.gtm.paidSaturationEma / (v2.gtm.paidSaturationEma + 25_000)
   const effectiveSpend = inp.perfSpend * (1 - 0.45 * saturation)
@@ -198,9 +210,14 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     // segments are additionally capped by human selling capacity
     const demand = weeklyDemand(seg, inp.week, inp.macroFactor)
     const paidAccess = seg.paidAccessibility ?? 0.7
-    const paidReach = clamp01((effectiveSpend / (effectiveSpend + 8_000)) * paidAccess)
+    // competitor auction pressure (spec §18.5): every live rival bids for the same attention,
+    // and a rival mid-discount-campaign bids hardest — your dollar buys less in a crowded auction
+    const auction = 1 + 0.12 * v2.competitors.length + 0.25 * v2.competitors.filter((c) => c.discountUntil !== undefined && inp.week < c.discountUntil).length
+    const paidReach = clamp01((effectiveSpend / (effectiveSpend + 8_000 * auction)) * paidAccess)
     const organicReach = clamp01(0.02 + (inp.brandStock / 100) * 0.28 + installedShare * 0.3)
-    const reach = clamp01(paidReach + organicReach) * inp.acquisitionEff
+    // positioning (spec §12, minimal): the declared segment hears the story better
+    const posMult = v2.positioning?.targetSegmentId ? (v2.positioning.targetSegmentId === seg.id ? 1.18 : 0.94) : 1
+    const reach = clamp01((paidReach + organicReach) * posMult) * inp.acquisitionEff
     const noise = 0.9 + 0.2 * inp.rng()
     let won = Math.max(0, demand * (shares.player ?? 0) * reach * noise)
     if (seg.salesLed ?? seg.baseWtp > 40) {
@@ -476,7 +493,7 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
   events.push(...confEvents)
 
   // ---- 27: due research lands — knowledge narrows, truth never moves (phase 4) --------------
-  events.push(...tickResearch(v2, inp.week))
+  events.push(...tickResearch(v2, inp.week, inp.analyticsMult))
 
   // ---- 31-32: milestones fire once; chapters are earned (phase 6) ---------------------------
   const story = tickStory(v2, inp.week)

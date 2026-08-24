@@ -71,6 +71,8 @@ export function createSimV2(sector: string, price: number, rng: () => number): B
     boardConfidence: { value: 60, driverHistory: [] },
     investorConfidence: { value: 55, driverHistory: [] },
     pendingResearch: [],
+    intel: {},
+    positioning: { targetSegmentId: null },
     serviceQuality: 70,
     overloadWeeks: 0,
     events: [],

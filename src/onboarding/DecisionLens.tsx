@@ -79,6 +79,8 @@ const SPECIAL_LABEL: Record<NonNullable<Effects['special']>, string> = {
   'v2-stability-sprint': 'shifts allocation hard toward bugs & stability for the crunch',
   'v2-cut-marketing': 'halves the growth budget — the pipeline thins, the runway slows',
   'v2-emergency-layoffs': 'cuts the bottom 20% of the team; morale takes the hit',
+  'v2-reforecast': 're-cuts every live commitment to a deliverable bar — honesty buys back some board trust',
+  'v2-differentiate': 'shifts the weekly build hard toward features & quality',
   acquired: 'ends the run — the company is sold',
   'lose-best': 'your strongest employee walks',
   accelerator: 'gives up 7% of the company',

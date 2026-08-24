@@ -1080,6 +1080,38 @@ export function applyEffects(s: GameState, fx: Effects) {
   if (fx.special === 'v2-cut-marketing') {
     s.marketingSpend = Math.round(s.marketingSpend / 2)
   }
+  if (fx.special === 'v2-reforecast') {
+    // reforecasting (spec §15.10) as a REAL planning action: active commitments re-cut to a
+    // deliverable bar at low ambition; the board pays a little confidence back for honesty
+    if (s.simV2) {
+      for (const c of s.simV2.planning.commitments) {
+        if (c.status === 'on_track' || c.status === 'at_risk') {
+          c.targetValue = (c.targetValue ?? 0.04) * 0.7
+          c.ambition = 0.2
+          c.status = 'reforecasted'
+        }
+      }
+      const g4 = sustainedGrowthRate(s)
+      s.simV2.planning.commitments.push({
+        id: `recovery_${s.week}`,
+        createdWeek: s.week,
+        dueWeek: s.week + 10,
+        metricId: 'weekly_growth',
+        targetValue: Math.max(0.01, g4 * 1.1),
+        importance: 1,
+        ambition: 0.25,
+        status: 'on_track',
+      })
+      s.simV2.boardConfidence.value = Math.min(100, s.simV2.boardConfidence.value + 6)
+    }
+  }
+  if (fx.special === 'v2-differentiate') {
+    s.allocation = {
+      ...s.allocation,
+      features: Math.min(70, s.allocation.features + 20),
+      quality: Math.min(60, s.allocation.quality + 10),
+    }
+  }
   if (fx.special === 'v2-emergency-layoffs') {
     const toCut = Math.max(1, Math.floor(s.employees.length * 0.2))
     const cut = [...s.employees].sort((a, b) => a.skill - b.skill).slice(0, toCut)
@@ -2112,7 +2144,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   let v2Revenue: number | null = null
   if (careerOn && usesBusinessSimulationV2(s) && s.simV2) {
     const priceStrategy = s.career?.pricing ?? 'market'
-    const price = sector.arpuPerCustomer * (priceStrategy === 'low' ? 0.7 : priceStrategy === 'premium' ? 1.45 : 1)
+    const price = s.simV2.pricing.manual
+      ? s.simV2.pricing.price
+      : sector.arpuPerCustomer * (priceStrategy === 'low' ? 0.7 : priceStrategy === 'premium' ? 1.45 : 1)
     const v2wk = resolveWeekV2(s.simV2, {
       week: s.week,
       sector: s.sector,
@@ -2136,6 +2170,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
           0,
         ) + 1.2,
       aiSupportMult: 1 + (s.aiAdoption?.areas.support ? s.aiAdoption.areas.support.maturity * (0.4 + s.aiAdoption.areas.support.quality / 200) * 0.12 : 0),
+      analyticsMult:
+        1 + (s.aiAdoption ? (Object.values(s.aiAdoption.areas).reduce((a2, x) => a2 + (x?.maturity ?? 0), 0) / 5) * 0.12 : 0),
       founderKind: s.founderKind,
       runwayWeeks: Math.min(999, runwayWeeks(s)),
       boardTarget: s.board ? boardEffectiveTarget(s) : 0,
@@ -2207,7 +2243,30 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         (e) => e.type === 'competitor_price_change' && Number(e.facts.newPrice) < Number(e.facts.oldPrice) * 0.85,
       )
       const capCrisis = v2wk.visibleEvents.find((e) => e.type === 'service_capacity_critical')
-      if (runwayNow2 !== Infinity && runwayNow2 < 8 && s.termSheets.length === 0) {
+      const missedTwice = (s.simV2.planning?.commitments ?? []).filter((c) => c.status === 'missed').length >= 2
+      const boardCritical = s.simV2.boardConfidence.value < 35 && missedTwice
+      if (boardCritical) {
+        s.flags.v2MomentWeek = s.week
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: '🏛 BOARD INTERVENTION — they have stopped believing the plan',
+          body: `Two commitments missed and board confidence is ${Math.round(s.simV2.boardConfidence.value)}/100. They want a plan they can believe — or they want changes you won't like.`,
+          choices: [
+            {
+              label: 'Present a credible recovery plan (reforecast lower)',
+              resultText: 'Lower numbers, honestly argued. The room exhales — deliver THESE and trust rebuilds.',
+              effects: { special: 'v2-reforecast' },
+            },
+            {
+              label: 'Hold the plan — the numbers will come',
+              resultText: 'You defend the original plan. The board writes one line in its notes: "founder unmoved."',
+              effects: {},
+            },
+          ],
+        })
+      } else if (runwayNow2 !== Infinity && runwayNow2 < 8 && s.termSheets.length === 0) {
         s.flags.v2MomentWeek = s.week
         s.inbox.unshift({
           id: uid(),
@@ -2249,6 +2308,11 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
           choices: [
             { label: 'Match the cut (move to low pricing)', resultText: 'Your price drops. The margin goes with it.', effects: { special: 'v2-price-match' } },
             { label: 'Hold premium positioning', resultText: 'You hold. Now the product has to be worth it.', effects: {} },
+            {
+              label: 'Accelerate differentiation (shift the build to product)',
+              resultText: 'You don’t fight on price. You fight on the thing they can’t copy by Friday.',
+              effects: { special: 'v2-differentiate' },
+            },
           ],
         })
       }

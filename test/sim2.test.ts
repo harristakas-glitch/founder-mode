@@ -161,8 +161,8 @@ console.log('— Phase 2: GTM saturation, sales capacity, expansion —')
   g.marketingSpend = 4000
   g = playWeeks(g, 45)
   const hist = g.simV2!.weeklyHistory
-  const arpuAt = (i: number) => (hist[i].customers > 0 ? hist[i].revenue / hist[i].customers : 0)
-  ok(arpuAt(hist.length - 1) > arpuAt(14) * 1.003, `retained cohorts expand (${arpuAt(14).toFixed(2)} → ${arpuAt(hist.length - 1).toFixed(2)} $/customer/wk)`)
+  const oldest = g.simV2!.cohorts.reduce((best, c) => (c.acquiredWeek < best.acquiredWeek ? c : best), g.simV2!.cohorts[0])
+  ok(oldest.expansion > 1.01, `retained cohorts expand (oldest cohort at ${oldest.expansion.toFixed(3)}x)`)
   ok(g.simV2!.finance.revenueDrivers.expansion > 0, 'the P&L driver decomposition carries the expansion line')
   // 4. the unit truth reaches the Capital sparklines
   const fh = g.finHistory!
@@ -301,6 +301,90 @@ console.log('— Phase 7: the postmortem is the run’s own story; scenarios are
   // users may still rise (new acquisition outpacing rot is exactly the scenario's trap)
   const inherited = a1.simV2!.cohorts.filter((c) => c.id.includes('inherited')).reduce((x, c) => x + c.size, 0)
   ok(inherited < 480, `the inherited base bleeds as the truth dictates (600 → ${Math.round(inherited)} inherited left by week 10)`)
+}
+
+console.log('— Close-out: price dial, positioning, intel, evolution, objectives, reforecast —')
+{
+  const { applyJournaled } = await import('../src/game/replay')
+  const { objectivesFor } = await import('../src/game/sim2/objectives')
+  const { createSimV2 } = await import('../src/game/sim2/init')
+  const { resolveWeekV2 } = await import('../src/game/sim2/resolveWeek')
+  const { resolveChoiceOnState } = await import('../src/game/engine')
+
+  // 1. the price dial is journaled, authoritative, and gate-guarded
+  let g = newGame('C1', 'saas', 'technical', { config: v2cfg(19) })
+  g.journal = []
+  g = applyJournaled(g, 'v2_price', { v: 55 }).state
+  ok(g.simV2!.pricing.price === 55 && g.simV2!.pricing.manual === true, 'the dial sets a real price and takes authority')
+  g = applyJournaled(g, 'advance').state
+  ok(g.simV2!.weeklyHistory[0].price === 55, 'the market resolves at the dialed price')
+  let c0 = newGame('C0', 'saas', 'technical', { config: { mode: 'career', format: 'standard', sector: 'saas', seed: 19 } as GameConfig })
+  c0.journal = []
+  c0 = applyJournaled(c0, 'v2_price', { v: 55 }).state
+  ok(c0.simV2 === undefined, 'a classic run’s journal cannot touch the dial')
+
+  // 2. positioning: the declared segment hears you better (same state, one flag flipped)
+  const mk2 = () => {
+    let seq = 0.37
+    const st = createSimV2('saas', 22, () => ((seq = (seq * 9301 + 0.49297) % 1), seq))
+    for (const a of st.attributes) a.value = 70
+    return st
+  }
+  const inputs = (over: Record<string, unknown> = {}) =>
+    ({ week: 30, sector: 'saas', engPointsP: 8, af: 0.5, aq: 0.3, ab: 0.2, bugs: 10, brandStock: 20, perfSpend: 8_000, price: 22, infraCostPerUser: 0.12, macroFactor: 1, rivals: [], churnRelief: 1, acquisitionEff: 1, salesPoints: 0, servicePoints: 3, aiSupportMult: 1, analyticsMult: 1, founderKind: 'technical', runwayWeeks: 40, boardTarget: 0, rng: () => 0.5, ...over }) as never
+  const plain = mk2()
+  const positioned = mk2()
+  positioned.positioning = { targetSegmentId: 'freelancers' }
+  resolveWeekV2(plain, inputs())
+  resolveWeekV2(positioned, inputs())
+  const freelancersWon = (st: typeof plain) => st.cohorts.filter((c) => c.segmentId === 'freelancers').reduce((a, c) => a + c.size, 0)
+  ok(freelancersWon(positioned) > freelancersWon(plain), `positioning turns the declared segment's head (${freelancersWon(positioned).toFixed(0)} vs ${freelancersWon(plain).toFixed(0)})`)
+
+  // 3. segment needs evolve — slowly, from state (spec §8.2)
+  const evo = mk2()
+  const sens0 = evo.segments[0].priceSensitivity
+  const mat0 = evo.segments[0].adoptionMaturity
+  for (let w = 30; w < 60; w++) resolveWeekV2(evo, inputs({ week: w, macroFactor: 0.9 }))
+  ok(evo.segments[0].adoptionMaturity > mat0 && evo.segments[0].priceSensitivity > sens0, 'a long downturn makes buyers warier; categories mature')
+
+  // 4. objectives read real state and progress with play
+  let o = newGame('O', 'saas', 'technical', { config: v2cfg(41) })
+  o.marketingSpend = 4000
+  o = playWeeks(o, 4)
+  const early = objectivesFor(o.simV2!)
+  ok(early.length === 3 && early.every((x) => x.progress >= 0 && x.progress <= 1), `chapter one asks three things (${early.map((x) => x.id).join(', ')})`)
+  o = playWeeks(o, 26)
+  const later = objectivesFor(o.simV2!)
+  ok(later.some((x, i) => x.progress > (early[i]?.progress ?? 0)) , 'playing moves the objectives')
+
+  // 5. board intervention: two missed promises + low confidence → the moment fires, and the
+  //    recovery plan is a REAL reforecast (spec §15.10)
+  let b = newGame('B', 'saas', 'technical', { config: v2cfg(77) })
+  b.marketingSpend = 4000
+  b = playWeeks(b, 10)
+  b.simV2!.planning.commitments.push(
+    { id: 'm1', createdWeek: 1, dueWeek: 5, metricId: 'weekly_growth', targetValue: 0.5, importance: 1, ambition: 0.5, status: 'missed' },
+    { id: 'm2', createdWeek: 2, dueWeek: 8, metricId: 'weekly_growth', targetValue: 0.5, importance: 1, ambition: 0.5, status: 'missed' },
+    { id: 'live', createdWeek: 9, dueWeek: 30, metricId: 'weekly_growth', targetValue: 0.2, importance: 1, ambition: 0.8, status: 'on_track' },
+  )
+  b.simV2!.boardConfidence.value = 25
+  b.flags.v2MomentWeek = -99
+  for (const m of b.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(b, m.id, 0)
+  b = playWeeks(b, 1)
+  const intervention = b.inbox.find((m) => m.title.includes('BOARD INTERVENTION'))
+  ok(!!intervention, 'a disbelieving board intervenes')
+  const confBefore = b.simV2!.boardConfidence.value
+  resolveChoiceOnState(b, intervention!.id, 0)
+  const live = b.simV2!.planning.commitments.find((c) => c.id === 'live')!
+  ok(live.status === 'reforecasted' && live.ambition === 0.2, 'the recovery plan re-cuts the live promise')
+  ok(b.simV2!.planning.commitments.some((c) => c.id.startsWith('recovery_')), '…and installs an honest new one')
+  ok(b.simV2!.boardConfidence.value === Math.min(100, confBefore + 6), 'honesty buys back a little trust')
+
+  // 6. every sector has a real market now
+  for (const sec of ['devtools', 'ecommerce', 'aiml'] as const) {
+    const t = newGame('T', sec, 'technical', { config: v2cfg(3, sec) })
+    ok(t.simV2!.segments.length === 3 && t.simV2!.segments.every((x) => x.id !== 'freelancers'), `${sec} deals its own segments (${t.simV2!.segments.map((x) => x.id).join(', ')})`)
+  }
 }
 
 console.log('— Truth isolation + seeded-RNG ban —')

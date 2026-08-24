@@ -4,7 +4,7 @@ import { money, num, pct } from '../format'
 import { sectorById } from '../game/data'
 import { effectiveChurn, MARKETING_CAP, marketingMax, operatingProfit, paidUsersPerWeek, unitEconomics } from '../game/engine'
 import { useStore } from '../store'
-import { systemDepth } from '../game/modes'
+import { systemDepth, usesBusinessSimulationV2 } from '../game/modes'
 import { growthSignals, mixAlignment } from '../game/strategic/growth'
 import { bigBetDef } from '../game/strategic/bigbets'
 import { openGuide } from '../onboarding/guide'
@@ -230,7 +230,81 @@ export function Growth() {
             </Panel>
           )
         })()}
+        <V2PricingPanel />
       </div>
     </div>
+  )
+}
+
+/** V2 runs (spec §13.4): the PRICE DIAL — a real number, judged per segment against what you
+ *  KNOW they'd pay (estimates, never truth) — and the positioning declaration (§12): who the
+ *  story is for. Both journaled; both feed the same market resolution everything else does. */
+function V2PricingPanel() {
+  const game = useStore((s) => s.game)!
+  const v2SetPrice = useStore((s) => s.v2SetPrice)
+  const v2SetPositioning = useStore((s) => s.v2SetPositioning)
+  if (!usesBusinessSimulationV2(game) || !game.simV2) return null
+  const v2 = game.simV2
+  const price = v2.pricing.price
+  const readFor = (segId: string): { word: string; cls: string } => {
+    const seg = v2.segments.find((x) => x.id === segId)!
+    const est = seg.knowledge.wtp
+    if (est.confidence < 0.35) return { word: 'unknown — research them', cls: 'text-mut/70' }
+    const r = price / Math.max(0.1, est.visibleEstimate)
+    if (r < 0.55) return { word: 'Underpriced', cls: 'text-warn' }
+    if (r < 0.9) return { word: 'Strong value', cls: 'text-good' }
+    if (r < 1.25) return { word: 'Fair', cls: 'text-good' }
+    if (r < 2) return { word: 'Expensive', cls: 'text-warn' }
+    return { word: 'Far above them', cls: 'text-bad' }
+  }
+  return (
+    <Panel title="Price & positioning" className="mt-4">
+      <div className="flex items-center gap-3">
+        <span className="text-[12.5px] text-mut">Price</span>
+        <input
+          type="range"
+          min={Math.max(0.5, price * 0.25)}
+          max={price * 4}
+          step={price > 40 ? 1 : 0.5}
+          value={price}
+          onChange={(e) => v2SetPrice(Number(e.target.value))}
+          className="min-w-0 flex-1 accent-[var(--color-accent)]"
+          aria-label="Weekly price per customer"
+        />
+        <b className="w-20 shrink-0 text-right text-[15px] tnum">{money(price)}/wk</b>
+      </div>
+      <div className="mt-2.5 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+        {v2.segments.map((seg) => {
+          const r = readFor(seg.id)
+          return (
+            <div key={seg.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+              <span className="text-mut">{seg.name}</span>
+              <b className={r.cls}>{r.word}</b>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-3 border-t border-line/50 pt-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12.5px] text-mut" title="Who the story is FOR — the declared segment hears your marketing better; everyone else a little worse">
+            Positioning
+          </span>
+          {v2.segments.map((seg) => (
+            <button
+              key={seg.id}
+              onClick={() => v2SetPositioning(v2.positioning?.targetSegmentId === seg.id ? '' : seg.id)}
+              aria-pressed={v2.positioning?.targetSegmentId === seg.id}
+              className={`min-h-[30px] rounded-full border px-2.5 text-[11.5px] font-semibold transition-colors ${
+                v2.positioning?.targetSegmentId === seg.id
+                  ? 'border-accent bg-accent/15 text-ink'
+                  : 'border-line2 bg-surface2 text-mut hover:text-ink'
+              }`}
+            >
+              {seg.name}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Panel>
   )
 }

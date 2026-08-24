@@ -141,10 +141,18 @@ export interface ProductAttributeV2 {
 // ---------- pricing (spec §13) ---------------------------------------------------------------
 
 export interface PricingStateV2 {
-  /** $/week per customer the player charges (derived from the pricing strategy until the
-   *  dedicated dial ships) */
+  /** $/week per customer the player charges */
   price: number
   lastChangedWeek: number
+  /** true once the player has touched the DIAL — from then on the dial is authoritative and
+   *  the legacy low/market/premium strategy stops driving the number */
+  manual?: boolean
+}
+
+/** Positioning (spec §12, minimal v1): who the story is FOR. Communication relevance — the
+ *  declared segment hears you better, everyone else slightly worse. */
+export interface PositioningStateV2 {
+  targetSegmentId: string | null
 }
 
 // ---------- competitors (spec §21) -----------------------------------------------------------
@@ -277,6 +285,9 @@ export interface BusinessSimulationV2State {
   boardConfidence: ConfidenceState
   investorConfidence: ConfidenceState
   pendingResearch: PendingResearchV2[]
+  /** competitive intelligence: what a bought study revealed about a rival, and when */
+  intel: Record<string, { price: number; focusSegment: string; revealedWeek: number }>
+  positioning: PositioningStateV2
   /** functional operating capacity, v1 domain: SERVICE (spec §19). Quality 0-100 degrades under
    *  sustained overload and heals under slack; folds into cohort retention exactly once. */
   serviceQuality: number

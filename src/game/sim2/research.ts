@@ -11,7 +11,7 @@ import type { BusinessSimulationV2State, EstimatedValue, SimulationEvent } from 
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
-export type ResearchKind = 'interviews' | 'market_survey' | 'pricing_study' | 'cohort_analysis'
+export type ResearchKind = 'interviews' | 'market_survey' | 'pricing_study' | 'cohort_analysis' | 'competitor_intel'
 
 export interface ResearchDef {
   kind: ResearchKind
@@ -55,6 +55,15 @@ export const RESEARCH_CATALOG: ResearchDef[] = [
     strength: 0.6,
   },
   {
+    kind: 'competitor_intel',
+    name: 'Competitive intelligence',
+    what: 'A rival’s real price and who they are actually courting.',
+    cost: 8_000,
+    weeks: 2,
+    improves: 'size', // unused for intel — the reveal writes the intel map instead
+    strength: 0,
+  },
+  {
     kind: 'cohort_analysis',
     name: 'Cohort analysis',
     what: 'How your own customers actually behave once the honeymoon ends.',
@@ -72,7 +81,10 @@ export function startResearchV2(s: GameState, kind: string, segmentId: string): 
   const v2 = s.simV2
   const def = researchDef(kind)
   if (!v2 || !def) return false
-  if (!v2.segments.some((seg) => seg.id === segmentId)) return false
+  // competitor_intel targets a COMPETITOR key; everything else targets a segment
+  if (kind === 'competitor_intel') {
+    if (!v2.competitors.some((c) => c.id === segmentId)) return false
+  } else if (!v2.segments.some((seg) => seg.id === segmentId)) return false
   if (v2.pendingResearch.some((p) => p.kind === kind && p.targetId === segmentId)) return false
   if (s.cash < def.cost) return false
   s.cash -= def.cost
@@ -103,17 +115,39 @@ function narrow(e: EstimatedValue, strength: number, week: number): EstimatedVal
 
 /** Resolver step 27: due studies land. Each completion is an explicit event (spec §0A.13) with
  *  before/after confidence in the facts — the reveal belongs to the engagement layer. */
-export function tickResearch(v2: BusinessSimulationV2State, week: number): SimulationEvent[] {
+export function tickResearch(v2: BusinessSimulationV2State, week: number, analyticsMult = 1): SimulationEvent[] {
   const events: SimulationEvent[] = []
   const due = v2.pendingResearch.filter((p) => week >= p.completesWeek)
   if (due.length === 0) return events
   v2.pendingResearch = v2.pendingResearch.filter((p) => week < p.completesWeek)
   for (const p of due) {
     const def = researchDef(p.kind)
+    if (!def) continue
+    // intel: the rival's offer becomes KNOWN — price and focus, as of this week
+    if (p.kind === 'competitor_intel') {
+      const comp = v2.competitors.find((c) => c.id === p.targetId)
+      if (!comp) continue
+      const focusSegment = Object.entries(comp.segmentFocus).sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+      ;(v2.intel ??= {})[comp.id] = { price: Math.round(comp.price), focusSegment, revealedWeek: week }
+      events.push({
+        id: `v2_${week}_research_${p.id}`,
+        week,
+        category: 'research',
+        type: 'competitor_intel_completed',
+        magnitude: 0.55,
+        urgency: 0.4,
+        strategicRelevance: 0.7,
+        entityIds: [comp.id],
+        facts: { study: 'Competitive intelligence', competitor: comp.name, price: Math.round(comp.price) },
+        visibility: 'known',
+      })
+      continue
+    }
     const seg = v2.segments.find((x) => x.id === p.targetId)
-    if (!def || !seg) continue
+    if (!seg) continue
     const before = seg.knowledge[def.improves]
-    const after = narrow(before, def.strength, week)
+    // analytics capability (spec §14.5): AI-assisted analysis makes the same study sharper
+    const after = narrow(before, Math.min(0.85, def.strength * analyticsMult), week)
     seg.knowledge[def.improves] = after
     events.push({
       id: `v2_${week}_research_${p.id}`,

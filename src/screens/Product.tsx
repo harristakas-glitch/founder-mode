@@ -16,8 +16,9 @@ import {
   resonanceEstimate,
   ventureSignal,
 } from '../game/engine'
-import { hasCapability } from '../game/modes'
+import { hasCapability, usesBusinessSimulationV2 } from '../game/modes'
 import { useStore } from '../store'
+import { productFit } from '../game/sim2/economics'
 
 const SIGNAL_COPY: Record<string, { text: string; cls: string }> = {
   unknown: { text: 'Do more user research to read the market.', cls: 'text-mut' },
@@ -324,6 +325,71 @@ export function Product() {
       )}
 
       <Ventures />
+      <V2ProductTruth />
     </div>
+  )
+}
+
+/** V2 runs (spec §50.2): WHAT THE PRODUCT ACTUALLY IS — the attributes your weekly work moves,
+ *  and how each segment rates the whole. Your own product is fully visible (you built it);
+ *  what a segment VALUES stays knowledge-gated behind research confidence. */
+function V2ProductTruth() {
+  const game = useStore((s) => s.game)!
+  if (!usesBusinessSimulationV2(game) || !game.simV2) return null
+  const v2 = game.simV2
+  const attrs = Object.fromEntries(v2.attributes.map((a) => [a.id, a.value]))
+  const fitWord = (f: number) => (f >= 0.8 ? 'Best-in-class' : f >= 0.65 ? 'Strong' : f >= 0.5 ? 'Competitive' : f >= 0.35 ? 'Developing' : 'Weak')
+  const fitTone = (f: number) => (f >= 0.65 ? 'text-good' : f >= 0.5 ? 'text-warn' : 'text-bad')
+  return (
+    <Panel title="What the product actually is" className="mt-3.5">
+      <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {v2.attributes.map((a) => (
+          <div key={a.id}>
+            <div className="flex items-baseline justify-between text-[12.5px]">
+              <span className="text-mut">{a.label}</span>
+              <span className="font-bold tnum">{Math.round(a.value)}</span>
+            </div>
+            <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-black/40">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${a.value}%`,
+                  background: a.value >= 60 ? 'var(--color-good)' : a.value >= 35 ? 'var(--color-accent)' : 'var(--color-warn)',
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 border-t border-line/50 pt-3">
+        <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">How each segment rates it</div>
+        <div className="mt-1.5 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          {v2.segments.map((seg) => {
+            const fit = productFit(attrs, seg.attributePreferences)
+            const knows = seg.knowledge.wtp.confidence >= 0.45 || seg.knowledge.retention.confidence >= 0.45
+            const values = knows
+              ? [...seg.attributePreferences]
+                  .sort((a, b) => b.importance - a.importance)
+                  .slice(0, 2)
+                  .map((pref) => v2.attributes.find((a) => a.id === pref.attributeId)?.label ?? pref.attributeId)
+              : null
+            return (
+              <div key={seg.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                <span className="min-w-0">
+                  <span>{seg.name}</span>
+                  {values && <span className="block truncate text-[10.5px] text-mut">values {values.join(' & ').toLowerCase()}</span>}
+                  {!values && <span className="block text-[10.5px] text-mut/70">research them to learn what they value</span>}
+                </span>
+                <b className={`shrink-0 ${fitTone(fit)}`}>{fitWord(fit)}</b>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div className="mt-2 text-[10.5px] leading-snug text-mut/80">
+        Features build core utility & integrations · quality builds ease, reliability, security & serviceability · bug-fixing hardens
+        reliability & performance. Everything decays a little every week — a product is a garden, not a statue.
+      </div>
+    </Panel>
   )
 }

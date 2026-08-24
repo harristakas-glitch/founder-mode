@@ -237,6 +237,34 @@ function weekCandidates(s: GameState, world: LivingWorldState): NarrativeCandida
       tags: ['rivals'], slots: { amount: `${ahead}` },
     })
 
+  // Business Simulation V2 (spec §0A.16): characters interpret REAL economic truth. Each
+  // candidate reads a fact the causal engine actually produced this week — capacity, service,
+  // board pressure — and the composer gives it a voice. No invented numbers, ever.
+  if (s.simV2) {
+    const snap = s.simV2.weeklyHistory[s.simV2.weeklyHistory.length - 1]
+    if (snap?.eventIds.some((id) => id.includes('salescap')))
+      out.push({
+        id: `v2sales_${s.week}`, type: 'v2_pipeline_over', category: 'concern',
+        financialImpact: 0.4, strategicImpact: 0.6, relationshipImpact: 0.5, competitiveImpact: 0.2,
+        urgency: 0.5, novelty: 0, callbackValue: 0.3, tags: ['team', 'customers'],
+        slots: { amount: `${Math.round((snap.customers ?? 0) / 100) * 100}` },
+      })
+    if ((s.simV2.serviceQuality ?? 70) < 45)
+      out.push({
+        id: `v2service_${s.week}`, type: 'v2_service_pain', category: 'concern',
+        financialImpact: 0.3, strategicImpact: 0.4, relationshipImpact: 0.7, competitiveImpact: 0.2,
+        urgency: 0.6, novelty: 0, callbackValue: 0.3, tags: ['team', 'customers', 'bad_week'],
+        slots: { amount: `${Math.round(s.simV2.serviceQuality)}` },
+      })
+    if (s.simV2.boardConfidence.value < 40 || s.simV2.planning.commitments.some((c) => c.status === 'missed'))
+      out.push({
+        id: `v2board_${s.week}`, type: 'v2_board_pressure', category: 'warning',
+        financialImpact: 0.4, strategicImpact: 0.7, relationshipImpact: 0.3, competitiveImpact: 0.1,
+        urgency: 0.4, novelty: 0, callbackValue: 0.4, tags: ['funding', 'bad_week'],
+        slots: { amount: `${Math.round(s.simV2.boardConfidence.value)}` },
+      })
+  }
+
   if (s.climate < -0.6)
     out.push({
       id: `climate_${s.week}`, type: 'funding_winter', category: 'warning',

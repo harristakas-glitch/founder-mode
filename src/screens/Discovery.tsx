@@ -237,7 +237,7 @@ function V2Discovery() {
                 </div>
               </div>
               <div className="mt-3 grid gap-1.5 border-t border-line/50 pt-2.5">
-                {RESEARCH_CATALOG.map((r) => {
+                {RESEARCH_CATALOG.filter((r) => r.kind !== 'competitor_intel').map((r) => {
                   const pending = v2.pendingResearch.some((x) => x.kind === r.kind && x.targetId === seg.id)
                   const conf = seg.knowledge[r.improves].confidence
                   return (
