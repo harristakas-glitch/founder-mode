@@ -13,7 +13,6 @@
 // behaviour channels (build speed, acquisition execution, cost, churn service), never fit itself.
 
 import type { GameState } from '../types'
-import { systemDepth } from '../modes'
 import type { AIAdoptionArea, AIAdoptionState, AIMaturity, SystemDepth } from './types'
 import { managementCapacity } from './capacity'
 import { effectiveAllocation } from './attention'

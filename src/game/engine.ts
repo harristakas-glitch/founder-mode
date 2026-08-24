@@ -1532,6 +1532,16 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
     `${downRound ? ' — a DOWN round. The team felt that.' : '. The war chest is full — spend it wisely.'}`
   s.cash += sheet.amount
   s.founderEquity *= 1 - sheet.equity
+  // Capital section: the round enters the record as issued — who, how much, what it took, and
+  // what the founder held AFTER. The cap table and dilution story read this, never re-derive it.
+  ;(s.rounds ??= []).push({
+    week: s.week,
+    stage: target,
+    investor: sheet.investor,
+    amount: sheet.amount,
+    equity: sheet.equity,
+    founderAfter: s.founderEquity,
+  })
   s.stage = target
   s.termSheets = []
   s.raiseCooldown = 12
@@ -2355,6 +2365,19 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     pmf: Math.round(s.pmf),
   })
   if (s.history.length > 300) s.history.shift()
+
+  // Capital section (career): the unit-economics reads the sparklines need — CAC/LTV cannot be
+  // recomputed from history later, so the week's reading is kept as it happens. Pure derivation
+  // (constant-rng unitEconomics), no draw; capped like every other buffer.
+  if (careerOn) {
+    const ue = unitEconomics(s)
+    ;(s.finHistory ??= []).push({
+      week: s.week,
+      cac: Number.isFinite(ue.cac) ? Math.round(ue.cac) : -1,
+      ltv: Math.round(ue.ltv),
+    })
+    if (s.finHistory.length > 26) s.finHistory.shift()
+  }
 
   // --- board review ---
   boardReview(s)

@@ -16,13 +16,14 @@ import {
 } from '../game/engine'
 import { hasCapability } from '../game/modes'
 import { useStore } from '../store'
+import { CapitalSection } from './capital'
 
 // The rules are not optional reading, but they are not every-week reading either — they go behind
 // the shared <Disclosure> (components.tsx), one keypress away instead of permanently occupying the
 // screen. What never goes in one: the player's current position, and any rule they could lose the
 // company to. That is why the covenant consequence stays on the face of the debt panel.
 
-function MacroPanel() {
+export function MacroPanel() {
   const game = useStore((s) => s.game)!
   const m = game.macro
   const idxHistory = game.history.map((h) => h.macroIndex ?? 100)
@@ -57,7 +58,7 @@ function MacroPanel() {
   )
 }
 
-function DebtPanel() {
+export function DebtPanel() {
   const game = useStore((s) => s.game)!
   const takeDebt = useStore((s) => s.takeDebt)
   const payDebt = useStore((s) => s.payDebt)
@@ -177,7 +178,7 @@ function DebtPanel() {
   )
 }
 
-function UpcomingPayments() {
+export function UpcomingPayments() {
   const game = useStore((s) => s.game)!
   const { due, potential, recommended } = committedCosts(game)
   if (due === 0 && potential === 0 && game.cash > recommended) return null
@@ -223,6 +224,14 @@ function UpcomingPayments() {
 }
 
 export function Finance() {
+  const game = useStore((s) => s.game)!
+  // The Capital section (owner brief 2026-08-24) ships SIMULATION-FIRST: career gets the
+  // P&L / Unit Economics / Cap Table truth layer; quick and arena keep the classic screen.
+  if (hasCapability(game, 'detailedPMF') && game.career) return <CapitalSection />
+  return <ClassicFinance />
+}
+
+function ClassicFinance() {
   const game = useStore((s) => s.game)!
   const rows = [...game.history].slice(-12).reverse()
 

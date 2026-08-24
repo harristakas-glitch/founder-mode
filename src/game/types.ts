@@ -306,6 +306,12 @@ export interface GameState {
    *  plan rank 1). Absent means 0 — old saves never migrate. Capped at ONE: a real company
    *  below the next stage bar gets exactly one priced lifeline, not a subscription to them. */
   extensionsTaken?: number
+  /** Capital section (2026-08-24): every accepted priced round, as issued — feeds the cap table
+   *  and the dilution story. Absent on old saves: the table shows the honest aggregate instead. */
+  rounds?: { week: number; stage: Stage; investor: string; amount: number; equity: number; founderAfter: number }[]
+  /** Career only: a small rolling buffer of the unit-economics reads (CAC/LTV) the Capital
+   *  section's sparklines need — they cannot be recomputed from history. Capped at 26. */
+  finHistory?: { week: number; cac: number; ltv: number }[]
   lastRevenue: number
   lastExpenses: number
   flash: string | null // one-shot banner shown after a player action; cleared on advance
