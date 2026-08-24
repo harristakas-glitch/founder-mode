@@ -165,6 +165,52 @@ console.log('— Phase 2: GTM saturation, sales capacity, expansion —')
   ok(fh[fh.length - 1].cac === hist[hist.length - 1].cac, 'finHistory CAC IS the causal engine’s realized CAC')
 }
 
+console.log('— Phase 3: commitments, Plan vs Actual, the two confidences —')
+{
+  const { acceptTermSheet } = await import('../src/game/engine')
+  const { tickConfidence, confidenceWord } = await import('../src/game/sim2/confidence')
+  const { createSimV2 } = await import('../src/game/sim2/init')
+
+  // 1. a closed round becomes a FIRST-CLASS commitment (spec §0A.10)
+  let g = newGame('B', 'saas', 'technical', { config: v2cfg(63) })
+  g.marketingSpend = 4000
+  g = playWeeks(g, 6)
+  g.termSheets = [{ id: 't1', investor: 'Meridian', amount: 1_500_000, equity: 0.2, weeksLeft: 3 }]
+  acceptTermSheet(g, 't1')
+  const c = g.simV2!.planning.commitments[0]
+  ok(!!c && c.metricId === 'weekly_growth' && c.dueWeek === g.week + 12, 'the round installs a growth commitment due at the review')
+  ok(c.ambition >= 0 && c.ambition <= 1, `ambition is measured against current reality (${c.ambition.toFixed(2)})`)
+
+  // 2. the two confidences move DIFFERENTLY (spec §17.2): strong upside, no execution record
+  const v2 = createSimV2('saas', 22, () => 0.42)
+  v2.weeklyHistory.push({ week: 10, customers: 500, revenue: 9000, netIncome: -2000, cash: 150000, price: 22, choiceShare: {}, productFit: {}, attributes: {}, brand: 20, boardConfidence: 60, investorConfidence: 55, planVariance: 0, newCustomers: 40, churnedCustomers: 8, paidSpend: 4000, cac: 100, eventIds: [] } as never)
+  const b0 = v2.boardConfidence.value
+  const i0 = v2.investorConfidence.value
+  for (let w = 11; w < 19; w++)
+    tickConfidence(v2, { week: w, revenue: 9000 * Math.pow(1.07, w - 10), macroFactor: 1, runwayWeeks: 40, growth4w: 0.07, churnRate: 0.015, bestFit: 0.7, boardTarget: 0 })
+  ok(v2.investorConfidence.value - i0 > 5, `hot growth warms investors (+${(v2.investorConfidence.value - i0).toFixed(1)})`)
+  ok(Math.abs(v2.boardConfidence.value - b0) < 4, `…while the board waits for delivered commitments (${(v2.boardConfidence.value - b0).toFixed(1)})`)
+
+  // 3. controllability (spec §0A.11): the same miss costs less when the macro broke it
+  const mk = () => {
+    const x = createSimV2('saas', 22, () => 0.42)
+    x.planning.forecastLog = [{ week: 6, projectedRevenue: 10_000, macroAtForecast: 1 }]
+    return x
+  }
+  const controllable = mk()
+  tickConfidence(controllable, { week: 10, revenue: 6_000, macroFactor: 1, runwayWeeks: 40, growth4w: 0.01, churnRate: 0.03, bestFit: 0.5, boardTarget: 0 })
+  const external = mk()
+  tickConfidence(external, { week: 10, revenue: 6_000, macroFactor: 0.9, runwayWeeks: 40, growth4w: 0.01, churnRate: 0.03, bestFit: 0.5, boardTarget: 0 })
+  ok(controllable.boardConfidence.value < external.boardConfidence.value, `an execution miss costs board credibility; a recession costs less (${controllable.boardConfidence.value.toFixed(1)} vs ${external.boardConfidence.value.toFixed(1)})`)
+
+  // 4. a due commitment SETTLES exactly once, as an event
+  const due = mk()
+  due.planning.commitments.push({ id: 'x', createdWeek: 1, dueWeek: 10, metricId: 'weekly_growth', targetValue: 0.05, importance: 1, ambition: 0.5, status: 'on_track' })
+  const ev = tickConfidence(due, { week: 10, revenue: 10_000, macroFactor: 1, runwayWeeks: 40, growth4w: 0.02, churnRate: 0.02, bestFit: 0.6, boardTarget: 0.05 })
+  ok(due.planning.commitments[0].status === 'missed' && ev.some((e) => e.type === 'commitment_missed' && e.eligibleForMajorMoment), 'a missed commitment settles once and is Major-Moment eligible')
+  ok(typeof confidenceWord(due.boardConfidence.value) === 'string', 'confidence speaks in words, not decimals')
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))

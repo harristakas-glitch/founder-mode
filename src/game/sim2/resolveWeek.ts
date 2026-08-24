@@ -10,6 +10,7 @@ import type { BusinessSimulationV2State, CustomerCohortV2, SimulationEvent, SimV
 import { attrRecord, choiceShares, effectiveWtp, priceFit, productFit, weeklyDemand, type OfferInput } from './economics'
 import { marketTemplate } from './config/markets'
 import { rankEvents } from './rank'
+import { tickConfidence } from './confidence'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => clamp(v, 0, 1)
@@ -48,6 +49,9 @@ export interface V2WeekInputs {
   /** the sales team's weekly effectiveness points (engine's eff() sum for sales role) */
   salesPoints: number
   founderKind: 'technical' | 'business'
+  /** projected runway in weeks (engine's own read) and the live board growth target (0 = none) */
+  runwayWeeks: number
+  boardTarget: number
   rng: () => number
 }
 
@@ -385,10 +389,28 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     brand: inp.brandStock,
     boardConfidence: v2.boardConfidence.value,
     investorConfidence: v2.investorConfidence.value,
+    planVariance: 0,
     eventIds: events.filter((e) => e.visibility === 'known').map((e) => e.id),
   }
   v2.weeklyHistory.push(snap)
   if (v2.weeklyHistory.length > 420) v2.weeklyHistory.shift()
+
+  // ---- 23-26: plan vs actual, commitments, the two confidences (phase 3) --------------------
+  const h4 = v2.weeklyHistory[v2.weeklyHistory.length - 5]
+  const growth4w = h4 && h4.revenue > 100 ? Math.pow(revenue / h4.revenue, 1 / 4) - 1 : 0
+  const churnRate = customers > 0 ? churnedTotal / Math.max(1, customers + churnedTotal) : 0
+  const confEvents = tickConfidence(v2, {
+    week: inp.week,
+    revenue,
+    macroFactor: inp.macroFactor,
+    runwayWeeks: inp.runwayWeeks,
+    growth4w,
+    churnRate,
+    bestFit: Math.max(0, ...Object.values(fitBySegment)),
+    boardTarget: inp.boardTarget,
+  })
+  events.push(...confEvents)
+  snap.eventIds = events.filter((e) => e.visibility === 'known').map((e) => e.id)
 
   const visibleEvents = rankEvents(v2, inp.week)
   for (const e of visibleEvents) v2.lastSeen[e.type] = inp.week

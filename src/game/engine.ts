@@ -1508,7 +1508,10 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
     // fundraising attention: a founder running a warm, prepared process prices a little better.
     // A multiplier like pitchMult — changes no draw and no order.
     const attnMult = attentionFundraisingMult(s)
-    const offeredVal = val * rand(0.7, 1.25) * climateMult * pitchMult * attnMult
+    // V2 (spec §17.3): INVESTOR confidence prices the round — bounded ±15%, a multiplier only
+    const invConfMult =
+      usesBusinessSimulationV2(s) && s.simV2 ? 0.85 + (s.simV2.investorConfidence.value / 100) * 0.3 : 1
+    const offeredVal = val * rand(0.7, 1.25) * climateMult * pitchMult * attnMult * invConfMult
     // Investors chase growth: a company compounding fast gets offered a bigger check.
     const growthAppetite = 1 + clamp(growth, 0, 0.3) * 4
     const amount = Math.round(Math.max(ROUND_FLOORS[target], offeredVal * rand(0.15, 0.25) * growthAppetite) / 10_000) * 10_000
@@ -1559,6 +1562,21 @@ export function acceptTermSheet(s: GameState, sheetId: string) {
   // New money, new masters: the board resets its expectations for the new stage.
   if (can(s, 'boardReviews')) {
     s.board = { targetGrowth: BOARD_TARGETS[target], nextReview: s.week + 12, strikes: 0, defied: false }
+    // V2 (spec §0A.10): the expectation becomes a FIRST-CLASS commitment the confidence system
+    // judges at the review date — ambition read off how far the bar sits above current reality.
+    if (usesBusinessSimulationV2(s) && s.simV2) {
+      const g4 = sustainedGrowthRate(s)
+      s.simV2.planning.commitments.push({
+        id: `growth_${target.replace(/\s+/g, '_')}_${s.week}`,
+        createdWeek: s.week,
+        dueWeek: s.week + 12,
+        metricId: 'weekly_growth',
+        targetValue: BOARD_TARGETS[target],
+        importance: 1,
+        ambition: clamp((BOARD_TARGETS[target] - g4) / Math.max(0.005, BOARD_TARGETS[target]), 0, 1),
+        status: 'on_track',
+      })
+    }
     // Living World Phase 7 (§34): the round IS a growth expectation. Noted here because this is
     // where the expectation becomes fact — the board installs with the target and the review date
     // that will judge it. World-only; a no-op without the promises capability.
@@ -2087,6 +2105,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       acquisitionEff: smods.acquisitionEff,
       salesPoints: s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0),
       founderKind: s.founderKind,
+      runwayWeeks: Math.min(999, runwayWeeks(s)),
+      boardTarget: s.board ? boardEffectiveTarget(s) : 0,
       rng: () => RNG.next(),
     })
     s.simV2.pricing.price = price
@@ -2107,6 +2127,11 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         if (e.type === 'customer_base_crossed') return `★ ${Number(f.count).toLocaleString()} customers`
         if (e.type === 'sales_capacity_constrained') return `⚠ ${f.segment}: pipeline ${f.pipeline} vs capacity to close ~${f.capacity}/wk — deals are waiting on a salesperson`
         if (e.type === 'cac_spike') return `▲ CAC $${f.cac} (+${f.pct}%)${f.saturated ? ' — the paid channel is saturating' : ''}`
+        if (e.type === 'commitment_delivered') return `✓ Board commitment DELIVERED — growth ${f.actualPct}% vs the ${f.targetPct}% promised`
+        if (e.type === 'commitment_missed') return `✗ Board commitment MISSED — growth ${f.actualPct}% vs the ${f.targetPct}% promised`
+        if (e.type === 'plan_variance_miss') return `▼ ${Math.abs(Number(f.variancePct))}% under plan${f.controllable ? '' : ' — mostly the market, not you'}`
+        if (e.type === 'board_confidence_up' || e.type === 'board_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Board confidence: ${f.word}`
+        if (e.type === 'investor_confidence_up' || e.type === 'investor_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Investor sentiment: ${f.word}`
         return e.type
       })
       s.inbox.unshift({
@@ -3695,6 +3720,9 @@ function boardReview(s: GameState) {
     return
   }
   s.board.strikes += 1
+  // V2 (spec §16.4): a board that has stopped believing you moves faster — at Critical/Low
+  // confidence the ultimatum comes a review early. Presentation-free consequence, real stakes.
+  const v2Fuse = usesBusinessSimulationV2(s) && s.simV2 && s.simV2.boardConfidence.value < 35 ? 2 : 3
   // BALANCE CAMPAIGN (2026-08-23, rank 2): after a submitted ultimatum, quick's board does not
   // grant a second three-strike cycle — two more misses and you're out. Career deep keeps the
   // forgiving cycle (its difficulty lives in the PMF game, and this teeth-check measured 3-10/16
@@ -3707,7 +3735,7 @@ function boardReview(s: GameState) {
   // Three, not two: the ultimatum's own body says "Three reviews, three misses", the strike news
   // says "of 3", and the Dashboard renders three dots. The gate was the only place that said two,
   // so a player who had been promised one more chance got the ultimatum a review early.
-  if (s.board.strikes >= 3) {
+  if (s.board.strikes >= v2Fuse) {
     drainEnergy(s, 5)
     s.inbox.unshift({
       id: uid(),

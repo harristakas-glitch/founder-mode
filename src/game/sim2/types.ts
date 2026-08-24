@@ -196,8 +196,9 @@ export interface GtmStateV2 {
 // ---------- planning / confidence (phase 3 placeholders kept minimal on purpose) -------------
 
 export interface PlanningStateV2 {
-  /** absent until phase 3 unlocks planning — a two-person startup has no budget office */
-  forecast?: Record<string, number>
+  /** management's rolling belief: each week we project revenue 4 weeks out from trailing
+   *  growth; Plan vs Actual compares today against the projection made 4 weeks ago (spec §15.6) */
+  forecastLog: { week: number; projectedRevenue: number; macroAtForecast: number }[]
   commitments: BoardCommitment[]
 }
 
@@ -251,6 +252,8 @@ export interface SimV2Snapshot {
   brand: number
   boardConfidence: number
   investorConfidence: number
+  /** this week's actual vs the 4-week-old projection, as a fraction (0 = on plan) */
+  planVariance: number
   /** ids of this week's KNOWN events, for the postmortem's turning points */
   eventIds: string[]
 }

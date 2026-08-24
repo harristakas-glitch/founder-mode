@@ -41,10 +41,11 @@ import { Btn, EmptyState } from '../components'
 import { money, num, pct } from '../format'
 import { attentionRegister } from '../attention'
 import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers } from '../game/engine'
-import { MODE_META, hasCapability, systemDepth } from '../game/modes'
+import { MODE_META, hasCapability, systemDepth, usesBusinessSimulationV2 } from '../game/modes'
 import { ATTENTION_AREAS, ATTENTION_BUDGET, ATTENTION_META, attentionNeeds, attentionSignals, delegationCover } from '../game/strategic/attention'
 import { bigBetDef } from '../game/strategic/bigbets'
 import { coherence } from '../game/strategic/coherence'
+import { confidenceWord } from '../game/sim2/confidence'
 import { BoardMeeting, Commitments, FounderBriefing, TeamOpinions, careerActive } from '../CareerUI'
 import { MarketLeaderboard } from './Market'
 import { DecisionLens } from '../onboarding/DecisionLens'
@@ -154,7 +155,16 @@ function ceoBrief(game: NonNullable<ReturnType<typeof useStore.getState>['game']
   const cohSignals = coherence(game).signals
   const cohLine = cohSignals.length > 0 && systemDepth(game, 'strategicCoherence') === 'deep' ? cohSignals[0].text + '.' : null
 
-  return { chapter, lines: cohLine ? [growthLine, fitLine, runwayLine, cohLine] : [growthLine, fitLine, runwayLine] }
+  // V2 runs: the two confidences, as words — the board judges execution, investors judge upside
+  const v2ConfLine =
+    usesBusinessSimulationV2(game) && game.simV2
+      ? `Board confidence ${confidenceWord(game.simV2.boardConfidence.value).toLowerCase()} · investors ${confidenceWord(game.simV2.investorConfidence.value).toLowerCase()}.`
+      : null
+
+  const lines = [growthLine, fitLine, runwayLine]
+  if (cohLine) lines.push(cohLine)
+  if (v2ConfLine) lines.push(v2ConfLine)
+  return { chapter, lines }
 }
 
 // ---------------------------------------------------------------------------------------------
