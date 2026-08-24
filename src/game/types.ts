@@ -312,6 +312,9 @@ export interface GameState {
   /** Career only: a small rolling buffer of the unit-economics reads (CAC/LTV) the Capital
    *  section's sparklines need — they cannot be recomputed from history. Capped at 26. */
   finHistory?: { week: number; cac: number; ltv: number }[]
+  /** Business Simulation V2 (docs/business-sim-v2-implementation.md). Present ONLY on runs
+   *  created with config.engine === 'v2' — absent means the classic engine, forever. */
+  simV2?: import('./sim2/types').BusinessSimulationV2State
   lastRevenue: number
   lastExpenses: number
   flash: string | null // one-shot banner shown after a player action; cleared on advance

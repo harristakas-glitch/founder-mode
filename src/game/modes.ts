@@ -65,9 +65,17 @@ export interface GameConfig {
   sector: SectorId
   scenario?: ScenarioId
   seed: number
+  /** Business Simulation V2 (docs/business-sim-v2-implementation.md D1). Absent = the classic
+   *  engine — every existing save, quick and arena, forever. 'v2' is opt-in on NEW Simulation
+   *  runs while V2 is under construction; it becomes the Simulation default at the MVP boundary. */
+  engine?: 'v1' | 'v2'
   /** Host/player overrides applied last — e.g. the Arena lobby's rule toggles. */
   overrides?: Partial<GameCapabilities>
 }
+
+/** THE V2 gate (spec §1). One predicate, imported everywhere — never a scattered mode check. */
+export const usesBusinessSimulationV2 = (s: { config?: GameConfig }): boolean =>
+  s.config?.mode === 'career' && s.config?.engine === 'v2'
 
 // ENFORCED vs DESCRIPTIVE — read this before assuming a flag does something.
 //

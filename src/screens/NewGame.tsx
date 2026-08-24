@@ -431,6 +431,8 @@ export function NewGame() {
   const [scenario, setScenario] = useState('standard')
   const [netError, setNetError] = useState<string | null>(null)
   const [pipHelp, setPipHelp] = useState(false)
+  // Business Simulation V2 (beta) — Simulation-only opt-in while the deeper engine is built out
+  const [engineV2, setEngineV2] = useState(false)
 
   const netAction = async (fn: () => Promise<void>) => {
     setNetError(null)
@@ -704,6 +706,18 @@ export function NewGame() {
                   </SetupSection>
                 )}
 
+                {experience === 'career' && (
+                  <label className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-line2/70 bg-surface2 px-3.5 py-2.5">
+                    <input type="checkbox" checked={engineV2} onChange={(e) => setEngineV2(e.target.checked)} className="mt-0.5 accent-[var(--color-accent)]" />
+                    <span className="text-[12.5px] leading-snug">
+                      <b>New market engine (beta).</b>{' '}
+                      <span className="text-mut">
+                        Customers choose between you, your rivals and doing nothing — based on what your product actually is, what each
+                        segment values, and what you charge. Deeper causality, still under construction.
+                      </span>
+                    </span>
+                  </label>
+                )}
                 <LaunchSummaryBar
                   summary={
                     <>
@@ -731,6 +745,7 @@ export function NewGame() {
                       name: name.trim(),
                       founder,
                       scenario: format === 'scenario' ? scenario : 'standard',
+                      engineV2: experience === 'career' && engineV2,
                     })
                   }
                 />

@@ -318,6 +318,8 @@ export interface NewGameSetup {
   name: string
   founder: FounderKind
   scenario?: string
+  /** Simulation only: opt into the Business Simulation V2 engine (beta) for this run. */
+  engineV2?: boolean
 }
 
 export const MATCH_CAP = 104 // weeks in a capped run (daily & online matches)
@@ -870,6 +872,8 @@ export const useStore = create<Store>()(
             sector,
             scenario: daily ? undefined : setup.scenario,
             seed: daily ? info.seed : Math.floor(Math.random() * 2 ** 31),
+            // V2 is Simulation-only and opt-in while under construction (contract D1)
+            ...(setup.mode === 'career' && setup.engineV2 ? { engine: 'v2' as const } : {}),
           }
           const rules = resolveGameRules(config)
           const g = newGame(setup.name || 'Untitled Inc.', sector, setup.founder, {

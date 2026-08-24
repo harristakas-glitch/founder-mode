@@ -12,7 +12,9 @@ import {
   sectorById,
 } from './data'
 import { ARC_DEFS } from './arcs'
-import { hasCapability, resolveGameRules, systemDepth, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
+import { hasCapability, resolveGameRules, systemDepth, usesBusinessSimulationV2, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
+import { createSimV2 } from './sim2/init'
+import { resolveWeekV2 } from './sim2/resolveWeek'
 import { careerAcqScale, careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import {
   createCareerPMF,
@@ -346,6 +348,12 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
       : undefined,
     history: [],
     gameOver: null,
+  }
+  // Business Simulation V2 (contract D1): the deeper market truth, generated once from the
+  // run's own seeded stream. Only runs created with engine:'v2' allocate it — the extra rng
+  // draws happen inside those runs only, so every classic run's stream is untouched.
+  if (usesBusinessSimulationV2(state)) {
+    state.simV2 = createSimV2(sector, sec.arpuPerCustomer, () => RNG.next())
   }
   if (opts.scenario && opts.scenario !== 'standard') applyScenario(state, opts.scenario)
   // Career: research has no path to PMF, so shipping a default that points a fifth of engineering
@@ -2053,7 +2061,59 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // only the customer/PMF step differs, and only when the capability is on.
   let careerRevenueMult = 1
   let room = 1 // remaining market headroom, consumed later by tickRivals
-  if (careerOn) {
+  // Business Simulation V2 (contract §5): the causal market replaces the V1 customer/PMF core —
+  // and ONLY that. Everything the rest of this function does (cash, payroll, events, board,
+  // valuation) continues on the numbers V2 returns. The revenue formula below is bypassed via
+  // v2Revenue so the causal chain (fit → choice → cohorts → collection) is the single source.
+  let v2Revenue: number | null = null
+  if (careerOn && usesBusinessSimulationV2(s) && s.simV2) {
+    const priceStrategy = s.career?.pricing ?? 'market'
+    const price = sector.arpuPerCustomer * (priceStrategy === 'low' ? 0.7 : priceStrategy === 'premium' ? 1.45 : 1)
+    const v2wk = resolveWeekV2(s.simV2, {
+      week: s.week,
+      sector: s.sector,
+      engPointsP,
+      af,
+      aq,
+      ab,
+      bugs: s.bugs,
+      brandStock: s.growth?.brand.stock ?? 0,
+      perfSpend,
+      price,
+      infraCostPerUser: sector.infraCost,
+      macroFactor: 0.85 + (s.macro.index / 100) * 0.15,
+      rivals: s.rivals,
+      churnRelief: smods.churnRelief,
+      acquisitionEff: smods.acquisitionEff,
+      rng: () => RNG.next(),
+    })
+    s.simV2.pricing.price = price
+    s.users = v2wk.customers
+    s.pmf = clamp(v2wk.displayedPmf, 0, 100)
+    v2Revenue = v2wk.revenue
+    room = Math.pow(1 - marketSaturation(s, externalUsers), 1.2)
+    // the week's ranked consequences reach the inbox as ONE compact resolution digest
+    if (v2wk.visibleEvents.length > 0) {
+      const lines = v2wk.visibleEvents.slice(0, 4).map((e) => {
+        const f = e.facts
+        if (e.type === 'segment_share_gain') return `▲ ${f.segment}: preference share ${f.sharePct}% (${Number(f.deltaPct) > 0 ? '+' : ''}${f.deltaPct}pp)`
+        if (e.type === 'segment_share_loss') return `▼ ${f.segment}: preference share ${f.sharePct}% (${f.deltaPct}pp)`
+        if (e.type === 'fit_threshold_crossed') return `★ ${f.segment} now rate the product ${f.level}`
+        if (e.type === 'competitor_price_change') return `⚔ ${f.competitor} moved pricing ($${f.oldPrice} → $${f.newPrice})`
+        if (e.type === 'revenue_up') return `▲ Revenue +${f.pct}% — $${Number(f.revenue).toLocaleString()}/wk`
+        if (e.type === 'revenue_down') return `▼ Revenue ${f.pct}% — $${Number(f.revenue).toLocaleString()}/wk`
+        if (e.type === 'customer_base_crossed') return `★ ${Number(f.count).toLocaleString()} customers`
+        return e.type
+      })
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `Week ${s.week} resolved — what moved`,
+        body: lines.join('\n'),
+      })
+    }
+  } else if (careerOn) {
     const r = tickCareerPMF(s, {
       sectorTam: sector.tam,
       // BALANCE CAMPAIGN (2026-08-23): fintech's CAREER acquisition eased 8 → 9 (see the
@@ -2109,8 +2169,12 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // A running hit piece bleeds hype and reputation weekly; a price war cuts revenue on both sides.
   const pvp = tickPvpEffects(s)
   if (pvp.prDamage) applyEffects(s, pvp.prDamage)
+  // V2 runs: revenue is the causal chain's own truth (cohorts × price × collection); the
+  // sales team and pvp effects still act on it — they are real forces, not part of the chain.
   const coreRevenue =
-    s.users * arpu * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult * pvp.revenueMultiplier
+    v2Revenue !== null
+      ? v2Revenue * Math.min(1.4, salesBoost) * pvp.revenueMultiplier
+      : s.users * arpu * salesBoost * conversion * scaleBoost * (0.6 + pScore / 150) * careerRevenueMult * pvp.revenueMultiplier
   const ventureRevenue = s.ventures.reduce((acc, v) => {
     if (!v.launched) return acc
     const vs = sectorById(v.sector)
@@ -2132,6 +2196,17 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   const cashAtStart = s.cash
   s.cash += revenue - expenses
   const cashAfterOperations = s.cash // everything below here (fees, events) is a one-off hit
+  // V2: the weekly snapshot learns the week's full financial close (spec §0A.4) — the resolver
+  // could not know expenses yet, so the engine completes the record here.
+  if (v2Revenue !== null && s.simV2) {
+    const snap = s.simV2.weeklyHistory[s.simV2.weeklyHistory.length - 1]
+    if (snap && snap.week === s.week) {
+      snap.netIncome = revenue - expenses
+      snap.cash = Math.round(s.cash)
+    }
+    s.simV2.finance.opex = expenses - infra
+    s.simV2.finance.netIncome = revenue - expenses
+  }
   // Career's founder briefing reports a revenue move; it can only be known here, after the
   // shared revenue formula has run. Previously left at 0, so the briefing always claimed flat.
   if (s.career?.lastBriefing) {
