@@ -30,6 +30,7 @@ import { accrueAmbientDebt, tickRoadmap } from './strategic/roadmap'
 import { BIG_BET_SYNERGY, bigBetDef, initiativeAlignment, tickBigBet } from './strategic/bigbets'
 import { brandCacRelief, createDefaultGrowth, mixAlignment, tickBrand } from './strategic/growth'
 import { attentionBetPoints, attentionFundraisingMult, attentionRecruitingBonus, createDefaultAttention, tickAttention } from './strategic/attention'
+import { mgmtDrag } from './strategic/capacity'
 import { createDefaultRoadmap } from './strategic/types'
 import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
 // Rival aggression routes "who and why" through the same living-world record every other company
@@ -1771,7 +1772,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // Communication overhead: every head past the first ~8 makes the whole org slightly slower.
   // Without this, headcount has no cost but payroll, and "hire everyone you can afford" is
   // strictly optimal forever — which removes the central question of how big to get.
-  const coordination = coordinationDrag(s)
+  // Phase 4 (Management Capacity): mgmtDrag IS coordinationDrag outside deep career, byte-
+  // exactly; deep career bends it by whether the org is actually LED (strategic/capacity.ts).
+  const coordination = mgmtDrag(s)
   // Strategic Systems Expansion: ONE derivation per week, read wherever a strategic multiplier
   // applies (docs/strategic-systems-implementation.md §3–§4). All caps live in effects.ts.
   const smods = strategicModifiers(s)
@@ -2954,12 +2957,9 @@ export function sellSecondary(s: GameState) {
 
 // ---------- PvP: what founders do to each other ----------
 
-// Headcount past this many people starts costing the org 1.5%/head in effectiveness.
-export const COORDINATION_FREE_HEADS = 8
-
-export function coordinationDrag(s: GameState): number {
-  return clamp(1 - Math.max(0, s.employees.length - COORDINATION_FREE_HEADS) * 0.015, 0.6, 1)
-}
+// Phase 4: the coordination formula moved to strategic/capacity.ts (management capacity builds
+// on it); re-exported here so every existing importer — screens, tests — is untouched.
+export { COORDINATION_FREE_HEADS, coordinationDrag } from './strategic/capacity'
 
 export const ATTACK_COOLDOWN = 5
 

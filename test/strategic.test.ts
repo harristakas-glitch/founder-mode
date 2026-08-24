@@ -332,5 +332,47 @@ console.log('— Founder Attention (brief §9): limited budget, real tradeoffs �
   ok(replayed.cash === live.cash && replayed.features === live.features && JSON.stringify(replayed.attention) === JSON.stringify(live.attention), 'a journaled attention run replays identically')
 }
 
+console.log('— Management Capacity (brief §11): leadership is the cap, not headcount —')
+{
+  const { coordinationDrag, mgmtDrag, managementCapacity, capacityParts } = await import('../src/game/strategic/capacity')
+  const mkEmp = (skill: number, i: number) =>
+    ({ id: `e${i}`, name: `E ${i}`, role: 'engineer', skill, salary: 100_000, morale: 70, weeks: 10, trait: null }) as never
+
+  // 1. Outside deep career the system IS the classic formula, byte-exactly, at every headcount.
+  for (const heads of [0, 5, 8, 12, 20, 40]) {
+    const q = newGame('Q', 'saas', 'technical', { config: cfg({ seed: 5 }) })
+    q.employees = Array.from({ length: heads }, (_, i) => mkEmp(5, i))
+    ok(mgmtDrag(q) === coordinationDrag(q), `quick mgmtDrag === coordinationDrag at ${heads} heads (${mgmtDrag(q)})`)
+  }
+
+  // 2. Deep: a fresh career company is untouched (drag exactly 1 — inert until the org grows).
+  const fresh = newGame('C', 'saas', 'technical', { config: cfg({ seed: 5, mode: 'career' }) })
+  ok(mgmtDrag(fresh) === 1, 'a founder-only deep career org has drag exactly 1.0')
+
+  // 3. Deep: the same 14-person org is slower UNLED than led — executives create real leverage.
+  const unled = newGame('C', 'saas', 'technical', { config: cfg({ seed: 5, mode: 'career' }) })
+  unled.employees = Array.from({ length: 14 }, (_, i) => mkEmp(5, i))
+  const led = newGame('C', 'saas', 'technical', { config: cfg({ seed: 5, mode: 'career' }) })
+  led.employees = Array.from({ length: 14 }, (_, i) => mkEmp(i < 3 ? 8 : 5, i))
+  ok(mgmtDrag(led) > mgmtDrag(unled), `led beats unled at 14 heads (${mgmtDrag(led).toFixed(3)} vs ${mgmtDrag(unled).toFixed(3)})`)
+  ok(mgmtDrag(led) <= 1, 'leadership recovers the coordination tax but never exceeds 1.0')
+  ok(mgmtDrag(unled) < coordinationDrag(unled), 'an unled org is SLOWER than the flat headcount tax alone')
+
+  // 4. Words track the ratio, and overload leaks into quality/morale parts — but Stretched is free.
+  const mcU = managementCapacity(unled)
+  ok(mcU.word === 'Overloaded' || mcU.word === 'Breaking', `14 unled heads read as overloaded (${mcU.word})`)
+  ok(mcU.why.length > 0, 'the verdict comes with reasons')
+  const pU = capacityParts(unled)
+  ok(pU.bugs > 0 && pU.moraleDrift < 0, 'an overloaded org leaks bugs and morale')
+  ok(capacityParts(fresh).bugs === 0 && capacityParts(fresh).moraleDrift === 0, 'a healthy org leaks nothing')
+  ok(capacityParts(led).bugs === 0 || managementCapacity(led).word !== 'Healthy', 'a led org clears the leak (or is honestly not Healthy)')
+
+  // 5. Quick/arena never leak regardless of shape — the depth gate holds.
+  const qBig = newGame('Q', 'saas', 'technical', { config: cfg({ seed: 5 }) })
+  qBig.employees = Array.from({ length: 30 }, (_, i) => mkEmp(4, i))
+  const pQ = capacityParts(qBig)
+  ok(pQ.bugs === 0 && pQ.moraleDrift === 0, 'no capacity leak outside deep career, even at 30 heads')
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

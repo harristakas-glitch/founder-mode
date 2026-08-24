@@ -18,6 +18,8 @@ import { money, pct } from '../format'
 import { pitchOptions, weeklyPayroll } from '../game/engine'
 import { hasCapability } from '../game/modes'
 import { ROLE_LABEL, burnRisk, fitTone, outputPoints, teamFit, title, type TeamContext } from '../game/people'
+import { systemDepth } from '../game/modes'
+import { managementCapacity } from '../game/strategic/capacity'
 import type { Employee } from '../game/types'
 import { EmployeeConversations } from '../CareerUI'
 import { useStore } from '../store'
@@ -161,6 +163,37 @@ function TeamRail() {
         </div>
         {nudge && <div className="mt-2 text-[11.5px] leading-snug text-warn">{nudge}</div>}
       </Panel>
+      {/* Phase 4 (deep career only): is the organisation actually LED? Derived live from the
+          same terms mgmtDrag uses, so the word here and the drag in the engine cannot split.
+          Not a resource meter (brief §10.8) — a verdict, its reasons, and what would fix it. */}
+      {systemDepth(game, 'managementCapacity') === 'deep' && game.employees.length > 0 && (() => {
+        const mc = managementCapacity(game)
+        const tone = mc.word === 'Healthy' ? 'text-good' : mc.word === 'Stretched' ? 'text-warn' : 'text-bad'
+        return (
+          <Panel className="mt-3.5">
+            <SectionLabel>Organisation</SectionLabel>
+            <div className="mt-2 flex items-baseline justify-between">
+              <span className={`text-[15px] font-bold ${tone}`}>{mc.word}</span>
+              <span className="text-[11.5px] text-mut tnum" title="Leadership the company needs vs leadership it has — headcount, functions, stage and initiatives against seniors, systems and your own attention">
+                needs {mc.demand} · has {mc.supply}
+              </span>
+            </div>
+            {mc.why.length > 0 && (
+              <ul className="mt-1.5 space-y-1 text-[11.5px] leading-snug text-mut">
+                {mc.why.map((w) => (
+                  <li key={w}>· {w}</li>
+                ))}
+              </ul>
+            )}
+            {mc.supply < mc.demand && (
+              <div className="mt-2 text-[11px] leading-snug text-mut/80">
+                What helps: a skill-8 hire leads a function, internal-systems roadmap work compounds, and Leadership attention counts directly.
+              </div>
+            )}
+          </Panel>
+        )
+      })()}
+
       <Panel className="mt-3.5">
         <SectionLabel>Role coverage</SectionLabel>
         <div className="mt-1.5">

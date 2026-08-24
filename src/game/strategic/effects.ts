@@ -21,6 +21,7 @@ import type { GameState } from '../types'
 import { roadmapDef } from './content'
 import { completedBetParts } from './bigbets'
 import { attentionParts } from './attention'
+import { capacityParts } from './capacity'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -119,6 +120,12 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
   churn.push(...attn.churn)
   bugs.push(...attn.bugs)
 
+  // MANAGEMENT CAPACITY (phase 4): an org past Stretched leaks quality and morale — the delayed
+  // consequences the brief demands (§10.5). Its speed cost lives in mgmtDrag at the employee
+  // seam, not here, so it is never double-counted. Zero outside deep career by construction.
+  const cap = capacityParts(s)
+  if (cap.bugs) bugs.push(cap.bugs)
+
   // a COMPLETED Big Bet leaves its archetype's standing effect (bigbets.ts, still capped here)
   const bet = completedBetParts(s)
   if (bet.build) build.push(bet.build)
@@ -139,8 +146,8 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
     churnRelief: clamp(composeBonus(churn.map((p) => -p), 0.15), 0.85, 1),
     bugPressure: composeBonus(bugs, 0.25),
     conversionLift: clamp(composeBonus(cro, 0.18), 1, 1.18),
-    // attention-only channels: no other system feeds them, so their caps live in attention.ts
     researchMult: attn.researchMult,
-    moraleDrift: clamp(attn.moraleDrift, -2.5, 1.8),
+    // attention lifts or starves morale; a Breaking org drains it on top — one clamped channel
+    moraleDrift: clamp(attn.moraleDrift + cap.moraleDrift, -2.5, 1.8),
   }
 }
