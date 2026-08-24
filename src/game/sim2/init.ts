@@ -67,7 +67,7 @@ export function createSimV2(sector: string, price: number, rng: () => number): B
     competitors: [],
     cohorts: [],
     finance: { revenue: 0, cogs: 0, opex: 0, netIncome: 0, revenueDrivers: { newBusiness: 0, expansion: 0, churnLoss: 0 } },
-    planning: { commitments: [] },
+    planning: { forecastLog: [], commitments: [] },
     boardConfidence: { value: 60, driverHistory: [] },
     investorConfidence: { value: 55, driverHistory: [] },
     pendingResearch: [],
