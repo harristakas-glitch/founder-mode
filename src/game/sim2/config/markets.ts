@@ -60,7 +60,7 @@ const SVC = { id: 'service', label: 'Serviceability' }
 const NET = { id: 'network', label: 'Network value' }
 const CONTENT = { id: 'content', label: 'Content quality' }
 
-const attr = (a: { id: string; label: string }, start: Band, ceiling = 95, decayRate = 0.05) => ({ ...a, start, ceiling, decayRate })
+const attr = (a: { id: string; label: string }, start: Band, ceiling = 95, decayRate = 0.03) => ({ ...a, start, ceiling, decayRate })
 
 export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
   saas: {

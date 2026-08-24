@@ -14,6 +14,7 @@ import {
 import { ARC_DEFS } from './arcs'
 import { hasCapability, resolveGameRules, systemDepth, usesBusinessSimulationV2, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { createSimV2 } from './sim2/init'
+import { companyIdentity } from './sim2/story'
 import { resolveWeekV2 } from './sim2/resolveWeek'
 import { careerAcqScale, careerMarketingDrain, careerProductDrag, tickCareerPMF } from './career/tick'
 import {
@@ -2161,6 +2162,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         if (e.type === 'board_confidence_up' || e.type === 'board_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Board confidence: ${f.word}`
         if (e.type === 'investor_confidence_up' || e.type === 'investor_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Investor sentiment: ${f.word}`
         if (e.type.endsWith('_completed') && e.category === 'research') return `🔬 ${f.study} done: ${f.segment} ${f.metric} confidence ${f.confidenceBefore}% → ${f.confidenceAfter}%`
+        if (e.type.startsWith('milestone_')) return `🏆 ${f.headline}`
+        if (e.type === 'chapter_entered') return `📖 New chapter: ${f.chapter} — ${f.line}`
         return e.type
       })
       s.inbox.unshift({
@@ -2170,6 +2173,23 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         title: `Week ${s.week} resolved — what moved`,
         body: lines.join('\n'),
       })
+    }
+
+    // chapter transitions are era breaks — one dedicated inbox story, with the company's
+    // emergent identity read back to the player (engagement §15: discover what you built)
+    const chapterEv = v2wk.visibleEvents.find((e) => e.type === 'chapter_entered')
+    if (chapterEv) {
+      const aiAvg = s.aiAdoption
+        ? Object.values(s.aiAdoption.areas).reduce((a2, x) => a2 + (x?.maturity ?? 0), 0) / 5
+        : 0
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `📖 ${chapterEv.facts.chapter}`,
+        body: `${chapterEv.facts.line}\n\nWhat you've built so far reads as: ${companyIdentity(s.simV2, aiAvg)}.`,
+      })
+      s.flash = `📖 New chapter: ${chapterEv.facts.chapter}`
     }
 
     // ---- MAJOR MOMENTS (engagement roadmap §5, spec §0A.10-12): rare, triggered by REAL

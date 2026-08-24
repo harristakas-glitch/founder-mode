@@ -12,6 +12,7 @@ import { marketTemplate } from './config/markets'
 import { rankEvents } from './rank'
 import { tickConfidence } from './confidence'
 import { tickResearch } from './research'
+import { tickStory } from './story'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => clamp(v, 0, 1)
@@ -80,11 +81,11 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
   for (const a of v2.attributes) {
     const headroom = Math.max(0, 1 - a.value / a.technicalCeiling)
     let gain = 0
-    if (a.id === 'core') gain = inp.engPointsP * inp.af * 0.11
-    if (a.id === 'ease') gain = inp.engPointsP * inp.aq * 0.05
-    if (a.id === 'reliability') gain = inp.engPointsP * (inp.aq * 0.05 + inp.ab * 0.06) - inp.bugs * 0.012
-    if (a.id === 'performance') gain = inp.engPointsP * inp.ab * 0.035
-    if (a.id === 'content') gain = inp.engPointsP * inp.af * 0.04
+    if (a.id === 'core') gain = inp.engPointsP * inp.af * 0.18
+    if (a.id === 'ease') gain = inp.engPointsP * inp.aq * 0.1
+    if (a.id === 'reliability') gain = inp.engPointsP * (inp.aq * 0.09 + inp.ab * 0.1) - inp.bugs * 0.012
+    if (a.id === 'performance') gain = inp.engPointsP * inp.ab * 0.06
+    if (a.id === 'content') gain = inp.engPointsP * inp.af * 0.08
     if (a.id === 'network') gain = 0 // network value accrues from customers below, not from code
     a.value = clamp(a.value + gain * headroom - a.decayRate, 0, a.technicalCeiling)
   }
@@ -192,7 +193,7 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     const demand = weeklyDemand(seg, inp.week, inp.macroFactor)
     const paidAccess = seg.paidAccessibility ?? 0.7
     const paidReach = clamp01((effectiveSpend / (effectiveSpend + 8_000)) * paidAccess)
-    const organicReach = clamp01(0.06 + (inp.brandStock / 100) * 0.28 + installedShare * 0.3)
+    const organicReach = clamp01(0.02 + (inp.brandStock / 100) * 0.28 + installedShare * 0.3)
     const reach = clamp01(paidReach + organicReach) * inp.acquisitionEff
     const noise = 0.9 + 0.2 * inp.rng()
     let won = Math.max(0, demand * (shares.player ?? 0) * reach * noise)
@@ -464,6 +465,10 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
 
   // ---- 27: due research lands — knowledge narrows, truth never moves (phase 4) --------------
   events.push(...tickResearch(v2, inp.week))
+
+  // ---- 31-32: milestones fire once; chapters are earned (phase 6) ---------------------------
+  const story = tickStory(v2, inp.week)
+  events.push(...story.events)
   snap.eventIds = events.filter((e) => e.visibility === 'known').map((e) => e.id)
 
   const visibleEvents = rankEvents(v2, inp.week)

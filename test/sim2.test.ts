@@ -249,6 +249,29 @@ console.log('— Phase 4: research narrows knowledge, never the market —')
   ok(c.cash === cCash && c.simV2 === undefined, 'a classic run’s journal cannot commission V2 research (gate holds)')
 }
 
+console.log('— Phase 6: milestones fire once, chapters are earned, identity is derived —')
+{
+  const { companyIdentity } = await import('../src/game/sim2/story')
+  let g = newGame('S', 'saas', 'technical', { config: v2cfg(41) })
+  g.marketingSpend = 4000
+  g.allocation = { ...g.allocation, features: 40, quality: 35, bugs: 15, research: 10 }
+  g = playWeeks(g, 45)
+  const v2 = g.simV2!
+  ok(v2.firedMilestones.includes('first_customer') && v2.firedMilestones.includes('customers_100'), `milestones persisted: ${v2.firedMilestones.join(', ')}`)
+  ok(new Set(v2.firedMilestones).size === v2.firedMilestones.length, 'each milestone fired exactly once, ever')
+  ok(v2.chapter === 'early_traction' || v2.chapter === 'scaling', `the company EARNED its chapter (${v2.chapter})`)
+  ok(g.inbox.some((m) => m.title.startsWith('📖')), 'the chapter transition told its story in the inbox')
+  const id1 = companyIdentity(v2, 0)
+  ok(id1.length > 5 && !id1.includes('undefined'), `identity is derived from play: "${id1}"`)
+
+  // a stagnant company stays in chapter one — weeks alone earn nothing (spec §0A.8)
+  let idle = newGame('I', 'saas', 'technical', { config: v2cfg(43) })
+  idle.marketingSpend = 0
+  idle.allocation = { ...idle.allocation, features: 5, quality: 5, bugs: 5, research: 85 }
+  idle = playWeeks(idle, 40)
+  ok(idle.simV2!.chapter === 'searching_for_fit', 'forty idle weeks earn no chapter — state advances chapters, never time')
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))
