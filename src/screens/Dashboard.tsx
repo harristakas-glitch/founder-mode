@@ -450,8 +450,8 @@ function V2BriefingCard() {
       </div>
       {events.length > 0 && (
         <div className="mt-2 space-y-1">
-          {events.map((e) => (
-            <div key={e.id} className="flex items-start gap-2 text-[12.5px] leading-snug">
+          {events.map((e, i) => (
+            <div key={`${game.week}-${e.id}`} className="flash-in flex items-start gap-2 text-[12.5px] leading-snug" style={{ animationDelay: `${i * 70}ms` }}>
               <span
                 className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${
                   e.category === 'crisis' || e.urgency >= 0.7 ? 'bg-bad' : e.urgency >= 0.5 ? 'bg-warn' : 'bg-good'
@@ -612,7 +612,14 @@ function InboxRow({ row, open, onToggle }: { row: Row; open: boolean; onToggle: 
           week is gated on them and the amber Decide button lands the player on this list */}
       {row.message && open && (
         <div className="border-t border-line/40 py-3 pr-3 pl-4 md:pl-[64px]">
-          <div className="max-w-[70ch] text-[13px] leading-relaxed text-mut">{row.message.body}</div>
+          <div className="max-w-[70ch] text-[13px] leading-relaxed text-mut">
+            {row.message.body.split('\n').map((ln, i) => (
+              // multi-line reports (the weekly digest) land one beat at a time — restrained, ~read speed
+              <div key={i} className={ln === '' ? 'h-2' : 'flash-in'} style={{ animationDelay: `${Math.min(i * 60, 540)}ms` }}>
+                {ln}
+              </div>
+            ))}
+          </div>
           {row.needsYou && <DecisionLens message={row.message} />}
           {row.needsYou && row.message.choices && (
             <div className="mt-3 flex flex-wrap gap-2">

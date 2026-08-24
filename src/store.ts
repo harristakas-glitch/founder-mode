@@ -225,9 +225,11 @@ function weekSounds(next: GameState) {
         return
     }
   }
-  if (next.flash?.startsWith('🏁')) sfx.milestone()
+  if (next.flash?.startsWith('🏁') || next.flash?.startsWith('🏆') || next.flash?.startsWith('📖')) sfx.milestone()
   else if (next.flash?.startsWith('IPO pulled')) sfx.ominous()
   else if (next.inbox[0]?.title === 'Board ultimatum' && !next.inbox[0].resolved) sfx.ominous()
+  // a Major Moment just landed (V2): outage, board intervention, price war… — the room goes quiet
+  else if (next.inbox.slice(0, 4).some((m) => m.kind === 'choice' && !m.resolved && /^(🔥|🏛|🚪|⚖️|🔓|⚔️)/u.test(m.title))) sfx.ominous()
   else sfx.week()
 }
 
@@ -437,6 +439,7 @@ interface Store {
   aiStart: (id: string) => void
   v2Research: (kind: string, segmentId: string) => void
   v2SetPrice: (v: number) => void
+  counterSheet: (index: number) => void
   v2SetPositioning: (seg: string) => void
   aiCancel: (id: string) => void
   setAttentionFocus: (a: string | null) => void
@@ -1197,7 +1200,9 @@ export const useStore = create<Store>()(
             return
           }
 
-          set({ game: applyJournaled(g, 'send_offer', { i: g.candidates.indexOf(c) }).state })
+          // Solo negotiation (engagement §6): the premium travels through the journal and the
+          // engine prices acceptance off the ADJUSTED salary — a lowball can genuinely lose them.
+          set({ game: applyJournaled(g, 'send_offer', { i: g.candidates.indexOf(c), pm: Math.max(-15, Math.min(30, Math.round(premiumPct))) }).state })
         },
 
         fire: (employeeId) => {
@@ -1383,6 +1388,12 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'growth_mix', { v }).state })
+        },
+
+        counterSheet: (index) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'counter_sheet', { i: index }).state })
         },
 
         v2SetPrice: (v) => {

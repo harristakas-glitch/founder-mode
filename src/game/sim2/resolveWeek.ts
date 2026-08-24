@@ -121,11 +121,6 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
       const key = r.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
       const prev = v2.competitors.find((c) => c.id === key)
       const posture = hash01(r.name)
-      const attributes: Record<string, number> = {}
-      for (const a of v2.attributes) {
-        // a rival's product level spreads around their single product score, stably per attribute
-        attributes[a.id] = clamp(r.product * (0.75 + 0.5 * hash01(r.name + a.id)), 5, 95)
-      }
       // aggressive rivals run periodic discount campaigns (spec §21.2) — deterministic from the
       // seeded name, so replays agree; the cut is REAL in the same choice market, no script
       let discountUntil = prev?.discountUntil
@@ -134,13 +129,59 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
       }
       const discounted = discountUntil !== undefined && inp.week < discountUntil
       const price = inp.price * (0.75 + 0.6 * posture) * (discounted ? 0.75 : 1)
-      const brand = clamp(15 + 70 * (r.users / (r.users + 80_000)), 0, 100)
+
+      // RIVALS PLAY (engagement §7): deterministic strategic decisions per seeded name —
+      // rounds raised (a funded rival outbids and outshouts you for a quarter), and feature
+      // launches (permanent product jumps in the attributes they care about). All of it lands
+      // in the SAME choice market — never a scripted share change.
+      let fundedUntil = prev?.fundedUntil
+      const launches: Record<string, number> = { ...(prev?.launches ?? {}) }
+      if (inp.week > 16 && (inp.week + Math.floor(hash01(r.name, 11) * 52)) % 52 === 0) {
+        fundedUntil = inp.week + 13
+        events.push({
+          id: eid(`competitor_raised_${key}`),
+          week: inp.week,
+          category: 'competitor',
+          type: 'competitor_raised',
+          magnitude: 0.6,
+          urgency: 0.45,
+          strategicRelevance: 0.7,
+          entityIds: [key],
+          facts: { competitor: r.name, amount: Math.round(4 + hash01(r.name, 13) * 20) },
+          visibility: 'known',
+        })
+      }
+      if (inp.week > 10 && (inp.week + Math.floor(hash01(r.name, 17) * 30)) % 30 === 0) {
+        const attrIds = v2.attributes.map((a2) => a2.id)
+        const target = attrIds[Math.floor(hash01(r.name + inp.week, 19) * attrIds.length)] ?? attrIds[0]
+        launches[target] = Math.min(25, (launches[target] ?? 0) + 8)
+        events.push({
+          id: eid(`competitor_launch_${key}`),
+          week: inp.week,
+          category: 'competitor',
+          type: 'competitor_launched',
+          magnitude: 0.45,
+          urgency: 0.35,
+          strategicRelevance: 0.6,
+          entityIds: [key],
+          facts: { competitor: r.name, area: v2.attributes.find((a2) => a2.id === target)?.label ?? target },
+          visibility: 'signal',
+        })
+      }
+      const funded = fundedUntil !== undefined && inp.week < fundedUntil
+      const attributes: Record<string, number> = {}
+      for (const a of v2.attributes) {
+        // a rival's product level spreads around their single product score, stably per
+        // attribute — plus whatever they have permanently LAUNCHED on top
+        attributes[a.id] = clamp(r.product * (0.75 + 0.5 * hash01(r.name + a.id)) + (launches[a.id] ?? 0), 5, 95)
+      }
+      const brand = clamp((15 + 70 * (r.users / (r.users + 80_000))) * (funded ? 1.25 : 1), 0, 100)
       const segmentFocus: Record<string, number> = {}
       for (const seg of v2.segments) {
         // each rival genuinely courts 1-2 segments; others get scraps
         segmentFocus[seg.id] = hash01(r.name + seg.id, 7) > 0.55 ? 1 : 0.25
       }
-      const c = { id: key, name: r.name, price, attributes, brand, segmentFocus, lastShare: prev?.lastShare ?? {}, discountUntil }
+      const c = { id: key, name: r.name, price, attributes, brand, segmentFocus, lastShare: prev?.lastShare ?? {}, discountUntil, fundedUntil, launches }
       // a material competitor price move is an EVENT (they cut, the market noticed)
       if (prev && Math.abs(price - prev.price) / Math.max(1, prev.price) > 0.12) {
         events.push({
@@ -212,7 +253,11 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     const paidAccess = seg.paidAccessibility ?? 0.7
     // competitor auction pressure (spec §18.5): every live rival bids for the same attention,
     // and a rival mid-discount-campaign bids hardest — your dollar buys less in a crowded auction
-    const auction = 1 + 0.12 * v2.competitors.length + 0.25 * v2.competitors.filter((c) => c.discountUntil !== undefined && inp.week < c.discountUntil).length
+    const auction =
+      1 +
+      0.12 * v2.competitors.length +
+      0.25 * v2.competitors.filter((c) => c.discountUntil !== undefined && inp.week < c.discountUntil).length +
+      0.2 * v2.competitors.filter((c) => c.fundedUntil !== undefined && inp.week < c.fundedUntil).length
     const paidReach = clamp01((effectiveSpend / (effectiveSpend + 8_000 * auction)) * paidAccess)
     const organicReach = clamp01(0.02 + (inp.brandStock / 100) * 0.28 + installedShare * 0.3)
     // positioning (spec §12, minimal): the declared segment hears the story better

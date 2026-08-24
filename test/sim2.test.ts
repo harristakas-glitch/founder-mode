@@ -387,6 +387,86 @@ console.log('— Close-out: price dial, positioning, intel, evolution, objective
   }
 }
 
+console.log('— Engagement close-out: rivals as actors, moment variety, negotiations —')
+{
+  const { resolveChoiceOnState, counterTermSheet, offerAcceptChance } = await import('../src/game/engine')
+
+  // 1. rivals PLAY: over a long run they raise rounds and ship features — real events, and
+  //    permanent launches folded into their product attributes in the same choice market
+  let g = newGame('R', 'saas', 'technical', { config: v2cfg(55) })
+  g.marketingSpend = 4000
+  let raised = 0
+  let launched = 0
+  for (let w = 0; w < 70 && !g.gameOver; w++) {
+    g = advanceWeek(g)
+    raised += g.simV2?.events.filter((e) => e.type === 'competitor_raised').length ?? 0
+    launched += g.simV2?.events.filter((e) => e.type === 'competitor_launched').length ?? 0
+    for (const m of g.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(g, m.id, m.choices.length - 1)
+  }
+  ok(raised >= 1, `rivals raise rounds (${raised} raises by week 70)`)
+  ok(launched >= 1, `rivals ship features (${launched} launches by week 70)`)
+  const shipper = g.simV2!.competitors.find((c) => Object.keys(c.launches ?? {}).length > 0)
+  ok(!!shipper && Object.values(shipper!.launches!).every((v) => v >= 8 && v <= 25), 'launches persist on the rival, bounded')
+  ok(g.simV2!.competitors.some((c) => c.fundedUntil !== undefined), 'a raise leaves a war chest behind')
+
+  // 2. moments are EVENTS, not a schedule: per-type cooldowns hold even for a player who
+  //    ignores every crisis (measured regression: outage re-fired every 8th week forever)
+  let m2 = newGame('M', 'saas', 'technical', { config: v2cfg(41) })
+  m2.marketingSpend = 4000
+  const fired: { week: number; head: string }[] = []
+  for (let w = 0; w < 110 && !m2.gameOver; w++) {
+    m2 = advanceWeek(m2)
+    for (const m of m2.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) {
+      if (/^(🔥|🏛|🚪|⚖️|🔓|⚔️|🎧)/u.test(m.title)) fired.push({ week: m2.week, head: m.title.slice(0, 4) })
+      resolveChoiceOnState(m2, m.id, m.choices.length - 1)
+    }
+  }
+  ok(fired.length >= 3, `crises happen to a passive founder (${fired.length} moments in 110 weeks)`)
+  ok(new Set(fired.map((f) => f.head)).size >= 2, 'more than one KIND of crisis shows up')
+  let minSameGap = Infinity
+  for (let i = 1; i < fired.length; i++)
+    for (let j = 0; j < i; j++)
+      if (fired[i].head === fired[j].head) minSameGap = Math.min(minSameGap, fired[i].week - fired[j].week)
+  ok(minSameGap >= 16, `the same crisis never re-runs on the global 8-week metronome (closest repeat: ${minSameGap} wk)`)
+
+  // 3. hiring negotiation: the three packages price risk honestly — more money, better odds
+  const h = newGame('H', 'saas', 'technical', { config: v2cfg(9) })
+  const cand = h.candidates[0]
+  const at = (pm: number) => offerAcceptChance(h, { ...cand, salary: Math.round((cand.salary * (100 + pm)) / 100) }, 40)
+  ok(at(15) >= at(0) && at(0) >= at(-10), `sweeten ≥ asking ≥ lowball (${at(15).toFixed(2)} / ${at(0).toFixed(2)} / ${at(-10).toFixed(2)})`)
+
+  // 4. term-sheet push-back: one shot, real outcomes, gated on the Simulation capability
+  const t = newGame('T', 'saas', 'technical', { config: v2cfg(21) })
+  t.termSheets = [{ id: 'ts1', investor: 'Alder Park', amount: 900_000, equity: 0.18, weeksLeft: 3 }]
+  const eqBefore = t.termSheets[0].equity
+  counterTermSheet(t, 'ts1')
+  const after = t.termSheets.find((x) => x.id === 'ts1')
+  ok(after === undefined || after.countered === true, 'the push-back marks the sheet (or the investor walks)')
+  ok(after === undefined || after.equity <= eqBefore, 'equity only ever moves in your favour')
+  if (after) {
+    const eqLocked = after.equity
+    counterTermSheet(t, 'ts1')
+    ok(after.equity === eqLocked, 'you only get one push-back per sheet')
+  }
+  const q2 = newGame('Q', 'saas', 'technical', { config: { mode: 'quick', format: 'standard', sector: 'saas', seed: 4 } as GameConfig })
+  q2.termSheets = [{ id: 'qs', investor: 'X', amount: 500_000, equity: 0.2, weeksLeft: 3 }]
+  counterTermSheet(q2, 'qs')
+  ok(q2.termSheets[0].countered !== true, 'Quick Play has no negotiation table')
+
+  // 5. an exec you wave off actually LEAVES, and the room feels it
+  let x = newGame('X', 'saas', 'technical', { config: v2cfg(33) })
+  x.employees.push({ id: 'exec1', name: 'Dana Cruz', role: 'engineer', skill: 9, salary: 4000, morale: 30, trait: 'craftsman', weeks: 20 } as (typeof x.employees)[number])
+  const others = x.employees.filter((e) => e.id !== 'exec1').map((e) => e.morale)
+  x.inbox.unshift({
+    id: 'resg', week: x.week, kind: 'choice', title: '🚪 DANA CRUZ IS ABOUT TO RESIGN', body: '',
+    meta: { employeeId: 'exec1' },
+    choices: [{ label: 'Wish them well', resultText: '', effects: { special: 'v2-exec-departs' } }],
+  })
+  resolveChoiceOnState(x, 'resg', 0)
+  ok(!x.employees.some((e) => e.id === 'exec1'), 'wishing them well means they are gone')
+  ok(x.employees.filter((e) => e.id !== 'exec1').every((e, i) => e.morale <= (others[i] ?? 100)), 'the departure dents everyone else')
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))

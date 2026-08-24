@@ -302,7 +302,9 @@ console.log('— Overflow —')
 console.log('— Action-surface ledger —')
 const EXPECTED_ACTIONS = [
   'accept_sheet', 'advance', 'ai_cancel', 'ai_start', 'allocation', 'attention_allocate', 'attention_focus', 'bet_abandon', 'bet_choose',
-  'buy_rival', 'concede_price_war', 'decline_sheet', 'v2_position', 'v2_price', 'v2_research',
+  'buy_rival', 'concede_price_war', 'counter_sheet', 'decline_sheet', 'v2_position', 'v2_price', 'v2_research',
+  // `counter_sheet` — negotiations (2026-08-24): the push-back draws from the stream and can
+  // re-price or remove a sheet, so it must replay; career-guarded inside counterTermSheet.
   // `v2_price` / `v2_position` — V2 close-out (2026-08-24): the price dial and the positioning
   // declaration both move the market resolution, so they replay; gate-guarded like v2_research.
   // `v2_research` — Business Simulation V2 phase 4 (2026-08-24): a study bills cash now and

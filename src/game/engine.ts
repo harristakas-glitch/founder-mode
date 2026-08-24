@@ -558,7 +558,10 @@ export function offerAcceptChance(s: GameState, c: Candidate, runwayNow: number)
   const overPay = clamp((c.salary - marketRate) / Math.max(1, marketRate), -0.2, 1)
   // A business founder closes: the third leg of the deal-game column (term sheets, exits, hires).
   const closer = s.founderKind === 'business' ? 0.08 : 0
-  return clamp(0.72 + s.reputation / 400 + overPay * 0.18 + closer - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0), 0.05, 0.97)
+  // Paying UNDER the market stings ~3x more than paying over it helps (loss aversion is real,
+  // and it is what makes the career lowball a live decision instead of a free 2-point discount).
+  const payFeel = overPay < 0 ? overPay * 0.5 : overPay * 0.18
+  return clamp(0.72 + s.reputation / 400 + payFeel + closer - (looksDoomed ? 0.25 : 0) + (s.climate < -0.2 ? 0.08 : 0), 0.05, 0.97)
 }
 
 // Every one-off payment the player has already set in motion — no hidden bills.
@@ -1112,6 +1115,15 @@ export function applyEffects(s: GameState, fx: Effects) {
       quality: Math.min(60, s.allocation.quality + 10),
     }
   }
+  if (fx.special === 'v2-harden') {
+    s.cash -= 25_000
+    s.allocation = { ...s.allocation, quality: Math.min(60, s.allocation.quality + 20), features: Math.max(5, s.allocation.features - 10) }
+  }
+  if (fx.special === 'v2-credit-customers' && s.simV2) {
+    const snap = s.simV2.weeklyHistory[s.simV2.weeklyHistory.length - 1]
+    if (snap) s.cash -= Math.round(snap.customers * snap.price * 0.5)
+    s.simV2.serviceQuality = Math.min(100, (s.simV2.serviceQuality ?? 70) + 6)
+  }
   if (fx.special === 'v2-emergency-layoffs') {
     const toCut = Math.max(1, Math.floor(s.employees.length * 0.2))
     const cut = [...s.employees].sort((a, b) => a.skill - b.skill).slice(0, toCut)
@@ -1585,6 +1597,31 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
   }
   s.flash = `${n} term sheet${n === 1 ? '' : 's'} on the table — offers below expire in 3 weeks.`
   return { sheets, message }
+}
+
+/**
+ * Negotiation (engagement §6): push back on a term sheet's price, ONCE. Success re-prices the
+ * same cheque at an 18% higher valuation (less equity sold); failure has the investor stand
+ * firm — or, on a genuinely cold read, pull the sheet. Odds come from real momentum: growth,
+ * the climate, and (V2) investor confidence. Career-only; journaled; draws from the stream.
+ */
+export function counterTermSheet(s: GameState, sheetId: string): void {
+  if (!can(s, 'detailedPMF')) return
+  const sheet = s.termSheets.find((t) => t.id === sheetId)
+  if (!sheet || sheet.countered) return
+  sheet.countered = true
+  const growth = sustainedGrowthRate(s)
+  const conf = usesBusinessSimulationV2(s) && s.simV2 ? (s.simV2.investorConfidence.value - 50) / 200 : 0
+  const p = clamp(0.32 + growth * 3 + conf + s.climate * 0.15 + (s.founderKind === 'business' ? 0.08 : 0), 0.08, 0.75)
+  if (RNG.next() < p) {
+    sheet.equity = clamp(sheet.equity / 1.18, 0.04, 0.4)
+    s.flash = `${sheet.investor} blinked: same cheque, 18% higher valuation. You sell ${(sheet.equity * 100).toFixed(1)}% now.`
+  } else if (RNG.next() < 0.4) {
+    s.termSheets = s.termSheets.filter((t) => t.id !== sheetId)
+    s.flash = `${sheet.investor} pulled the sheet. "We were already at our number." The lesson costs what it costs.`
+  } else {
+    s.flash = `${sheet.investor} stands firm — the terms don't move. The offer still expires on schedule.`
+  }
 }
 
 export function acceptTermSheet(s: GameState, sheetId: string) {
@@ -2207,6 +2244,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         if (e.type === 'segment_share_loss') return `▼ ${f.segment}: preference share ${f.sharePct}% (${f.deltaPct}pp)`
         if (e.type === 'fit_threshold_crossed') return `★ ${f.segment} now rate the product ${f.level}`
         if (e.type === 'competitor_price_change') return `⚔ ${f.competitor} moved pricing ($${f.oldPrice} → $${f.newPrice})`
+        if (e.type === 'competitor_raised') return `💰 ${f.competitor} raised ~$${f.amount}M — expect louder marketing and richer offers for a quarter`
+        if (e.type === 'competitor_launched') return `🚀 ${f.competitor} shipped something big in ${f.area}`
         if (e.type === 'revenue_up') return `▲ Revenue +${f.pct}% — $${Number(f.revenue).toLocaleString()}/wk`
         if (e.type === 'revenue_down') return `▼ Revenue ${f.pct}% — $${Number(f.revenue).toLocaleString()}/wk`
         if (e.type === 'customer_base_crossed') return `★ ${Number(f.count).toLocaleString()} customers`
@@ -2231,6 +2270,11 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       })
     }
 
+    // a reached milestone is the run's trophy moment: put it on the banner so the same
+    // celebration path Quick Play uses (confetti keyed on the trophy emoji) fires here too
+    const mileEv = v2wk.visibleEvents.find((e) => e.type.startsWith('milestone_'))
+    if (mileEv && !s.flash) s.flash = `\u{1F3C6} ${mileEv.facts.headline}`
+
     // chapter transitions are era breaks — one dedicated inbox story, with the company's
     // emergent identity read back to the player (engagement §15: discover what you built)
     const chapterEv = v2wk.visibleEvents.find((e) => e.type === 'chapter_entered')
@@ -2248,12 +2292,37 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       s.flash = `📖 New chapter: ${chapterEv.facts.chapter}`
     }
 
+    // funded rivals POACH (engagement §7): with a fresh war chest they take your best
+    // candidate off the market — deterministic per rival name + week, announced honestly
+    const poacher = s.simV2.competitors.find(
+      (c) => c.fundedUntil !== undefined && s.week < c.fundedUntil && (s.week + Math.floor((c.id.length * 7919) % 11)) % 11 === 0,
+    )
+    if (poacher && s.candidates.length > 1) {
+      const best = [...s.candidates].sort((a2, b2) => b2.skill - a2.skill)[0]
+      s.candidates = s.candidates.filter((x) => x.id !== best.id)
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `🎣 ${poacher.name} hired ${best.name} out from under you`,
+        body: `Their new war chest is buying talent. ${best.name} (${best.role}, ${best.skill}/10) took their offer before you moved. Funded rivals empty the market — move faster or pay more.`,
+      })
+    }
+
     // ---- MAJOR MOMENTS (engagement roadmap §5, spec §0A.10-12): rare, triggered by REAL
     // simulation state, at most one per week with an 8-week cooldown — and every option maps to
     // a real domain action. Presenting the situation applies NO economics (no double counting);
     // only the player's chosen action changes state.
     const lastMoment = (s.flags.v2MomentWeek ?? -99) as number
     const hasOpenChoice = s.inbox.some((m) => m.kind === 'choice' && !m.resolved)
+    // per-TYPE memory on top of the global cooldown: the same crisis must not re-run on a
+    // metronome (measured: an ignored outage re-fired every 8th week and starved the whole
+    // catalog). A standing condition is the PRECONDITION for a moment, never its schedule.
+    const mAgo = (k: string, cd: number) => s.week - (s.flags['v2m_' + k] ?? -999) >= cd
+    const mMark = (k: string) => {
+      s.flags['v2m_' + k] = s.week
+      s.flags.v2MomentWeek = s.week
+    }
     if (s.week - lastMoment >= 8 && !hasOpenChoice) {
       const runwayNow2 = runwayWeeks(s)
       const priceCut = v2wk.visibleEvents.find(
@@ -2262,8 +2331,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       const capCrisis = v2wk.visibleEvents.find((e) => e.type === 'service_capacity_critical')
       const missedTwice = (s.simV2.planning?.commitments ?? []).filter((c) => c.status === 'missed').length >= 2
       const boardCritical = s.simV2.boardConfidence.value < 35 && missedTwice
-      if (boardCritical) {
-        s.flags.v2MomentWeek = s.week
+      if (boardCritical && mAgo('board', 24)) {
+        mMark('board')
         s.inbox.unshift({
           id: uid(),
           week: s.week,
@@ -2283,8 +2352,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
             },
           ],
         })
-      } else if (runwayNow2 !== Infinity && runwayNow2 < 8 && s.termSheets.length === 0) {
-        s.flags.v2MomentWeek = s.week
+      } else if (runwayNow2 !== Infinity && runwayNow2 < 8 && s.termSheets.length === 0 && mAgo('cash', 16)) {
+        mMark('cash')
         s.inbox.unshift({
           id: uid(),
           week: s.week,
@@ -2297,8 +2366,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
             { label: 'Push on — the plan is the plan', resultText: 'No lever pulled. The runway keeps counting.', effects: {} },
           ],
         })
-      } else if (capCrisis) {
-        s.flags.v2MomentWeek = s.week
+      } else if (capCrisis && mAgo('service', 16)) {
+        mMark('service')
         s.inbox.unshift({
           id: uid(),
           week: s.week,
@@ -2314,8 +2383,73 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
             { label: 'Push through — growth first', resultText: 'The queue keeps growing. So does the churn risk.', effects: {} },
           ],
         })
-      } else if (priceCut) {
-        s.flags.v2MomentWeek = s.week
+      } else if ((() => {
+        const exec = s.employees.find((e) => e.skill >= 8 && e.morale < (e.trait === 'mercenary' ? 55 : 32) + 8 && mAgo('resign_' + e.id, 9999))
+        if (!exec) return false
+        mMark('resign_' + exec.id)
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: `🚪 ${exec.name.toUpperCase()} IS ABOUT TO RESIGN`,
+          body: `Your strongest ${exec.role} has an offer elsewhere and one foot out the door. Morale ${Math.round(exec.morale)}/100. Losing them mid-chapter costs more than money — but so does overpaying to keep someone half-gone.`,
+          meta: { employeeId: exec.id },
+          choices: [
+            { label: 'Counter-offer: +20% and a real conversation', resultText: 'They stay. The number helped; being SEEN helped more.', effects: {}, target: { morale: 18, salaryMult: 1.2 } },
+            { label: 'Wish them well', resultText: 'You shake hands. The room takes notes on how exits happen here.', effects: { special: 'v2-exec-departs' } },
+          ],
+        })
+        return true
+      })()) {
+        // handled inline above
+      } else if ((() => {
+        const rely = s.simV2.attributes.find((a) => a.id === 'reliability')
+        // week floor: outages need real load history — a 3-week-old product "falling over
+        // publicly" read as scripted, and taxed every young run (measured, social probe)
+        if (s.week < 16 || !rely || rely.value >= 35 || s.users < 300 || !mAgo('outage', 20)) return false
+        // low reliability makes an outage POSSIBLE, load makes it likely — never scheduled
+        if (RNG.next() > 0.22 + (35 - rely.value) / 90) return false
+        mMark('outage')
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: '🔥 MAJOR OUTAGE — the product fell over under real load',
+          body: `Reliability has sagged to ${Math.round(rely.value)}/100 and this week it broke publicly. Customers noticed. What happens NEXT is the part they'll remember.`,
+          choices: [
+            { label: 'War room — the whole team on stability', resultText: 'Features wait. The pager quiets. The postmortem is honest.', effects: { special: 'v2-stability-sprint' } },
+            { label: "Credit every customer the week — and say why", resultText: 'Expensive, public, and remembered kindly.', effects: { special: 'v2-credit-customers' } },
+            { label: 'Patch and move on', resultText: 'The graphs recover. The trust curve is another matter.', effects: {} },
+          ],
+        })
+        return true
+      })()) {
+        // handled inline above
+      } else if ((() => {
+        const sec = s.simV2.attributes.find((a) => a.id === 'security')
+        const regulated = s.sector === 'fintech'
+        // regulators and researchers notice companies, not week-3 prototypes
+        if (s.week < 26 || !sec || sec.value >= (regulated ? 45 : 30) || s.users < (regulated ? 800 : 500) || !mAgo('security', 26)) return false
+        if (RNG.next() > 0.25) return false
+        mMark('security')
+        s.inbox.unshift({
+          id: uid(),
+          week: s.week,
+          kind: 'choice',
+          title: regulated ? '⚖️ REGULATOR KNOCKING — your controls are under review' : '🔓 SECURITY INCIDENT — a researcher found the hole first',
+          body: regulated
+            ? `Security & trust sits at ${Math.round(sec.value)}/100 with ${s.users.toLocaleString()} customers' money in motion. The review is happening either way; what they FIND is up to you.`
+            : `Security & trust sits at ${Math.round(sec.value)}/100 — this time it was a friendly researcher. Next time it may not be.`,
+          choices: [
+            { label: 'Disclose and harden ($25k + a real sprint)', resultText: 'The write-up is uncomfortable and correct. The fix is real.', effects: { special: 'v2-harden' } },
+            { label: 'Quietly patch', resultText: 'The hole closes. The habit that made it stays.', effects: {} },
+          ],
+        })
+        return true
+      })()) {
+        // handled inline above
+      } else if (priceCut && mAgo('pricewar', 12)) {
+        mMark('pricewar')
         s.inbox.unshift({
           id: uid(),
           week: s.week,
@@ -2639,6 +2773,9 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       meta: { acquisitionAmount: amount },
       choices: [
         { label: 'Sell the company', resultText: 'You sign the papers. Champagne — and a strange emptiness.', effects: { special: 'acquired' } },
+        ...(usesBusinessSimulationV2(s)
+          ? [{ label: 'Counter — ask for 25% more', resultText: 'You name the higher number and let the silence work.', effects: { special: 'v2-counter-acquisition' as const } }]
+          : []),
         { label: 'Keep building', resultText: 'You are not done yet. The team cheers.', effects: { morale: 6, reputation: 3 } },
       ],
     })
@@ -3149,7 +3286,10 @@ interface OneOnOne {
 const ONE_ON_ONES: OneOnOne[] = [
   {
     id: 'promotion',
-    cond: (e) => e.weeks >= 16 && e.skill >= 6,
+    // the ladder tops out: nobody gets promoted past ~2x market for the role — the request
+    // stops coming. Without this cap a player who said yes at every 1:1 compounded x1.15
+    // forever (measured: $940k/wk payroll for six people by week 100, bankrupting active runs).
+    cond: (e) => e.weeks >= 16 && e.skill >= 6 && e.salary < marketSalary(e.role, e.skill) * 2,
     body: (e) => `${e.name} books a 1:1 and comes prepared: a doc titled "My Next Chapter". They want a lead title and the salary to match. They've earned a hearing — and the rest of the team will hear the outcome either way.`,
     accept: {
       label: 'Promote them (+15% salary)',
@@ -4432,6 +4572,35 @@ function resolveChoiceOnStateInner(s: GameState, messageId: string, choiceIndex:
     if (star) noteRaiseOutcome(s, star, special === 'grant-raise')
   }
   if (special === 'cola-raise') noteColaAdjustment(s)
+  if (choice.effects.special === 'v2-exec-departs' && msg.meta?.employeeId) {
+    const emp = s.employees.find((e) => e.id === msg.meta!.employeeId)
+    if (emp) {
+      s.employees = s.employees.filter((e) => e.id !== emp.id)
+      for (const e of s.employees) e.morale = clamp(e.morale - 6, 0, 100)
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `${emp.name} resigned`,
+        body: `Your ${emp.role} (${emp.skill}/10) is gone. The team watched how it ended — morale dips across the room.`,
+      })
+    }
+  }
+  if (choice.effects.special === 'v2-counter-acquisition' && msg.meta?.acquisitionAmount) {
+    // haggle the exit: strong momentum gets the bump; a shaky story watches them walk
+    const conf = s.simV2 ? (s.simV2.investorConfidence.value - 50) / 150 : 0
+    const p = clamp(0.35 + sustainedGrowthRate(s) * 4 + conf, 0.1, 0.8)
+    if (RNG.next() < p) {
+      s.gameOver = {
+        type: 'acquired',
+        week: s.week,
+        payout: Math.round(founderStanding(s, { exitValue: Math.round(msg.meta.acquisitionAmount * 1.25) })),
+      }
+      s.flash = 'They paid the bump. Champagne — and a better cap table story.'
+    } else {
+      s.flash = 'They walked. "We were at our ceiling." The company is still yours — that has to be worth something.'
+    }
+  }
   if (choice.effects.special === 'acquired' && msg.meta?.acquisitionAmount) {
     // The offer prices the COMPANY. The token leg rides along untouched — disjoint legs.
     s.gameOver = {

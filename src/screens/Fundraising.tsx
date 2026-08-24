@@ -1062,6 +1062,7 @@ export function Fundraising() {
   const pitch = useStore((s) => s.pitch)
   const accept = useStore((s) => s.accept)
   const decline = useStore((s) => s.decline)
+  const counterSheet = useStore((s) => s.counterSheet)
 
   const val = valuation(game)
   const target = nextStage(game)
@@ -1255,10 +1256,19 @@ export function Fundraising() {
                         {downRound && <b className="text-bad"> · down round</b>}
                       </SheetRow>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Btn variant="good" onClick={() => accept(t.id)}>
                         Sign
                       </Btn>
+                      {hasCapability(game, 'detailedPMF') && !t.countered && (
+                        <Btn
+                          onClick={() => counterSheet(game.termSheets.indexOf(t))}
+                          title="One push-back per sheet: strong momentum re-prices the same cheque 18% higher; a cold read can watch the sheet get pulled"
+                        >
+                          Push back on price
+                        </Btn>
+                      )}
+                      {t.countered && <span className="self-center text-[11.5px] text-mut">negotiated — this is their number</span>}
                       <Btn variant="danger" onClick={() => decline(t.id)}>
                         Pass
                       </Btn>

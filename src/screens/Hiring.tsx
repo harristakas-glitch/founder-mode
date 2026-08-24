@@ -619,6 +619,33 @@ export function Hiring() {
               <div className="w-full max-w-[280px]">
                 <BidControl candidateId={openCandidate.id} />
               </div>
+            ) : hasCapability(game, 'detailedPMF') ? (
+              // NEGOTIATION (engagement §6): three real packages, each with live acceptance odds
+              // read from the engine's own roll — a lowball can genuinely lose them.
+              <div className="flex flex-wrap items-center gap-1.5">
+                {([
+                  [-10, 'Lowball −10%'],
+                  [0, 'Asking'],
+                  [15, 'Sweeten +15%'],
+                ] as const).map(([pm, label]) => {
+                  const adj = { ...openCandidate, salary: Math.round((openCandidate.salary * (100 + pm)) / 100) }
+                  const p = offerAcceptChance(game, adj, Math.min(999, runwayNow))
+                  const word = p >= 0.75 ? 'likely' : p >= 0.55 ? 'probable' : p >= 0.35 ? 'uncertain' : 'long shot'
+                  const tone = p >= 0.75 ? 'text-good' : p >= 0.55 ? 'text-warn' : 'text-bad'
+                  return (
+                    <Btn
+                      key={pm}
+                      variant={pm === 0 ? 'primary' : undefined}
+                      onClick={() => {
+                        sendOffer(openCandidate.id, pm)
+                        setOpen(null)
+                      }}
+                    >
+                      {label} <span className={`ml-1 text-[10.5px] font-bold ${tone}`}>{word}</span>
+                    </Btn>
+                  )
+                })}
+              </div>
             ) : (
               <Btn
                 variant="primary"

@@ -44,10 +44,10 @@ function casual(s: GameState): void {
 function active(s: GameState): void {
   resolveChoices(s)
   const v2 = s.simV2!
-  if (s.week === 2) {
-    s.allocation = { ...s.allocation, features: 40, quality: 35, bugs: 15, research: 10 }
-    s.marketingSpend = Math.min(6_000, marketingMax(s))
-  }
+  if (s.week === 2) s.marketingSpend = Math.min(6_000, marketingMax(s))
+  // an ACTIVE founder re-points the team after every war room / harden sprint — without this
+  // the crisis choices' allocation shifts compound and the product org never builds again
+  if (s.week >= 2 && s.week % 8 === 2) s.allocation = { ...s.allocation, features: 40, quality: 35, bugs: 15, research: 10 }
   // scale spend only after the service side holds and the channel is not screaming
   if (s.week > 20 && v2.serviceQuality > 60 && (v2.gtm?.lastCac ?? 0) < 400) s.marketingSpend = Math.min(10_000, marketingMax(s))
   else if (v2.serviceQuality < 45) s.marketingSpend = Math.min(3_000, marketingMax(s))

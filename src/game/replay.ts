@@ -25,6 +25,7 @@
 
 import {
   acceptTermSheet,
+  counterTermSheet,
   acquireRival,
   advanceWeek,
   applyEffects,
@@ -165,9 +166,13 @@ const REPLAY_ACTIONS = {
   send_offer: (g, p) => {
     const c = g.candidates[idx(p.i)]
     if (!c) return
+    // negotiation (engagement §6): the offered package is asking ± the premium, clamped; the
+    // acceptance roll and the eventual payroll both price the ADJUSTED number
+    const pm = Math.max(-15, Math.min(30, num(p.pm)))
+    const offered = pm !== 0 ? { ...c, salary: Math.round((c.salary * (100 + pm)) / 100 / 500) * 500 } : c
     g.candidates = g.candidates.filter((x) => x.id !== c.id)
-    g.offersOut.push(c)
-    g.flash = `Offer sent to ${c.name}. They'll answer when you advance the week — candidates get cold feet when your runway is under ~10 weeks.`
+    g.offersOut.push(offered)
+    g.flash = `Offer sent to ${c.name}${pm > 0 ? ` at +${pm}% over asking` : pm < 0 ? ` at ${pm}% under asking` : ''}. They'll answer when you advance the week — lowballs and thin runways both get cold feet.`
   },
 
   fire: (g, p) => {
@@ -359,6 +364,12 @@ const REPLAY_ACTIONS = {
   v2_research: (g, p) => {
     if (!usesBusinessSimulationV2(g)) return
     startResearchV2(g, str(p.k), str(p.seg))
+  },
+
+  /** Push back on a term sheet's price — once per sheet (negotiation, engagement §6). */
+  counter_sheet: (g, p) => {
+    const t = g.termSheets[idx(p.i)]
+    if (t) counterTermSheet(g, t.id)
   },
 
   /** Set the V2 price DIAL (spec §13.4). Once touched, the dial is authoritative. Clamped to a

@@ -170,6 +170,10 @@ export interface CompetitorV2 {
   lastShare: Record<string, number>
   /** an aggressive reprice window: price runs 25% under posture until this week (phase 5) */
   discountUntil?: number
+  /** a raised war-chest window: brand and GTM presence amplified until this week */
+  fundedUntil?: number
+  /** permanent product jumps from launches, per attribute (added on top of the derived level) */
+  launches?: Record<string, number>
 }
 
 // ---------- cohorts (spec §20, filled in phase 2) --------------------------------------------
