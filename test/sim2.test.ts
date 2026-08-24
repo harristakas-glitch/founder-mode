@@ -97,6 +97,74 @@ console.log('— The first playable loop (spec phase 1) —')
   ok(fitLate > fitEarly, 'building the product moves segment fit — the chain, not a stat bonus')
 }
 
+console.log('— Phase 2: GTM saturation, sales capacity, expansion —')
+{
+  const { createSimV2 } = await import('../src/game/sim2/init')
+  const { resolveWeekV2 } = await import('../src/game/sim2/resolveWeek')
+  const mkInputs = (over: Record<string, unknown> = {}) =>
+    ({
+      week: 30,
+      sector: 'saas',
+      engPointsP: 8,
+      af: 0.5,
+      aq: 0.3,
+      ab: 0.2,
+      bugs: 10,
+      brandStock: 20,
+      perfSpend: 12_000,
+      price: 22,
+      infraCostPerUser: 0.12,
+      macroFactor: 1,
+      rivals: [],
+      churnRelief: 1,
+      acquisitionEff: 1,
+      salesPoints: 0,
+      founderKind: 'technical' as const,
+      rng: () => 0.5,
+      ...over,
+    }) as never
+
+  // the same product, priced for everyone: attributes high enough that fit exists everywhere
+  const base = () => {
+    let seq = 0.3
+    const st = createSimV2('saas', 22, () => ((seq = (seq * 9301 + 0.49297) % 1), seq))
+    for (const a of st.attributes) a.value = 70
+    return st
+  }
+
+  // 1. channel saturation: a fresh channel outperforms a burned one at the SAME spend
+  const freshCh = base()
+  const burned = base()
+  burned.gtm.paidSaturationEma = 60_000
+  resolveWeekV2(freshCh, mkInputs())
+  resolveWeekV2(burned, mkInputs())
+  const freshNew = freshCh.weeklyHistory[0].newCustomers
+  const burnedNew = burned.weeklyHistory[0].newCustomers
+  ok(freshNew > burnedNew, `a saturated paid channel buys fewer customers at the same spend (${freshNew} vs ${burnedNew})`)
+
+  // 2. sales capacity: sales-led segments are capped by humans, and hiring sales opens them
+  const noSales = base()
+  const withSales = base()
+  resolveWeekV2(noSales, mkInputs())
+  resolveWeekV2(withSales, mkInputs({ salesPoints: 12 }))
+  const salesLedWon = (st: typeof noSales) =>
+    st.cohorts.filter((c) => c.segmentId === 'mid_market' || c.segmentId === 'enterprise').reduce((a, c) => a + c.size, 0)
+  ok(salesLedWon(withSales) > salesLedWon(noSales), `a sales team closes what a founder alone cannot (${salesLedWon(withSales).toFixed(1)} vs ${salesLedWon(noSales).toFixed(1)})`)
+  ok(noSales.events.some((e) => e.type === 'sales_capacity_constrained'), 'the constrained pipeline emits the capacity fact (spec §0A.16)')
+
+  // 3. expansion: retained customers deepen — revenue per customer rises with NO price change
+  let g = newGame('E', 'saas', 'technical', { config: v2cfg(55) })
+  g.marketingSpend = 4000
+  g = playWeeks(g, 45)
+  const hist = g.simV2!.weeklyHistory
+  const arpuAt = (i: number) => (hist[i].customers > 0 ? hist[i].revenue / hist[i].customers : 0)
+  ok(arpuAt(hist.length - 1) > arpuAt(14) * 1.005, `retained cohorts expand (${arpuAt(14).toFixed(2)} → ${arpuAt(hist.length - 1).toFixed(2)} $/customer/wk)`)
+  ok(g.simV2!.finance.revenueDrivers.expansion > 0, 'the P&L driver decomposition carries the expansion line')
+  // 4. the unit truth reaches the Capital sparklines
+  const fh = g.finHistory!
+  ok(fh[fh.length - 1].cac === hist[hist.length - 1].cac, 'finHistory CAC IS the causal engine’s realized CAC')
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))

@@ -78,11 +78,21 @@ export function pnlRows(s: GameState): PnlRow[] {
       lastWeek: p.revenue,
       ...dTone(now.revenue, p.revenue, true),
       series: seriesOf(s, (h) => h.revenue),
-      drivers: [
-        { label: `Customer base ${usersDelta >= 0 ? 'grew' : 'shrank'} (${usersDelta >= 0 ? '+' : ''}${usersDelta.toLocaleString()})`, value: usersDelta * arpuNow, tone: usersDelta >= 0 ? 'good' : 'bad' },
-        { label: `Revenue per customer ${arpuNow >= arpuPrev ? 'up' : 'down'}`, value: (arpuNow - arpuPrev) * p.users, tone: trendTone(pctChange(arpuNow, arpuPrev), true) },
-        ...((s.growth?.brand.stock ?? 0) > 8 ? [{ label: 'Brand pulls organic demand', value: 0, tone: 'good' as Tone }] : []),
-      ],
+      // V2 runs: the causal engine's own decomposition (new business / expansion / churn) —
+      // one truth, no re-derivation (contract §0). V1 runs keep the history-based read.
+      drivers: s.simV2?.finance.revenueDrivers
+        ? [
+            { label: 'New business won', value: s.simV2.finance.revenueDrivers.newBusiness, tone: 'good' as Tone },
+            ...(s.simV2.finance.revenueDrivers.expansion > 1
+              ? [{ label: 'Expansion — existing customers deepened', value: s.simV2.finance.revenueDrivers.expansion, tone: 'good' as Tone }]
+              : []),
+            { label: 'Churned customers', value: s.simV2.finance.revenueDrivers.churnLoss, tone: 'bad' as Tone },
+          ]
+        : [
+            { label: `Customer base ${usersDelta >= 0 ? 'grew' : 'shrank'} (${usersDelta >= 0 ? '+' : ''}${usersDelta.toLocaleString()})`, value: usersDelta * arpuNow, tone: usersDelta >= 0 ? 'good' : 'bad' },
+            { label: `Revenue per customer ${arpuNow >= arpuPrev ? 'up' : 'down'}`, value: (arpuNow - arpuPrev) * p.users, tone: trendTone(pctChange(arpuNow, arpuPrev), true) },
+            ...((s.growth?.brand.stock ?? 0) > 8 ? [{ label: 'Brand pulls organic demand', value: 0, tone: 'good' as Tone }] : []),
+          ],
     },
     {
       id: 'cogs',

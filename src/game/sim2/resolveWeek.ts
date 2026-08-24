@@ -45,6 +45,9 @@ export interface V2WeekInputs {
   /** V1 strategic multipliers that V2 folds ONCE (contract D4) */
   churnRelief: number
   acquisitionEff: number
+  /** the sales team's weekly effectiveness points (engine's eff() sum for sales role) */
+  salesPoints: number
+  founderKind: 'technical' | 'business'
   rng: () => number
 }
 
@@ -124,6 +127,17 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
       return c
     })
 
+  // ---- 13: GTM reach, saturation and sales capacity (spec §18) ------------------------------
+  // The paid channel REMEMBERS: sustained heavy spend saturates (EMA), and the next dollar buys
+  // less. Brand and the installed base open organic doors paid money cannot.
+  v2.gtm ??= { paidSaturationEma: 0, lastCac: 0 }
+  v2.gtm.paidSaturationEma = v2.gtm.paidSaturationEma * 0.85 + inp.perfSpend * 0.15
+  const saturation = v2.gtm.paidSaturationEma / (v2.gtm.paidSaturationEma + 25_000)
+  const effectiveSpend = inp.perfSpend * (1 - 0.45 * saturation)
+  // human selling is a capacity, not a multiplier (spec §18.6): deals a week, founder included —
+  // a business founder carries real early sales; a technical founder carries a little
+  let salesCapacity = inp.salesPoints * 0.5 + (inp.founderKind === 'business' ? 1.5 : 0.4)
+
   // ---- 10-16, 18-19: fit → choice → demand → acquisition → cohorts → revenue ----------------
   const attrs = attrRecord(v2.attributes)
   const totalCustomersBySegment: Record<string, number> = {}
@@ -131,6 +145,7 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
 
   let newCustomersTotal = 0
   let churnedTotal = 0
+  const salesConstrained: { seg: string; pipeline: number; capacity: number }[] = []
   const fitBySegment: Record<string, number> = {}
   const shareBySegment: Record<string, number> = {}
 
@@ -155,11 +170,23 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     shareBySegment[seg.id] = shares.player ?? 0
     for (const c of v2.competitors) c.lastShare[seg.id] = shares[c.id] ?? 0
 
-    // demand → realized (phase-1 GTM approximation: paid reach; real channels land in phase 2)
+    // demand → realized: reach is per-CHANNEL and per-segment (spec §18) — paid money reaches
+    // paid-reachable people, brand and the installed base pull organically, and sales-led
+    // segments are additionally capped by human selling capacity
     const demand = weeklyDemand(seg, inp.week, inp.macroFactor)
-    const reach = clamp01(0.18 + inp.perfSpend / (inp.perfSpend + 6_000)) * inp.acquisitionEff
+    const paidAccess = seg.paidAccessibility ?? 0.7
+    const paidReach = clamp01((effectiveSpend / (effectiveSpend + 8_000)) * paidAccess)
+    const organicReach = clamp01(0.06 + (inp.brandStock / 100) * 0.28 + installedShare * 0.3)
+    const reach = clamp01(paidReach + organicReach) * inp.acquisitionEff
     const noise = 0.9 + 0.2 * inp.rng()
-    const won = Math.max(0, demand * (shares.player ?? 0) * reach * noise)
+    let won = Math.max(0, demand * (shares.player ?? 0) * reach * noise)
+    if (seg.salesLed ?? seg.baseWtp > 40) {
+      // each closed deal consumes capacity; whatever the pipeline offered beyond that WAITS
+      const closable = Math.min(won, salesCapacity)
+      if (won > salesCapacity * 1.4 && won > 1) salesConstrained.push({ seg: seg.name, pipeline: won, capacity: salesCapacity })
+      salesCapacity = Math.max(0, salesCapacity - closable)
+      won = closable
+    }
     if (won >= 0.5) {
       v2.cohorts.push({
         id: `${seg.id}_${inp.week}`,
@@ -168,6 +195,7 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
         size: won,
         priceAtAcquisition: inp.price,
         fitAtAcquisition: fit,
+        expansion: 1,
       })
       newCustomersTotal += won
     }
@@ -185,21 +213,38 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     // the part of the cohort that would leave, leaves churnRelief as often
     const kept = c.size * clamp(1 - (1 - keepBase) * inp.churnRelief, 0.85, 0.999)
     churnedTotal += c.size - kept
-    if (kept >= 0.5) nextCohorts.push({ ...c, size: kept })
+    // retained customers DEEPEN (spec §20.4): seats, usage, upgrades — bounded, slow, real
+    const expansion = Math.min(1.8, (c.expansion ?? 1) * (1 + (seg.expansionRate ?? 0.001)))
+    if (kept >= 0.5) nextCohorts.push({ ...c, size: kept, expansion })
   }
   v2.cohorts = nextCohorts.slice(-520) // a decade of weekly cohorts is plenty
 
   // ---- 18-19: revenue truth --------------------------------------------------------------
   const customers = v2.cohorts.reduce((x, c) => x + c.size, 0)
+  let expansionRevenue = 0
   const revenue = v2.cohorts.reduce((x, c) => {
     const seg = v2.segments.find((sg) => sg.id === c.segmentId)
     if (!seg) return x
     // customers pay the price, but a segment priced far over its head quietly downgrades/laps
     const collect = 0.75 + 0.25 * priceFit(inp.price, effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock), seg.priceSensitivity)
-    return x + c.size * inp.price * collect
+    const base = c.size * inp.price * collect
+    expansionRevenue += base * ((c.expansion ?? 1) - 1)
+    return x + base * (c.expansion ?? 1)
   }, 0)
   const cogs = customers * inp.infraCostPerUser
-  v2.finance = { revenue, cogs, opex: 0, netIncome: 0 }
+  const cac = newCustomersTotal > 0.5 ? inp.perfSpend / newCustomersTotal : v2.gtm.lastCac
+  v2.gtm.lastCac = cac
+  v2.finance = {
+    revenue,
+    cogs,
+    opex: 0,
+    netIncome: 0,
+    revenueDrivers: {
+      newBusiness: newCustomersTotal * inp.price,
+      expansion: expansionRevenue,
+      churnLoss: -churnedTotal * inp.price,
+    },
+  }
 
   // ---- events for the week's real movements ------------------------------------------------
   // the heartbeat: a real revenue move or a customer-base crossing speaks even in a quiet week
@@ -215,6 +260,37 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
         urgency: dRev > 0 ? 0.25 : 0.5,
         strategicRelevance: 0.5,
         facts: { pct: Math.round(dRev * 100), revenue: Math.round(revenue) },
+        visibility: 'known',
+      })
+    }
+  }
+  // the fact behind "we have twice the pipeline we can handle" (spec §0A.16) — capacity, not vibes
+  for (const sc of salesConstrained) {
+    events.push({
+      id: eid(`salescap_${sc.seg.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`),
+      week: inp.week,
+      category: 'capacity',
+      type: 'sales_capacity_constrained',
+      magnitude: clamp01(sc.pipeline / Math.max(0.5, sc.capacity) / 4),
+      urgency: 0.65,
+      strategicRelevance: 0.75,
+      facts: { segment: sc.seg, pipeline: Math.round(sc.pipeline), capacity: Math.round(sc.capacity * 10) / 10 },
+      visibility: 'known',
+      eligibleForMajorMoment: true,
+    })
+  }
+  if (prevSnap && prevSnap.cac > 1 && cac > 1) {
+    const dCac = (cac - prevSnap.cac) / prevSnap.cac
+    if (dCac > 0.25 && inp.perfSpend > 1_000) {
+      events.push({
+        id: eid('cac_spike'),
+        week: inp.week,
+        category: 'growth',
+        type: 'cac_spike',
+        magnitude: clamp01(dCac),
+        urgency: 0.55,
+        strategicRelevance: 0.6,
+        facts: { cac: Math.round(cac), pct: Math.round(dCac * 100), saturated: saturation > 0.5 },
         visibility: 'known',
       })
     }
@@ -300,6 +376,10 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     cash: 0,
     price: inp.price,
     choiceShare: shareBySegment,
+    newCustomers: Math.round(newCustomersTotal),
+    churnedCustomers: Math.round(churnedTotal),
+    paidSpend: inp.perfSpend,
+    cac: Math.round(cac),
     productFit: fitBySegment,
     attributes: attrs,
     brand: inp.brandStock,

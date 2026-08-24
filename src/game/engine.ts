@@ -2085,6 +2085,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       rivals: s.rivals,
       churnRelief: smods.churnRelief,
       acquisitionEff: smods.acquisitionEff,
+      salesPoints: s.employees.filter((e) => e.role === 'sales').reduce((a2, e) => a2 + eff(e), 0),
+      founderKind: s.founderKind,
       rng: () => RNG.next(),
     })
     s.simV2.pricing.price = price
@@ -2103,6 +2105,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         if (e.type === 'revenue_up') return `▲ Revenue +${f.pct}% — $${Number(f.revenue).toLocaleString()}/wk`
         if (e.type === 'revenue_down') return `▼ Revenue ${f.pct}% — $${Number(f.revenue).toLocaleString()}/wk`
         if (e.type === 'customer_base_crossed') return `★ ${Number(f.count).toLocaleString()} customers`
+        if (e.type === 'sales_capacity_constrained') return `⚠ ${f.segment}: pipeline ${f.pipeline} vs capacity to close ~${f.capacity}/wk — deals are waiting on a salesperson`
+        if (e.type === 'cac_spike') return `▲ CAC $${f.cac} (+${f.pct}%)${f.saturated ? ' — the paid channel is saturating' : ''}`
         return e.type
       })
       s.inbox.unshift({
@@ -2445,12 +2449,25 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // recomputed from history later, so the week's reading is kept as it happens. Pure derivation
   // (constant-rng unitEconomics), no draw; capped like every other buffer.
   if (careerOn) {
-    const ue = unitEconomics(s)
-    ;(s.finHistory ??= []).push({
-      week: s.week,
-      cac: Number.isFinite(ue.cac) ? Math.round(ue.cac) : -1,
-      ltv: Math.round(ue.ltv),
-    })
+    // V2 runs record the causal engine's OWN unit truth (realized CAC = spend / customers won;
+    // LTV = current revenue per customer over the measured churn rate) — V1 keeps the estimator.
+    if (s.simV2 && usesBusinessSimulationV2(s)) {
+      const snap = s.simV2.weeklyHistory[s.simV2.weeklyHistory.length - 1]
+      const churnRate = snap && snap.customers > 0 ? snap.churnedCustomers / Math.max(1, snap.customers + snap.churnedCustomers) : 0.02
+      const arpuNow = snap && snap.customers > 0 ? snap.revenue / snap.customers : 0
+      ;(s.finHistory ??= []).push({
+        week: s.week,
+        cac: Math.round(s.simV2.gtm?.lastCac ?? 0) || -1,
+        ltv: Math.round(arpuNow / Math.max(0.004, churnRate)),
+      })
+    } else {
+      const ue = unitEconomics(s)
+      ;(s.finHistory ??= []).push({
+        week: s.week,
+        cac: Number.isFinite(ue.cac) ? Math.round(ue.cac) : -1,
+        ltv: Math.round(ue.ltv),
+      })
+    }
     if (s.finHistory.length > 26) s.finHistory.shift()
   }
 

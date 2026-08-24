@@ -111,6 +111,12 @@ export interface MarketSegmentV2 {
   priceSensitivity: number // 0..1
   switchingFriction: number // 0..1
   retentionBaseline: number // weekly keep 0..1
+  /** weekly revenue-per-customer growth potential for retained cohorts (spec §20.4) */
+  expansionRate: number
+  /** how cheaply paid channels can reach this segment (0..1 — enterprise is barely paid-reachable) */
+  paidAccessibility: number
+  /** whether winning them takes a human sales motion (capacity-gated, spec §18.6) */
+  salesLed: boolean
   // preferences (truth)
   attributePreferences: SegmentAttributePreference[]
   brandImportance: number // 0..1
@@ -165,6 +171,8 @@ export interface CustomerCohortV2 {
   size: number
   priceAtAcquisition: number
   fitAtAcquisition: number
+  /** revenue multiplier from seat/usage growth — retained customers deepen (spec §20.4) */
+  expansion: number
 }
 
 // ---------- finance (spec §22, filled in phase 2) --------------------------------------------
@@ -174,6 +182,15 @@ export interface FinanceStateV2 {
   cogs: number
   opex: number
   netIncome: number
+  /** the week's revenue decomposition — the Capital P&L's driver panel reads THIS (spec §22.5) */
+  revenueDrivers: { newBusiness: number; expansion: number; churnLoss: number }
+}
+
+export interface GtmStateV2 {
+  /** EMA of recent paid spend — the saturation memory (spec §18.4): the channel remembers */
+  paidSaturationEma: number
+  /** last week's realized CAC (paid spend / new customers) — truth, not estimate */
+  lastCac: number
 }
 
 // ---------- planning / confidence (phase 3 placeholders kept minimal on purpose) -------------
@@ -225,6 +242,10 @@ export interface SimV2Snapshot {
   price: number
   /** player choice share by segment (realized preference, not sales) */
   choiceShare: Record<string, number>
+  newCustomers: number
+  churnedCustomers: number
+  paidSpend: number
+  cac: number
   productFit: Record<string, number>
   attributes: Record<string, number>
   brand: number
@@ -241,6 +262,7 @@ export interface BusinessSimulationV2State {
   segments: MarketSegmentV2[]
   attributes: ProductAttributeV2[]
   pricing: PricingStateV2
+  gtm: GtmStateV2
   competitors: CompetitorV2[]
   cohorts: CustomerCohortV2[]
   finance: FinanceStateV2

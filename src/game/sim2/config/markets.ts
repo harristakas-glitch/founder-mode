@@ -26,6 +26,12 @@ export interface SegmentBlueprint {
   switchingFriction: Band
   /** weekly keep-rate band */
   retention: Band
+  /** weekly expansion-revenue potential band (retained customers deepen) */
+  expansion: Band
+  /** 0..1 — how well paid channels reach them */
+  paidAccess: number
+  /** capacity-gated human sales motion required */
+  salesLed: boolean
   brandImportance: number
   prefs: SegmentAttributePreference[]
 }
@@ -79,6 +85,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.7, hi: 0.9 },
         switchingFriction: { lo: 0.1, hi: 0.25 },
         retention: { lo: 0.955, hi: 0.975 },
+        expansion: { lo: 0.0002, hi: 0.001 },
+        paidAccess: 0.85,
+        salesLed: false,
         brandImportance: 0.25,
         prefs: [pref('core', 0.35, 70), pref('ease', 0.4, 90), pref('reliability', 0.15, 70), pref('service', 0.1, 50)],
       },
@@ -93,6 +102,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.5, hi: 0.7 },
         switchingFriction: { lo: 0.25, hi: 0.45 },
         retention: { lo: 0.965, hi: 0.985 },
+        expansion: { lo: 0.001, hi: 0.003 },
+        paidAccess: 0.7,
+        salesLed: false,
         brandImportance: 0.35,
         prefs: [pref('core', 0.3, 80), pref('ease', 0.25, 80), pref('reliability', 0.2, 80), pref('integrations', 0.15, 65), pref('service', 0.1, 60)],
       },
@@ -107,6 +119,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.35, hi: 0.55 },
         switchingFriction: { lo: 0.45, hi: 0.65 },
         retention: { lo: 0.975, hi: 0.99 },
+        expansion: { lo: 0.002, hi: 0.005 },
+        paidAccess: 0.45,
+        salesLed: true,
         brandImportance: 0.45,
         prefs: [
           pref('core', 0.25, 85),
@@ -127,6 +142,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.15, hi: 0.35 },
         switchingFriction: { lo: 0.6, hi: 0.85 },
         retention: { lo: 0.982, hi: 0.995 },
+        expansion: { lo: 0.003, hi: 0.007 },
+        paidAccess: 0.15,
+        salesLed: true,
         brandImportance: 0.55,
         prefs: [
           pref('core', 0.2, 85),
@@ -161,6 +179,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.85, hi: 0.97 },
         switchingFriction: { lo: 0.05, hi: 0.15 },
         retention: { lo: 0.9, hi: 0.945 },
+        expansion: { lo: 0.0, hi: 0.0004 },
+        paidAccess: 0.9,
+        salesLed: false,
         brandImportance: 0.5,
         prefs: [pref('ease', 0.3, 95), pref('content', 0.3, 85), pref('network', 0.25, 80), pref('performance', 0.15, 75)],
       },
@@ -175,6 +196,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.55, hi: 0.75 },
         switchingFriction: { lo: 0.3, hi: 0.5 },
         retention: { lo: 0.955, hi: 0.98 },
+        expansion: { lo: 0.001, hi: 0.003 },
+        paidAccess: 0.75,
+        salesLed: false,
         brandImportance: 0.45,
         prefs: [pref('core', 0.3, 85), pref('content', 0.25, 90), pref('network', 0.25, 85, 35), pref('performance', 0.2, 80)],
       },
@@ -189,6 +213,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.25, hi: 0.45 },
         switchingFriction: { lo: 0.4, hi: 0.6 },
         retention: { lo: 0.975, hi: 0.99 },
+        expansion: { lo: 0.002, hi: 0.006 },
+        paidAccess: 0.35,
+        salesLed: true,
         brandImportance: 0.6,
         prefs: [pref('network', 0.35, 90, 45), pref('content', 0.25, 80), pref('security', 0.2, 75, 40), pref('core', 0.2, 75)],
       },
@@ -217,6 +244,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.8, hi: 0.95 },
         switchingFriction: { lo: 0.3, hi: 0.5 },
         retention: { lo: 0.93, hi: 0.965 },
+        expansion: { lo: 0.0002, hi: 0.001 },
+        paidAccess: 0.8,
+        salesLed: false,
         brandImportance: 0.55,
         prefs: [pref('ease', 0.3, 90), pref('security', 0.3, 85, 40), pref('core', 0.25, 75), pref('reliability', 0.15, 85)],
       },
@@ -231,6 +261,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.4, hi: 0.6 },
         switchingFriction: { lo: 0.5, hi: 0.7 },
         retention: { lo: 0.972, hi: 0.99 },
+        expansion: { lo: 0.001, hi: 0.004 },
+        paidAccess: 0.55,
+        salesLed: true,
         brandImportance: 0.45,
         prefs: [pref('core', 0.3, 85), pref('security', 0.25, 85, 50), pref('reliability', 0.2, 90, 45), pref('integrations', 0.15, 70), pref('service', 0.1, 65)],
       },
@@ -245,6 +278,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         priceSensitivity: { lo: 0.1, hi: 0.25 },
         switchingFriction: { lo: 0.75, hi: 0.92 },
         retention: { lo: 0.988, hi: 0.997 },
+        expansion: { lo: 0.003, hi: 0.008 },
+        paidAccess: 0.08,
+        salesLed: true,
         brandImportance: 0.65,
         prefs: [
           pref('security', 0.35, 95, 70),
