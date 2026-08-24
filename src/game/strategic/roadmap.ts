@@ -7,7 +7,7 @@
 // deterministic; the tick is called from advanceWeekInner at a fixed position.
 
 import type { GameState } from '../types'
-import { roadmapDef, roadmapPool } from './content'
+import { nextEvergreens, roadmapDef, roadmapPool } from './content'
 import { createDefaultRoadmap, type RoadmapInitiativeDef, type SystemDepth } from './types'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -33,9 +33,13 @@ export function availableInitiatives(s: GameState, depth: SystemDepth): RoadmapI
   const rm = s.roadmap ?? createDefaultRoadmap()
   const busy = new Set([...rm.active.map((a) => a.id), ...rm.queued, ...rm.done.map((d) => d.id)])
   const late = s.stage !== 'Pre-seed' && s.stage !== 'Seed'
-  return roadmapPool(s.sector).filter(
+  const pool = roadmapPool(s.sector).filter(
     (i) => !busy.has(i.id) && (depth !== 'light' || i.quickPool) && (!i.lateStage || late),
   )
+  // the pool ran dry mid-game (owner playtest) — when fewer than three named initiatives
+  // remain in deep play, the evergreen programs open: a roadmap never truly finishes
+  if (depth === 'deep' && pool.length < 3) pool.push(...nextEvergreens(busy).filter((i) => !busy.has(i.id)))
+  return pool
 }
 
 export const effortRequired = (def: RoadmapInitiativeDef, depth: Exclude<SystemDepth, 'off'> = 'deep'): number =>

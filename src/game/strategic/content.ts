@@ -91,5 +91,78 @@ export const ROADMAP_POOLS: Record<string, RoadmapInitiativeDef[]> = {
 }
 
 export const roadmapPool = (sector: string): RoadmapInitiativeDef[] => ROADMAP_POOLS[sector] ?? ROADMAP_POOLS.saas
+// ---------- the evergreen track (owner playtest 2026-08-24: "the roadmap finished very fast") -
+// A real company never runs out of roadmap. When the sector pool thins, repeatable engineering
+// programs take over: modest, honest, and a little slower each generation — the compounding
+// grind of a maturing product, not a content treadmill.
+const EVERGREEN: Record<string, Omit<RoadmapInitiativeDef, 'id' | 'weeks'> & { baseWeeks: number }> = {
+  perf: {
+    name: 'Performance program',
+    blurb: 'Profile, cache, parallelise. The product gets faster, and the codebase gets kinder.',
+    sector: 'all',
+    type: 'internal_system',
+    baseWeeks: 4,
+    impact: { reliability: 2, developerVelocity: 1 },
+    segmentImpact: {},
+    techDebtReduced: 6,
+    quickPool: false,
+  },
+  infra: {
+    name: 'Infrastructure hardening',
+    blurb: 'The unglamorous work that keeps 3am quiet: failover, monitoring, cost control.',
+    sector: 'all',
+    type: 'infrastructure',
+    baseWeeks: 5,
+    impact: { reliability: 2, operatingEfficiency: 1 },
+    segmentImpact: {},
+    techDebtReduced: 4,
+    quickPool: false,
+  },
+  convert: {
+    name: 'Conversion tuning',
+    blurb: 'Instrument, hypothesise, ship, measure. The funnel leaks less than it did.',
+    sector: 'all',
+    type: 'cro',
+    baseWeeks: 3,
+    impact: { acquisition: 1, retention: 1 },
+    segmentImpact: {},
+    quickPool: false,
+  },
+  polish: {
+    name: 'Product polish pass',
+    blurb: 'A hundred paper cuts, closed. Customers can’t name what changed — they just stay.',
+    sector: 'all',
+    type: 'customer_feature',
+    baseWeeks: 3,
+    impact: { retention: 2 },
+    segmentImpact: {},
+    quickPool: false,
+  },
+}
+
+/** Resolve an evergreen id like `evg-perf-3`. Generation N is one week slower than N-1 — the
+ *  easy wins were the early ones. */
+export function evergreenDef(id: string): RoadmapInitiativeDef | undefined {
+  const m = id.match(/^evg-([a-z]+)-(\d+)$/)
+  if (!m) return undefined
+  const base = EVERGREEN[m[1]]
+  const gen = Number(m[2])
+  if (!base || gen < 1 || gen > 40) return undefined
+  const { baseWeeks, ...rest } = base
+  return { ...rest, id, name: `${base.name}${gen > 1 ? ` ${['II', 'III', 'IV', 'V'][gen - 2] ?? `v${gen}`}` : ''}`, weeks: baseWeeks + Math.min(4, gen - 1) }
+}
+
+/** The next generation of each evergreen, given what a roadmap has done/underway. */
+export function nextEvergreens(doneOrBusy: ReadonlySet<string>): RoadmapInitiativeDef[] {
+  const out: RoadmapInitiativeDef[] = []
+  for (const kind of Object.keys(EVERGREEN)) {
+    let gen = 1
+    while (doneOrBusy.has(`evg-${kind}-${gen}`)) gen++
+    const def = evergreenDef(`evg-${kind}-${gen}`)
+    if (def) out.push(def)
+  }
+  return out
+}
+
 export const roadmapDef = (sector: string, id: string): RoadmapInitiativeDef | undefined =>
-  roadmapPool(sector).find((i) => i.id === id)
+  id.startsWith('evg-') ? evergreenDef(id) : roadmapPool(sector).find((i) => i.id === id)

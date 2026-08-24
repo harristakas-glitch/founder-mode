@@ -129,9 +129,14 @@ const GOLDEN_TRACES: Record<number, number> = {
   //      coefficients lifted so PMF 60 is reachable (it was mathematically unreachable — the
   //      equilibrium capped at 44), decay 0.012→0.008; Career's evidence ramp gained the
   //      maturity term. The pmf trajectory moved by design, so every trace moved.
-  7: 0xb33ceae6,
-  4242: 0x54446ff3,
-  31337: 0xdfea5503,
+  // 2026-08-24 — macro mean reversion (owner playtest: runs stuck permanently frozen/cold).
+  // Rates and inflation now revert gently toward neutral, so every run sees seasons. VALUE
+  // change only: the same rand() calls in the same order — inflation's level feeds payroll
+  // drift, which feeds cash, which is in the trace. Draw order untouched; re-recorded here in
+  // the same commit per this file's own policy.
+  7: 0xe9eeb915,
+  4242: 0x7cebc168,
+  31337: 0x903500d6,
 }
 
 for (const [seedKey, expected] of Object.entries(GOLDEN_TRACES)) {

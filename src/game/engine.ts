@@ -1844,9 +1844,17 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
 
   // --- the real economy turns over: rates, inflation, the market — and they drive the funding climate ---
   const m = s.macro
-  const rateShift = rand(-0.12, 0.12) + (m.inflation > 5 ? 0.06 : m.inflation < 2 ? -0.04 : 0)
+  // CYCLES, NOT REGIMES (owner playtest: "mostly frozen and cold, never normal or warm" — a
+  // run whose inflation walked high early ratcheted rates up and the climate equilibrium sat
+  // below −0.6 for the WHOLE GAME). Rates and inflation now revert gently toward their
+  // neutral levels, so every run sees seasons: hot markets cool, cold markets thaw.
+  const rateShift = rand(-0.12, 0.12) + (m.inflation > 5 ? 0.06 : m.inflation < 2 ? -0.04 : 0) + (5 - m.rate) * 0.012
   m.rate = clamp(m.rate + rateShift, 0.5, 12)
-  m.inflation = clamp(m.inflation + rand(-0.15, 0.15) + (m.rate < m.inflation - 2 ? 0.08 : m.rate > m.inflation + 2 ? -0.08 : 0), 0, 12)
+  m.inflation = clamp(
+    m.inflation + rand(-0.15, 0.15) + (m.rate < m.inflation - 2 ? 0.08 : m.rate > m.inflation + 2 ? -0.08 : 0) + (2.5 - m.inflation) * 0.015,
+    0,
+    12,
+  )
   const marketReturn = rand(-0.025, 0.028) + (5 - m.rate) * 0.0015 - Math.max(0, m.inflation - 4) * 0.001
   m.index = Math.max(20, m.index * (1 + marketReturn))
   // Mean reversion. Without it climate is a pure random walk against a hard clamp, and a clamp is
@@ -1856,7 +1864,16 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // blocked throughout, which reads to the player as a broken game rather than a hard market.
   // Funding markets are cyclical, not absorbing, so the pull scales with distance from neutral.
   const reversion = -s.climate * 0.07
-  s.climate = clamp(s.climate + reversion + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
+  // WINTERS END (owner playtest, 2026-08-24: "market is frozen most of the rounds"). The
+  // reversion above loses to a self-sustaining hot-inflation regime: inflation >5 biases rates
+  // up, rates poison marketReturn, and the drift equilibrium sits INSIDE the frozen band —
+  // measured worst case 60 consecutive frozen weeks, 5/24 runs with a 15+ week freeze. Real
+  // funding winters thaw: after ~8 frozen weeks capital that sat out starts returning, and the
+  // pull grows each week until the market reopens. No new draws — goldens hold.
+  const frozenWeeks = (s.flags.frozenWeeks ?? 0) as number
+  const thaw = s.climate < -0.6 ? Math.min(0.09, Math.max(0, frozenWeeks - 8) * 0.015) : 0
+  s.climate = clamp(s.climate + reversion + thaw + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
+  s.flags.frozenWeeks = s.climate < -0.6 ? frozenWeeks + 1 : 0
   if (can(s, 'macroShocks')) macroShocks(s)
 
   // --- inflation quietly eats payroll: salaries drift up with the cost of living ---
@@ -3822,8 +3839,12 @@ export function boardEffectiveTarget(s: GameState): number {
   // the number the player sees cannot disagree. Career keeps its stage-set targets untouched;
   // the quick-saas casual measurement drove the 1.2 (13% failure vs the 25-35 owner band, with
   // its board passing every review — the one quiet corner of the calibration).
-  const saasAppetite = s.sector === 'saas' && systemDepth(s, 'boardMeetings') !== 'deep' ? 1.2 : 1
-  return Math.max(0.008, s.board.targetGrowth * saasAppetite * (1 - 0.5 * marketSaturation(s)))
+  // …and social joined it (2026-08-24) when the macro thaw let volatile casual runs re-raise
+  // through every rough patch (raises reset strikes): a consumer-app board funds the VIRAL
+  // curve and expects it — measured 13% casual failure without the appetite, in-band with it.
+  const appetite =
+    systemDepth(s, 'boardMeetings') !== 'deep' ? (s.sector === 'saas' ? 1.2 : s.sector === 'social' ? 1.18 : 1) : 1
+  return Math.max(0.008, s.board.targetGrowth * appetite * (1 - 0.5 * marketSaturation(s)))
 }
 
 // Trailing weekly revenue growth — the board's alternative yardstick for mature companies.

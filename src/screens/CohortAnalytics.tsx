@@ -527,13 +527,12 @@ export function CohortAnalytics() {
             </div>
           </Panel>
 
-          {/* ---- the triangle, one interaction away ------------------------------------------
-              192 cells on arrival and up to 960 expanded, answering a question most weeks do not
-              ask — the loudest thing on a screen whose point is the sentence above it. Native
-              <details>: a real disclosure to a keyboard and a screen reader, one key away. */}
+          {/* ---- the triangle — OPEN by default (owner call, 2026-08-24: this page IS the
+              triangle; hiding its centrepiece behind a click made the screen feel empty).
+              Still a real <details>, so it collapses for anyone who wants the summary only. */}
           <div className="mt-3.5">
             <Panel>
-              <details className="group">
+              <details className="group" open>
                 <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md text-[15px] font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/60 [&::-webkit-details-marker]:hidden">
                   <ChevronRight size={16} className="shrink-0 text-mut transition-transform group-open:rotate-90" />
                   Cohort triangle
