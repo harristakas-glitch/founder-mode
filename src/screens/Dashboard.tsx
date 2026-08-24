@@ -44,6 +44,7 @@ import { boardEffectiveTarget, growthRate, pmfLabel, runwayWeeks, totalUsers } f
 import { MODE_META, hasCapability, systemDepth } from '../game/modes'
 import { ATTENTION_AREAS, ATTENTION_BUDGET, ATTENTION_META, attentionNeeds, attentionSignals, delegationCover } from '../game/strategic/attention'
 import { bigBetDef } from '../game/strategic/bigbets'
+import { coherence } from '../game/strategic/coherence'
 import { BoardMeeting, Commitments, FounderBriefing, TeamOpinions, careerActive } from '../CareerUI'
 import { MarketLeaderboard } from './Market'
 import { DecisionLens } from '../onboarding/DecisionLens'
@@ -148,7 +149,12 @@ function ceoBrief(game: NonNullable<ReturnType<typeof useStore.getState>['game']
           ? 'Searching for fit'
           : 'Scaling what works'
 
-  return { chapter, lines: [growthLine, fitLine, runwayLine] }
+  // one coherence read (phase 6) — the hidden score surfaces ONLY as its loudest signal, and
+  // only when the company's decisions have actually started agreeing or arguing
+  const cohSignals = coherence(game).signals
+  const cohLine = cohSignals.length > 0 && systemDepth(game, 'strategicCoherence') === 'deep' ? cohSignals[0].text + '.' : null
+
+  return { chapter, lines: cohLine ? [growthLine, fitLine, runwayLine, cohLine] : [growthLine, fitLine, runwayLine] }
 }
 
 // ---------------------------------------------------------------------------------------------

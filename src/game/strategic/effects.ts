@@ -23,6 +23,7 @@ import { completedBetParts } from './bigbets'
 import { attentionParts } from './attention'
 import { capacityParts } from './capacity'
 import { aiParts } from './ai'
+import { coherenceParts } from './coherence'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -132,6 +133,14 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
   opex.push(...aip.opex)
   bugs.push(...aip.bugs)
 
+  // STRATEGIC COHERENCE (phase 6): decisions that reinforce each other compound a little;
+  // decisions that contradict each other tax a little. Derived, hidden, modest (§9.5) — and
+  // structurally neutral wherever the systems it reads are off (quick/arena have no bet, no
+  // roadmap, no career targeting: total 0, parts 0).
+  const coh = coherenceParts(s)
+  if (coh.acq) acq.push(coh.acq)
+  if (coh.build) build.push(coh.build)
+
   // MANAGEMENT CAPACITY (phase 4): an org past Stretched leaks quality and morale — the delayed
   // consequences the brief demands (§10.5). Its speed cost lives in mgmtDrag at the employee
   // seam, not here, so it is never double-counted. Zero outside deep career by construction.
@@ -159,8 +168,8 @@ export function strategicModifiers(s: GameState): StrategicModifiers {
     bugPressure: composeBonus(bugs, 0.25),
     conversionLift: clamp(composeBonus(cro, 0.18), 1, 1.18),
     researchMult: attn.researchMult,
-    // attention lifts or starves morale; AI leverage adds a little; a Breaking org drains it —
-    // one clamped channel for all three
-    moraleDrift: clamp(attn.moraleDrift + cap.moraleDrift + aip.moraleDrift, -2.5, 1.8),
+    // attention lifts or starves morale; AI leverage adds a little; incoherence confuses; a
+    // Breaking org drains — one clamped channel for all of it
+    moraleDrift: clamp(attn.moraleDrift + cap.moraleDrift + aip.moraleDrift + coh.moraleDrift, -2.5, 1.8),
   }
 }

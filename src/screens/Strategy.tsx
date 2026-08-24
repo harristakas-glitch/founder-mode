@@ -5,6 +5,7 @@
 import { Target, Check, Circle, Flag } from 'lucide-react'
 import { systemDepth } from '../game/modes'
 import { BIG_BETS, alignmentWord, bigBetDef, initiativeAlignment } from '../game/strategic/bigbets'
+import { coherence } from '../game/strategic/coherence'
 import { roadmapDef } from '../game/strategic/content'
 import { useStore } from '../store'
 
@@ -83,6 +84,26 @@ export function Strategy() {
             )}
           </div>
         </div>
+
+        {/* Phase 6 (deep only): does the WHOLE company agree with this bet? The hidden coherence
+            score surfaces as words — pricing, targeting, roadmap, mix and hiring either reinforce
+            the direction or argue with it (§9.7: never a number). */}
+        {systemDepth(game, 'strategicCoherence') === 'deep' && (() => {
+          const sig = coherence(game).signals
+          if (sig.length === 0) return null
+          return (
+            <div className="mt-3 rounded-[14px] border border-line bg-surface p-4">
+              <div className="mb-1.5 text-[10.5px] font-bold tracking-wider text-mut uppercase">Does it hang together?</div>
+              <div className="space-y-1">
+                {sig.map((x) => (
+                  <div key={x.text} className={`text-[12.5px] leading-snug ${x.tone === 'good' ? 'text-good' : 'text-warn'}`}>
+                    {x.tone === 'good' ? '✓' : '△'} {x.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
         <button className="mt-3 text-[12px] font-semibold text-mut transition-colors hover:text-bad" onClick={betAbandon}>
           Reconsider — abandon this bet

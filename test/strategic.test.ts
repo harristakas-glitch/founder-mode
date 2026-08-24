@@ -459,5 +459,50 @@ console.log('— AI Adoption (brief §5): transform, at the price of a real roll
   )
 }
 
+console.log('— Strategic Coherence (brief §10): derived, hidden, modest —')
+{
+  const { coherence, coherenceParts } = await import('../src/game/strategic/coherence')
+  const { chooseBigBet } = await import('../src/game/strategic/bigbets')
+
+  // 1. Structurally neutral where its inputs are off: quick and arena always read zero.
+  const q = newGame('Q', 'saas', 'technical', { config: cfg({ seed: 3 }) })
+  ok(coherence(q).total === 0 && coherenceParts(q).acq === 0, 'quick/arena coherence is exactly neutral (nothing to read)')
+
+  // 2. A company whose choices AGREE compounds; one whose choices ARGUE pays — both modest.
+  const agree = newGame('C', 'saas', 'technical', { config: cfg({ seed: 3, mode: 'career' }) })
+  chooseBigBet(agree, 'consumer_viral_engine', 'deep')
+  agree.growth = { performanceShare: 1, lastMixWeek: 0, brand: { stock: 0, pending: [] } }
+  agree.employees = [
+    { id: 'm1', name: 'M', role: 'marketer', skill: 6, salary: 90_000, morale: 70, weeks: 5, trait: null },
+    { id: 'e1', name: 'E', role: 'engineer', skill: 6, salary: 120_000, morale: 70, weeks: 5, trait: null },
+    { id: 'e2', name: 'E2', role: 'engineer', skill: 6, salary: 120_000, morale: 70, weeks: 5, trait: null },
+  ] as never
+  const tgt = agree.career!.primaryTargetSegmentId
+  agree.career!.segmentBeliefs[tgt].willingnessToPay = { estimate: 70, confidence: 0.7, evidenceCount: 5 }
+  agree.career!.pricing = 'premium'
+  const cAgree = coherence(agree)
+  ok(cAgree.total >= 2, `reinforcing choices score coherent (${cAgree.total})`)
+  ok(coherenceParts(agree).acq > 0, 'coherence pays a small, capped premium')
+
+  const argue = newGame('C', 'saas', 'technical', { config: cfg({ seed: 3, mode: 'career' }) })
+  chooseBigBet(argue, 'enterprise_readiness', 'deep')
+  // an enterprise push… targeting freelancers, priced premium against a board that says they
+  // won't pay, marketing 100% performance (the mix the bet competes with), nobody in sales
+  argue.growth = { performanceShare: 1, lastMixWeek: 0, brand: { stock: 0, pending: [] } }
+  argue.career!.primaryTargetSegmentId = 'freelancers'
+  argue.career!.segmentBeliefs.freelancers.willingnessToPay = { estimate: 15, confidence: 0.7, evidenceCount: 5 }
+  argue.career!.pricing = 'premium'
+  argue.employees = [
+    { id: 'e1', name: 'E', role: 'engineer', skill: 6, salary: 120_000, morale: 70, weeks: 5, trait: null },
+    { id: 'e2', name: 'E2', role: 'engineer', skill: 6, salary: 120_000, morale: 70, weeks: 5, trait: null },
+    { id: 'd1', name: 'D', role: 'designer', skill: 6, salary: 100_000, morale: 70, weeks: 5, trait: null },
+  ] as never
+  const cArgue = coherence(argue)
+  ok(cArgue.total <= -2, `contradicting choices score incoherent (${cArgue.total})`)
+  ok(cArgue.signals.length > 0 && cArgue.signals.every((x) => !/\d\d/.test(x.text)), 'signals are WORDS — the score never leaks a number')
+  const p = coherenceParts(argue)
+  ok(p.acq < 0 && p.acq >= -0.05 && p.moraleDrift < 0, 'incoherence taxes, modestly — never a death sentence')
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)
