@@ -31,6 +31,7 @@ import { BIG_BET_SYNERGY, bigBetDef, initiativeAlignment, tickBigBet } from './s
 import { brandCacRelief, createDefaultGrowth, mixAlignment, tickBrand } from './strategic/growth'
 import { attentionBetPoints, attentionFundraisingMult, attentionRecruitingBonus, createDefaultAttention, tickAttention } from './strategic/attention'
 import { mgmtDrag } from './strategic/capacity'
+import { createDefaultAI, tickAI } from './strategic/ai'
 import { createDefaultRoadmap } from './strategic/types'
 import { noteBoardDefiance, noteColaAdjustment, noteFundingExpectations, noteRaiseOutcome } from './world/promises'
 // Rival aggression routes "who and why" through the same living-world record every other company
@@ -1731,6 +1732,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   s.roadmap ??= createDefaultRoadmap()
   s.growth ??= createDefaultGrowth()
   s.attention ??= createDefaultAttention()
+  s.aiAdoption ??= createDefaultAI()
   sanitize(s) // a non-finite number anywhere would spread through every formula below and brick the save
 
   // Founder attention runs FIRST so a crisis can force this week's budget before the strategic
@@ -1866,7 +1868,34 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     })
     s.flash = `🏗 Shipped: ${def.name}`
   }
-  const engPointsP = engPoints * (1 - rmWeek.draw) * smods.buildVelocity
+
+  // --- AI adoption rollouts (phase 5) — deterministic, no dice; strict no-op unless engaged ---
+  const aiDepth = systemDepth(s, 'aiAdoption')
+  const aiWk = aiDepth !== 'off' ? tickAI(s, aiDepth) : { draw: 0, completed: [] as never[] }
+  for (const c of aiWk.completed) {
+    if (c.reaction === 'wary') {
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `🤖 ${c.def.name} is live — and the ${c.def.area} team is watching it closely`,
+        body: `${c.def.blurb} The rollout landed, but the people it touches are wary of what it means for them. Resistance will slow the next step until they see it working for them, not instead of them.`,
+      })
+      applyEffects(s, { morale: -3 })
+    } else {
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: `🤖 ${c.def.name} is live`,
+        body: `${c.def.blurb} Implementation quality ${c.quality >= 70 ? 'is genuinely good — the leverage is real' : c.quality >= 40 ? 'is workable, with rough edges the team is sanding' : 'is poor — rushed into an overloaded org, and it shows'}.`,
+      })
+      applyEffects(s, { morale: 2 })
+    }
+    s.flash = `🤖 ${c.def.name} is live`
+  }
+  // the rollout and the roadmap draw from the same engineering week (combined cap 60%)
+  const engPointsP = engPoints * (1 - Math.min(0.6, rmWeek.draw + aiWk.draw)) * smods.buildVelocity
 
   const a = s.allocation
   const hasBet = s.ventures.some((v) => !v.launched)

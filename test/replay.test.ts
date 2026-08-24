@@ -301,8 +301,11 @@ console.log('— Overflow —')
 
 console.log('— Action-surface ledger —')
 const EXPECTED_ACTIONS = [
-  'accept_sheet', 'advance', 'allocation', 'attention_allocate', 'attention_focus', 'bet_abandon', 'bet_choose',
+  'accept_sheet', 'advance', 'ai_cancel', 'ai_start', 'allocation', 'attention_allocate', 'attention_focus', 'bet_abandon', 'bet_choose',
   'buy_rival', 'concede_price_war', 'decline_sheet',
+  // `ai_start` / `ai_cancel` — Strategic Systems phase 5 (2026-08-24): an AI rollout spends cash,
+  // draws engineering output and permanently changes area maturity/quality — simulation-mutating,
+  // so it replays. Depth-guarded in startAIInitiative (quick/arena: aiAdoption off).
   'defy_mandate', 'experiment_standing', 'file_ipo', 'fire', 'focus', 'growth_mix', 'incentives', 'interaction',
   'marketing', 'pay_debt', 'pitch', 'pivot', 'pricing', 'proposal_stance', 'raise', 'rally', 'recharge',
   'resolve_choice', 'roadmap_cancel', 'roadmap_start', 'run_experiment', 'secondary', 'sell_founder',

@@ -374,5 +374,90 @@ console.log('— Management Capacity (brief §11): leadership is the cap, not he
   ok(pQ.bugs === 0 && pQ.moraleDrift === 0, 'no capacity leak outside deep career, even at 30 heads')
 }
 
+console.log('— AI Adoption (brief §5): transform, at the price of a real rollout —')
+{
+  const { availableAIInitiatives, startAIInitiative, tickAI, aiParts, implementationQuality, createDefaultAI } = await import(
+    '../src/game/strategic/ai'
+  )
+  const { strategicModifiers } = await import('../src/game/strategic/effects')
+  const mkEmp = (skill: number, i: number, morale = 70) =>
+    ({ id: `e${i}`, name: `E ${i}`, role: 'engineer', skill, salary: 100_000, morale, weeks: 10, trait: null }) as never
+
+  // 1. Inert by default: a fresh career company has zero AI parts and neutral modifiers.
+  const fresh = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  const p0 = aiParts(fresh)
+  ok(p0.build.length === 0 && p0.moraleDrift === 0, 'no adoption → zero parts')
+
+  // 2. The ladder gates: only rung-1 initiatives are startable from nothing, and cash is real.
+  const c = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  c.aiAdoption = createDefaultAI()
+  const avail = availableAIInitiatives(c)
+  ok(avail.length > 0 && avail.every((d) => d.target === 1), 'from maturity 0 only tools-level rungs are on offer')
+  ok(!startAIInitiative(c, 'eng-review', 'deep'), 'a workflow rung cannot start before the tools rung')
+  const cashBefore = c.cash
+  ok(startAIInitiative(c, 'eng-assistants', 'deep'), 'the tools rung starts')
+  ok(c.cash === cashBefore - 8_000, 'the rollout bills its cash up front')
+  ok(!startAIInitiative(c, 'mkt-content', 'deep'), 'one rollout at a time — transformation is not free parallelism')
+
+  // 3. The tick completes it, deterministically, and the area carries maturity + quality.
+  let weeks = 0
+  while (c.aiAdoption!.active.length > 0 && weeks < 20) {
+    tickAI(c, 'deep')
+    weeks++
+  }
+  ok(weeks >= 3 && weeks <= 6, `a 3-week tools rollout lands in 3-6 weeks at healthy pace (${weeks})`)
+  ok(c.aiAdoption!.areas.engineering?.maturity === 1, 'engineering reaches Tools')
+
+  // 4. Quality is the org, not the dice: the same rollout in an overloaded indebted org ships worse.
+  const healthy = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  healthy.employees = Array.from({ length: 4 }, (_, i) => mkEmp(8, i))
+  const mess = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  mess.employees = Array.from({ length: 14 }, (_, i) => mkEmp(3, i))
+  mess.roadmap = { active: [], queued: [], done: [], debt: 90 }
+  mess.bugs = 70
+  ok(implementationQuality(healthy) > implementationQuality(mess) + 15, `quality is earned (${implementationQuality(healthy)} vs ${implementationQuality(mess)})`)
+
+  // 5. Effects flow through the composer — and never touch fit (no PMF hook, §5.10).
+  const adopted = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  adopted.aiAdoption = {
+    areas: { engineering: { maturity: 3, quality: 80, resistance: 0 }, support: { maturity: 2, quality: 70, resistance: 0 } },
+    active: [],
+  }
+  const m = strategicModifiers(adopted)
+  ok(m.buildVelocity > 1, `engineering adoption speeds the build (${m.buildVelocity.toFixed(3)})`)
+  ok(m.churnRelief < 1 && m.opexMult < 1, 'support adoption serves retention and trims cost')
+  ok(m.conversionLift === 1, 'AI never buys conversion/fit directly — the PMF wall holds')
+  const botched = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  botched.aiAdoption = { areas: { engineering: { maturity: 3, quality: 30, resistance: 0 } }, active: [] }
+  ok(strategicModifiers(botched).bugPressure > 1, 'a botched engineering transformation ships bugs, not speed')
+
+  // 6. Resistance is real: a resisted area rolls out slower than a willing one.
+  const willing = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  willing.aiAdoption = { areas: { support: { maturity: 1, quality: 70, resistance: 0 } }, active: [] }
+  startAIInitiative(willing, 'sup-triage', 'deep')
+  const resistant = newGame('C', 'saas', 'technical', { config: cfg({ seed: 9, mode: 'career' }) })
+  resistant.aiAdoption = { areas: { support: { maturity: 1, quality: 70, resistance: 50 } }, active: [] }
+  startAIInitiative(resistant, 'sup-triage', 'deep')
+  tickAI(willing, 'deep')
+  tickAI(resistant, 'deep')
+  ok(willing.aiAdoption!.active[0].progress > resistant.aiAdoption!.active[0].progress, 'resistance slows the rollout')
+
+  // 7. Journal integrity: depth-guarded, and a journaled run replays byte-identically.
+  let q = newGame('Q', 'saas', 'technical', { config: cfg({ seed: 9 }) })
+  q = applyJournaled(q, 'ai_start', { id: 'eng-assistants' }).state
+  ok((q.aiAdoption?.active.length ?? 0) === 0, 'quick journals cannot start a rollout (aiAdoption is OFF there)')
+  let live = newGame('R', 'saas', 'technical', { config: cfg({ seed: 77, mode: 'career' }) })
+  live = applyJournaled(live, 'ai_start', { id: 'eng-assistants' }).state
+  for (let i = 0; i < 6; i++) live = applyJournaled(live, 'advance').state
+  const replayed = replayRun(
+    { name: 'R', sector: 'saas', founderKind: 'technical', config: cfg({ seed: 77, mode: 'career' }) } as never,
+    [{ a: 'ai_start', w: 1, p: { id: 'eng-assistants' } }, ...Array.from({ length: 6 }, () => ({ a: 'advance', w: 0 }))] as never,
+  )
+  ok(
+    replayed.cash === live.cash && JSON.stringify(replayed.aiAdoption) === JSON.stringify(live.aiAdoption),
+    'a journaled AI run replays identically',
+  )
+}
+
 console.log(fails.length === 0 ? '\nALL PASS' : `\nFAILURES:\n${fails.map((f) => '  ✗ ' + f).join('\n')}`)
 process.exit(fails.length === 0 ? 0 : 1)

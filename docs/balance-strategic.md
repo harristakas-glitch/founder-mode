@@ -139,3 +139,20 @@ them." What it needed:
 career active failure 0-9% and active medians beat passive in ALL SIX cells (saas 14.3 vs 8.5,
 social 11.3 vs 7.2, fintech 11.2 vs 9.0). The `--assert` gate now pins: quick casual failure
 [15,40], career active ≤ 30%, passive median ≤ active median, zero career firings.
+
+## Phase 4+5 — Management Capacity & AI Adoption (2026-08-24)
+
+- mgmtDrag == coordinationDrag byte-exactly outside deep career (tested at 0-40 heads); goldens
+  unchanged. Deep: ±(supply−demand)·0.006, clamped [−0.25,+0.12] around the classic formula,
+  floor 0.55 — a led 14-person org beats an unled one by ~8-12 points of drag. Overloaded orgs
+  leak bugs +5% / morale −0.4/wk (Breaking: +10% / −0.9) through the composer.
+- AI adoption (deep career only; quick/arena off per the owner simplification): 5 areas ×
+  maturity ladder, 16 initiatives. One rollout at a time, cash up front, draw 3-15% of the eng
+  week (combined roadmap+AI draw capped 60%). Implementation quality = f(capacity word, debt,
+  ops attention, team skill) ∈ [15,95], deterministic. Effects at maturity m, quality q:
+  scale=(m/4)(0.4+0.6q/100) → eng +10%·scale build (quality<40: +6% bugs instead), mkt +6% acq,
+  sales +4% arpu, support +5% churn relief +4% opex, ops +6% opex + capacity supply. Morale
+  +0.08/maturity level, −0.15 per resisting area. All inside existing caps; conversionLift
+  untouched (no PMF hook, §5.10).
+- Calibration gate re-run after both phases: PASS (bots don't adopt AI; the systems are
+  opt-in pressure/leverage — a dedicated AI-line probe belongs to the next balance round).

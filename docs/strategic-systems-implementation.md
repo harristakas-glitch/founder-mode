@@ -150,9 +150,9 @@ one-word change. Quick keeps the light Founder Focus (attention); arena keeps at
    quick), 8-point HQ allocator with needs/shortfalls, crisis forcing (bugs>60 claims 3 ops
    points), dependency growth/decay, senior-hire delegation cover, recruiting/fundraising/
    morale/research hooks, big-bet attention affinity, tests.
-4. **Management Capacity** — demand/supply derivation, overload states, executive leverage,
+4. ✅ **Management Capacity** — demand/supply derivation, overload states, executive leverage,
    mgmtDrag replacing coordinationDrag, tests.
-5. **AI Adoption** — areas, maturity ladder, initiatives, quality/resistance, effects,
+5. ✅ **AI Adoption** — areas, maturity ladder, initiatives, quality/resistance, effects,
    employee reaction events, tests.
 6. **Strategic Coherence** — derived score, qualitative signals, pivot friction, tests.
 7. **Living-world extensions** — big-bet/AI reaction templates, rival memory, tests.

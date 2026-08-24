@@ -28,8 +28,11 @@ import type { SystemDepth, SystemDepthConfig } from './strategic/types'
 // provably inert (the golden traces are byte-identical), so the removal is exact, not
 // approximate. The light/competitive content and gating all still exist behind these switches;
 // re-adding a system to a mode is a one-word change here.
+// … and AI adoption joined them when it shipped (phase 5): its light/competitive content exists
+// behind these switches, but quick and arena launch with the classic engine until the owner
+// asks otherwise.
 const QUICK_SYSTEM_DEPTH: SystemDepthConfig = {
-  roadmap: 'off', bigBets: 'off', growthMix: 'off', aiAdoption: 'light', strategicCoherence: 'light',
+  roadmap: 'off', bigBets: 'off', growthMix: 'off', aiAdoption: 'off', strategicCoherence: 'light',
   founderAttention: 'light', managementCapacity: 'light', livingWorld: 'light', boardMeetings: 'light',
 }
 const SIMULATION_SYSTEM_DEPTH: SystemDepthConfig = {
@@ -37,7 +40,7 @@ const SIMULATION_SYSTEM_DEPTH: SystemDepthConfig = {
   founderAttention: 'deep', managementCapacity: 'deep', livingWorld: 'deep', boardMeetings: 'deep',
 }
 const ARENA_SYSTEM_DEPTH: SystemDepthConfig = {
-  roadmap: 'off', bigBets: 'off', growthMix: 'off', aiAdoption: 'competitive', strategicCoherence: 'competitive',
+  roadmap: 'off', bigBets: 'off', growthMix: 'off', aiAdoption: 'off', strategicCoherence: 'competitive',
   founderAttention: 'off', managementCapacity: 'light', livingWorld: 'competitive', boardMeetings: 'off',
 }
 

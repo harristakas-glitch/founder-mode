@@ -10,6 +10,8 @@ import { availableInitiatives, effortRequired, ROADMAP_DRAW_PER_ITEM, roadmapSlo
 import { createDefaultRoadmap, type RoadmapInitiativeDef } from '../game/strategic/types'
 import { segmentDef } from '../game/career/pmf'
 import { alignmentWord, bigBetDef, initiativeAlignment } from '../game/strategic/bigbets'
+import { AI_AREA_META, AI_AREAS, aiInitiativeDef, aiLeverage, availableAIInitiatives, createDefaultAI, MATURITY_WORDS } from '../game/strategic/ai'
+import { money } from '../format'
 import { useStore } from '../store'
 
 const fitWord = (m: number) => (m >= 1.3 ? 'Very high' : m >= 0.95 ? 'High' : m >= 0.55 ? 'Medium' : 'Low')
@@ -199,6 +201,117 @@ export function Roadmap() {
           })}
         </div>
       )}
+
+      {/* AI ADOPTION (phase 5, deep only) — Product → Systems per the brief §5.9: game-like
+          initiatives, not a maturity dashboard. Lives on the roadmap because it competes for the
+          same engineering week the roadmap does. */}
+      <AISection />
+    </div>
+  )
+}
+
+function AISection() {
+  const game = useStore((s) => s.game)!
+  const aiStart = useStore((s) => s.aiStart)
+  const aiCancel = useStore((s) => s.aiCancel)
+  if (systemDepth(game, 'aiAdoption') !== 'deep') return null
+  const ai = game.aiAdoption ?? createDefaultAI()
+  const available = availableAIInitiatives(game)
+  const leverage = aiLeverage(game)
+  const anyAdoption = AI_AREAS.some((a) => (ai.areas[a]?.maturity ?? 0) > 0)
+
+  return (
+    <div className="mt-8">
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-bold tracking-[0.12em] text-mut uppercase">
+        🤖 AI adoption — how the company itself runs
+      </div>
+
+      {/* maturity chips per area */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {AI_AREAS.map((area) => {
+          const st = ai.areas[area]
+          const m = st?.maturity ?? 0
+          return (
+            <span
+              key={area}
+              title={`${AI_AREA_META[area].moves}${st && st.resistance >= 30 ? ' · the team is resisting — show them it works for them' : ''}`}
+              className={`rounded-full border px-2.5 py-1 text-[11.5px] font-semibold ${
+                m === 0 ? 'border-line2 text-mut' : st!.quality < 40 ? 'border-warn/50 bg-warn/10 text-warn' : 'border-accent/45 bg-accent/10 text-ink'
+              }`}
+            >
+              {AI_AREA_META[area].icon} {AI_AREA_META[area].label} · {MATURITY_WORDS[m]}
+              {st && st.resistance >= 30 && ' ⚡'}
+            </span>
+          )
+        })}
+      </div>
+
+      {/* current leverage — the §5.9 lines, real numbers from the composer's own parts */}
+      {anyAdoption && leverage.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 rounded-xl border border-line/60 bg-surface px-4 py-2.5 text-[12.5px]">
+          {leverage.map((l) => (
+            <span key={l.label}>
+              <span className="text-mut">{l.label}</span>{' '}
+              <b className={`tnum ${l.label === 'Quality risk' ? 'text-warn' : 'text-good'}`}>{l.value}</b>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* active rollout */}
+      {ai.active.map((a) => {
+        const def = aiInitiativeDef(a.id)
+        if (!def) return null
+        return (
+          <div key={a.id} className="mb-3 rounded-xl border border-accent/40 bg-accent/[0.05] px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <b className="text-[14px]">{def.name} — rolling out</b>
+              <button onClick={() => aiCancel(a.id)} className="text-[11.5px] text-mut underline decoration-dotted hover:text-bad">
+                Cancel
+              </button>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/40">
+              <div className="h-full rounded-full bg-[var(--color-accent)]" style={{ width: `${Math.min(100, a.progress)}%` }} />
+            </div>
+            <div className="mt-1 text-[11.5px] text-mut">
+              An overloaded org rolls out slowly, and a resistant team slower still — the Organisation panel on Team says which you are.
+            </div>
+          </div>
+        )
+      })}
+
+      {/* available initiatives — the next rung per area */}
+      {available.length > 0 && ai.active.length === 0 && (
+        <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          {available.map((d) => (
+            <div key={d.id} className="flex flex-col rounded-xl border border-line/60 bg-surface p-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <b className="text-[13.5px] leading-tight">{d.name}</b>
+                <span className="shrink-0 rounded-full border border-line2 px-2 py-[2px] text-[10px] font-bold text-mut">
+                  → {MATURITY_WORDS[d.target]}
+                </span>
+              </div>
+              <div className="mt-1 flex-1 text-[12px] leading-snug text-mut">{d.blurb}</div>
+              <div className="mt-2 flex items-center justify-between text-[11.5px]">
+                <span className="text-mut tnum">
+                  ~{d.weeks.deep} wk · {money(d.cash)} · {Math.round(d.draw * 100)}% of eng
+                </span>
+                <button
+                  onClick={() => aiStart(d.id)}
+                  disabled={game.cash < d.cash}
+                  className="rounded-lg border border-accent/50 bg-accent/15 px-2.5 py-1 text-[12px] font-bold text-ink transition-colors hover:bg-accent/25 disabled:opacity-40"
+                >
+                  Start
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2 text-[11px] leading-snug text-mut/80">
+        Leverage over headcount — but the benefit is only as good as the implementation: transform while overloaded and indebted and the
+        rollout ships bugs instead of speed. One rollout at a time; it draws from the same engineering week as the roadmap.
+      </div>
     </div>
   )
 }

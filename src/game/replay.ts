@@ -56,6 +56,7 @@ import { chooseInteractionOption } from './world/interactions'
 import { cancelInitiative, startInitiative } from './strategic/roadmap'
 import { abandonBigBet, chooseBigBet } from './strategic/bigbets'
 import { ATTENTION_AREA_MAX, ATTENTION_AREAS, ATTENTION_BUDGET, createDefaultAttention } from './strategic/attention'
+import { cancelAIInitiative, startAIInitiative } from './strategic/ai'
 import type { FounderAttentionArea } from './strategic/types'
 import { systemDepth } from './modes'
 import type { GameConfig } from './modes'
@@ -349,6 +350,16 @@ const REPLAY_ACTIONS = {
       }
     }
     g.attention = { ...(g.attention ?? createDefaultAttention()), allocated: alloc }
+  },
+
+  /** Start an AI adoption rollout (phase 5). Depth-guarded inside startAIInitiative — an arena
+   *  or quick journal cannot smuggle a transformation in while the system is off there. */
+  ai_start: (g, p) => {
+    startAIInitiative(g, str(p.id), systemDepth(g, 'aiAdoption'))
+  },
+
+  ai_cancel: (g, p) => {
+    cancelAIInitiative(g, str(p.id))
   },
 
   /** Split the marketing budget between performance and brand (growth engine). Depth-guarded:

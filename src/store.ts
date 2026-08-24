@@ -432,6 +432,8 @@ interface Store {
   roadmapCancel: (id: string) => void
   betChoose: (t: string) => void
   setGrowthMix: (v: number) => void
+  aiStart: (id: string) => void
+  aiCancel: (id: string) => void
   setAttentionFocus: (a: string | null) => void
   setAttentionAllocation: (alloc: Record<string, number>) => void
   betAbandon: () => void
@@ -1374,6 +1376,19 @@ export const useStore = create<Store>()(
           const g = get().game
           if (!g) return
           set({ game: applyJournaled(g, 'growth_mix', { v }).state })
+        },
+
+        aiStart: (id) => {
+          const g = get().game
+          if (!g) return
+          set({ game: applyJournaled(g, 'ai_start', { id }).state })
+        },
+
+        aiCancel: (id) => {
+          const g = get().game
+          if (!g) return
+          if (!confirm('Cancel this rollout? The cash and progress are gone — a half-installed workflow is worth nothing.')) return
+          set({ game: applyJournaled(g, 'ai_cancel', { id }).state })
         },
 
         setAttentionFocus: (a) => {
