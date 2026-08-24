@@ -188,7 +188,8 @@ export function Discovery() {
   if (!career) return null
 
   const segs = segmentsForSector(game.sector)
-  const suggestion = suggestedExperiment(career, game.sector)
+  // revenue per customer corroborates a low-confidence "they don't pay" belief (WTP-trap branch)
+  const suggestion = suggestedExperiment(career, game.sector, game.users > 0 ? game.lastRevenue / game.users : undefined)
   // Falls back to the live target for the one render where the board opened before there was a
   // career to read one from.
   const segment = picked ?? career.primaryTargetSegmentId

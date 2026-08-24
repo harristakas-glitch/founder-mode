@@ -25,6 +25,7 @@ import type {
   TruthMetric,
 } from './types'
 import { generateAllTruth, segmentCeiling, segmentDef, segmentsForSector } from './segments'
+import { sectorById } from '../data'
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v))
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
@@ -1219,6 +1220,11 @@ export function biggestUncertainty(career: CareerPMFState, sector: string): stri
 export function suggestedExperiment(
   career: CareerPMFState,
   sector: string,
+  /** measured revenue per customer per week (state.lastRevenue / users) — lets a LOW-confidence
+   *  "they don't pay" belief be corroborated by the P&L, which every founder reads for free.
+   *  Optional so existing callers and tests are untouched; without it the WTP branch demands
+   *  full belief confidence. */
+  revPerCustomer?: number,
 ): { type: ExperimentType; segmentId: SegmentId; why: string } | null {
   const running = new Set(career.activeExperiments.filter((e) => e.status === 'active').map((e) => `${e.segmentId}:${e.type}`))
   // Each rung: the belief it answers, the instrument that answers it, and the bar to clear.
@@ -1285,7 +1291,11 @@ export function suggestedExperiment(
         const other = segmentsForSector(sector)
           .filter((o) => o.id !== seg.id)
           .map((o) => ({ o, belief: career.segmentBeliefs[o.id] }))
-          .filter((x) => !!x.belief)
+          // REACHABLE alternatives only: a segment believed unreachable or tiny is not an answer
+          // to "who should we build for instead" — recommending fortress enterprises to a
+          // pre-seed company is how good advice kills people (measured: the fintech pivot picker
+          // without this filter sent 15/16 runs at regulated_institutions, acq truth 12-15).
+          .filter((x) => !!x.belief && x.belief.acquisitionAccessibility.estimate >= 30 && x.belief.marketSize.estimate >= 25)
           .sort((a, b2) => (b2.belief!.retentionPotential.estimate ?? 0) - (a.belief!.retentionPotential.estimate ?? 0))[0]
         if (other && !running.has(`${other.o.id}:interview`) && !experimentAnswered(career, 'interview', other.o.id)) {
           candidates.push({
@@ -1297,6 +1307,38 @@ export function suggestedExperiment(
             score: 0.95,
           })
         }
+      }
+    }
+
+    // The OTHER trap wears a smile (balance round 2 — fintech's consumers): they stay, they just
+    // never pay enough to build a company on. Two ways to know it: the board is CONFIDENT the
+    // target pays little, or a low-confidence "they don't pay" belief is corroborated by the
+    // P&L — measured revenue per customer under half the sector's norm, a number every founder
+    // reads for free. When either holds and another segment is believed to pay real money with
+    // liveable retention, the slot names the upmarket question.
+    const wtpKnown = b.willingnessToPay.confidence >= 0.6 && b.willingnessToPay.estimate < 35
+    const wtpCorroborated =
+      b.willingnessToPay.confidence >= 0.3 &&
+      b.willingnessToPay.estimate < 40 &&
+      revPerCustomer !== undefined &&
+      revPerCustomer < sectorById(sector).arpuPerCustomer * 0.5
+    if (isTarget && customers > 40 && (wtpKnown || wtpCorroborated) && !candidates.some((c) => c.score >= 0.9)) {
+      const richer = segmentsForSector(sector)
+        .filter((o) => o.id !== seg.id)
+        .map((o) => ({ o, belief: career.segmentBeliefs[o.id] }))
+        .filter((x) => !!x.belief && x.belief.willingnessToPay.estimate > 55 && x.belief.retentionPotential.estimate >= 40)
+        // reachable and big enough to matter — see the churn branch's filter for the measurement
+        .filter((x) => x.belief!.acquisitionAccessibility.estimate >= 30 && x.belief!.marketSize.estimate >= 25)
+        .sort((a, b2) => b2.belief!.willingnessToPay.estimate - a.belief!.willingnessToPay.estimate)[0]
+      if (richer && !running.has(`${richer.o.id}:interview`) && !experimentAnswered(career, 'interview', richer.o.id)) {
+        candidates.push({
+          type: 'interview',
+          segmentId: richer.o.id,
+          why:
+            `${segmentDef(sector, seg.id).name} stay, but they pay little by nature — the board already says so. ` +
+            `The question worth paying for is whether ${segmentDef(sector, richer.o.id).name}, who pay real money, are the company you should be building.`,
+          score: 0.93,
+        })
       }
     }
   }

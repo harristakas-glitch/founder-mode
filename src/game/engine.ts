@@ -3471,7 +3471,15 @@ export const BOARD_TARGETS: Record<Stage, number> = {
 // What the board actually expects right now: raw stage targets, tempered by market reality.
 export function boardEffectiveTarget(s: GameState): number {
   if (!s.board) return 0
-  return Math.max(0.008, s.board.targetGrowth * (1 - 0.5 * marketSaturation(s)))
+  // BALANCE round 2 (2026-08-24): outside deep career, a B2B SaaS board prices the sector's own
+  // steadiness into its ask — churn-proof compounding revenue is exactly what they funded, so
+  // they expect it executed, not just collected. Every reader (the review gate, the Dashboard
+  // dots, the defiance note) goes through THIS function, so the number the board enforces and
+  // the number the player sees cannot disagree. Career keeps its stage-set targets untouched;
+  // the quick-saas casual measurement drove the 1.2 (13% failure vs the 25-35 owner band, with
+  // its board passing every review — the one quiet corner of the calibration).
+  const saasAppetite = s.sector === 'saas' && systemDepth(s, 'boardMeetings') !== 'deep' ? 1.2 : 1
+  return Math.max(0.008, s.board.targetGrowth * saasAppetite * (1 - 0.5 * marketSaturation(s)))
 }
 
 // Trailing weekly revenue growth — the board's alternative yardstick for mature companies.

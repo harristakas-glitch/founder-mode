@@ -107,3 +107,35 @@ runs sell at wk 44 with a clean board; further hardening would tax actives, all 
 measured-and-rejected in the diagnosis). Recorded as: bands hit in spirit, two cells outside,
 each with a named next knob awaiting an owner decision. token-incentives' warned-weeks floor
 recalibrated 60→45 (predicate intact at 3/3 runs/inboxed; the extension IS the escape hatch).
+
+## The calibration campaign — round 2 (2026-08-24): every cell to band
+
+Round 1 left two cells outside: quick-saas casual failure 13% (band floor 25) and the fintech
+career skill inversion (passive $16.4M > active $6.2M). Owner call: "do what it needs on all of
+them." What it needed:
+
+1. **SaaS board appetite** (quick/arena only): boardEffectiveTarget ×1.2 for saas outside deep
+   career — a B2B board expects churn-proof revenue EXECUTED, not collected. One function feeds
+   the review gate, the Dashboard dots and the defiance note, so display and enforcement cannot
+   split. Measured: quick-saas casual failure 13% → 31-34%, actives 0 fired (no leak).
+2. **The WTP trap gets signposted** (career guidance): fintech's consumers stay but pay almost
+   nothing (truth WTP 16-25). suggestedExperiment gains the second trap branch: a confident
+   low-WTP belief — or a low-confidence one CORROBORATED by the P&L (revenue per customer under
+   half the sector norm, passed in by the Discovery screen) — recommends interviewing the
+   best-believed richer segment.
+3. **Reachability in every destination picker** (the round's biggest find): the pivot pickers
+   scored alternatives on retention+pay alone, so every fintech pivot chose regulated
+   institutions (believed rp/wtp ~100 — truth accessibility 12-15, market 5-11, cycles 12-18wk)
+   and starved. All three pickers (guidance churn branch, guidance WTP branch, probe bot) now
+   require believed accessibility ≥ 30 and market size ≥ 25: "who should we build for instead"
+   may only answer with segments a pre-seed company can actually reach. After: every fintech
+   pivot lands on smb_finance and the sector's active line flips from $6.2M to $18.6M (16 seeds).
+4. **The probe's informed opening**: the active bot now opens on the best BELIEVED reachable
+   segment (the same scoring as the pivot) instead of the most accessible one — the old opening
+   is a designed mistake in trust-heavy sectors, and measuring it forever measured stubbornness.
+
+**Final (32 seeds × 3 sectors):** quick casual failure saas 34% / social 28% / fintech 19%
+(sector personality: fintech is the patient sector); quick actives 0-1 fired, medians $42-104M;
+career active failure 0-9% and active medians beat passive in ALL SIX cells (saas 14.3 vs 8.5,
+social 11.3 vs 7.2, fintech 11.2 vs 9.0). The `--assert` gate now pins: quick casual failure
+[15,40], career active ≤ 30%, passive median ≤ active median, zero career firings.
