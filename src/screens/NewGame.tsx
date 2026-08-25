@@ -747,7 +747,17 @@ export function NewGame() {
                       </span>
                     </label>
                     {engineV2 && experience === 'career' && (
-                      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                      <div className="mt-2.5">
+                        {/* owner playtest 2026-08-26: the checkbox explains the ENGINE, then these
+                            cards appeared under it unlabeled — "the tick says something different
+                            from the choices below". The options are STARTING SITUATIONS the beta
+                            engine unlocks; now they say so. */}
+                        <div className="text-[11px] font-bold tracking-[0.08em] text-mut uppercase">Starting situation</div>
+                        <div className="mt-0.5 mb-1.5 text-[11.5px] leading-snug text-mut">
+                          The new engine can drop you into a live problem instead of a blank week one. Pick where the story starts — everything
+                          about the market above still applies.
+                        </div>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
                         {[{ id: 'standard', name: 'Week one', blurb: 'The classic start: an idea, $200k, and nobody knows if the market wants it.' }, ...V2_SCENARIOS].map((sc) => (
                           <button
                             key={sc.id}
@@ -762,6 +772,7 @@ export function NewGame() {
                             <div className="mt-0.5 text-[11px] leading-snug text-mut">{sc.blurb}</div>
                           </button>
                         ))}
+                      </div>
                       </div>
                     )}
                   </div>
