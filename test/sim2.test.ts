@@ -492,6 +492,52 @@ console.log('— Pricing dial cannot ratchet (owner-reported week-4 unicorn) —
   ok(n.simV2!.pricing.price === before && n.simV2!.pricing.manual !== true, 'NaN/zero payloads bounce off the dial')
 }
 
+console.log('— Exploit regressions: collection gouge + M&A arbitrage (adversarial hunt 2026-08-25) —')
+{
+  const { advanceWeek: aw, valuation, acquisitionPrice, canAcquire, sustainedGrowthRate } = await import('../src/game/engine')
+  const { applyJournaled } = await import('../src/game/replay')
+
+  // 1. the collection-floor gouge: price the dial to its legal cap against a low-WTP mass
+  //    segment — the billing ceiling (15x WTP) must keep collected revenue near baseline
+  let g = newGame('G', 'fintech', 'business', { config: v2cfg(42, 'fintech') })
+  g = applyJournaled(g, 'v2_position', { seg: 'consumers' }).state
+  g = applyJournaled(g, 'v2_price', { v: 1e9 }).state
+  g.marketingSpend = 5000
+  for (let w = 0; w < 15 && !g.gameOver; w++) g = aw(g)
+  ok(!g.gameOver && valuation(g) < 80_000_000, `gouging consumers at the dial cap stays earthbound (val $${(valuation(g) / 1e6).toFixed(1)}M)`)
+  const cust = g.simV2!.cohorts.reduce((a, c) => a + c.size, 0)
+  const perCust = cust > 100 ? g.simV2!.finance.revenue / cust : 0
+  ok(perCust < 15, `a $1.6-WTP customer cannot be billed $48/wk (collected $${perCust.toFixed(1)}/customer/wk)`)
+
+  // 2. M&A arbitrage: the acquirer-side price floor and the whale gate
+  let m = newGame('M', 'social', 'business', { config: { mode: 'quick', format: 'standard', sector: 'social', seed: 2 } as GameConfig })
+  for (let w = 0; w < 10; w++) m = aw(m)
+  const whale = m.rivals.find((r) => r.alive)!
+  whale.users = 600_000
+  m.users = 20_000
+  m.lastRevenue = 49_000
+  const price = acquisitionPrice(m, whale)
+  ok(price >= 600_000 * 0.7 * (49_000 / 20_000) * 52 * 4 * 0.95, `the price floors at what YOUR machine makes of their users ($${(price / 1e6).toFixed(0)}M, not ~$39M)`)
+  // give the acquirer the exploit's exact posture: big enough to pass the 1.5x size check
+  // (val ~$80M vs rival ~$40M) yet nowhere near able to fund a $214M deal
+  for (let i = Math.max(0, m.history.length - 4); i < m.history.length; i++) m.history[i] = { ...m.history[i], revenue: 200_000, users: 20_000 }
+  ok(valuation(m) >= 1.5 * (acquisitionPrice(m, whale) / 1.4 / 5), 'sanity: the old size gate alone would let this through')
+  const gate = canAcquire(m, whale)
+  ok(!gate.ok && /too big/i.test(gate.reason ?? ''), `nobody swallows a whale with paper — the deal is gated, not just priced (${gate.reason ?? 'ok?!'})`)
+
+  // 3. an M&A user step is priced as a STEP, not a growth trend, in every window regime
+  const step = newGame('S', 'social', 'technical', { config: { mode: 'quick', format: 'standard', sector: 'social', seed: 5 } as GameConfig })
+  for (let w = 0; w < 8; w++) {
+    step.history.push({ ...step.history[step.history.length - 1] ?? { week: 0, cash: 1e6, users: 1000, revenue: 0, burn: 0, pmf: 10, valuation: 1e6 }, week: w + 1, users: 1000 + w * 40 })
+  }
+  step.week = step.history.length
+  step.history.push({ ...step.history[step.history.length - 1], week: step.week, users: 420_000 })
+  const pegged = sustainedGrowthRate(step)
+  step.flags[`acqUsersW${step.week}`] = 418_000
+  const excluded = sustainedGrowthRate(step)
+  ok(pegged >= 0.45 && excluded < 0.25 && excluded < pegged / 2, `the same +418k step reads ${pegged.toFixed(2)} raw but ${excluded.toFixed(2)} once flagged as M&A`)
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))

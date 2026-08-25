@@ -316,16 +316,20 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     // collection floor 0.45 (was 0.75 — measured hole: pricing 10x above a mass segment's WTP
     // still collected three-quarters, making overpricing free money). Below-WTP pricing now
     // genuinely converts better; above-WTP pricing genuinely leaks to downgrades and laps.
-    const collect = 0.45 + 0.55 * priceFit(inp.price, effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock), seg.priceSensitivity)
-    // NOTE on the floor: 0.45 of sticker from a low-WTP cohort is the DESIGNED downgrade-tier
-    // mechanic (one price serves segments whose WTP spans 100x). It is safe only because the
-    // price dial is hard-capped at 6x the sector reference at BOTH write paths (replay clamp +
-    // UI band) — an unbounded dial times this floor was a week-4 unicorn. A per-cohort WTP
-    // billing ceiling was tried and rejected: it repriced the honest base economy (fintech
-    // casual valuations fell 6x, new bankruptcies in two sectors — measured).
+    const wtpHere = effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock)
+    const collect = 0.45 + 0.55 * priceFit(inp.price, wtpHere, seg.priceSensitivity)
+    // BILLING CEILING at 15x WTP. The 0.45 floor is the designed downgrade-tier mechanic (one
+    // price serves segments whose WTP spans 100x), and at the SECTOR REFERENCE price it already
+    // extracts up to ~15x a mass segment's WTP — that ratio IS the calibrated baseline. What it
+    // must never do is scale past that with the dial: the adversarial hunt proved the 6x dial
+    // clamp alone only moved the unicorn from week 4 to week 18 (fintech consumers, WTP ~$1.6,
+    // billed $48.6/wk at the $108 cap — 30x honest revenue, retention never reads price). A
+    // tighter 2.2x ceiling was tried first and rejected — it repriced the honest baseline
+    // (fintech casual valuations fell 6x). 15x binds ONLY in the gouge regime, measured.
+    const billed = Math.min(inp.price, wtpHere * 15)
     // ad-model archetypes (social): revenue per user compounds with network scale — CPMs and
     // fill rates climb, same shape the classic engine uses. Config-driven, not sector-coded.
-    const base = c.size * inp.price * collect * adScale
+    const base = c.size * billed * collect * adScale
     expansionRevenue += base * ((c.expansion ?? 1) - 1)
     return x + base * (c.expansion ?? 1)
   }, 0)

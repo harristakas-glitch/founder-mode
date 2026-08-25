@@ -664,7 +664,25 @@ function trailingUsers(s: GameState, span: number, back = 0): number {
 function smoothedGrowth(s: GameState, back: number): number | null {
   const then = trailingUsers(s, VALUATION_SMOOTHING, back)
   if (then <= 0) return null
-  return clamp((trailingUsers(s, VALUATION_SMOOTHING) - then) / then / back, -0.5, 0.5)
+  // Users bought in an ACQUISITION are a step, not a trend — exactly the class of move this
+  // window exists to discount. Without this, one stock-financed rival buy (+419k users in a
+  // week) pegged both growth legs at the clamp, maxing multiple AND growthMania and re-rating
+  // the whole company off a single M&A step (measured: week-18 unicorn). Migrated users still
+  // count everywhere else — revenue, userPart, TAM — just not as growth a cheque-writer pays
+  // a multiple for.
+  // the step stays "in play" until the THEN-window is fully past the buy — back + smoothing
+  const acquired = acquiredUsersSince(s, s.week - back - VALUATION_SMOOTHING)
+  return clamp((trailingUsers(s, VALUATION_SMOOTHING) - acquired - then) / then / back, -0.5, 0.5)
+}
+
+/** Users migrated in via M&A after `fromWeek` (recorded by acquireRival, keyed per week). */
+function acquiredUsersSince(s: GameState, fromWeek: number): number {
+  let total = 0
+  for (const [k, v] of Object.entries(s.flags)) {
+    if (!k.startsWith('acqUsersW')) continue
+    if (Number(k.slice(9)) > fromWeek) total += v
+  }
+  return total
 }
 
 /**
@@ -690,13 +708,29 @@ function smoothedGrowth(s: GameState, back: number): number | null {
  */
 export function sustainedGrowthRate(s: GameState): number {
   // Under a quarter plus the month it is compared against there is no long window to read, and
-  // `growthRate` is already the whole of the history. Nothing is exploitable this early either:
-  // `valuation` is on its $400k floor and the acquisition trigger wants $8M.
-  if (s.history.length < VALUATION_WINDOW + VALUATION_SMOOTHING) return growthRate(s)
+  // `growthRate` is already the whole of the history. The first version fell back to the RAW
+  // spot rate here with a comment claiming nothing was exploitable this early — false: a social
+  // run reached a $58M valuation by week 16, stock-bought a 600k-user rival, and the M&A step
+  // pegged the raw fallback at the clamp for a $1.14B week-18 unicorn (adversarial hunt,
+  // 2026-08-25). The fallback now prices M&A steps like the smoothed legs do: as steps.
+  if (s.history.length < VALUATION_WINDOW + VALUATION_SMOOTHING) return spotGrowthExAcquisitions(s)
   const month = smoothedGrowth(s, VALUATION_SMOOTHING)
   const quarter = smoothedGrowth(s, VALUATION_WINDOW)
-  if (month === null || quarter === null) return growthRate(s)
+  if (month === null || quarter === null) return spotGrowthExAcquisitions(s)
   return Math.min(month, quarter)
+}
+
+/** growthRate with M&A user influx removed from the "now" side — identical to growthRate
+ *  (bit for bit, same early returns) on every run that never bought a rival. */
+function spotGrowthExAcquisitions(s: GameState): number {
+  const h = s.history
+  if (h.length < 5) return growthRate(s)
+  const acq = acquiredUsersSince(s, s.week - 6)
+  if (acq === 0) return growthRate(s)
+  const now = h[h.length - 1].users - acq
+  const then = h[h.length - 5].users
+  if (then <= 0) return now > 0 ? 0.2 : 0
+  return clamp((now - then) / then / 4, -0.5, 0.5)
 }
 
 export function valuation(s: GameState): number {
@@ -3893,7 +3927,17 @@ function pitchTeamInner(s: GameState, id: PitchOption['id']): void {
 
 // Exact asking price, visible before you offer — no hidden bills, even in M&A.
 export function acquisitionPrice(s: GameState, r: Rival): number {
-  return Math.round((rivalValuation(r, s) * 1.4) / 100_000) * 100_000
+  // Two floors, and the seller takes the higher. The naive floor prices THEIR company (users x
+  // perUserVal); the acquirer-side floor prices what the migrated users become the moment they
+  // land in YOUR machine — your realized revenue per user, annualized, at a 4x book multiple.
+  // Without it a social rival's users sold for ~$65 each and re-rated at ~$2,700 each through
+  // valuation()'s revenue multiple the week after the deal: a 40-80x arbitrage that
+  // stock-financed (zero cash) into a week-18 unicorn (adversarial hunt, 2026-08-25).
+  const naive = rivalValuation(r, s) * 1.4
+  const migrated = r.users * 0.7
+  const revPerUser = s.users > 0 ? s.lastRevenue / s.users : 0
+  const acquirerSide = migrated * revPerUser * 52 * 4
+  return Math.round(Math.max(naive, acquirerSide) / 100_000) * 100_000
 }
 
 export function canAcquire(s: GameState, r: Rival): { ok: boolean; reason?: string } {
@@ -3902,6 +3946,10 @@ export function canAcquire(s: GameState, r: Rival): { ok: boolean; reason?: stri
   if ((r.rebuffedUntil ?? 0) > s.week) return { ok: false, reason: `They won't take your calls until week ${r.rebuffedUntil}` }
   const val = valuation(s)
   if (val < rivalValuation(r, s) * 1.5) return { ok: false, reason: 'You need to be clearly the bigger company (1.5× their valuation)' }
+  // and the DEAL has to fit inside the company: nobody swallows a whale with paper. Without
+  // this, a $58M company stock-financed a $213M deal (78% of itself) for a 600k-user rival
+  // and the acquired book re-rated into a week-20 unicorn (adversarial hunt, 2026-08-25).
+  if (acquisitionPrice(s, r) > val * 0.5) return { ok: false, reason: 'Deal too big — the price is over half your own valuation' }
   return { ok: true }
 }
 
@@ -3940,6 +3988,8 @@ function acquireRivalInner(s: GameState, rivalId: string, method: 'cash' | 'stoc
   }
   const migrated = Math.round(r.users * 0.7) // some of their users leave during the transition
   s.users += migrated
+  // valuation's growth legs read this to price the step as a step (see smoothedGrowth)
+  s.flags[`acqUsersW${s.week}`] = (s.flags[`acqUsersW${s.week}`] ?? 0) + migrated
   s.features = clamp(s.features + 4, 0, 100)
   s.bugs = clamp(s.bugs + 8, 0, 100) // two codebases, one repo: integration pain is real
   s.maCooldown = 15
