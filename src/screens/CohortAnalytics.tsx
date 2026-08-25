@@ -23,6 +23,8 @@ import { ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { EmptyState, Panel } from '../components'
 import { cohortDecaysApplied, RETENTION_WINDOW_WEEKS, segmentDef, segmentsForSector } from '../game/career/pmf'
+import { usesBusinessSimulationV2 } from '../game/modes'
+import type { BusinessSimulationV2State } from '../game/sim2/types'
 import type { CustomerCohort, SegmentId } from '../game/career/types'
 import { useStore } from '../store'
 
@@ -392,17 +394,53 @@ function Triangle({ rows }: { rows: Row[] }) {
 
 // ---------------------------------------------------------------------------------------------
 
+/** V2 runs track cohorts in the causal engine, not the career discovery model — adapt them to
+ *  the exact shape this screen's triangle and trend already read (owner playtest 2026-08-25:
+ *  "cohorts don't work, i don't see either of 2 graphs" — both graphs read career.cohorts,
+ *  which the V2 branch never populates). Same visuals, the V2 engine's own facts. */
+function adaptV2Cohorts(v2: BusinessSimulationV2State): CustomerCohort[] {
+  return v2.cohorts
+    .filter((c) => (c.sizeAtAcquisition ?? c.size) >= 2)
+    .map(
+      (c) =>
+        ({
+          id: c.id,
+          acquiredWeek: c.acquiredWeek,
+          segmentId: c.segmentId as unknown as SegmentId,
+          startingCustomers: Math.round(c.sizeAtAcquisition ?? c.size),
+          activeCustomers: Math.round(c.size),
+          exactCustomers: c.size,
+          retentionAt4wk: c.retentionAt4wk,
+          acquisitionCost: 0,
+          priceAtAcquisition: c.priceAtAcquisition,
+          productQualityAtAcquisition: Math.round((c.fitAtAcquisition ?? 0.5) * 100),
+          origin: 'organic',
+        }) as unknown as CustomerCohort,
+    )
+}
+
 export function CohortAnalytics() {
   const game = useStore((s) => s.game)
   const career = game?.career
+  const v2 = game && usesBusinessSimulationV2(game) && game.simV2 ? game.simV2 : null
   const [picked, setPicked] = useState<SegmentId | null>(null)
 
-  const segments = useMemo(() => (game ? segmentsForSector(game.sector) : []), [game])
-  const segment = picked ?? career?.primaryTargetSegmentId ?? segments[0]?.id
+  const segments = useMemo(
+    () =>
+      v2
+        ? v2.segments.filter((x) => x.id !== 'none').map((x) => ({ id: x.id as unknown as SegmentId, name: x.name }))
+        : game
+          ? segmentsForSector(game.sector)
+          : [],
+    [game, v2],
+  )
+  const sourceCohorts = useMemo<CustomerCohort[]>(() => (v2 ? adaptV2Cohorts(v2) : (career?.cohorts ?? [])), [v2, career])
+  const v2Target = v2?.positioning?.targetSegmentId as SegmentId | undefined
+  const segment = picked ?? (v2 ? (v2Target ?? (segments[0]?.id as SegmentId)) : (career?.primaryTargetSegmentId ?? segments[0]?.id))
 
   const rows = useMemo<Row[]>(() => {
-    if (!career || !game || !segment) return []
-    return career.cohorts
+    if (!game || !segment) return []
+    return sourceCohorts
       .filter((c) => c.segmentId === segment)
       .map((c) => ({
         cohort: c,
@@ -412,11 +450,11 @@ export function CohortAnalytics() {
         incentivised: !isOrganic(c),
       }))
       .reverse()
-  }, [career, game, segment])
+  }, [sourceCohorts, game, segment])
 
   const trend = useMemo<Point[]>(() => {
-    if (!career || !game || !segment) return []
-    const mine = career.cohorts.filter((c) => c.segmentId === segment)
+    if (!game || !segment) return []
+    const mine = sourceCohorts.filter((c) => c.segmentId === segment)
     const first = mine.reduce((a, c) => (c.retentionAt4wk !== undefined ? Math.min(a, snapshotWeek(c.acquiredWeek)) : a), Infinity)
     if (!Number.isFinite(first)) return []
     const out: Point[] = []
@@ -425,9 +463,9 @@ export function CohortAnalytics() {
       if (p) out.push(p)
     }
     return out
-  }, [career, game, segment])
+  }, [sourceCohorts, game, segment])
 
-  if (!game || !career)
+  if (!game || (!career && !v2))
     return (
       <div>
         <h1 className="text-[28px] font-bold tracking-tight">Cohorts</h1>
@@ -447,7 +485,7 @@ export function CohortAnalytics() {
     .filter((r) => r.atFour !== undefined)
     .map((r) => ({ week: snapshotWeek(r.cohort.acquiredWeek), value: r.atFour!, size: r.cohort.startingCustomers, incentivised: r.incentivised }))
 
-  const def = segment ? segmentDef(game.sector, segment) : null
+  const def = v2 ? { name: segments.find((x) => x.id === segment)?.name ?? 'Segment' } : segment ? segmentDef(game.sector, segment) : null
 
   return (
     <div>
@@ -459,7 +497,7 @@ export function CohortAnalytics() {
       {segments.length > 1 && (
         <div className="mb-3.5 flex flex-wrap gap-2">
           {segments.map((s) => {
-            const n = career.cohorts.filter((c) => c.segmentId === s.id).length
+            const n = sourceCohorts.filter((c) => c.segmentId === s.id).length
             const on = s.id === segment
             return (
               <button
@@ -471,7 +509,9 @@ export function CohortAnalytics() {
               >
                 {s.name}
                 <span className="ml-1.5 text-[11px] font-normal text-mut">{n || '—'}</span>
-                {career.primaryTargetSegmentId === s.id && <span className="ml-1.5 text-[10px] font-bold tracking-wide text-accent uppercase">target</span>}
+                {(v2 ? v2Target === s.id : career?.primaryTargetSegmentId === s.id) && (
+                  <span className="ml-1.5 text-[10px] font-bold tracking-wide text-accent uppercase">target</span>
+                )}
               </button>
             )
           })}
@@ -510,8 +550,8 @@ export function CohortAnalytics() {
               {insideNoise ? (
                 <>
                   <span className="font-semibold text-ink">That move is smaller than the gap between your own cohorts.</span> The ten cohorts behind this
-                  average range from {pct(Math.min(...windowAt(career.cohorts.filter((c) => c.segmentId === segment), game.week).map((c) => c.retentionAt4wk!)))} to{' '}
-                  {pct(Math.max(...windowAt(career.cohorts.filter((c) => c.segmentId === segment), game.week).map((c) => c.retentionAt4wk!)))}, so the headline
+                  average range from {pct(Math.min(...windowAt(sourceCohorts.filter((c) => c.segmentId === segment), game.week).map((c) => c.retentionAt4wk!)))} to{' '}
+                  {pct(Math.max(...windowAt(sourceCohorts.filter((c) => c.segmentId === segment), game.week).map((c) => c.retentionAt4wk!)))}, so the headline
                   number twitches by a point or two every week purely as old cohorts drop out of the window and new ones enter. Nothing about your product
                   changed. Judge it over six weeks, not one.
                 </>

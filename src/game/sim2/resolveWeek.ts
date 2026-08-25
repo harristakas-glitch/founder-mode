@@ -289,6 +289,7 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
         segmentId: seg.id,
         acquiredWeek: inp.week,
         size: won,
+        sizeAtAcquisition: won,
         priceAtAcquisition: inp.price,
         fitAtAcquisition: fit,
         expansion: 1,
@@ -318,7 +319,12 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     churnedTotal += c.size - kept
     // retained customers DEEPEN (spec §20.4): seats, usage, upgrades — bounded, slow, real
     const expansion = Math.min(1.8, (c.expansion ?? 1) * (1 + (seg.expansionRate ?? 0.001)))
-    if (kept >= 0.5) nextCohorts.push({ ...c, size: kept, expansion })
+    // the 4-week survival snapshot, frozen once — the fact the Cohorts screen plots
+    const atFour =
+      c.retentionAt4wk === undefined && inp.week - c.acquiredWeek === 4 && (c.sizeAtAcquisition ?? 0) > 0
+        ? clamp01(kept / c.sizeAtAcquisition!)
+        : c.retentionAt4wk
+    if (kept >= 0.5) nextCohorts.push({ ...c, size: kept, expansion, retentionAt4wk: atFour })
   }
   v2.cohorts = nextCohorts.slice(-520) // a decade of weekly cohorts is plenty
 
@@ -484,6 +490,21 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     }
     const prevFit = prevSnap?.productFit[seg.id] ?? 0
     for (const bar of [0.5, 0.65, 0.8]) {
+      // losing a bar is news too — fit decay used to be completely silent (owner playtest)
+      if (prevFit >= bar && (fitBySegment[seg.id] ?? 0) < bar && (totalCustomersBySegment[seg.id] ?? 0) > 5) {
+        events.push({
+          id: eid(`fitlost_${seg.id}_${bar}`),
+          week: inp.week,
+          category: 'product',
+          type: 'fit_threshold_lost',
+          magnitude: 0.4 + bar * 0.4,
+          urgency: 0.6,
+          strategicRelevance: 0.7,
+          entityIds: [seg.id],
+          facts: { segment: seg.name, level: bar === 0.5 ? 'Competitive' : bar === 0.65 ? 'Strong' : 'Best-in-class' },
+          visibility: 'known',
+        })
+      }
       if (prevFit < bar && (fitBySegment[seg.id] ?? 0) >= bar) {
         events.push({
           id: eid(`fit_${seg.id}_${bar}`),
@@ -505,8 +526,53 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
   const weightedFit =
     v2.segments.reduce((x, sg) => x + (fitBySegment[sg.id] ?? 0) * (totalCustomersBySegment[sg.id] ?? 1), 0) /
     Math.max(1, v2.segments.reduce((x, sg) => x + (totalCustomersBySegment[sg.id] ?? 1), 0))
-  const retentionQuality = customers > 0 ? clamp01(1 - churnedTotal / Math.max(1, customers + churnedTotal) / 0.06) : 0.3
+  // CREDIBILITY (owner playtest 2026-08-25): with a handful of customers, one lucky
+  // zero-churn week read retentionQuality ~1 and PMF spiked past 60 — then "mysteriously"
+  // decayed as reality arrived. Thin data now reads closer to neutral; the blend is gone
+  // (cred ~1) by a few hundred customers.
+  const rawRetention = customers > 0 ? clamp01(1 - churnedTotal / Math.max(1, customers + churnedTotal) / 0.06) : 0.3
+  const cred = clamp01(customers / (customers + 60))
+  const retentionQuality = customers > 0 ? 0.55 + (rawRetention - 0.55) * cred : 0.3
   const displayedPmf = clamp(100 * (0.55 * weightedFit + 0.45 * retentionQuality), 0, 100)
+  // a real PMF slide gets NAMED, once per slide: which leg is falling, and where
+  {
+    const h = v2.weeklyHistory
+    const p4 = h[h.length - 4]
+    const p5 = h[h.length - 5]
+    const p1 = h[h.length - 1]
+    const delta = p4?.pmf !== undefined ? displayedPmf - p4.pmf : 0
+    const prevDelta = p1?.pmf !== undefined && p5?.pmf !== undefined ? p1.pmf - p5.pmf : 0
+    if (p4?.pmf !== undefined && delta <= -4 && prevDelta > -4) {
+      const dFit = Math.round(100 * 0.55 * weightedFit) - (p4.pmfFitLeg ?? Math.round(100 * 0.55 * weightedFit))
+      const dRet = Math.round(100 * 0.45 * retentionQuality) - (p4.pmfRetentionLeg ?? Math.round(100 * 0.45 * retentionQuality))
+      // the biggest served segment with the lowest fit is usually the story
+      const biggest = [...v2.segments]
+        .filter((sg) => (totalCustomersBySegment[sg.id] ?? 0) > customers * 0.15)
+        .sort((a2, b2) => (fitBySegment[a2.id] ?? 0) - (fitBySegment[b2.id] ?? 0))[0]
+      events.push({
+        id: eid('pmf_shift'),
+        week: inp.week,
+        category: 'product',
+        type: 'pmf_shift',
+        magnitude: clamp01(Math.abs(delta) / 12),
+        urgency: 0.65,
+        strategicRelevance: 0.8,
+        entityIds: biggest ? [biggest.id] : [],
+        facts: {
+          from: Math.round(p4.pmf),
+          to: Math.round(displayedPmf),
+          driver: Math.abs(dFit) >= Math.abs(dRet) ? 'product fit' : 'churn',
+          detail:
+            Math.abs(dFit) >= Math.abs(dRet)
+              ? biggest
+                ? `${biggest.name} are a growing share of your base and rate the product ${Math.round((fitBySegment[biggest.id] ?? 0) * 100)}/100`
+                : 'the average customer rates the product lower than your early base did'
+              : `churn is up — check price vs willingness-to-pay, service quality, and reliability`,
+        },
+        visibility: 'known',
+      })
+    }
+  }
 
   v2.explanations = [
     {
@@ -540,6 +606,9 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     productFit: fitBySegment,
     attributes: attrs,
     brand: inp.brandStock,
+    pmf: Math.round(displayedPmf),
+    pmfFitLeg: Math.round(100 * 0.55 * weightedFit),
+    pmfRetentionLeg: Math.round(100 * 0.45 * retentionQuality),
     boardConfidence: v2.boardConfidence.value,
     investorConfidence: v2.investorConfidence.value,
     planVariance: 0,

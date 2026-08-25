@@ -187,6 +187,11 @@ export interface CustomerCohortV2 {
   fitAtAcquisition: number
   /** revenue multiplier from seat/usage growth — retained customers deepen (spec §20.4) */
   expansion: number
+  /** the cohort's size the week it joined — the denominator every retention read needs
+   *  (absent on saves from before the Cohorts screen learned V2; fall back to size) */
+  sizeAtAcquisition?: number
+  /** 4-week survival, frozen once at age 4 — the same fact V1's cohort triangle freezes */
+  retentionAt4wk?: number
 }
 
 // ---------- finance (spec §22, filled in phase 2) --------------------------------------------
@@ -272,6 +277,11 @@ export interface SimV2Snapshot {
   serviceQuality: number
   /** ids of this week's KNOWN events, for the postmortem's turning points */
   eventIds: string[]
+  /** displayed PMF and its two legs (fit x0.55, retention x0.45, both x100) — stored so a
+   *  falling PMF can be DECOMPOSED and narrated instead of read as mystery (owner playtest) */
+  pmf?: number
+  pmfFitLeg?: number
+  pmfRetentionLeg?: number
 }
 
 // ---------- root state (spec §32) ------------------------------------------------------------

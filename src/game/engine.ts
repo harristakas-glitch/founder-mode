@@ -1999,8 +1999,18 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // pull grows each week until the market reopens. No new draws — goldens hold.
   const frozenWeeks = (s.flags.frozenWeeks ?? 0) as number
   const thaw = s.climate < -0.6 ? Math.min(0.09, Math.max(0, frozenWeeks - 8) * 0.015) : 0
-  s.climate = clamp(s.climate + reversion + thaw + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
+  // PENT-UP DEMAND (owner playtest 2026-08-25, third climate report: "mostly frozen or cool,
+  // never warm"). The frozen-band thaw ends deep winters, but reversion only pulls toward
+  // NEUTRAL — an unlucky rate path could camp a whole run in the cool band with zero warm
+  // weeks (measured: 2/60 random runs >50% cold in their first 60 weeks, worst 55%). Real
+  // funding cycles overshoot: capital that sat out a long winter comes back HUNGRY. After
+  // ~20 weeks without a warm reading the pull grows until the market actually reopens.
+  // No new draws — the golden traces cannot move (12-week runs never reach the threshold).
+  const subWarmWeeks = (s.flags.subWarmWeeks ?? 0) as number
+  const pentUp = subWarmWeeks > 20 ? Math.min(0.05, (subWarmWeeks - 20) * 0.005) : 0
+  s.climate = clamp(s.climate + reversion + thaw + pentUp + rand(-0.08, 0.08) + marketReturn * 6 - rateShift * 0.5, -1, 1)
   s.flags.frozenWeeks = s.climate < -0.6 ? frozenWeeks + 1 : 0
+  s.flags.subWarmWeeks = s.climate < 0.2 ? subWarmWeeks + 1 : 0
   if (can(s, 'macroShocks')) macroShocks(s)
 
   // --- inflation quietly eats payroll: salaries drift up with the cost of living ---
@@ -2350,6 +2360,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         if (e.type === 'board_confidence_up' || e.type === 'board_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Board confidence: ${f.word}`
         if (e.type === 'investor_confidence_up' || e.type === 'investor_confidence_down') return `${e.type.endsWith('up') ? '▲' : '▼'} Investor sentiment: ${f.word}`
         if (e.type.endsWith('_completed') && e.category === 'research') return `🔬 ${f.study} done: ${f.segment} ${f.metric} confidence ${f.confidenceBefore}% → ${f.confidenceAfter}%`
+        if (e.type === 'pmf_shift') return `▼ PMF ${f.from} → ${f.to} — mostly ${f.driver}: ${f.detail}`
+        if (e.type === 'fit_threshold_lost') return `▼ ${f.segment} no longer rate the product ${f.level}`
         if (e.type.startsWith('milestone_')) return `🏆 ${f.headline}`
         if (e.type === 'chapter_entered') return `📖 New chapter: ${f.chapter} — ${f.line}`
         return e.type

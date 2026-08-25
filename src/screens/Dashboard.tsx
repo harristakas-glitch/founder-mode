@@ -436,6 +436,8 @@ function V2BriefingCard() {
     if (e.type === 'cac_spike') return `CAC $${f.cac} (+${f.pct}%)`
     if (e.type === 'commitment_missed') return 'Board commitment missed'
     if (e.type === 'commitment_delivered') return 'Board commitment delivered'
+    if (e.type === 'pmf_shift') return `PMF ${f.from} → ${f.to} — ${f.driver}`
+    if (e.type === 'fit_threshold_lost') return `${f.segment} rate the product below ${f.level}`
     if (e.type === 'chapter_entered') return `New chapter: ${f.chapter}`
     if (e.type.startsWith('milestone_')) return String(f.headline)
     if (e.category === 'research') return `${f.study} completed`
