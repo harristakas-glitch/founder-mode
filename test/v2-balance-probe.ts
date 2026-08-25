@@ -7,10 +7,10 @@
 //
 //   npx tsx test/v2-balance-probe.ts [seeds] [sectors...]
 
-import { advanceWeek, newGame, pitchInvestors, acceptTermSheet, resolveChoiceOnState, marketingMax } from '../src/game/engine'
-import { startResearchV2 } from '../src/game/sim2/research'
+import { advanceWeek, newGame } from '../src/game/engine'
+import { BOTS } from './bots/archetypes'
 import type { GameConfig } from '../src/game/modes'
-import type { GameState, SectorId } from '../src/game/types'
+import type { SectorId } from '../src/game/types'
 
 const argRest = process.argv.slice(2)
 const SEEDS = Number(argRest[0]) || 16
@@ -19,58 +19,6 @@ const WEEKS = 120
 
 const money = (n: number) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${Math.round(n / 1e3)}k`)
 const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0)
-
-function resolveChoices(s: GameState): void {
-  for (const m of s.inbox) if (m.kind === 'choice' && !m.resolved && m.choices) resolveChoiceOnState(s, m.id, 0)
-}
-
-function hire(s: GameState, role: string): void {
-  const staff = s.employees.length + s.pendingHires.length + s.offersOut.length
-  if (s.cash < 180_000 || staff >= 10) return
-  const c = [...s.candidates].filter((x) => x.role === role).sort((a, b) => b.skill - a.skill)[0]
-  if (!c) return
-  s.candidates = s.candidates.filter((x) => x.id !== c.id)
-  s.offersOut.push(c)
-}
-
-function casual(s: GameState): void {
-  resolveChoices(s)
-  s.marketingSpend = Math.min(5_000, marketingMax(s))
-  if (s.raiseCooldown === 0 && s.termSheets.length === 0 && s.week % 8 === 0) s.termSheets = pitchInvestors(s).sheets
-  if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount - a.amount)[0].id)
-  if (s.week % 9 === 0) hire(s, 'engineer')
-}
-
-function active(s: GameState): void {
-  resolveChoices(s)
-  const v2 = s.simV2!
-  if (s.week === 2) s.marketingSpend = Math.min(6_000, marketingMax(s))
-  // an ACTIVE founder re-points the team after every war room / harden sprint — without this
-  // the crisis choices' allocation shifts compound and the product org never builds again
-  if (s.week >= 2 && s.week % 8 === 2) s.allocation = { ...s.allocation, features: 40, quality: 35, bugs: 15, research: 10 }
-  // scale spend only after the service side holds and the channel is not screaming
-  if (s.week > 20 && v2.serviceQuality > 60 && (v2.gtm?.lastCac ?? 0) < 400) s.marketingSpend = Math.min(10_000, marketingMax(s))
-  else if (v2.serviceQuality < 45) s.marketingSpend = Math.min(3_000, marketingMax(s))
-  // study the money question early, then price to the segment you ACTUALLY serve — premium
-  // into a mass-consumer base is a real mistake the economics punish (measured, round 1)
-  if (s.week === 6) startResearchV2(s, 'pricing_study', v2.segments[1]?.id ?? v2.segments[0].id)
-  if (s.week === 20 && s.career) {
-    const served: Record<string, number> = {}
-    for (const c of v2.cohorts) served[c.segmentId] = (served[c.segmentId] ?? 0) + c.size
-    const domId = Object.entries(served).sort((a, b) => b[1] - a[1])[0]?.[0]
-    const dom = v2.segments.find((x) => x.id === domId)
-    if (dom) {
-      const est = dom.knowledge.wtp.visibleEstimate
-      s.career.pricing = est > v2.pricing.price * 1.35 ? 'premium' : est < v2.pricing.price * 0.75 ? 'low' : 'market'
-    }
-  }
-  // team: engineers first (attributes are the game), one seller for the upmarket door, service
-  if (s.week === 10 || s.week === 24 || s.week === 38 || s.week === 52) hire(s, 'engineer')
-  if (s.week === 30) hire(s, 'sales')
-  if (s.week === 18 || s.week === 44) hire(s, 'designer')
-  if (s.raiseCooldown === 0 && s.termSheets.length === 0 && (s.cash < 250_000 || s.week % 16 === 0)) s.termSheets = pitchInvestors(s).sheets
-  if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount / b.equity - a.amount / a.equity)[0].id)
-}
 
 interface Row {
   sector: string
@@ -90,9 +38,10 @@ for (const sector of SECTORS) {
     const row: Row = { sector, player, bankrupt: 0, fired: 0, exits: 0, alive: 0, chapters: {}, vals: [], customers: [] }
     for (let i = 0; i < SEEDS; i++) {
       const cfg = { mode: 'career', format: 'standard', sector, seed: 1000 + i * 97, engine: 'v2' } as GameConfig
-      let s = newGame(`${player}V2`, sector, player === 'active' ? 'business' : 'technical', { config: cfg })
+      const bot = BOTS[player]
+      let s = newGame(`${player}V2`, sector, bot.founderKind, { config: cfg })
       for (let w = 0; w < WEEKS && !s.gameOver; w++) {
-        ;(player === 'casual' ? casual : active)(s)
+        bot.play(s)
         if (s.gameOver) break
         s = advanceWeek(s)
       }

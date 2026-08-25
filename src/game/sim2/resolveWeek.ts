@@ -209,7 +209,10 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
   v2.positioning ??= { targetSegmentId: null }
   v2.gtm.paidSaturationEma = v2.gtm.paidSaturationEma * 0.85 + inp.perfSpend * 0.15
   const saturation = v2.gtm.paidSaturationEma / (v2.gtm.paidSaturationEma + 25_000)
-  const effectiveSpend = inp.perfSpend * (1 - 0.45 * saturation)
+  // LEVER SWEEP (2026-08-25): after marketingMax learned to respect runway, pegging the
+  // slider at its cap dominated informed spend 2.5-4x — safe max spending bought linear
+  // reach. Channels drown: past ~$80k/wk each extra dollar buys visibly less.
+  const effectiveSpend = (inp.perfSpend * (1 - 0.45 * saturation)) / (1 + inp.perfSpend / 80_000)
   // human selling is a capacity, not a multiplier (spec §18.6): deals a week, founder included —
   // a business founder carries real early sales; a technical founder carries a little
   let salesCapacity = inp.salesPoints * 0.5 + (inp.founderKind === 'business' ? 1.5 : 0.4)
@@ -257,7 +260,15 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
       1 +
       0.12 * v2.competitors.length +
       0.25 * v2.competitors.filter((c) => c.discountUntil !== undefined && inp.week < c.discountUntil).length +
-      0.2 * v2.competitors.filter((c) => c.fundedUntil !== undefined && inp.week < c.fundedUntil).length
+      0.2 * v2.competitors.filter((c) => c.fundedUntil !== undefined && inp.week < c.fundedUntil).length +
+      // your own volume bids the price up too: at scale you compete with yourself for the
+      // same attention (lever sweep, 2026-08-25 — the runway-safe max still dominated).
+      // Keyed on RAW spend, not effectiveSpend: effectiveSpend asymptotes at ~$44k, so an
+      // effectiveSpend-based term capped at ~0.9 and reach rose monotonically with money —
+      // a Series-C fintech pegging $1.5M/wk held ~0.55 reach and bought a $360M valuation
+      // at negative unit economics (measured, seed 1000). Raw spend makes reach peak around
+      // $80-150k/wk and DEGRADE past it: pegging the cap now buys ~$20k worth of reach.
+      inp.perfSpend / 100_000
     const paidReach = clamp01((effectiveSpend / (effectiveSpend + 8_000 * auction)) * paidAccess)
     const organicReach = clamp01(0.02 + (inp.brandStock / 100) * 0.28 + installedShare * 0.3)
     // positioning (spec §12, minimal): the declared segment hears the story better
@@ -339,7 +350,7 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     expansionRevenue += base * ((c.expansion ?? 1) - 1)
     return x + base * (c.expansion ?? 1)
   }, 0)
-  const cogs = customers * inp.infraCostPerUser
+  const cogs = customers * inp.infraCostPerUser + newCustomersTotal * (tpl.onboardingCost ?? 0)
   const cac = newCustomersTotal > 0.5 ? inp.perfSpend / newCustomersTotal : v2.gtm.lastCac
   v2.gtm.lastCac = cac
   v2.finance = {

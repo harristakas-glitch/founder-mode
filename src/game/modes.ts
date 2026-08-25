@@ -69,13 +69,20 @@ export interface GameConfig {
    *  engine — every existing save, quick and arena, forever. 'v2' is opt-in on NEW Simulation
    *  runs while V2 is under construction; it becomes the Simulation default at the MVP boundary. */
   engine?: 'v1' | 'v2'
+  /** Difficulty tier (Simulation + Quick Play; absent = 'standard'). Maps to the small knob
+   *  set in src/game/tuning.ts — the same game, priced differently. */
+  difficulty?: 'relaxed' | 'standard' | 'brutal'
   /** Host/player overrides applied last — e.g. the Arena lobby's rule toggles. */
   overrides?: Partial<GameCapabilities>
 }
 
-/** THE V2 gate (spec §1). One predicate, imported everywhere — never a scattered mode check. */
+/** THE V2 gate (spec §1). One predicate, imported everywhere — never a scattered mode check.
+ *  Quick Play joined as a BETA opt-in (balance program, 2026-08-25): the owner's design intent
+ *  was always to move V2 systems into Quick/Arena selectively, and V2's economics are now the
+ *  better-audited of the two. Existing saves and the quick default stay V1 until the
+ *  quick-V2 probe cells hold a full calibration round. */
 export const usesBusinessSimulationV2 = (s: { config?: GameConfig }): boolean =>
-  s.config?.mode === 'career' && s.config?.engine === 'v2'
+  (s.config?.mode === 'career' || s.config?.mode === 'quick') && s.config?.engine === 'v2'
 
 // ENFORCED vs DESCRIPTIVE — read this before assuming a flag does something.
 //

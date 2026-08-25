@@ -1,0 +1,43 @@
+# The nightly balance battery — the instruments too heavy for per-commit CI.
+#
+# Per-commit CI runs the smoke tier (npm test includes invariant-fuzz smoke + balance-gate
+# --smoke). This workflow runs the full battery: the 16-seed lockfile gate, the skill ladder,
+# the dominant-strategy lever sweep, the choice A/B no-op detector, the full fuzz campaign,
+# and the mode instruments (daily ladder / arena proxy, report-only). A red night means the
+# balance moved without a lockfile update — fix the engine or update the lockfile with a
+# rationale, exactly like a golden trace.
+name: Nightly balance
+on:
+  schedule:
+    - cron: '20 3 * * *'
+  workflow_dispatch:
+jobs:
+  balance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Balance lockfile (full, 16 seeds)
+        run: npx tsx test/balance-gate.ts --full
+      - name: Skill ladder
+        run: npx tsx test/skill-ladder.ts 12 --assert
+      - name: Lever coverage
+        run: npx tsx test/lever-coverage.ts
+      - name: Dominant-strategy sweep
+        run: npx tsx test/lever-sweep.ts 10 --assert
+      - name: Choice A/B (no-op detector)
+        run: npx tsx test/choice-ab.ts 6 --assert
+      - name: Invariant fuzz (full)
+        run: npx tsx test/invariant-fuzz.ts --full
+      - name: V1 calibration gate
+        run: npx tsx test/winrate-probe.ts --assert
+      - name: Mode instruments (report-only)
+        run: |
+          npx tsx test/daily-ladder.ts 6 || true
+          npx tsx test/arena-proxy.ts 8 || true
+          npx tsx test/v2-balance-probe.ts 16 saas social fintech devtools ecommerce aiml || true

@@ -513,11 +513,11 @@ console.log('— Exploit regressions: collection gouge + M&A arbitrage (adversar
   let m = newGame('M', 'social', 'business', { config: { mode: 'quick', format: 'standard', sector: 'social', seed: 2 } as GameConfig })
   for (let w = 0; w < 10; w++) m = aw(m)
   const whale = m.rivals.find((r) => r.alive)!
-  whale.users = 600_000
+  whale.users = 1_200_000
   m.users = 20_000
   m.lastRevenue = 49_000
   const price = acquisitionPrice(m, whale)
-  ok(price >= 600_000 * 0.7 * (49_000 / 20_000) * 52 * 4 * 0.95, `the price floors at what YOUR machine makes of their users ($${(price / 1e6).toFixed(0)}M, not ~$39M)`)
+  ok(price >= 1_200_000 * 0.7 * (49_000 / 20_000) * 52 * 2.5 * 0.95, `the price floors at what YOUR machine makes of their users ($${(price / 1e6).toFixed(0)}M, not ~$78M)`)
   // give the acquirer the exploit's exact posture: big enough to pass the 1.5x size check
   // (val ~$80M vs rival ~$40M) yet nowhere near able to fund a $214M deal
   for (let i = Math.max(0, m.history.length - 4); i < m.history.length; i++) m.history[i] = { ...m.history[i], revenue: 200_000, users: 20_000 }

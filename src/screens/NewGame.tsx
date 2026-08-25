@@ -434,6 +434,7 @@ export function NewGame() {
   const [pipHelp, setPipHelp] = useState(false)
   // Business Simulation V2 (beta) — Simulation-only opt-in while the deeper engine is built out
   const [engineV2, setEngineV2] = useState(false)
+  const [difficulty, setDifficulty] = useState<'relaxed' | 'standard' | 'brutal'>('standard')
   const [v2Scenario, setV2Scenario] = useState('standard')
 
   const netAction = async (fn: () => Promise<void>) => {
@@ -708,7 +709,32 @@ export function NewGame() {
                   </SetupSection>
                 )}
 
-                {experience === 'career' && (
+                {!daily_ && (
+                  <div className="mb-3">
+                    <div className="mb-1 text-[11px] font-bold tracking-[0.08em] text-mut uppercase">Difficulty</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {([
+                        ['relaxed', 'Relaxed', 'Longer runway, patient board, friendlier terms.'],
+                        ['standard', 'Standard', 'The calibrated game.'],
+                        ['brutal', 'Brutal', 'Short runway, demanding board, expensive money.'],
+                      ] as const).map(([id, label, blurb]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-pressed={difficulty === id}
+                          title={blurb}
+                          onClick={() => setDifficulty(id)}
+                          className={`rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                            difficulty === id ? 'border-accent bg-accent/15 text-ink' : 'border-line2 text-mut hover:border-accent hover:text-ink'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(experience === 'career' || experience === 'quick') && (
                   <div className="mb-3">
                     <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line2/70 bg-surface2 px-3.5 py-2.5">
                       <input type="checkbox" checked={engineV2} onChange={(e) => setEngineV2(e.target.checked)} className="mt-0.5 accent-[var(--color-accent)]" />
@@ -720,7 +746,7 @@ export function NewGame() {
                         </span>
                       </span>
                     </label>
-                    {engineV2 && (
+                    {engineV2 && experience === 'career' && (
                       <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
                         {[{ id: 'standard', name: 'Week one', blurb: 'The classic start: an idea, $200k, and nobody knows if the market wants it.' }, ...V2_SCENARIOS].map((sc) => (
                           <button
@@ -774,7 +800,8 @@ export function NewGame() {
                           : format === 'scenario'
                             ? scenario
                             : 'standard',
-                      engineV2: experience === 'career' && engineV2,
+                      engineV2: (experience === 'career' || experience === 'quick') && engineV2,
+                      difficulty,
                     })
                   }
                 />

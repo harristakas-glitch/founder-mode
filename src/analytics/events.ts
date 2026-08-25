@@ -71,6 +71,8 @@ export type Feature =
 export interface RunProps extends EventProps {
   mode: string
   format: string
+  engine?: string
+  difficulty?: string
   sector: string
   scenario?: string
   career?: boolean
@@ -114,7 +116,21 @@ export function runStarted(run: RunProps, p: { founder: string; first_run: boole
 }
 
 /** A run reached an ending. The completion event — outnumbered, in reality, by the two below. */
-export function runEnded(run: RunProps, p: { ending: string; weeks: number; score: number; verified: string }): SentProps {
+export function runEnded(
+  run: RunProps,
+  p: {
+    ending: string
+    weeks: number
+    score: number
+    verified: string
+    lever_dial?: boolean
+    lever_positioning?: boolean
+    lever_research?: boolean
+    lever_ma?: boolean
+    lever_debt?: boolean
+    lever_counter_sheet?: boolean
+  },
+): SentProps {
   return capture('run_ended', { ...run, ...p })
 }
 
@@ -124,6 +140,12 @@ export function runEnded(run: RunProps, p: { ending: string; weeks: number; scor
  */
 export function runAbandoned(run: RunProps, p: { weeks: number }): SentProps {
   return capture('run_abandoned', { ...run, ...p, reason: 'abandoned' })
+}
+
+/** One tap on the ending screen: did the run FEEL too easy, fair, or brutal? The only
+ *  balance signal bots cannot produce — correlate with mode/sector/difficulty/outcome. */
+export function runFeel(run: RunProps, p: { feel: 'too_easy' | 'fair' | 'brutal'; ending: string; weeks: number }): SentProps {
+  return capture('run_feel', { ...run, ...p })
 }
 
 // ---------- Q3: playing time, in weeks ----------

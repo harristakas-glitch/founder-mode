@@ -320,8 +320,10 @@ export interface NewGameSetup {
   name: string
   founder: FounderKind
   scenario?: string
-  /** Simulation only: opt into the Business Simulation V2 engine (beta) for this run. */
+  /** Simulation + Quick Play: opt into the Business Simulation V2 engine (beta) for this run. */
   engineV2?: boolean
+  /** difficulty tier — same game, priced differently (src/game/tuning.ts). Absent = standard. */
+  difficulty?: 'relaxed' | 'standard' | 'brutal'
 }
 
 export const MATCH_CAP = 104 // weeks in a capped run (daily & online matches)
@@ -878,8 +880,10 @@ export const useStore = create<Store>()(
             sector,
             scenario: daily ? undefined : setup.scenario,
             seed: daily ? info.seed : Math.floor(Math.random() * 2 ** 31),
-            // V2 is Simulation-only and opt-in while under construction (contract D1)
-            ...(setup.mode === 'career' && setup.engineV2 ? { engine: 'v2' as const } : {}),
+            // V2 is opt-in while under calibration (contract D1; quick joined as beta 2026-08-25)
+            ...((setup.mode === 'career' || setup.mode === 'quick') && setup.engineV2 ? { engine: 'v2' as const } : {}),
+            // daily is a shared, ranked seed — everyone plays the same difficulty
+            ...(setup.difficulty && setup.difficulty !== 'standard' && !daily ? { difficulty: setup.difficulty } : {}),
           }
           const rules = resolveGameRules(config)
           const g = newGame(setup.name || 'Untitled Inc.', sector, setup.founder, {

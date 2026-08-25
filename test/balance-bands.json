@@ -1,0 +1,198 @@
+{
+  "seeds": 16,
+  "note": "Balance lockfile — regenerate ONLY via `npx tsx test/balance-gate.ts --update`, and commit the change with a rationale for why the balance legitimately moved.",
+  "cells": {
+    "saas/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        10,
+        16
+      ],
+      "medCustomers": 2149,
+      "medFounderValue": 17193386
+    },
+    "saas/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        7,
+        13
+      ],
+      "medCustomers": 3562,
+      "medFounderValue": 21383820
+    },
+    "social/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        0,
+        3
+      ],
+      "medCustomers": 9125,
+      "medFounderValue": 9142994
+    },
+    "social/active": {
+      "bankrupt": [
+        0,
+        4
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        0,
+        3
+      ],
+      "medCustomers": 5181,
+      "medFounderValue": 4866712
+    },
+    "fintech/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        1,
+        7
+      ],
+      "medCustomers": 11758,
+      "medFounderValue": 29342963
+    },
+    "fintech/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        1,
+        7
+      ],
+      "medCustomers": 8361,
+      "medFounderValue": 33560317
+    },
+    "devtools/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        9,
+        15
+      ],
+      "medCustomers": 2466,
+      "medFounderValue": 12973370
+    },
+    "devtools/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        9,
+        15
+      ],
+      "medCustomers": 4572,
+      "medFounderValue": 23714255
+    },
+    "ecommerce/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        3,
+        9
+      ],
+      "medCustomers": 6321,
+      "medFounderValue": 14676052
+    },
+    "ecommerce/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        4,
+        10
+      ],
+      "medCustomers": 4741,
+      "medFounderValue": 15155459
+    },
+    "aiml/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        6,
+        12
+      ],
+      "medCustomers": 2610,
+      "medFounderValue": 15656488
+    },
+    "aiml/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        9,
+        15
+      ],
+      "medCustomers": 3122,
+      "medFounderValue": 20300810
+    }
+  }
+}

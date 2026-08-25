@@ -48,6 +48,9 @@ export interface MarketTemplate {
   choiceTemperature: number
   /** ad-funded archetype: revenue per user compounds with network scale */
   adModel?: boolean
+  /** per-new-customer onboarding cost (KYC/compliance) — regulated sectors pay to ACQUIRE,
+   *  which is what keeps volume-at-any-price from being free (lever sweep, 2026-08-25) */
+  onboardingCost?: number
   segments: SegmentBlueprint[]
 }
 
@@ -231,6 +234,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
   },
 
   fintech: {
+    onboardingCost: 35,
     attributes: [
       attr(CORE, { lo: 25, hi: 40 }),
       attr(EASE, { lo: 20, hi: 35 }),

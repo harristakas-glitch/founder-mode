@@ -61,6 +61,8 @@ function runProps(g: GameState, screen: ScreenId): RunProps {
   return {
     mode: c?.mode ?? 'unknown',
     format: c?.format ?? 'unknown',
+    engine: c?.engine ?? 'v1',
+    difficulty: c?.difficulty ?? 'standard',
     sector: g.sector,
     scenario: c?.scenario,
     career: !!g.career,
@@ -197,11 +199,20 @@ function AnalyticsWatcher() {
 
       // The ending. Emitted from the state that carries it, once, and only if we watched it happen.
       if (game.gameOver && !firstLook && (!prev || !prev.game.gameOver || key !== prev.key)) {
+        // which levers this run actually touched — the balance team's funnel dimension
+        // (a lever no real player pulls is a lever the bots are measuring for nobody)
+        const acts = new Set((game.journal ?? []).map((j) => j.a))
         runEnded(runProps(game, screen), {
           ending: game.gameOver.type,
           weeks: game.gameOver.week,
           score: game.gameOver.payout ?? 0,
           verified: verifyRun(game).state,
+          lever_dial: acts.has('v2_price'),
+          lever_positioning: acts.has('v2_position'),
+          lever_research: acts.has('v2_research'),
+          lever_ma: acts.has('buy_rival'),
+          lever_debt: acts.has('take_debt'),
+          lever_counter_sheet: acts.has('counter_sheet'),
         })
       }
 

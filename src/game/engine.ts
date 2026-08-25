@@ -11,6 +11,7 @@ import {
   randomName,
   sectorById,
 } from './data'
+import { BOARD_APPETITE, DIFFICULTY, FUSE_STRIKES, V2_FUSE_CONFIDENCE, knobs } from './tuning'
 import { ARC_DEFS } from './arcs'
 import { hasCapability, resolveGameRules, systemDepth, usesBusinessSimulationV2, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { createSimV2 } from './sim2/init'
@@ -291,7 +292,7 @@ function buildGame(companyName: string, sector: SectorId, founderKind: FounderKi
     sector,
     founderKind,
     week: 1,
-    cash: 200_000,
+    cash: Math.round(200_000 * DIFFICULTY[opts.config!.difficulty ?? 'standard'].startCashMult),
     users: 0,
     hype: 8,
     reputation: 10,
@@ -1585,7 +1586,7 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
       // priced 30-45% below fair value — the lifeline is real and so is the haircut
       const pre = val * rand(0.55, 0.7) * climateMult
       const amount = Math.round((pre * rand(0.15, 0.25)) / 10_000) * 10_000
-      const equity = clamp(amount / (pre + amount), 0.05, 0.4)
+      const equity = clamp((amount / (pre + amount)) * knobs(s).sheetEquityMult, 0.05, 0.4)
       const sheet: TermSheet = { id: uid(), investor: 'Meridian Capital (extension)', amount, equity, weeksLeft: 3 }
       const message: Message = {
         id: uid(),
@@ -1673,7 +1674,7 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
     // Investors chase growth: a company compounding fast gets offered a bigger check.
     const growthAppetite = 1 + clamp(growth, 0, 0.3) * 4
     const amount = Math.round(Math.max(ROUND_FLOORS[target], offeredVal * rand(0.15, 0.25) * growthAppetite) / 10_000) * 10_000
-    const equity = clamp(amount / (offeredVal + amount), 0.05, 0.4)
+    const equity = clamp((amount / (offeredVal + amount)) * knobs(s).sheetEquityMult, 0.05, 0.4)
     return { id: uid(), investor, amount, equity, weeksLeft: 3 }
   })
   const message: Message = {
@@ -1698,6 +1699,7 @@ export function counterTermSheet(s: GameState, sheetId: string): void {
   const sheet = s.termSheets.find((t) => t.id === sheetId)
   if (!sheet || sheet.countered) return
   sheet.countered = true
+  s.flags.sheetsCountered = (s.flags.sheetsCountered ?? 0) + 1
   const growth = sustainedGrowthRate(s)
   const conf = usesBusinessSimulationV2(s) && s.simV2 ? (s.simV2.investorConfidence.value - 50) / 200 : 0
   const p = clamp(0.32 + growth * 3 + conf + s.climate * 0.15 + (s.founderKind === 'business' ? 0.08 : 0), 0.08, 0.75)
@@ -2284,7 +2286,10 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // valuation) continues on the numbers V2 returns. The revenue formula below is bypassed via
   // v2Revenue so the causal chain (fit → choice → cohorts → collection) is the single source.
   let v2Revenue: number | null = null
-  if (careerOn && usesBusinessSimulationV2(s) && s.simV2) {
+  // the gate is the PREDICATE, not careerOn: quick-V2 (beta opt-in, 2026-08-25) runs the same
+  // causal engine; career-V2 behavior is unchanged (careerOn was always true when the
+  // predicate held, until quick joined the gate)
+  if (usesBusinessSimulationV2(s) && s.simV2) {
     const priceStrategy = s.career?.pricing ?? 'market'
     const price = s.simV2.pricing.manual
       ? s.simV2.pricing.price
@@ -3064,11 +3069,28 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
       }
     }
   } else if (val >= 1_000_000_000 && !s.ipo) {
-    // mid-IPO, the run continues — ringing the bell at a $1B+ price beats the plain unicorn ending
-    s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(founderStanding(s, { exitValue: val })) }
+    // DILIGENCE ENVELOPE (balance audit 2026-08-25): a mark someone will actually pay holds
+    // for more than one hot week. Both minted unicorns this year (dial ratchet, M&A re-rating)
+    // were one-to-two-week valuation spikes; requiring three consecutive weeks over the bar is
+    // invisible to every honest unicorn and a final backstop against the exploit class.
+    s.flags.unicornHold = (s.flags.unicornHold ?? 0) + 1
+    if (s.flags.unicornHold === 1) {
+      s.inbox.unshift({
+        id: uid(),
+        week: s.week,
+        kind: 'news',
+        title: '🦄 The paper says one billion',
+        body: 'The model crossed $1B this week. The market wants to see it HOLD — keep the company there and the milestone is real.',
+      })
+    }
+    if (s.flags.unicornHold >= 3) {
+      // mid-IPO, the run continues — ringing the bell at a $1B+ price beats the plain unicorn ending
+      s.gameOver = { type: 'unicorn', week: s.week, payout: Math.round(founderStanding(s, { exitValue: val })) }
+    }
   } else if (s.challenge && s.week >= s.challenge.cap) {
     s.gameOver = { type: 'timeup', week: s.week, payout: Math.round(founderStanding(s, { exitValue: val })) }
   }
+  if (val < 1_000_000_000 && s.flags.unicornHold) s.flags.unicornHold = 0
 
   // The living world runs LAST, once every fact for the week exists — including the ending, so a
   // postmortem can read it. It interprets; it never decides. With its capabilities off it returns
@@ -4006,7 +4028,12 @@ export function acquisitionPrice(s: GameState, r: Rival): number {
   const naive = rivalValuation(r, s) * 1.4
   const migrated = r.users * 0.7
   const revPerUser = s.users > 0 ? s.lastRevenue / s.users : 0
-  const acquirerSide = migrated * revPerUser * 52 * 4
+  // 2.5x annualized book, not 4x: at 4x the acquirer-side floor priced EVERY social rival out
+  // of reach for honest mid-game players (smallest target $139M by week 25 — the lane died).
+  // 2.5x still kills the arbitrage stone dead: the exploit needed a ~40-80x spread and its
+  // repro deal reprices to ~$130M against a $58M company, which the half-your-valuation deal
+  // gate refuses anyway.
+  const acquirerSide = migrated * revPerUser * 52 * 2.5
   return Math.round(Math.max(naive, acquirerSide) / 100_000) * 100_000
 }
 
@@ -4036,9 +4063,13 @@ function acquireRivalInner(s: GameState, rivalId: string, method: 'cash' | 'stoc
   // weak companies sell; strong ones believe their own deck
   const pAccept = clamp(0.55 + (productScore(s) > r.product ? 0.15 : -0.1) + s.reputation / 300 + (r.momentum < 1 ? 0.15 : -0.05), 0.25, 0.9)
   if (RNG.next() > pAccept) {
-    r.rebuffedUntil = s.week + 20
+    // 10 weeks, not 20: with the post-arbitrage price floor and deal-size gate, the window
+    // where a deal is even possible (target small enough, you big enough) is narrow — a
+    // 20-week sulk regularly outlived the entire window and made M&A unreachable in a
+    // 110-week run even for a bot built to attempt it every month (measured, 2026-08-25)
+    r.rebuffedUntil = s.week + 10
     applyEffects(s, { hype: -3 })
-    s.flash = `${r.name} rebuffed your offer — "We're just getting started," their CEO posts, with a screenshot of your term sheet. Awkward. They won't talk again for ~20 weeks.`
+    s.flash = `${r.name} rebuffed your offer — "We're just getting started," their CEO posts, with a screenshot of your term sheet. Awkward. They won't talk again for ~10 weeks.`
     s.inbox.unshift({
       id: uid(),
       week: s.week,
@@ -4102,9 +4133,8 @@ export function boardEffectiveTarget(s: GameState): number {
   // …and social joined it (2026-08-24) when the macro thaw let volatile casual runs re-raise
   // through every rough patch (raises reset strikes): a consumer-app board funds the VIRAL
   // curve and expects it — measured 13% casual failure without the appetite, in-band with it.
-  const appetite =
-    systemDepth(s, 'boardMeetings') !== 'deep' ? (s.sector === 'saas' ? 1.2 : s.sector === 'social' ? 1.18 : 1) : 1
-  return Math.max(0.008, s.board.targetGrowth * appetite * (1 - 0.5 * marketSaturation(s)))
+  const appetite = systemDepth(s, 'boardMeetings') !== 'deep' ? (BOARD_APPETITE[s.sector] ?? 1) : 1
+  return Math.max(0.008, s.board.targetGrowth * appetite * knobs(s).boardTargetMult * (1 - 0.5 * marketSaturation(s)))
 }
 
 // Trailing weekly revenue growth — the board's alternative yardstick for mature companies.
@@ -4178,7 +4208,7 @@ function boardReview(s: GameState) {
   s.board.strikes += 1
   // V2 (spec §16.4): a board that has stopped believing you moves faster — at Critical/Low
   // confidence the ultimatum comes a review early. Presentation-free consequence, real stakes.
-  const v2Fuse = usesBusinessSimulationV2(s) && s.simV2 && s.simV2.boardConfidence.value < 35 ? 2 : 3
+  const v2Fuse = Math.max(2, (usesBusinessSimulationV2(s) && s.simV2 && s.simV2.boardConfidence.value < V2_FUSE_CONFIDENCE ? FUSE_STRIKES.v2LowConfidence : FUSE_STRIKES.normal) + knobs(s).boardFuseDelta)
   // BALANCE CAMPAIGN (2026-08-23, rank 2): after a submitted ultimatum, quick's board does not
   // grant a second three-strike cycle — two more misses and you're out. Career deep keeps the
   // forgiving cycle (its difficulty lives in the PMF game, and this teeth-check measured 3-10/16

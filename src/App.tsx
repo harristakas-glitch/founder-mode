@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { analyticsActive } from './analytics/client'
+import { runFeel } from './analytics/events'
 import {
   Check,
   ChevronsRight,
@@ -45,7 +47,7 @@ import { Fundraising } from './screens/Fundraising'
 import { Discovery } from './screens/Discovery'
 import { CohortAnalytics } from './screens/CohortAnalytics'
 import { Story } from './screens/Story'
-import { Confetti, Monogram, Ticker, TimelineChart, TrendBadge, useDialog } from './components'
+import { Btn, Confetti, Monogram, Ticker, TimelineChart, TrendBadge, useDialog } from './components'
 import { runMarkers } from './runMarkers'
 import { FieldGuideButton, FounderNotes } from './onboarding/FounderNotes'
 import { FitPeek } from './FitPeek'
@@ -1065,6 +1067,39 @@ function Stat({ k, tone, title, icon, children }: { k: string; tone?: 'good' | '
 }
 
 /**
+ * One question on the way out: did the run FEEL right? The only balance signal bots cannot
+ * produce — three buttons, one tap, once per run, gone after answering. Correlated server-side
+ * with mode/sector/difficulty/outcome; disappears entirely when analytics is off.
+ */
+function FeelTap() {
+  const game = useStore((s) => s.game)
+  const [answered, setAnswered] = useState(false)
+  if (!game?.gameOver || answered || !analyticsActive()) return null
+  const c = game.config
+  const send = (feel: 'too_easy' | 'fair' | 'brutal') => {
+    runFeel(
+      {
+        mode: c?.mode ?? 'unknown',
+        format: c?.format ?? 'unknown',
+        engine: c?.engine ?? 'v1',
+        difficulty: c?.difficulty ?? 'standard',
+        sector: game.sector,
+      },
+      { feel, ending: game.gameOver!.type, weeks: game.gameOver!.week },
+    )
+    setAnswered(true)
+  }
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[12.5px]">
+      <span className="text-mut">How did this run feel?</span>
+      <Btn onClick={() => send('too_easy')}>Too easy</Btn>
+      <Btn onClick={() => send('fair')}>Fair fight</Btn>
+      <Btn onClick={() => send('brutal')}>Brutal</Btn>
+    </div>
+  )
+}
+
+/**
  * The primary share: the SYSTEM share sheet, which lists whatever is actually installed —
  * WhatsApp, Viber, Slack, Messages, all of it (owner, 2026-08-23: "directly open the apps").
  * Works on phones and on desktop Chrome/Edge/Safari; where the sheet does not exist the text
@@ -1476,6 +1511,8 @@ function GameOver({ onClose }: { onClose: () => void }) {
         </div>
 
         <TokenPostmortem />
+
+        <FeelTap />
 
         {/* V2: the company's own postmortem — derived, honest, and the ONE place the market's
             hidden truth is finally shown (spec §0A.16). Screenshotable by design. */}
