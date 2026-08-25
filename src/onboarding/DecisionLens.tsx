@@ -85,6 +85,8 @@ const SPECIAL_LABEL: Record<NonNullable<Effects['special']>, string> = {
   'v2-credit-customers': 'refunds every customer half a week — expensive, public, remembered',
   'v2-counter-acquisition': 'asks 25% more — strong momentum gets it, a shaky story watches them walk',
   'v2-exec-departs': 'They leave — team morale dips as the room watches',
+  'v2-ignore-outage': 'Service quality and reputation take the hit; some customers walk',
+  'v2-quiet-patch': 'Cheap now — the next incident comes sooner, and reads worse',
   acquired: 'ends the run — the company is sold',
   'lose-best': 'your strongest employee walks',
   accelerator: 'gives up 7% of the company',

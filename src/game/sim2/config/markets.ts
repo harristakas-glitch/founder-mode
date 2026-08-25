@@ -4,6 +4,11 @@
 // little different, deterministically. No SaaS logic is hardcoded in the engine; adding an
 // archetype is adding data here.
 
+// BALANCE AUDIT (2026-08-25): every sector's MASS segment used to be authored 3-11x below
+// the sector reference price (fintech consumers $0.8-2.5 vs $18). The 0.45 collection floor
+// silently monetized them anyway, which made overpricing dominant, research worthless, and
+// the informed "price to the estimate" move a trap (measured, six-lane audit). Mass-segment
+// WTP now sits at ~1.2-2x under the reference so price is a real decision at baseline.
 import type { SegmentAttributePreference } from '../types'
 
 export interface Band {
@@ -83,7 +88,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         activeRate: { lo: 0.25, hi: 0.4 },
         growthAnnual: { lo: 0.05, hi: 0.15 },
         adoptionMaturity: { lo: 0.5, hi: 0.75 },
-        wtp: { lo: 4, hi: 9 },
+        wtp: { lo: 8, hi: 16 },
         priceSensitivity: { lo: 0.7, hi: 0.9 },
         switchingFriction: { lo: 0.1, hi: 0.25 },
         retention: { lo: 0.955, hi: 0.975 },
@@ -178,7 +183,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         activeRate: { lo: 0.3, hi: 0.5 },
         growthAnnual: { lo: 0.1, hi: 0.3 },
         adoptionMaturity: { lo: 0.6, hi: 0.85 },
-        wtp: { lo: 0.2, hi: 0.9 },
+        wtp: { lo: 0.8, hi: 1.8 },
         priceSensitivity: { lo: 0.85, hi: 0.97 },
         switchingFriction: { lo: 0.05, hi: 0.15 },
         retention: { lo: 0.9, hi: 0.945 },
@@ -243,7 +248,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         activeRate: { lo: 0.2, hi: 0.4 },
         growthAnnual: { lo: 0.08, hi: 0.22 },
         adoptionMaturity: { lo: 0.5, hi: 0.75 },
-        wtp: { lo: 0.8, hi: 2.5 },
+        wtp: { lo: 8, hi: 16 },
         priceSensitivity: { lo: 0.8, hi: 0.95 },
         switchingFriction: { lo: 0.3, hi: 0.5 },
         retention: { lo: 0.93, hi: 0.965 },
@@ -251,7 +256,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         paidAccess: 0.8,
         salesLed: false,
         brandImportance: 0.55,
-        prefs: [pref('ease', 0.3, 90), pref('security', 0.3, 85, 40), pref('core', 0.25, 75), pref('reliability', 0.15, 85)],
+        // AUDIT (2026-08-25): ease+security put 0.75 weight on quality-fed attributes — the
+        // all-quality monoculture beat balanced play 29/3 on paired seeds. Core work matters now.
+        prefs: [pref('core', 0.35, 75), pref('ease', 0.2, 85), pref('security', 0.2, 85, 40), pref('reliability', 0.15, 80), pref('integrations', 0.1, 60)],
       },
       {
         id: 'smb_finance',
@@ -303,6 +310,9 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
       attr(PERF, { lo: 20, hi: 35 }),
       attr(INTEG, { lo: 10, hi: 20 }),
       attr(SEC, { lo: 10, hi: 20 }),
+      // AUDIT: enterprise_eng's service pref pointed at an attribute this template never
+      // defined — productFit pinned it at 0 forever. The attribute exists now.
+      attr(SVC, { lo: 10, hi: 20 }),
     ],
     choiceTemperature: 0.14,
     segments: [
@@ -313,7 +323,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         activeRate: { lo: 0.25, hi: 0.45 },
         growthAnnual: { lo: 0.08, hi: 0.2 },
         adoptionMaturity: { lo: 0.55, hi: 0.8 },
-        wtp: { lo: 2, hi: 6 },
+        wtp: { lo: 8, hi: 18 },
         priceSensitivity: { lo: 0.75, hi: 0.92 },
         switchingFriction: { lo: 0.15, hi: 0.3 },
         retention: { lo: 0.95, hi: 0.975 },
@@ -321,7 +331,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         paidAccess: 0.6,
         salesLed: false,
         brandImportance: 0.4,
-        prefs: [pref('core', 0.35, 85), pref('performance', 0.25, 85), pref('ease', 0.2, 75), pref('reliability', 0.2, 80)],
+        prefs: [pref('core', 0.35, 78), pref('performance', 0.25, 78), pref('ease', 0.2, 72), pref('reliability', 0.2, 75)],
       },
       {
         id: 'startup_eng',
@@ -338,7 +348,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         paidAccess: 0.55,
         salesLed: false,
         brandImportance: 0.4,
-        prefs: [pref('core', 0.3, 85), pref('reliability', 0.25, 85, 40), pref('performance', 0.2, 80), pref('integrations', 0.25, 75)],
+        prefs: [pref('core', 0.3, 80), pref('reliability', 0.25, 80, 40), pref('performance', 0.2, 78), pref('integrations', 0.25, 72)],
       },
       {
         id: 'enterprise_eng',
@@ -384,7 +394,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         activeRate: { lo: 0.25, hi: 0.45 },
         growthAnnual: { lo: 0.08, hi: 0.2 },
         adoptionMaturity: { lo: 0.55, hi: 0.8 },
-        wtp: { lo: 3, hi: 8 },
+        wtp: { lo: 6, hi: 12 },
         priceSensitivity: { lo: 0.75, hi: 0.92 },
         switchingFriction: { lo: 0.2, hi: 0.35 },
         retention: { lo: 0.94, hi: 0.97 },
@@ -455,7 +465,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         activeRate: { lo: 0.3, hi: 0.5 },
         growthAnnual: { lo: 0.15, hi: 0.35 },
         adoptionMaturity: { lo: 0.5, hi: 0.75 },
-        wtp: { lo: 3, hi: 9 },
+        wtp: { lo: 10, hi: 20 },
         priceSensitivity: { lo: 0.7, hi: 0.9 },
         switchingFriction: { lo: 0.1, hi: 0.25 },
         retention: { lo: 0.94, hi: 0.97 },
@@ -463,7 +473,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         paidAccess: 0.65,
         salesLed: false,
         brandImportance: 0.45,
-        prefs: [pref('core', 0.35, 90), pref('performance', 0.25, 85), pref('ease', 0.25, 80), pref('reliability', 0.15, 70)],
+        prefs: [pref('core', 0.35, 80), pref('performance', 0.25, 78), pref('ease', 0.25, 75), pref('reliability', 0.15, 70)],
       },
       {
         id: 'ai_startups',
@@ -480,7 +490,7 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         paidAccess: 0.55,
         salesLed: false,
         brandImportance: 0.45,
-        prefs: [pref('performance', 0.3, 90, 45), pref('core', 0.3, 85), pref('integrations', 0.2, 80), pref('reliability', 0.2, 80)],
+        prefs: [pref('performance', 0.3, 82, 40), pref('core', 0.3, 80), pref('integrations', 0.2, 75), pref('reliability', 0.2, 75)],
       },
       {
         id: 'enterprise_ml',

@@ -917,7 +917,13 @@ export function marketingMax(s: GameState): number {
   if (profit <= 0) return floor
   const earned = profit * MARKETING_CAP.earnedShare
   const treasury = Math.max(0, s.cash) * MARKETING_CAP.treasuryShare
-  return Math.round(Math.max(floor, earned + treasury))
+  // AUDIT (2026-08-25): the cap's top third was strictly suicidal — spending it every week
+  // bankrupted 16/16 fintech and 12/16 devtools bot runs while 25% of cap dominated on
+  // valuation too. The cap now keeps ~12 weeks of runway at the spend it permits: aggressive
+  // stays available, autopilot self-destruction does not.
+  const burnExMarketing = Math.max(0, weeklyBurn(s) - s.marketingSpend)
+  const runwayCap = Math.max(0, (s.cash - 12 * burnExMarketing) / 12)
+  return Math.round(Math.max(floor, Math.min(earned + treasury, runwayCap)))
 }
 
 // Paid acquisition price per user: rises as the market saturates and falls with PMF.
@@ -1102,14 +1108,40 @@ export function applyEffects(s: GameState, fx: Effects) {
     }
   }
   // V2 Major-Moment actions (spec §0A.6) — each IS the real lever, nothing extra
+  if (fx.special === 'v2-ignore-outage' && s.simV2) {
+    // AUDIT: "Patch and move on" was effects:{} — a public outage you shrugged at cost
+    // nothing, so the free option weakly dominated both real responses. Customers noticed.
+    s.simV2.serviceQuality = Math.max(0, (s.simV2.serviceQuality ?? 70) - 8)
+    s.reputation = clamp(s.reputation - 4, 0, 100)
+    for (const c of s.simV2.cohorts) c.size *= 0.96
+  }
+  if (fx.special === 'v2-quiet-patch') {
+    // the hole closes, the habit stays: the next incident comes sooner (the security moment's
+    // cooldown reads this flag) and the write-up, when it comes, is not about the researcher
+    s.flags.v2QuietPatchW = s.week
+    s.reputation = clamp(s.reputation - 2, 0, 100)
+  }
   if (fx.special === 'v2-price-match' && s.career) {
     s.career.pricing = 'low'
+    // AUDIT: once the price DIAL has been touched, pricing.manual is authoritative and the
+    // strategy field is dead — this choice was a bit-identical no-op in 39/39 paired runs.
+    // Matching a price war means the DIAL moves.
+    if (s.simV2?.pricing.manual) {
+      const ref = sectorById(s.sector).arpuPerCustomer
+      s.simV2.pricing = { price: Math.max(ref * 0.25, s.simV2.pricing.price * 0.7), lastChangedWeek: s.week, manual: true }
+    }
   }
   if (fx.special === 'v2-stability-sprint') {
-    s.allocation = {
-      ...s.allocation,
-      bugs: Math.min(60, s.allocation.bugs + 25),
-      features: Math.max(5, s.allocation.features - 15),
+    // AUDIT: the shift used to be permanent, quietly punishing anyone who picked the
+    // responsible-sounding option (casual devtools: −$107k ARR). A sprint ENDS: the shift
+    // reverts after 4 weeks (see the revert check in the V2 weekly branch).
+    if (!s.flags.v2SprintRevertW) {
+      s.allocation = {
+        ...s.allocation,
+        bugs: Math.min(60, s.allocation.bugs + 25),
+        features: Math.max(5, s.allocation.features - 15),
+      }
+      s.flags.v2SprintRevertW = s.week + 4
     }
     // the one direct write: the war-room week clears the queue's worst backlog
     if (s.simV2) s.simV2.serviceQuality = Math.min(100, (s.simV2.serviceQuality ?? 70) + 8)
@@ -1148,6 +1180,13 @@ export function applyEffects(s: GameState, fx: Effects) {
       features: Math.min(70, s.allocation.features + 20),
       quality: Math.min(60, s.allocation.quality + 10),
     }
+  }
+  if (fx.special === 'v2-harden' && s.simV2) {
+    // AUDIT: the $25k used to buy an allocation nudge that moved the security attribute by
+    // ~0.09/wk against 0.03/wk decay — the moment refired as a $25k tax forever (75 fires in
+    // 24 runs). A disclosed hardening sprint now moves the attribute itself.
+    const sec = s.simV2.attributes.find((a) => a.id === 'security')
+    if (sec) sec.value = Math.min(95, sec.value + 12)
   }
   if (fx.special === 'v2-harden') {
     s.cash -= 25_000
@@ -1496,6 +1535,21 @@ function pitchInvestorsInner(s: GameState): { sheets: TermSheet[]; message: Mess
       body: 'You are mid-IPO — securities law says no private fundraising until the process ends, one way or the other.',
     }
     s.flash = 'Quiet period: no private fundraising while the IPO is in progress.'
+    return { sheets: [], message }
+  }
+  // AUDIT (failure floor): 240/240 V2 bot runs ended with zero deaths — the confidence system
+  // had no teeth. Investors now actually pass when they have stopped believing: no sheets at
+  // Critical investor confidence. No RNG drawn on this path (V1 draw order untouched).
+  if (usesBusinessSimulationV2(s) && s.simV2 && s.simV2.investorConfidence.value < 35) {
+    s.raiseCooldown = 6
+    const message: Message = {
+      id: uid(),
+      week: s.week,
+      kind: 'system',
+      title: 'The round did not come together',
+      body: 'Polite meetings, no term sheets. The market has read your last quarters the same way your board has — rebuild the story (growth, delivered commitments) before going out again.',
+    }
+    s.flash = 'No term sheets — investor confidence is too low. Deliver a quarter first.'
     return { sheets: [], message }
   }
   const val = valuation(s)
@@ -2352,6 +2406,15 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     // per-TYPE memory on top of the global cooldown: the same crisis must not re-run on a
     // metronome (measured: an ignored outage re-fired every 8th week and starved the whole
     // catalog). A standing condition is the PRECONDITION for a moment, never its schedule.
+    // a stability sprint ends on schedule: revert the war-room allocation shift
+    if (s.flags.v2SprintRevertW && s.week >= s.flags.v2SprintRevertW) {
+      s.allocation = {
+        ...s.allocation,
+        bugs: Math.max(0, s.allocation.bugs - 25),
+        features: Math.min(80, s.allocation.features + 15),
+      }
+      delete s.flags.v2SprintRevertW
+    }
     const mAgo = (k: string, cd: number) => s.week - (s.flags['v2m_' + k] ?? -999) >= cd
     const mMark = (k: string) => {
       s.flags['v2m_' + k] = s.week
@@ -2363,8 +2426,10 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         (e) => e.type === 'competitor_price_change' && Number(e.facts.newPrice) < Number(e.facts.oldPrice) * 0.85,
       )
       const capCrisis = v2wk.visibleEvents.find((e) => e.type === 'service_capacity_critical')
-      const missedTwice = (s.simV2.planning?.commitments ?? []).filter((c) => c.status === 'missed').length >= 2
-      const boardCritical = s.simV2.boardConfidence.value < 35 && missedTwice
+      // AUDIT: the old compound gate (conf<35 AND >=2 missed) held for 0 weeks in 0 of 288
+      // runs — even a deliberately-bad bot never saw it. Either leg alone now suffices.
+      const missedOnce = (s.simV2.planning?.commitments ?? []).some((c) => c.status === 'missed')
+      const boardCritical = (s.simV2.boardConfidence.value < 38 && missedOnce) || s.simV2.boardConfidence.value < 28
       if (boardCritical && mAgo('board', 24)) {
         mMark('board')
         s.inbox.unshift({
@@ -2418,7 +2483,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
           ],
         })
       } else if ((() => {
-        const exec = s.employees.find((e) => e.skill >= 8 && e.morale < (e.trait === 'mercenary' ? 55 : 32) + 8 && mAgo('resign_' + e.id, 9999))
+        const exec = s.employees.find((e) => e.skill >= 8 && e.morale < (e.trait === 'mercenary' ? 55 : 32) + 14 && mAgo('resign_' + e.id, 9999))
         if (!exec) return false
         mMark('resign_' + exec.id)
         s.inbox.unshift({
@@ -2453,7 +2518,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
           choices: [
             { label: 'War room — the whole team on stability', resultText: 'Features wait. The pager quiets. The postmortem is honest.', effects: { special: 'v2-stability-sprint' } },
             { label: "Credit every customer the week — and say why", resultText: 'Expensive, public, and remembered kindly.', effects: { special: 'v2-credit-customers' } },
-            { label: 'Patch and move on', resultText: 'The graphs recover. The trust curve is another matter.', effects: {} },
+            { label: 'Patch and move on', resultText: 'The graphs recover. The trust curve is another matter.', effects: { special: 'v2-ignore-outage' } },
           ],
         })
         return true
@@ -2463,7 +2528,8 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
         const sec = s.simV2.attributes.find((a) => a.id === 'security')
         const regulated = s.sector === 'fintech'
         // regulators and researchers notice companies, not week-3 prototypes
-        if (s.week < 26 || !sec || sec.value >= (regulated ? 45 : 30) || s.users < (regulated ? 800 : 500) || !mAgo('security', 26)) return false
+        const secCd = s.flags.v2QuietPatchW ? 14 : 26
+        if (s.week < 26 || !sec || sec.value >= (regulated ? 45 : 30) || s.users < (regulated ? 800 : 500) || !mAgo('security', secCd)) return false
         if (RNG.next() > 0.25) return false
         mMark('security')
         s.inbox.unshift({
@@ -2476,7 +2542,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
             : `Security & trust sits at ${Math.round(sec.value)}/100 — this time it was a friendly researcher. Next time it may not be.`,
           choices: [
             { label: 'Disclose and harden ($25k + a real sprint)', resultText: 'The write-up is uncomfortable and correct. The fix is real.', effects: { special: 'v2-harden' } },
-            { label: 'Quietly patch', resultText: 'The hole closes. The habit that made it stays.', effects: {} },
+            { label: 'Quietly patch', resultText: 'The hole closes. The habit that made it stays.', effects: { special: 'v2-quiet-patch' } },
           ],
         })
         return true
@@ -2774,6 +2840,10 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
   // and the golden traces cannot move.
   if (
     val > 8_000_000 &&
+    // AUDIT: V2's causal engine crosses the $8M bar by week 8-9, so casual choice-0 play was
+    // acquired at week 16-21 for $8.5M median — the run never faced its risks. Acquirers do
+    // longer diligence on a V2 company: no offers before week 30.
+    (!usesBusinessSimulationV2(s) || s.week >= 30) &&
     s.pmf > 50 &&
     RNG.next() < (maDiscounted ? TOKEN_ACQUISITION.offerChance : 0.03) &&
     (!s.board || s.board.strikes <= 1) &&

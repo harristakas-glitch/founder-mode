@@ -149,7 +149,9 @@ export interface Effects {
     | 'v2-harden' // security incident response: real hardening sprint + real money
     | 'v2-credit-customers' // outage response: give the affected week back, keep the trust
     | 'v2-counter-acquisition'
-    | 'v2-exec-departs' // haggle the exit: ask 25% more, risk the offer walking
+    | 'v2-exec-departs'
+    | 'v2-ignore-outage'
+    | 'v2-quiet-patch' // haggle the exit: ask 25% more, risk the offer walking
 }
 
 export interface Choice {

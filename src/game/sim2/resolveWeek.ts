@@ -294,7 +294,13 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     if (!seg) continue
     const fitNow = fitBySegment[c.segmentId] ?? 0.5
     const service = ((v2.serviceQuality ?? 70) - 70) / 100 // −0.55..+0.3 → ±0.005 on keep
-    const keepBase = clamp(seg.retentionBaseline + 0.03 * (fitNow - 0.6) + service * 0.017, 0.85, 0.998)
+    // PRICE ELASTICITY (balance audit 2026-08-25): a cohort billed far above its willingness
+    // to pay LEAVES — up to 2x WTP is tolerated (tiers, inertia), past that each extra
+    // multiple bleeds ~2.5%/wk, capped at 10%/wk. Without this term the peg-the-dial-at-max
+    // strategy beat honest pricing in 52/54 paired seeds across three sectors.
+    const wtpKeep = effectiveWtp(seg, fitNow, inp.brandStock)
+    const priceBleed = Math.min(0.1, 0.025 * Math.max(0, inp.price / Math.max(0.1, wtpKeep) - 2))
+    const keepBase = clamp(seg.retentionBaseline + 0.03 * (fitNow - 0.6) + service * 0.017 - priceBleed, 0.8, 0.998)
     // churnRelief is V1's ≤1 churn multiplier (retention roadmap work) — folded exactly once:
     // the part of the cohort that would leave, leaves churnRelief as often
     const kept = c.size * clamp(1 - (1 - keepBase) * inp.churnRelief, 0.85, 0.999)
@@ -317,19 +323,19 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     // still collected three-quarters, making overpricing free money). Below-WTP pricing now
     // genuinely converts better; above-WTP pricing genuinely leaks to downgrades and laps.
     const wtpHere = effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock)
-    const collect = 0.45 + 0.55 * priceFit(inp.price, wtpHere, seg.priceSensitivity)
-    // BILLING CEILING at 15x WTP. The 0.45 floor is the designed downgrade-tier mechanic (one
-    // price serves segments whose WTP spans 100x), and at the SECTOR REFERENCE price it already
-    // extracts up to ~15x a mass segment's WTP — that ratio IS the calibrated baseline. What it
-    // must never do is scale past that with the dial: the adversarial hunt proved the 6x dial
-    // clamp alone only moved the unicorn from week 4 to week 18 (fintech consumers, WTP ~$1.6,
-    // billed $48.6/wk at the $108 cap — 30x honest revenue, retention never reads price). A
-    // tighter 2.2x ceiling was tried first and rejected — it repriced the honest baseline
-    // (fintech casual valuations fell 6x). 15x binds ONLY in the gouge regime, measured.
-    const billed = Math.min(inp.price, wtpHere * 15)
+    // COLLECTION with a decaying floor (balance audit 2026-08-25). The 0.45 floor is the
+    // downgrade-tier mechanic — but flat-in-price it made 45% of ANY sticker collectible,
+    // which is why the dial pegged at 6x dominated every honest strategy and two week-18
+    // unicorns got minted. Up to 2.5x a cohort's WTP the floor holds; past that collected
+    // revenue goes flat at ~1.1x WTP (the decay is exactly 2.5/ratio, continuous at the knee).
+    // Mass-segment WTP was re-authored to ~1.2-2x under the reference price in the same
+    // commit, so this decay never binds at honest prices.
+    const ratio = inp.price / Math.max(0.1, wtpHere)
+    const floorDecay = ratio <= 2.5 ? 1 : 2.5 / ratio
+    const collect = (0.45 + 0.55 * priceFit(inp.price, wtpHere, seg.priceSensitivity)) * floorDecay
     // ad-model archetypes (social): revenue per user compounds with network scale — CPMs and
     // fill rates climb, same shape the classic engine uses. Config-driven, not sector-coded.
-    const base = c.size * billed * collect * adScale
+    const base = c.size * inp.price * collect * adScale
     expansionRevenue += base * ((c.expansion ?? 1) - 1)
     return x + base * (c.expansion ?? 1)
   }, 0)
