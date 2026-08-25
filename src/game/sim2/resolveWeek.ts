@@ -317,6 +317,12 @@ export function resolveWeekV2(v2: BusinessSimulationV2State, inp: V2WeekInputs):
     // still collected three-quarters, making overpricing free money). Below-WTP pricing now
     // genuinely converts better; above-WTP pricing genuinely leaks to downgrades and laps.
     const collect = 0.45 + 0.55 * priceFit(inp.price, effectiveWtp(seg, fitBySegment[c.segmentId] ?? 0.5, inp.brandStock), seg.priceSensitivity)
+    // NOTE on the floor: 0.45 of sticker from a low-WTP cohort is the DESIGNED downgrade-tier
+    // mechanic (one price serves segments whose WTP spans 100x). It is safe only because the
+    // price dial is hard-capped at 6x the sector reference at BOTH write paths (replay clamp +
+    // UI band) — an unbounded dial times this floor was a week-4 unicorn. A per-cohort WTP
+    // billing ceiling was tried and rejected: it repriced the honest base economy (fintech
+    // casual valuations fell 6x, new bankruptcies in two sectors — measured).
     // ad-model archetypes (social): revenue per user compounds with network scale — CPMs and
     // fill rates climb, same shape the classic engine uses. Config-driven, not sector-coded.
     const base = c.size * inp.price * collect * adScale

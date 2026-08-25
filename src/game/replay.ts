@@ -51,6 +51,7 @@ import {
   tokeniseCompany,
   uid,
 } from './engine'
+import { sectorById } from './data'
 import { addJournal, experimentDef, segmentDef, startExperiment } from './career/pmf'
 import { repositionTo } from './career/tick'
 import { chooseInteractionOption } from './world/interactions'
@@ -373,13 +374,15 @@ const REPLAY_ACTIONS = {
   },
 
   /** Set the V2 price DIAL (spec §13.4). Once touched, the dial is authoritative. Clamped to a
-   *  sane band around the sector reference so a hostile journal cannot set $1e9. */
+   *  fixed band around the IMMUTABLE sector reference price — never the current price. The first
+   *  version anchored on `pricing.price` itself, which RATCHETS: each move allowed 20x the last,
+   *  so a few pulls compounded to 8000x and a week-4 unicorn (owner-reported, reproduced). */
   v2_price: (g, p) => {
     if (!usesBusinessSimulationV2(g) || !g.simV2) return
     const v = num(p.v)
-    if (v <= 0) return
-    const ref = g.simV2.pricing.price || 1
-    g.simV2.pricing = { price: Math.min(Math.max(v, ref * 0.1, 0.1), Math.max(ref * 20, 1000)), lastChangedWeek: g.week, manual: true }
+    if (!Number.isFinite(v) || v <= 0) return
+    const ref = sectorById(g.sector).arpuPerCustomer
+    g.simV2.pricing = { price: Math.min(Math.max(v, ref * 0.25, 0.1), ref * 6), lastChangedWeek: g.week, manual: true }
   },
 
   /** Declare positioning (spec §12): who the story is for. Null clears it. */

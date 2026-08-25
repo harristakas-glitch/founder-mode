@@ -467,6 +467,31 @@ console.log('— Engagement close-out: rivals as actors, moment variety, negotia
   ok(x.employees.filter((e) => e.id !== 'exec1').every((e, i) => e.morale <= (others[i] ?? 100)), 'the departure dents everyone else')
 }
 
+console.log('— Pricing dial cannot ratchet (owner-reported week-4 unicorn) —')
+{
+  const { advanceWeek: aw, valuation } = await import('../src/game/engine')
+  const { applyJournaled } = await import('../src/game/replay')
+  const { sectorById } = await import('../src/game/data')
+  // the exploit: drag the dial to its allowed max every week. The band must anchor on the
+  // immutable sector reference, never the current price — a self-referencing band compounds.
+  for (const sec of ['saas', 'social', 'fintech'] as const) {
+    let g = newGame('U', sec, 'business', { config: v2cfg(7, sec) })
+    const ref = sectorById(sec).arpuPerCustomer
+    for (let w = 0; w < 12 && !g.gameOver; w++) {
+      g = applyJournaled(g, 'v2_price', { v: 1e9 }).state
+      g = aw(g)
+    }
+    ok(g.simV2!.pricing.price <= ref * 6 + 1e-9, `${sec}: dial pegged all run stays ≤ 6x reference ($${g.simV2!.pricing.price.toFixed(0)})`)
+    ok(!g.gameOver && valuation(g) < 100_000_000, `${sec}: max-dial abuse cannot mint a unicorn (val $${(valuation(g) / 1e6).toFixed(1)}M, ${g.gameOver?.type ?? 'running'})`)
+  }
+  // hostile payloads: NaN and zero leave the dial untouched
+  let n = newGame('N', 'saas', 'technical', { config: v2cfg(3) })
+  const before = n.simV2!.pricing.price
+  n = applyJournaled(n, 'v2_price', { v: Number.NaN }).state
+  n = applyJournaled(n, 'v2_price', { v: 0 }).state
+  ok(n.simV2!.pricing.price === before && n.simV2!.pricing.manual !== true, 'NaN/zero payloads bounce off the dial')
+}
+
 console.log('— Truth isolation + seeded-RNG ban —')
 {
   const screens = readdirSync('src/screens').filter((f) => f.endsWith('.tsx'))

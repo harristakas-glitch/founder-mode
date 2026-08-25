@@ -246,6 +246,9 @@ function V2PricingPanel() {
   if (!usesBusinessSimulationV2(game) || !game.simV2) return null
   const v2 = game.simV2
   const price = v2.pricing.price
+  // dial band anchored to the sector reference, NOT the current price — a self-referencing
+  // range ratchets (drag to max, re-render, drag again) and compounded to a week-4 unicorn
+  const priceRef = sectorById(game.sector).arpuPerCustomer
   const readFor = (segId: string): { word: string; cls: string } => {
     const seg = v2.segments.find((x) => x.id === segId)!
     const est = seg.knowledge.wtp
@@ -263,9 +266,9 @@ function V2PricingPanel() {
         <span className="text-[12.5px] text-mut">Price</span>
         <input
           type="range"
-          min={Math.max(0.5, price * 0.25)}
-          max={price * 4}
-          step={price > 40 ? 1 : 0.5}
+          min={Math.max(0.1, priceRef * 0.25)}
+          max={priceRef * 6}
+          step={priceRef > 10 ? 1 : 0.5}
           value={price}
           onChange={(e) => v2SetPrice(Number(e.target.value))}
           className="min-w-0 flex-1 accent-[var(--color-accent)]"
