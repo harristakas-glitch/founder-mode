@@ -326,6 +326,7 @@ export function Product() {
 
       <Ventures />
       <V2ProductTruth />
+      <V2PmfDecomposition />
     </div>
   )
 }
@@ -333,6 +334,80 @@ export function Product() {
 /** V2 runs (spec §50.2): WHAT THE PRODUCT ACTUALLY IS — the attributes your weekly work moves,
  *  and how each segment rates the whole. Your own product is fully visible (you built it);
  *  what a segment VALUES stays knowledge-gated behind research confidence. */
+/** WHY is PMF this number — the standing answer to the owner's "PMF dropping dunno why"
+ *  (2026-08-25). The two legs of the score, and the customer mix behind the fit leg, read
+ *  straight from the week's snapshot. When it falls, this panel shows which half fell. */
+function V2PmfDecomposition() {
+  const game = useStore((s) => s.game)!
+  if (!usesBusinessSimulationV2(game) || !game.simV2) return null
+  const v2 = game.simV2
+  const snap = v2.weeklyHistory[v2.weeklyHistory.length - 1]
+  if (!snap || snap.pmfFitLeg === undefined) return null
+  const prev4 = v2.weeklyHistory[v2.weeklyHistory.length - 5]
+  const served = v2.segments
+    .filter((sg) => sg.id !== 'none')
+    .map((sg) => {
+      const size = v2.cohorts.filter((c) => c.segmentId === sg.id).reduce((a, c) => a + c.size, 0)
+      return { name: sg.name, size, fit: snap.productFit[sg.id] ?? 0 }
+    })
+    .filter((x) => x.size >= 1)
+    .sort((a, b) => b.size - a.size)
+  const totalServed = served.reduce((a, x) => a + x.size, 0)
+  const legDelta = (now?: number, then?: number) => (now !== undefined && then !== undefined ? now - then : 0)
+  const dFit = legDelta(snap.pmfFitLeg, prev4?.pmfFitLeg)
+  const dRet = legDelta(snap.pmfRetentionLeg, prev4?.pmfRetentionLeg)
+  const Leg = ({ label, value, delta, hint }: { label: string; value: number; delta: number; hint: string }) => (
+    <div>
+      <div className="flex items-baseline justify-between text-[12.5px]">
+        <span className="text-mut">{label}</span>
+        <span className="font-bold tnum">
+          {value}
+          {Math.abs(delta) >= 2 && <span className={`ml-1.5 text-[11px] ${delta > 0 ? 'text-good' : 'text-bad'}`}>{delta > 0 ? '+' : ''}{delta} / 4wk</span>}
+        </span>
+      </div>
+      <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-black/40">
+        <div className="h-full rounded-full" style={{ width: `${Math.min(100, value * 1.82)}%`, background: 'var(--color-accent)' }} />
+      </div>
+      <div className="mt-0.5 text-[10.5px] leading-snug text-mut">{hint}</div>
+    </div>
+  )
+  return (
+    <Panel title="Where PMF comes from" className="mt-3.5">
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <Leg
+          label="Product fit × customer mix (55%)"
+          value={snap.pmfFitLeg}
+          delta={dFit}
+          hint="how well the product fits the customers you ACTUALLY have — growing a lower-fit segment dilutes this even while the product improves"
+        />
+        <Leg
+          label="Retention quality (45%)"
+          value={snap.pmfRetentionLeg ?? 0}
+          delta={dRet}
+          hint="how many stay each week — price far above willingness-to-pay, weak service, and low reliability all bleed here"
+        />
+      </div>
+      {served.length > 0 && totalServed > 0 && (
+        <div className="mt-3 border-t border-line/50 pt-2.5">
+          <div className="text-[10px] font-bold tracking-[0.1em] text-mut uppercase">The mix behind the fit leg</div>
+          <div className="mt-1.5 space-y-1">
+            {served.slice(0, 4).map((x) => (
+              <div key={x.name} className="flex items-center gap-2 text-[12px]">
+                <span className="w-36 truncate text-mut">{x.name}</span>
+                <span className="w-12 shrink-0 text-right tnum">{Math.round((100 * x.size) / totalServed)}%</span>
+                <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-black/40">
+                  <div className="h-full rounded-full" style={{ width: `${x.fit * 100}%`, background: x.fit >= 0.65 ? 'var(--color-good)' : x.fit >= 0.5 ? 'var(--color-accent)' : 'var(--color-warn)' }} />
+                </div>
+                <span className="w-14 shrink-0 text-right text-[11px] text-mut tnum">fit {Math.round(x.fit * 100)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
 function V2ProductTruth() {
   const game = useStore((s) => s.game)!
   if (!usesBusinessSimulationV2(game) || !game.simV2) return null

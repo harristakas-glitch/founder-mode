@@ -99,7 +99,11 @@ export const MARKET_TEMPLATES: Record<string, MarketTemplate> = {
         paidAccess: 0.85,
         salesLed: false,
         brandImportance: 0.25,
-        prefs: [pref('core', 0.35, 70), pref('ease', 0.4, 90), pref('reliability', 0.15, 70), pref('service', 0.1, 50)],
+        // LEVER SWEEP (2026-08-26): ease+reliability+service put 0.65 weight on quality-fed
+        // attributes, so the all-quality monoculture (features 5 / quality 80) beat balanced
+        // play 1.27x at 12 seeds — same failure shape as the fintech consumers audit fix.
+        // Freelancers now care first that the product DOES the job (core is features-fed).
+        prefs: [pref('core', 0.45, 75), pref('ease', 0.3, 90), pref('reliability', 0.15, 70), pref('service', 0.1, 50)],
       },
       {
         id: 'small_teams',

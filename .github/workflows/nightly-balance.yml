@@ -36,8 +36,9 @@ jobs:
         run: npx tsx test/invariant-fuzz.ts --full
       - name: V1 calibration gate
         run: npx tsx test/winrate-probe.ts --assert
+      - name: Daily ladder (gated since 2026-08-26 — Daily runs on V2 and separates skill 6/6)
+        run: npx tsx test/daily-ladder.ts 6 --assert
       - name: Mode instruments (report-only)
         run: |
-          npx tsx test/daily-ladder.ts 6 || true
           npx tsx test/arena-proxy.ts 8 || true
           npx tsx test/v2-balance-probe.ts 16 saas social fintech devtools ecommerce aiml || true

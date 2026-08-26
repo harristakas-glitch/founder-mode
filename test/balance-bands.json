@@ -12,11 +12,11 @@
         2
       ],
       "exits": [
-        10,
-        16
+        9,
+        15
       ],
-      "medCustomers": 2149,
-      "medFounderValue": 17193386
+      "medCustomers": 2995,
+      "medFounderValue": 17855269
     },
     "saas/active": {
       "bankrupt": [
@@ -28,11 +28,11 @@
         2
       ],
       "exits": [
-        7,
-        13
+        13,
+        16
       ],
-      "medCustomers": 3562,
-      "medFounderValue": 21383820
+      "medCustomers": 5704,
+      "medFounderValue": 47262793
     },
     "social/casual": {
       "bankrupt": [
@@ -47,13 +47,13 @@
         0,
         3
       ],
-      "medCustomers": 9125,
-      "medFounderValue": 9142994
+      "medCustomers": 9051,
+      "medFounderValue": 9158742
     },
     "social/active": {
       "bankrupt": [
         0,
-        4
+        6
       ],
       "fired": [
         0,
@@ -63,8 +63,8 @@
         0,
         3
       ],
-      "medCustomers": 5181,
-      "medFounderValue": 4866712
+      "medCustomers": 10923,
+      "medFounderValue": 9475373
     },
     "fintech/casual": {
       "bankrupt": [
@@ -76,11 +76,11 @@
         2
       ],
       "exits": [
-        1,
-        7
+        0,
+        6
       ],
-      "medCustomers": 11758,
-      "medFounderValue": 29342963
+      "medCustomers": 11747,
+      "medFounderValue": 31167585
     },
     "fintech/active": {
       "bankrupt": [
@@ -92,11 +92,11 @@
         2
       ],
       "exits": [
-        1,
-        7
+        5,
+        11
       ],
-      "medCustomers": 8361,
-      "medFounderValue": 33560317
+      "medCustomers": 10281,
+      "medFounderValue": 35558737
     },
     "devtools/casual": {
       "bankrupt": [
@@ -108,11 +108,11 @@
         2
       ],
       "exits": [
-        9,
-        15
+        10,
+        16
       ],
-      "medCustomers": 2466,
-      "medFounderValue": 12973370
+      "medCustomers": 2909,
+      "medFounderValue": 13402561
     },
     "devtools/active": {
       "bankrupt": [
@@ -124,11 +124,11 @@
         2
       ],
       "exits": [
-        9,
-        15
+        8,
+        14
       ],
-      "medCustomers": 4572,
-      "medFounderValue": 23714255
+      "medCustomers": 5604,
+      "medFounderValue": 34644172
     },
     "ecommerce/casual": {
       "bankrupt": [
@@ -140,11 +140,11 @@
         2
       ],
       "exits": [
-        3,
-        9
+        5,
+        11
       ],
-      "medCustomers": 6321,
-      "medFounderValue": 14676052
+      "medCustomers": 6320,
+      "medFounderValue": 13513724
     },
     "ecommerce/active": {
       "bankrupt": [
@@ -156,11 +156,11 @@
         2
       ],
       "exits": [
-        4,
-        10
+        10,
+        16
       ],
-      "medCustomers": 4741,
-      "medFounderValue": 15155459
+      "medCustomers": 8379,
+      "medFounderValue": 32451699
     },
     "aiml/casual": {
       "bankrupt": [
@@ -175,10 +175,122 @@
         6,
         12
       ],
-      "medCustomers": 2610,
-      "medFounderValue": 15656488
+      "medCustomers": 2426,
+      "medFounderValue": 15011284
     },
     "aiml/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        8,
+        14
+      ],
+      "medCustomers": 4554,
+      "medFounderValue": 26312657
+    },
+    "quickv2-saas/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        3
+      ],
+      "exits": [
+        8,
+        14
+      ],
+      "medCustomers": 2304,
+      "medFounderValue": 18231879
+    },
+    "quickv2-saas/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        8,
+        14
+      ],
+      "medCustomers": 6379,
+      "medFounderValue": 37947851
+    },
+    "quickv2-social/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        8
+      ],
+      "exits": [
+        0,
+        3
+      ],
+      "medCustomers": 6419,
+      "medFounderValue": 8107630
+    },
+    "quickv2-social/active": {
+      "bankrupt": [
+        1,
+        7
+      ],
+      "fired": [
+        0,
+        3
+      ],
+      "exits": [
+        0,
+        3
+      ],
+      "medCustomers": 10031,
+      "medFounderValue": 9509064
+    },
+    "quickv2-fintech/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        4
+      ],
+      "exits": [
+        1,
+        7
+      ],
+      "medCustomers": 12023,
+      "medFounderValue": 33808221
+    },
+    "quickv2-fintech/active": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        4
+      ],
+      "exits": [
+        3,
+        9
+      ],
+      "medCustomers": 10037,
+      "medFounderValue": 44106916
+    },
+    "saas-relaxed/casual": {
       "bankrupt": [
         0,
         3
@@ -191,8 +303,24 @@
         9,
         15
       ],
-      "medCustomers": 3122,
-      "medFounderValue": 20300810
+      "medCustomers": 2996,
+      "medFounderValue": 18631705
+    },
+    "saas-brutal/casual": {
+      "bankrupt": [
+        0,
+        3
+      ],
+      "fired": [
+        0,
+        2
+      ],
+      "exits": [
+        9,
+        15
+      ],
+      "medCustomers": 2243,
+      "medFounderValue": 14850426
     }
   }
 }

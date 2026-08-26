@@ -127,7 +127,10 @@ const { s, titles } = play(4242)
 // ratio is 0/0, and the determinism check is `"[]" === "[]"`. `titles` only fills when
 // `world.narrative.emitted` is keyed by inbox message id, which is exactly the coupling a refactor
 // would break, so without this line the file would go quietly green on that regression.
-ok(titles.length >= 5, `the director actually narrated the run (${titles.length} headlines in 60 wk)`)
+// ≥3, was ≥5 (2026-08-26): the 11-item balance batch (event effect grades, the maturity-scaled
+// revenue multiple) legitimately reshaped seed 4242's trajectory and the director had less news
+// on it. The regression this line exists for — emitted no longer keyed by inbox id — reads ZERO.
+ok(titles.length >= 3, `the director actually narrated the run (${titles.length} headlines in 60 wk)`)
 const types = Object.keys(s.world?.narrativeLastSeen ?? {})
 ok(types.length >= 3, `the director tells several kinds of story, not one (${types.length}: ${types.join(', ')})`)
 let maxRun = titles.length ? 1 : 0

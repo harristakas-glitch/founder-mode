@@ -238,6 +238,8 @@ export interface HistoryPoint {
   infra: number
   interest?: number
   macroIndex?: number
+  /** funding climate that week (−1..1) — the Fundraising ribbon reads this; absent on old rows */
+  climate?: number
   valuation: number
   pmf: number
 }

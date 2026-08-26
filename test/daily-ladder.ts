@@ -36,7 +36,7 @@ for (let day = 0; day < DAYS; day++) {
   const scores: number[] = []
   for (const tier of TIERS) {
     const bot = BOTS[tier]
-    const cfg = { mode: 'quick', format: 'daily_challenge', sector, seed: daySeed(day) } as GameConfig
+    const cfg = { mode: 'quick', format: 'daily_challenge', sector, seed: daySeed(day), engine: 'v2' } as GameConfig
     let s = newGame(`${tier}D`, sector, bot.founderKind, { config: cfg })
     s.challenge = { label: `Daily #${day}`, cap: CAP }
     for (let w = 0; w < CAP && !s.gameOver; w++) {

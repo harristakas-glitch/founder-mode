@@ -187,12 +187,17 @@ export const EVENTS: EventDef[] = [
           s.bugs > 40
             ? 'The piece runs: "Promising, but buggy." Some hype, some bruises.'
             : 'A glowing profile! Sign-ups spike.',
-        effects: s.bugs > 40 ? { hype: 8, reputation: -5, energy: -8 } : { hype: 18, reputation: 6, energy: -8 },
+        effects:
+          s.bugs > 40
+            ? { hype: 8, reputation: -5, energy: -8 }
+            : s.bugs > 25
+              ? { hype: 14, reputation: 0, energy: -8 }
+              : { hype: 18, reputation: 6, energy: -8 },
       },
       {
         label: 'Politely decline',
-        resultText: 'The story never runs. Business as usual.',
-        effects: {},
+        resultText: 'The piece runs anyway, thinner — "the company declined to comment" does its quiet work.',
+        effects: { hype: -2 },
       },
     ],
   },
@@ -347,14 +352,14 @@ export const EVENTS: EventDef[] = [
       'A white-hat researcher reported a serious vulnerability and asked for a bounty. Nothing was leaked — yet.',
     choices: () => [
       {
-        label: 'Pay the bounty ($15,000), patch immediately',
+        label: 'Pay the bounty ($20,000), patch immediately',
         resultText: 'Patched and disclosed responsibly. The researcher praises you publicly.',
-        effects: { cash: -15000, bugs: -5, reputation: 6 },
+        effects: { cash: -20000, bugs: -5, reputation: 6 },
       },
       {
         label: 'Patch quietly, skip the bounty',
         resultText: 'Patched. The researcher writes an annoyed thread about companies that do not pay.',
-        effects: { bugs: -5, reputation: -5 },
+        effects: { bugs: -5, reputation: -3 },
       },
     ],
   },
@@ -530,12 +535,17 @@ export const EVENTS: EventDef[] = [
           s.bugs > 45
             ? 'The demo crashes live. The clip goes viral for the wrong reasons.'
             : 'The demo lands perfectly. The signup queue is visible from space.',
-        effects: s.bugs > 45 ? { hype: -6, reputation: -8, morale: -5, energy: -12 } : { hype: 16, reputation: 8, energy: -12 },
+        effects:
+          s.bugs > 45
+            ? { hype: -6, reputation: -8, morale: -5, energy: -12 }
+            : s.bugs > 32
+              ? { hype: 10, reputation: 3, energy: -12 }
+              : { hype: 16, reputation: 8, energy: -12 },
       },
       {
         label: 'Send a polite no',
-        resultText: 'Maybe next year.',
-        effects: {},
+        resultText: 'Your biggest rival takes the slot. Their demo is fine. Their signup queue is yours.',
+        effects: { hype: -1 },
       },
     ],
   },
@@ -1065,10 +1075,10 @@ export const EVENTS: EventDef[] = [
     minWeek: 10,
     cond: (s) => s.hype > 25,
     title: 'Domain squatter',
-    body: (s) => `Someone bought every misspelling of ${s.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com and wants $8,000 for the bundle.`,
+    body: (s) => `Someone bought every misspelling of ${s.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com and wants $12,000 for the bundle.`,
     choices: () => [
-      { label: 'Pay the troll ($8,000)', resultText: 'The typos are yours. It feels bad and correct.', effects: { cash: -8_000 } },
-      { label: 'Refuse on principle', resultText: 'A typo\'d clone site appears within the month, harvesting confused visitors.', effects: { reputation: -3 } },
+      { label: 'Pay the troll ($12,000)', resultText: 'The typos are yours. It feels bad and correct.', effects: { cash: -12_000 } },
+      { label: 'Refuse on principle', resultText: 'A typo\'d clone site appears within the month, harvesting confused visitors.', effects: { reputation: -2 } },
     ],
   },
   {

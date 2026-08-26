@@ -115,7 +115,10 @@ const trustOf = (s: GameState, characterId: string) =>
 
 /** Seed 4242's real walkthrough: term sheet at week 21 installs a board due for review at week 33. */
 function playToFunding(): GameState {
-  const s = play(4242, 20)
+  // 12 weeks, was 20 (2026-08-26): the maturity-scaled valuation (11-item balance batch)
+  // legitimately reshaped seed 4242's event sequence and the old 20-week bootstrap now goes
+  // bankrupt at week 15. The machinery under test is unchanged — fund earlier, same promise.
+  const s = play(4242, 12)
   s.termSheets.push({ id: 'ts-1', investor: 'Granite Peak', amount: 1_200_000, equity: 0.18, weeksLeft: 2 })
   acceptTermSheet(s, 'ts-1')
   return s
@@ -245,11 +248,14 @@ console.log('\n— The real seed: a term sheet at w21, judged by its own first r
   ok(warned, '§35: the panel warns before the deadline ("the commitment lands in N weeks")')
   ok(verdictSpoken, '§35: the verdict is voiced the week it lands')
 
-  // BROKEN: same seed, same sheet — the founder just stops buying growth. The review strikes.
+  // BROKEN: same seed, same sheet — the founder stops buying growth AND stops building.
+  // (Zero marketing alone no longer guarantees the miss: a week-12-funded company coasts on
+  // organic growth past its first review — 2026-08-26 fixture repair, same machinery under test.)
   let b = playToFunding()
   const before = trustOf(b, 'adv:board')!
   for (let w = 0; w < 14 && !b.gameOver; w++) {
     b.marketingSpend = 0
+    b.allocation = { ...b.allocation, features: 0, quality: 0, bugs: 0, research: 0 }
     b = advanceWeek(b)
   }
   const settledBroken = b.world?.promises.find((p) => p.summaryKey === PROMISE_KEYS.fundingGrowth)

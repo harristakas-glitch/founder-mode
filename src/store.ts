@@ -880,8 +880,11 @@ export const useStore = create<Store>()(
             sector,
             scenario: daily ? undefined : setup.scenario,
             seed: daily ? info.seed : Math.floor(Math.random() * 2 ** 31),
-            // V2 is opt-in while under calibration (contract D1; quick joined as beta 2026-08-25)
+            // V2 is opt-in while under calibration (contract D1; quick joined as beta 2026-08-25).
+            // DAILY runs on V2 for everyone since 2026-08-26: a shared ranked seed needs the
+            // better-audited economy, and the flip is clean on a day boundary.
             ...((setup.mode === 'career' || setup.mode === 'quick') && setup.engineV2 ? { engine: 'v2' as const } : {}),
+            ...(daily ? { engine: 'v2' as const } : {}),
             // daily is a shared, ranked seed — everyone plays the same difficulty
             ...(setup.difficulty && setup.difficulty !== 'standard' && !daily ? { difficulty: setup.difficulty } : {}),
           }

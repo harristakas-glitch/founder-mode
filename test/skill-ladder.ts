@@ -21,8 +21,10 @@ const ASSERT = process.argv.includes('--assert')
 const SEEDS = Number(args[0]) || 12
 const WEEKS = 120
 const SECTORS: SectorId[] = ['saas', 'social', 'fintech', 'devtools', 'ecommerce', 'aiml']
-/** sectors where the ladder is a hard gate (see policy above) */
-const HARD_SECTORS: SectorId[] = ['saas', 'devtools', 'aiml']
+/** sectors where the ladder is a hard gate — ALL SIX since 2026-08-26: the last three
+ *  inversions were root-caused and fixed (social = bots under-hired engineering; devtools/
+ *  ecommerce = expert's dial pricing down to the mass segment). Nightly holds the line. */
+const HARD_SECTORS: SectorId[] = ['saas', 'social', 'fintech', 'devtools', 'ecommerce', 'aiml']
 /** an upper tier must reach at least this fraction of the next lower tier's median to "hold" —
  *  tolerance for seed noise; a real inversion lands well under it */
 const TOLERANCE = 0.9

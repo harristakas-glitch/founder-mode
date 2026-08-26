@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { Bar, Btn, Disclosure, Meter, NESTED, Panel, RAISED, StatCard } from '../components'
 import { money, pct } from '../format'
 import { STAGE_THRESHOLDS, climateLabel } from '../game/data'
+import { usesBusinessSimulationV2 } from '../game/modes'
 import {
   BOARD_TARGETS,
   boardEffectiveTarget,
@@ -1057,6 +1058,29 @@ function SheetRow({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** The last year of funding weather, one cell per week — cycles become visible, so a cold
+ *  stretch reads as a season instead of a broken game (owner reports x3, 2026-08-24/25). */
+function ClimateRibbon() {
+  const game = useStore((s) => s.game)!
+  const rows = game.history.slice(-52).filter((h) => h.climate !== undefined)
+  if (rows.length < 8) return null
+  const color = (c: number) =>
+    c < -0.6 ? '#3b5bd6' : c < -0.2 ? '#5a7be0' : c < 0.2 ? 'var(--color-line2)' : c < 0.6 ? '#e0a34e' : '#e06a3d'
+  return (
+    <div className="mt-2">
+      <div className="flex h-2 items-stretch gap-px overflow-hidden rounded-full" title="Funding climate, last year — blue cold, grey neutral, amber warm">
+        {rows.map((h) => (
+          <div key={h.week} className="min-w-0 flex-1" style={{ background: color(h.climate!) }} />
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[9.5px] text-mut">
+        <span>{rows.length} wk ago</span>
+        <span>now</span>
+      </div>
+    </div>
+  )
+}
+
 export function Fundraising() {
   const game = useStore((s) => s.game)!
   const pitch = useStore((s) => s.pitch)
@@ -1098,7 +1122,9 @@ export function Fundraising() {
           value={climateLabel(game.climate)}
           delta={game.climate < -0.4 ? 'Valuations depressed, funds hibernating' : game.climate > 0.4 ? 'Cheap money — strike now' : 'Business as usual'}
           tone={game.climate < -0.4 ? 'down' : game.climate > 0.4 ? 'up' : undefined}
-        />
+        >
+          <ClimateRibbon />
+        </StatCard>
         {/* Valuation RETURNED here 2026-08-21 after the owner could not find it anywhere in a
             live run. Its removal was right when written — the rail rendered it on every screen —
             and became wrong when the rail slimmed to the money clock: two individually-correct
@@ -1299,9 +1325,29 @@ export function Fundraising() {
               Offers price around your valuation and swing with the funding climate — in a frozen market, even good companies get
               ghosted. Raising below your last round's price is a down round: cash in the bank, morale out the door.
             </More>
-            <Btn variant="primary" className="mt-3" disabled={game.raiseCooldown > 0 || !!game.gameOver} onClick={pitch}>
-              {game.raiseCooldown > 0 ? `On the road — try again in ${game.raiseCooldown} wk` : 'Start pitching ▸'}
-            </Btn>
+            {/* the failure floor's investor-confidence gate must be visible BEFORE the click —
+                pitching into it costs a cooldown, and a rake in the grass is not difficulty
+                (owner review, 2026-08-26). Same disabled-with-reason pattern as the token paths. */}
+            {(() => {
+              const confidenceOut = usesBusinessSimulationV2(game) && game.simV2 ? game.simV2.investorConfidence.value < 35 : false
+              return (
+                <>
+                  <Btn variant="primary" className="mt-3" disabled={game.raiseCooldown > 0 || confidenceOut || !!game.gameOver} onClick={pitch}>
+                    {game.raiseCooldown > 0
+                      ? `On the road — try again in ${game.raiseCooldown} wk`
+                      : confidenceOut
+                        ? 'Investors are out — deliver a quarter first'
+                        : 'Start pitching ▸'}
+                  </Btn>
+                  {confidenceOut && game.raiseCooldown === 0 && (
+                    <p className="mt-2 text-[12px] leading-snug text-warn">
+                      Investor confidence is Critical ({Math.round(game.simV2!.investorConfidence.value)}/100) — no fund will engage until the
+                      story improves. Growth and delivered board commitments rebuild it.
+                    </p>
+                  )}
+                </>
+              )
+            })()}
           </Panel>
         </div>
       )}

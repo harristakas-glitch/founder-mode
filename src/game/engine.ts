@@ -11,7 +11,7 @@ import {
   randomName,
   sectorById,
 } from './data'
-import { BOARD_APPETITE, DIFFICULTY, FUSE_STRIKES, V2_FUSE_CONFIDENCE, knobs } from './tuning'
+import { BOARD_APPETITE, DIFFICULTY, FUSE_STRIKES, V2_FUSE_CONFIDENCE, V2_QUICK_BOARD_EASE, V2_QUICK_BOARD_EASE_DEFAULT, knobs } from './tuning'
 import { ARC_DEFS } from './arcs'
 import { hasCapability, resolveGameRules, systemDepth, usesBusinessSimulationV2, type CapabilityKey, type GameCapabilities, type GameConfig } from './modes'
 import { createSimV2 } from './sim2/init'
@@ -738,7 +738,16 @@ export function valuation(s: GameState): number {
   const sector = sectorById(s.sector)
   const annualRev = trailingRevenue(s, VALUATION_SMOOTHING) * 52
   const growth = sustainedGrowthRate(s)
-  const multiple = clamp(8 + growth * 150, 5, 25) * (1 + 0.4 * s.climate)
+  // MATURITY (audit follow-up, 2026-08-26): acquirers pay peak growth multiples for growth
+  // they believe will LAST, and a 24-week-old company has not proven a year of anything —
+  // the greedy quick-social loop was pricing week-24 companies at the full 25x clamp
+  // ($281M by week 24 with maximal play). The growth-derived EXCESS above the base multiple
+  // ramps in over the first 40 weeks; mature companies are untouched.
+  // Scoped to the REVENUE multiple only: the week-24 $281M was 95% revenue-multiple, while
+  // early-stage raising (especially social) is priced off the user base — scaling growthMania
+  // too pushed quick-social casual failure to 44% (measured; band is 15-40%).
+  const maturity = Math.min(1, Math.max(0.5, s.week / 40))
+  const multiple = clamp(8 + growth * 150 * maturity, 5, 8 + 17 * Math.max(0.4, maturity)) * (1 + 0.4 * s.climate)
   const revPart = annualRev * multiple
   // Investors pay up for growth: a fast-growing user base is worth a multiple of a stagnant one.
   const growthMania = 1 + clamp(growth * 12, 0, 4)
@@ -2915,6 +2924,7 @@ function advanceWeekInner(prev: GameState, externalUsers = 0): GameState {
     infra,
     interest,
     macroIndex: Math.round(s.macro.index * 10) / 10,
+    climate: Math.round(s.climate * 100) / 100,
     valuation: val,
     pmf: Math.round(s.pmf),
   })
@@ -4146,7 +4156,15 @@ export function boardEffectiveTarget(s: GameState): number {
   // through every rough patch (raises reset strikes): a consumer-app board funds the VIRAL
   // curve and expects it — measured 13% casual failure without the appetite, in-band with it.
   const appetite = systemDepth(s, 'boardMeetings') !== 'deep' ? (BOARD_APPETITE[s.sector] ?? 1) : 1
-  return Math.max(0.008, s.board.targetGrowth * appetite * knobs(s).boardTargetMult * (1 - 0.5 * marketSaturation(s)))
+  // quick-V2 (2026-08-26): the arcade board's asks were calibrated for V1's viral spikes;
+  // the causal engine grows steadier, and the same targets fired 8-16 of 16 casual bot runs
+  // in every quick-V2 lockfile cell (social: all sixteen). A board funding the V2 curve
+  // prices the V2 curve. V1 quick and deep career untouched.
+  const v2Ease =
+    usesBusinessSimulationV2(s) && systemDepth(s, 'boardMeetings') !== 'deep'
+      ? (V2_QUICK_BOARD_EASE[s.sector] ?? V2_QUICK_BOARD_EASE_DEFAULT)
+      : 1
+  return Math.max(0.008, s.board.targetGrowth * appetite * v2Ease * knobs(s).boardTargetMult * (1 - 0.5 * marketSaturation(s)))
 }
 
 // Trailing weekly revenue growth — the board's alternative yardstick for mature companies.
@@ -4211,6 +4229,31 @@ function boardReview(s: GameState) {
     return
   }
 
+  // A real miss — but on quick-V2, the arcade strike machinery consults the V2 board's own
+  // confidence first (2026-08-26): the causal engine has a NATURAL mid-game plateau (early
+  // adopters churn before the mass market is won) and the V1-calibrated board fired every
+  // social casual run inside it at confidence 50-59 — i.e. while the board system that can
+  // actually see the company still believed. Both boards must agree before you lose the job.
+  // Forgiveness has a BUDGET of three per run: without it, a fully passive company at neutral
+  // confidence never fired at all (measured — the failure floor dissolved). Three forgiven
+  // misses cover the engine's natural plateau; a company that NEVER delivers runs out.
+  if (
+    usesBusinessSimulationV2(s) &&
+    s.simV2 &&
+    systemDepth(s, 'boardMeetings') !== 'deep' &&
+    s.simV2.boardConfidence.value >= 48 &&
+    (s.flags.v2MissesForgiven ?? 0) < 3
+  ) {
+    s.flags.v2MissesForgiven = (s.flags.v2MissesForgiven ?? 0) + 1
+    s.inbox.unshift({
+      id: uid(),
+      week: s.week,
+      kind: 'news',
+      title: 'Board review: a miss, forgiven',
+      body: `Growth came in under target, but the board still believes the trajectory (confidence ${Math.round(s.simV2.boardConfidence.value)}/100). No strike — ${(s.flags.v2MissesForgiven ?? 0) >= 3 ? 'and that was the last free pass' : 'but patience is not infinite'}.`,
+    })
+    return
+  }
   // A real miss.
   if (s.board.defied) {
     // Being removed halves what your EQUITY is worth. It does not halve your token position.

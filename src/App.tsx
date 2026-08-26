@@ -20,6 +20,8 @@ import {
   Activity,
   Target,
   TrendingUp,
+  Download,
+  Upload,
 } from 'lucide-react'
 import { useStore, type ScreenId } from './store'
 import { buildPostmortem } from './game/sim2/postmortem'
@@ -206,6 +208,60 @@ function MuteButton() {
     >
       <Icon size={18} />
     </UtilityButton>
+  )
+}
+
+/**
+ * Save export/import — one save slot in localStorage is one browser profile away from a lost
+ * run (proven the hard way, 2026-08-25). Export downloads the exact persisted save; import
+ * validates the shape, writes it back, and reloads. No cloud, no account — a file the player owns.
+ */
+function SaveButton() {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const doExport = () => {
+    const raw = localStorage.getItem('founder-mode-save')
+    if (!raw) return
+    const blob = new Blob([raw], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `founder-mode-save-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  const doImport = (file: File) => {
+    file.text().then((text) => {
+      try {
+        const parsed = JSON.parse(text)
+        if (!parsed || typeof parsed !== 'object' || !('state' in parsed)) throw new Error('not a save')
+        if (!confirm('Replace the current save with this file? The current run is overwritten.')) return
+        localStorage.setItem('founder-mode-save', text)
+        location.reload()
+      } catch {
+        alert('That file is not a Founder Mode save.')
+      }
+    })
+  }
+  return (
+    <>
+      <UtilityButton label="Export save (download a backup)" onClick={doExport}>
+        <Download size={18} />
+      </UtilityButton>
+      <UtilityButton label="Import save (restore a backup)" onClick={() => fileRef.current?.click()}>
+        <Upload size={18} />
+      </UtilityButton>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) doImport(f)
+          e.target.value = ''
+        }}
+      />
+    </>
   )
 }
 
@@ -682,6 +738,7 @@ export default function App() {
           </UtilityButton>
           <FieldGuideButton />
           <MuteButton />
+          <SaveButton />
           <UtilityButton
             danger
             label={online ? 'Leave match' : 'Abandon run & start over'}
@@ -772,6 +829,12 @@ export default function App() {
                 <div className="text-[16px] font-extrabold tracking-tight">{game.companyName}</div>
                 <div className="text-xs text-mut">
                   {game.stage} · Week {game.week}
+                  {game.config?.difficulty && game.config.difficulty !== 'standard' && (
+                    <span className={game.config.difficulty === 'brutal' ? 'text-bad' : 'text-good'}>
+                      {' '}· {game.config.difficulty === 'brutal' ? 'Brutal' : 'Relaxed'}
+                    </span>
+                  )}
+                  {game.config?.engine === 'v2' && ' · V2 beta'}
                   {online && ` · Room ${online.code}`}
                 </div>
               </div>

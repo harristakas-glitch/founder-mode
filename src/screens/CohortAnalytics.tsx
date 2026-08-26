@@ -579,6 +579,11 @@ export function CohortAnalytics() {
                   <span className="text-[12.5px] font-normal text-mut">
                     {rows.length} cohort{rows.length === 1 ? '' : 's'}, week by week
                   </span>
+                  {v2 && rows.some((r) => r.atFour === undefined && r.age > RETENTION_WINDOW_WEEKS) && (
+                    <span className="text-[11px] font-normal text-warn">
+                      · cohorts from before this week's update show unmeasured — new ones report normally
+                    </span>
+                  )}
                 </summary>
                 <div className="mt-3.5">
                   <Triangle rows={rows} />

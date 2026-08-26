@@ -125,6 +125,9 @@ const active: BotDef = {
     if (s.week === 10 || s.week === 24 || s.week === 38 || s.week === 52) hire(s, 'engineer')
     if (s.week === 30) hire(s, 'sales')
     if (s.week === 18 || s.week === 44) hire(s, 'designer')
+    // ...and KEEP hiring engineers as cash allows (isolated A/B 2026-08-26: the fixed 4-engineer
+    // plan was the entire social skill-inversion — attributes are built by heads, every sector)
+    if (s.week % 9 === 5) hire(s, 'engineer')
     if (s.raiseCooldown === 0 && s.termSheets.length === 0 && (s.cash < 250_000 || s.week % 16 === 0)) s.termSheets = pitchInvestors(s).sheets
     if (s.termSheets.length) acceptTermSheet(s, [...s.termSheets].sort((a, b) => b.amount / b.equity - a.amount / a.equity)[0].id)
   },
@@ -142,10 +145,19 @@ const expert: BotDef = {
     const v2 = s.simV2
     if (s.week === 2) s.marketingSpend = Math.min(6_000, marketingMax(s))
     if (s.week >= 2 && s.week % 8 === 2) s.allocation = { ...s.allocation, features: 40, quality: 35, bugs: 15, research: 10 }
-    // spend scales with the business (a fraction of revenue), throttled when service drowns
-    if (s.week > 20 && (!v2 || (v2.serviceQuality > 60 && (v2.gtm?.lastCac ?? 0) < 400)))
-      s.marketingSpend = Math.min(Math.max(10_000, Math.round(s.lastRevenue * 0.3)), marketingMax(s))
-    else if (v2 && v2.serviceQuality < 45) s.marketingSpend = Math.min(3_000, marketingMax(s))
+    // spend scales with the business (a fraction of revenue), capped near the reach sweet spot
+    // (~$120k/wk — self-competition degrades the paid auction past it). LEVER SWEEP 2026-08-26:
+    // the old serviceQuality>60 gate muted marketing to $3k forever in high-volume sectors
+    // (fintech consumer support drowns unfixably, svc pins at 15) while CAC sat at $2-3 —
+    // forced-max then dominated "informed" 1.5x. Drowned service only throttles spend when a
+    // customer actually costs more than ~8 weeks of their revenue; cheap volume stays bought.
+    if (s.week > 20) {
+      const cac = v2?.gtm?.lastCac ?? 0
+      const unitPrice = v2?.pricing?.price ?? sectorById(s.sector).arpuPerCustomer
+      const worthBuying = !v2 || v2.serviceQuality > 60 || cac < unitPrice * 8
+      if (worthBuying) s.marketingSpend = Math.min(Math.max(10_000, Math.round(s.lastRevenue * 0.45)), 120_000, marketingMax(s))
+      else s.marketingSpend = Math.min(3_000, marketingMax(s))
+    }
     // research BOTH money questions: the mass base early, the mid segment for the upsell path
     if (v2 && s.week === 6) startResearchV2(s, 'pricing_study', v2.segments[0].id)
     if (v2 && s.week === 14) startResearchV2(s, 'pricing_study', v2.segments[1]?.id ?? v2.segments[0].id)
@@ -160,13 +172,18 @@ const expert: BotDef = {
       const dom = v2.segments.find((x) => x.id === dominantSegment(s))
       if (dom && dom.knowledge.wtp.confidence > 0.4) {
         const ref = sectorById(s.sector).arpuPerCustomer
-        const target = Math.min(Math.max(dom.knowledge.wtp.visibleEstimate * 1.1, ref * 0.25), ref * 6)
+        // price to the researched WTP but never dial BELOW ~the reference: the mass segment
+        // is the volume base, the mid segment pays the bills — pricing down to the mass
+        // estimate re-created the fintech "informed = trap" inversion in devtools/ecommerce
+        // (measured 2026-08-26: expert $22.6M vs active $29.9M ecommerce until this floor)
+        const target = Math.min(Math.max(dom.knowledge.wtp.visibleEstimate * 1.1, ref * 0.9), ref * 6)
         v2.pricing = { price: target, lastChangedWeek: s.week, manual: true }
       }
     }
     if (s.week === 10 || s.week === 24 || s.week === 38 || s.week === 52) hire(s, 'engineer')
     if (s.week === 30) hire(s, 'sales')
     if (s.week === 18 || s.week === 44) hire(s, 'designer')
+    if (s.week % 9 === 5) hire(s, 'engineer')
     if (s.raiseCooldown === 0 && s.termSheets.length === 0 && (s.cash < 300_000 || s.week % 14 === 0)) s.termSheets = pitchInvestors(s).sheets
     if (s.termSheets.length) {
       // one push-back per sheet (negotiation, engagement §6), then take the best cheque
